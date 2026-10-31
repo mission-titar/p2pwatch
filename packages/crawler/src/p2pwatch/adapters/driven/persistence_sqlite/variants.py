@@ -1,6 +1,7 @@
 """The variants' ``content_hash``, and the SQL functions the catalog migrations and merge call.
 
-Changing the serialization changes every stored ``content_hash``: it needs a migration.
+Changing what ``content_hash`` hashes changes every stored hash: a released catalog needs a
+migration.
 """
 
 import hashlib
@@ -116,25 +117,23 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     """Registers ``content_hash``, ``source_content_hash``, ``file_id``, ``source_id``,
     ``fold_raw_meta`` and ``iso_to_micros``."""
 
-    # A stored raw_metadata, folded and serialized as record_observation serializes it.
+    # A v4 raw_meta, its [name, value] pairs folded as the mapper folds a result.
     def fold_stored(  # noqa: PLR0917
         raw_metadata: str, codec: str | None, file_type: str | None, complete: int
     ) -> str:
-        return json.dumps(
-            fold_raw_metadata(
-                json.loads(raw_metadata),
-                codec=codec,
-                file_type=file_type,
-                complete_source_count=complete,
-            ),
-            ensure_ascii=False,
-        )
+        return fold_raw_metadata(
+            _unmapped_from_pairs(json.loads(raw_metadata)),
+            codec=codec,
+            file_type=file_type,
+            complete_source_count=complete,
+        ).text
 
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
     create_memoized_function(
         connection, name="content_hash", argument_count=8, function=content_hash_by_position
     )
-    # The SQL name keeps its old spelling: migration catalog/0007, which never changes, calls it.
+    # The SQL name keeps its old spelling: migration catalog/0007's script, which never changes,
+    # calls it.
     create_memoized_function(
         connection, name="fold_raw_meta", argument_count=4, function=fold_stored
     )
@@ -147,6 +146,21 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     # The migrations' reference, the one sanctioned: remove_migration_sql_functions drops it after.
     iso_to_micros = micros.iso_to_micros  # type: ignore[deprecated]
     connection.create_function("iso_to_micros", 1, iso_to_micros, deterministic=True)
+
+
+def _unmapped_from_pairs(pairs: list[list[str]]) -> dict[str, object]:
+    """v4's pairs as the mapper's ``unmapped``: a ``media.<k>`` under ``media``, every other name
+    at its first level, a repeated name keeping its last value."""
+    unmapped: dict[str, object] = {}
+    media: dict[str, str] = {}
+    for name, value in pairs:
+        if name.startswith("media."):
+            media[name.removeprefix("media.")] = value
+        else:
+            unmapped[name] = value
+    if media:
+        unmapped["media"] = media
+    return unmapped
 
 
 def remove_migration_sql_functions(connection: sqlite3.Connection) -> None:

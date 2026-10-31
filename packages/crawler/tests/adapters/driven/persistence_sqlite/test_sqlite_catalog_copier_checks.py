@@ -40,7 +40,6 @@ _FILE = FileKey(network=Network.ED2K, native_id="a" * 32)
 _NODE_ID = NodeId("node-a")
 _T0 = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 _NOT_UTF8 = "is not valid UTF-8"
-_NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
 _NOT_JSON_OBJECT_TEXT = "is not the canonical JSON text of an object"
 _CONTROL = "holds a control character"
 _NOT_DERIVED = "is not the id its network and native_id derive"
@@ -84,7 +83,7 @@ def _clean_catalog(path: Path) -> Path:
         size_bytes=100,
         source_count=3,
         keyword=Keyword("keroro"),
-        raw_metadata=(("codec", "xvid"), ("rating", 3), ("complete_source_count", None)),
+        raw_metadata=JsonObjectText.from_object({"codec": "xvid", "rating": 3, "file_type": None}),
     )
     decision = DecisionRecord(
         target_id=TargetId("062A"), rule_name="segment_id_loose", tier=DecisionTier.DOWNLOAD
@@ -160,23 +159,23 @@ def _state(destination: Path) -> tuple[bytes | None, list[str]]:
     ("table", "column", "value_sql", "problem"),
     [
         ("observation_variants", "filename", "CAST(x'4bff' AS TEXT)", _NOT_UTF8),
-        ("observation_variants", "raw_metadata", r"""'[["a", "\ud800"]]'""", _NOT_PAIRS),
-        ("observation_variants", "raw_metadata", "'not json'", _NOT_PAIRS),
         ("match_decisions", "target_id", "'062' || char(31) || 'A'", _CONTROL),
         ("match_decisions", "rule_name", "'segment' || char(9) || 'id'", _CONTROL),
         # Checked for UTF-8 first: a function handed such a text fails before its body runs.
         ("observation_variants", "raw_metadata", "CAST(x'5bff' AS TEXT)", _NOT_UTF8),
         ("source_variants", "name", "CAST(x'ff' AS TEXT)", _NOT_UTF8),
-        ("observation_variants", "raw_metadata", "'{}'", _NOT_PAIRS),
-        ("observation_variants", "raw_metadata", """'["ab"]'""", _NOT_PAIRS),
-        ("observation_variants", "raw_metadata", """'[["a"]]'""", _NOT_PAIRS),
-        ("observation_variants", "raw_metadata", """'[[1, "a"]]'""", _NOT_PAIRS),
         *[
-            pytest.param(
-                "source_variants", "raw_metadata", text, _NOT_JSON_OBJECT_TEXT, id=f"source-{name}"
-            )
+            pytest.param(table, "raw_metadata", text, _NOT_JSON_OBJECT_TEXT, id=f"{table}-{name}")
+            for table in ("observation_variants", "source_variants")
             for name, text in _NOT_JSON_OBJECT_TEXTS.items()
         ],
+        pytest.param(
+            "observation_variants",
+            "raw_metadata",
+            """'[["a", "b"]]'""",
+            _NOT_JSON_OBJECT_TEXT,
+            id="observation_variants-pairs",
+        ),
         ("files", "file_id", _ZERO_ID, _NOT_DERIVED),
         ("sources", "source_id", _ZERO_ID, _NOT_DERIVED),
         ("observation_variants", "content_hash", "randomblob(16)", _NOT_HASHED),

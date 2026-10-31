@@ -37,7 +37,7 @@ _FULL = (_A, _NAME, 100, 5, 2, 1474, 1200, "xvid", "Video", _RAW_META, "keroro",
 _BARE = (_B, "b.avi", 200, 1, 0, None, None, None, None, "[]", "titar", _T1, "n2")
 _FULL_VARIANT = (_A, _NAME, 100, 1474, 1200)
 _BARE_VARIANT = (_B, "b.avi", 200, None, None)
-_BARE_META = '[["codec", null], ["file_type", null], ["complete_source_count", 0]]'
+_BARE_META = '{"codec": null, "complete_source_count": 0, "file_type": null, "unmapped": {}}'
 # The variants as the readers rebuild them, observations as (observed_at, source_count).
 _REBUILT = """
 SELECT v.ed2k_hash, v.filename, v.size_bytes, v.media_length_sec, v.bitrate_kbps, v.raw_meta,
@@ -61,8 +61,8 @@ _REBUILT_COLUMNS = (
 
 def _full_meta(complete: int) -> str:
     return (
-        '[["0x0308", "0"], ["0x0999", "mystère"], ["codec", "xvid"], ["file_type", "Video"],'
-        f' ["complete_source_count", {complete}]]'
+        f'{{"codec": "xvid", "complete_source_count": {complete}, "file_type": "Video",'
+        ' "unmapped": {"0x0308": "0", "0x0999": "mystère"}}'
     )
 
 
@@ -143,10 +143,52 @@ def test_the_old_table_and_its_indexes_are_gone(tmp_path: Path) -> None:
         connection.close()
 
 
-def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("old_meta", "folded"),
+    [
+        (
+            '[["media.title", "Keroro"], ["rating", "0"], ["0x0308", "0"]]',
+            '{"codec": "xvid", "complete_source_count": 2, "file_type": "Video",'
+            ' "unmapped": {"0x0308": "0", "media": {"title": "Keroro"}, "rating": "0"}}',
+        ),
+        (
+            '[["0x0308", "0"], ["0x0308", "1"]]',
+            '{"codec": "xvid", "complete_source_count": 2, "file_type": "Video",'
+            ' "unmapped": {"0x0308": "1"}}',
+        ),
+    ],
+    ids=["media", "repeated"],
+)
+def test_an_old_rows_metadata_becomes_an_object_its_networks_names_under_unmapped(
+    *, tmp_path: Path, old_meta: str, folded: str
 ) -> None:
-    """D11: the mapper's fold and 0007's agree, or every file gets a second variant."""
+    path = tmp_path / "catalog.db"
+    _old_catalog(path, _with(_FULL, raw_meta=old_meta))
+    connection = open_catalog_at(path, version=7)
+    try:
+        assert rows(connection, sql="SELECT raw_meta FROM observation_variants") == [
+            {"raw_meta": folded}
+        ]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize(
+    ("media", "old_meta"),
+    [
+        ({}, '[["rating", "0"], ["status", "mystère"]]'),
+        (
+            {"title": "Keroro"},
+            '[["rating", "0"], ["status", "mystère"], ["media.title", "Keroro"]]',
+        ),
+    ],
+    ids=["mapped-media", "unmapped-media"],
+)
+def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
+    *, tmp_path: Path, media: dict[str, str], old_meta: str
+) -> None:
+    """D11: the mapper's fold and 0007's agree, or every file gets a second variant. The old
+    metadata holds the same values as the pre-0007 mapper and store stored them."""
     search_result = {
         "hash": _A,
         "name": _NAME,
@@ -154,11 +196,14 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
         "sources": {"total": 9, "complete": 2},
         "rating": 0,
         "file_type": "Video",
-        "media": {"duration_seconds": 1474, "bitrate_kilobits_per_second": 1200, "codec": "xvid"},
+        "media": {
+            "duration_seconds": 1474,
+            "bitrate_kilobits_per_second": 1200,
+            "codec": "xvid",
+            **media,
+        },
         "status": "mystère",
     }
-    # The same values as the pre-0007 mapper and store stored them.
-    old_meta = '[["rating", "0"], ["status", "mystère"]]'
     path = tmp_path / "catalog.db"
     _old_catalog(path, _with(_FULL, raw_meta=old_meta))
     (reported_file,), _ = map_search_results([search_result], keyword=Keyword("keroro"))

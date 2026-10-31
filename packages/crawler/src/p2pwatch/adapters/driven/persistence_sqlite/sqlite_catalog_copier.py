@@ -30,7 +30,6 @@ new ``.sql`` for sqlfluff to lint). A source is attached read-only: a merge neve
 even the pending ``-wal`` of a copy taken from a running node.
 """
 
-import json
 import logging
 import sqlite3
 from collections.abc import Iterator, Sequence
@@ -55,7 +54,6 @@ from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyErro
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.json_object_text import JsonObjectText
-from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _logger = logging.getLogger(__name__)
 
@@ -164,7 +162,6 @@ ORDER BY t.name, c.cid
 _SELECT_KEY_COLUMNS = f"SELECT name FROM pragma_table_info(?, '{_SRC}') WHERE pk > 0 ORDER BY pk"
 
 _NOT_UTF8 = "is not valid UTF-8"
-_NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
 _NOT_JSON_OBJECT_TEXT = "is not the canonical JSON text of an object"
 _CONTROL = "holds a control character"
 _NOT_DERIVED = "is not the id its network and native_id derive"
@@ -201,8 +198,8 @@ _CONTENT_CHECKS = (
     _RowCheck(
         table="observation_variants",
         column="raw_metadata",
-        refused_where="NOT is_metadata_pairs(raw_metadata)",
-        problem=_NOT_PAIRS,
+        refused_where="NOT is_json_object_text(raw_metadata)",
+        problem=_NOT_JSON_OBJECT_TEXT,
     ),
     _RowCheck(
         table="source_variants",
@@ -347,7 +344,6 @@ def _check_catalogs(
     connection.create_function("file_id", 2, file_id, deterministic=True)
     connection.create_function("source_id", 2, _source_id_or_none, deterministic=True)
     connection.create_function("is_valid_utf8", 1, _is_valid_utf8, deterministic=True)
-    connection.create_function("is_metadata_pairs", 1, _is_metadata_pairs, deterministic=True)
     connection.create_function("is_json_object_text", 1, _is_json_object_text, deterministic=True)
     connection.create_function(
         "has_control_character", 1, has_control_character, deterministic=True
@@ -437,15 +433,6 @@ def _is_valid_utf8(encoded: bytes | None) -> bool:
     return True
 
 
-def _is_metadata_pairs(raw_metadata: str) -> bool:
-    """Whether ``raw_metadata`` is what an observation's read unpacks: a JSON array of ``[name,
-    value]`` pairs, each name a text, every text well formed."""
-    decoded = _well_formed_json(raw_metadata)
-    return isinstance(decoded, list) and all(
-        isinstance(pair, list) and len(pair) == 2 and isinstance(pair[0], str) for pair in decoded
-    )
-
-
 def _is_json_object_text(text: str) -> bool:
     """Whether ``text`` is a ``JsonObjectText``'s: the canonical text of a JSON object."""
     try:
@@ -453,19 +440,6 @@ def _is_json_object_text(text: str) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _well_formed_json(text: str) -> object:
-    """``text`` decoded as JSON, ``None`` unless it is JSON whose every text is well formed."""
-    try:
-        decoded = json.loads(text)
-        # Dumped back as it came: every text of it, an object's keys included, reaches the check.
-        require_well_formed_text(
-            json.dumps(decoded, ensure_ascii=False), error_label="raw_metadata"
-        )
-    except ValueError:
-        return None
-    return decoded
 
 
 @contextmanager

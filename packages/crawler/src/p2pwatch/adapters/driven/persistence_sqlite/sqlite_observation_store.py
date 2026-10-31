@@ -1,8 +1,7 @@
 """``SqliteObservationStore``: ``FileObservation`` → durable rows, and their reads.
 
 The adapter stores what the domain ignores (data-model spec §3): ``node_id``, given at each write.
-``raw_metadata`` is serialized as a JSON LIST of pairs (``[["0x0308", "0"], …]``), wire order and
-duplicates preserved, ``ensure_ascii=False``, no sorting (spec §3). ``record_observation`` makes
+``raw_metadata`` is stored as its ``JsonObjectText``'s canonical text. ``record_observation`` makes
 ONE transaction (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
 ``observation_variants`` (found by its ``content_hash``) and into ``observations``: the
 OBSERVED size is ALWAYS written into the variant (deviation 1, spec §5: a size anomaly must
@@ -17,7 +16,6 @@ pragma would commit an ORPHAN observation. The rollback catches ``BaseException`
 leave the connection ``in_transaction``, otherwise the store would be permanently broken.
 """
 
-import json
 import sqlite3
 from contextlib import suppress
 
@@ -61,7 +59,7 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
         reported_file = observation.reported_file
         file = reported_file.file
         require_canonical_native_id(file)
-        raw_metadata = json.dumps(reported_file.raw_metadata, ensure_ascii=False)
+        raw_metadata = reported_file.raw_metadata.text
         variant = (
             file.file_id,
             reported_file.filename,

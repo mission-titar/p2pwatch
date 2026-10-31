@@ -13,7 +13,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     source_content_hash,
 )
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.observation import fold_raw_metadata
 from p2pwatch.domain.source import SourceKey
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 
@@ -78,16 +77,29 @@ def test_content_hash_sql_function_matches_the_python_one(connection: sqlite3.Co
     assert row["content_hash"] == _hash()
 
 
-def test_fold_raw_meta_sql_function_folds_the_stored_text_as_the_domain_does(
-    connection: sqlite3.Connection,
+@pytest.mark.parametrize(
+    ("pairs", "unmapped"),
+    [
+        ([], "{}"),
+        (
+            [["0x0308", "0"], ["media.title", "Kéroro"], ["0x0308", "1"]],
+            '{"0x0308": "1", "media": {"title": "Kéroro"}}',
+        ),
+    ],
+    ids=["empty", "media-and-repeated"],
+)
+def test_fold_raw_meta_sql_function_folds_old_pairs_as_the_mapper_folds_a_result(
+    *, connection: sqlite3.Connection, pairs: list[list[str]], unmapped: str
 ) -> None:
-    pairs = (("0x0308", "0"), ("media.title", "Kéroro"))
-    stored = json.dumps(pairs, ensure_ascii=False)
     [row] = rows(
-        connection, sql="SELECT fold_raw_meta(?, 'xvid', NULL, 2) AS raw_meta", parameters=(stored,)
+        connection,
+        sql="SELECT fold_raw_meta(?, 'xvid', NULL, 2) AS raw_meta",
+        parameters=(json.dumps(pairs, ensure_ascii=False),),
     )
-    folded = fold_raw_metadata(pairs, codec="xvid", file_type=None, complete_source_count=2)
-    assert row["raw_meta"] == json.dumps(folded, ensure_ascii=False)
+    assert row["raw_meta"] == (
+        '{"codec": "xvid", "complete_source_count": 2, "file_type": null,'
+        f' "unmapped": {unmapped}}}'
+    )
 
 
 def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments() -> None:

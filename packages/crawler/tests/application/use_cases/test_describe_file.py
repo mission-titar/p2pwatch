@@ -19,6 +19,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.identifiers import FileId, Keyword, NodeId
 from p2pwatch.domain.interval import Interval
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
@@ -40,7 +41,7 @@ _OBSERVATION = FileObservation(
         keyword=Keyword("keroro"),
         duration_seconds=1300,
         bitrate_kbps=900,
-        raw_metadata=(),
+        raw_metadata=JsonObjectText(text="{}"),
     ),
     observed_at=_NOW - timedelta(hours=1),
     node_id=NodeId("n1"),

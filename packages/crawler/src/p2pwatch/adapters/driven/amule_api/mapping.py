@@ -1,8 +1,8 @@
 """Maps the amuleapi payloads onto the ports' DTOs. An unknown key is never an error.
 
 Typed JSON does not preserve the capture-all invariant on its own, so every key of a search
-result no structured field consumes lands in ``raw_metadata`` - except ``ecid``, a session-local id
-we never persist. A source keeps only D7's keys (stage 4 spec).
+result no structured field consumes lands under ``raw_metadata``'s ``unmapped`` - except ``ecid``, a
+session-local id we never persist. A source keeps only D7's keys (stage 4 spec).
 """
 
 import json
@@ -288,7 +288,7 @@ def _map_result(search_result: object, *, keyword: Keyword) -> list[ReportedFile
     if native_id is None or size_bytes is None:
         return []
     media = _as_dict(search_result.get("media"))
-    raw_metadata = _raw_metadata(search_result, media=media)
+    unmapped = _unmapped(search_result, media=media)
     codec, file_type = _string(media.get("codec")), _string(search_result.get("file_type"))
     alternates = search_result.get("alternate_names")
     name_rows: list[object] = [search_result, *(alternates if isinstance(alternates, list) else [])]
@@ -309,28 +309,29 @@ def _map_result(search_result: object, *, keyword: Keyword) -> list[ReportedFile
                 duration_seconds=_optional_int(media.get("duration_seconds")),
                 bitrate_kbps=_optional_int(media.get("bitrate_kilobits_per_second")),
                 raw_metadata=fold_raw_metadata(
-                    raw_metadata, codec=codec, file_type=file_type, complete_source_count=complete
+                    unmapped, codec=codec, file_type=file_type, complete_source_count=complete
                 ),
             )
         )
     return reported_files
 
 
-def _raw_metadata(
-    search_result: dict[str, Any], *, media: dict[str, Any]
-) -> tuple[tuple[str, str], ...]:
-    """Every unmapped key → ``(key, rendered_value)``, in wire order."""
-    collected = [
-        (replace_surrogates(key), _render(field))
+def _unmapped(search_result: dict[str, Any], *, media: dict[str, Any]) -> dict[str, object]:
+    """Every key no field consumes, ``media``'s under ``media`` when it holds one, each value
+    rendered as text."""
+    unmapped: dict[str, object] = {
+        replace_surrogates(key): _render(field)
         for key, field in search_result.items()
         if key not in _MAPPED_KEYS
-    ]
-    collected += [
-        (replace_surrogates(f"media.{key}"), _render(field))
+    }
+    unmapped_media = {
+        replace_surrogates(key): _render(field)
         for key, field in media.items()
         if key not in _MAPPED_MEDIA_KEYS
-    ]
-    return tuple(collected)
+    }
+    if unmapped_media:
+        unmapped["media"] = unmapped_media
+    return unmapped
 
 
 def _render(field: object) -> str:

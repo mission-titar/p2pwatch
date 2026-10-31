@@ -51,8 +51,14 @@ def _result(**overrides: Any) -> dict[str, Any]:
     return row
 
 
-def _raw_metadata(reported_file: ReportedFile) -> dict[str, object]:
-    return dict(reported_file.raw_metadata)
+def _raw_metadata(reported_file: ReportedFile) -> dict[str, Any]:
+    raw_metadata: dict[str, Any] = json.loads(reported_file.raw_metadata.text)
+    return raw_metadata
+
+
+def _unmapped(reported_file: ReportedFile) -> dict[str, Any]:
+    unmapped: dict[str, Any] = _raw_metadata(reported_file)["unmapped"]
+    return unmapped
 
 
 def test_maps_a_result_to_an_observation() -> None:
@@ -67,16 +73,33 @@ def test_maps_a_result_to_an_observation() -> None:
     assert reported_file.keyword == "keroro"
 
 
-def test_the_ed2k_only_fields_are_folded_last_into_raw_metadata() -> None:
+def test_the_ed2k_only_fields_sit_beside_what_no_field_consumes() -> None:
     (reported_file,), _ = map_search_results(
         [_result(media={"codec": "H.264"})], keyword=Keyword("keroro")
     )
 
-    assert reported_file.raw_metadata[-3:] == (
-        ("codec", "H.264"),
-        ("file_type", "video"),
-        ("complete_source_count", 142),
+    raw = _raw_metadata(reported_file)
+    assert raw.keys() == {"codec", "file_type", "complete_source_count", "unmapped"}
+    assert (raw["codec"], raw["file_type"], raw["complete_source_count"]) == ("H.264", "video", 142)
+
+
+def test_a_name_the_network_sends_never_meets_one_the_mapper_derives() -> None:
+    """D4: flattened, each of these would repeat a name the mapper chose."""
+    search_result = _result(
+        codec="h264",
+        complete_source_count=7,
+        media={"codec": "xvid", "title": "Keroro"},
+        **{"media.title": "top"},
     )
+    (reported_file,), _ = map_search_results([search_result], keyword=Keyword("keroro"))
+
+    raw = _raw_metadata(reported_file)
+    assert (raw["codec"], raw["complete_source_count"]) == ("xvid", 142)
+    unmapped = _unmapped(reported_file)
+    assert unmapped["codec"] == "h264"
+    assert unmapped["complete_source_count"] == "7"
+    assert unmapped["media.title"] == "top"
+    assert unmapped["media"] == {"title": "Keroro"}
 
 
 def test_an_uppercase_hash_is_folded_to_lowercase() -> None:
@@ -102,7 +125,14 @@ def test_media_fills_the_columns_that_ec_never_could() -> None:
     assert reported_file.bitrate_kbps == 1500
     assert _raw_metadata(reported_file)["codec"] == "H.264"
     # artist/album/title have no column: they survive in raw_metadata (spec §4.2).
-    assert ("media.title", "Keroro") in reported_file.raw_metadata
+    assert _unmapped(reported_file)["media"] == {"artist": "", "album": "", "title": "Keroro"}
+
+
+@pytest.mark.parametrize("media", [None, {"duration_seconds": 1440, "codec": "H.264"}])
+def test_a_media_holding_no_unmapped_key_is_left_out(media: object) -> None:
+    (reported_file,), _ = map_search_results([_result(media=media)], keyword=Keyword("keroro"))
+
+    assert "media" not in _unmapped(reported_file)
 
 
 def test_a_null_media_leaves_the_media_columns_empty() -> None:
@@ -125,7 +155,7 @@ def test_a_malformed_media_object_is_tolerated() -> None:
 def test_unmapped_keys_land_in_raw_metadata() -> None:
     (reported_file,), _ = map_search_results([_result(rating=3)], keyword=Keyword("keroro"))
 
-    raw = _raw_metadata(reported_file)
+    raw = _unmapped(reported_file)
     assert raw["rating"] == "3"
     assert raw["status"] == "new"
     assert raw["already_downloaded"] == "false"
@@ -170,7 +200,7 @@ def test_an_alternate_never_carries_the_volatile_ecid() -> None:
         [_result(alternate_names=[alternate])], keyword=Keyword("keroro")
     )
 
-    assert all("621" not in str(rendered) for _, rendered in reported_files[1].raw_metadata)
+    assert "621" not in reported_files[1].raw_metadata.text
 
 
 def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
@@ -289,22 +319,29 @@ def test_a_surrogate_in_a_filename_reads_as_a_replacement_character(
 
 
 @pytest.mark.parametrize(
-    ("overrides", "pair"),
+    ("overrides", "path", "value"),
     [
-        ({f"rating{_SURROGATE}": "3"}, (f"rating{_REPLACEMENT}", "3")),
-        ({"rating": f"3{_SURROGATE}"}, ("rating", f"3{_REPLACEMENT}")),
-        ({"comments": [f"nice{_SURROGATE}"]}, ("comments", f'["nice{_REPLACEMENT}"]')),
-        ({"media": {f"title{_SURROGATE}": "Keroro"}}, (f"media.title{_REPLACEMENT}", "Keroro")),
-        ({"media": {"codec": f"H.264{_SURROGATE}"}}, ("codec", f"H.264{_REPLACEMENT}")),
-        ({"file_type": f"video{_SURROGATE}"}, ("file_type", f"video{_REPLACEMENT}")),
+        ({f"rating{_SURROGATE}": "3"}, ("unmapped", f"rating{_REPLACEMENT}"), "3"),
+        ({"rating": f"3{_SURROGATE}"}, ("unmapped", "rating"), f"3{_REPLACEMENT}"),
+        ({"comments": [f"nice{_SURROGATE}"]}, ("unmapped", "comments"), f'["nice{_REPLACEMENT}"]'),
+        (
+            {"media": {f"title{_SURROGATE}": "Keroro"}},
+            ("unmapped", "media", f"title{_REPLACEMENT}"),
+            "Keroro",
+        ),
+        ({"media": {"codec": f"H.264{_SURROGATE}"}}, ("codec",), f"H.264{_REPLACEMENT}"),
+        ({"file_type": f"video{_SURROGATE}"}, ("file_type",), f"video{_REPLACEMENT}"),
     ],
 )
 def test_a_surrogate_in_a_results_raw_metadata_reads_as_a_replacement_character(
-    *, overrides: dict[str, Any], pair: tuple[str, str]
+    *, overrides: dict[str, Any], path: tuple[str, ...], value: str
 ) -> None:
     (reported_file,), _ = map_search_results([_result(**overrides)], keyword=Keyword("keroro"))
 
-    assert pair in reported_file.raw_metadata
+    found: Any = _raw_metadata(reported_file)
+    for name in path:
+        found = found[name]
+    assert found == value
 
 
 def test_a_non_string_file_type_is_dropped() -> None:

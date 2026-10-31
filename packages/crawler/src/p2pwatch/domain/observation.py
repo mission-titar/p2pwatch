@@ -1,18 +1,17 @@
 """Observation of a file seen on the network. PURE domain.
 
-``raw_metadata`` is the per-network catch-all of ``(name, value)`` pairs: no metadata field is lost.
+``raw_metadata`` is the per-network catch-all, a JSON object: no metadata field is lost.
 """
 
-from collections.abc import Iterator
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.value_bounds import require_quantity, require_well_formed_text
-
-RawMetadata = tuple[tuple[str, str | int | None], ...]
 
 # DECISION 8: the "MB" shown by eMule clients are binary (MiB).
 _BYTES_PER_MIB = 1024 * 1024
@@ -41,28 +40,22 @@ def candidate_from_fields(
 
 
 def fold_raw_metadata(
-    raw_metadata: tuple[tuple[str, str], ...],
+    unmapped: Mapping[str, object],
     *,
     codec: str | None,
     file_type: str | None,
     complete_source_count: int,
-) -> RawMetadata:
-    """``raw_metadata`` with the three eD2k-only fields appended, absent ones as ``None``. The
-    amuleapi mapper and the catalog migration share it, so both store the same pairs."""
-    return (
-        *raw_metadata,
-        ("codec", codec),
-        ("file_type", file_type),
-        ("complete_source_count", complete_source_count),
+) -> JsonObjectText:
+    """The three eD2k-only values, absent ones as ``null``, beside ``unmapped``, what no field
+    consumes. The amuleapi mapper and the catalog migration share it: both store the same text."""
+    return JsonObjectText.from_object(
+        {
+            "codec": codec,
+            "file_type": file_type,
+            "complete_source_count": complete_source_count,
+            "unmapped": dict(unmapped),
+        }
     )
-
-
-def _metadata_texts(raw_metadata: RawMetadata) -> Iterator[str]:
-    """Each key of ``raw_metadata``, and each value that is text: an integer is stored as JSON."""
-    for key, field in raw_metadata:
-        yield key
-        if isinstance(field, str):
-            yield field
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -77,13 +70,11 @@ class ReportedFile:
     keyword: Keyword
     duration_seconds: int | None = None
     bitrate_kbps: int | None = None
-    raw_metadata: RawMetadata = ()
+    raw_metadata: JsonObjectText = JsonObjectText(text="{}")
 
     def __post_init__(self) -> None:
         require_well_formed_text(self.filename, error_label="a reported file's filename")
         require_well_formed_text(self.keyword, error_label="a reported file's keyword")
-        for text in _metadata_texts(self.raw_metadata):
-            require_well_formed_text(text, error_label="a reported file's raw_metadata")
         require_quantity(self.size_bytes, error_label="a reported file's size_bytes")
         require_quantity(self.source_count, error_label="a reported file's source_count")
         require_quantity(self.duration_seconds, error_label="a reported file's duration_seconds")

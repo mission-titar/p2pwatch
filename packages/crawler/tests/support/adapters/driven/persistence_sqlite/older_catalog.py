@@ -102,13 +102,13 @@ def insert_v11_observation(
         size_bytes=100,
         duration_seconds=media_length_sec,
         bitrate_kbps=None,
-        raw_metadata="[]",
+        raw_metadata="{}",
         keyword="keroro",
         node_id="n1",
     )
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, media_length_sec,"
-        " raw_meta, keyword, node_id, content_hash) VALUES (?, ?, ?, ?, '[]', 'keroro', 'n1', ?)",
+        " raw_meta, keyword, node_id, content_hash) VALUES (?, ?, ?, ?, '{}', 'keroro', 'n1', ?)",
         (file_id, filename, 100, media_length_sec, key),
     )
     connection.execute(
@@ -158,14 +158,14 @@ def insert_v12_observation(
         size_bytes=100,
         duration_seconds=None,
         bitrate_kbps=None,
-        raw_metadata='[["codec", "xvid"]]',
+        raw_metadata='{"codec": "xvid"}',
         keyword="keroro",
         node_id="n1",
     )
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
         " raw_meta, keyword, node_id, content_hash)"
-        " VALUES (?, ?, ?, ?, '[[\"codec\", \"xvid\"]]', 'keroro', 'n1', ?)",
+        " VALUES (?, ?, ?, ?, '{\"codec\": \"xvid\"}', 'keroro', 'n1', ?)",
         (file_id, filename, 100, None, key),
     )
     connection.execute(
@@ -210,14 +210,14 @@ def insert_v13_observation(
         size_bytes=100,
         duration_seconds=None,
         bitrate_kbps=None,
-        raw_metadata="[]",
+        raw_metadata="{}",
         keyword="keroro",
         node_id="n1",
     )
     connection.execute(
         "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
         " raw_metadata, keyword, node_id, content_hash)"
-        " VALUES (?, ?, ?, ?, '[]', 'keroro', 'n1', ?)",
+        " VALUES (?, ?, ?, ?, '{}', 'keroro', 'n1', ?)",
         (file_id, filename, 100, None, key),
     )
     connection.execute(
