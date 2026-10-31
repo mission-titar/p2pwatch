@@ -270,4 +270,5 @@ By `kwonly-holistic-review` over `git diff origin/main...origin/refactor/keyword
 
 The lot changes the image, by its signatures only. Whether a release follows is the lead's to propose once the stack
 merges (Wrap f), under the constraint the earlier handoffs name: the v5 waits for a P2P network other than eD2k
-(operator, 2026-10-27). Then `BACKLOG.md`, read before proposing.
+(operator, 2026-10-27) (Corrected: revoked on 2026-10-30, the v5 waits for no new network; D7 of
+`agents/specs/2026-10-30-values-checked-at-the-boundary.md`). Then `BACKLOG.md`, read before proposing.
