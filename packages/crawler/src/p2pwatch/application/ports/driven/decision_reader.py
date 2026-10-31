@@ -19,4 +19,5 @@ class DecisionReader(ABC):
 
     @abstractmethod
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:
-        """Every file and target whose latest verdict is tier=download (spec download §5)."""
+        """Every file and target whose latest verdict, by any node, is tier=download (download §5):
+        a merge joins trusted peers, and a download the webui shows belongs in the client."""

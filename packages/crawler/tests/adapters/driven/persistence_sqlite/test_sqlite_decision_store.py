@@ -195,6 +195,18 @@ def test_download_candidates_include_a_single_download_only_decision(
     )
 
 
+def test_download_candidates_include_a_decision_another_node_made(
+    decision_store: SqliteDecisionStore,
+) -> None:
+    # A merged catalog's download decisions drive this node's download loop too.
+    decision_store.record_decision(
+        _decision(_A, tier=DecisionTier.DOWNLOAD, node_id=NodeId("merged-peer"))
+    )
+    assert decision_store.read_download_candidates() == (
+        DownloadCandidate(file=_A, target_id=TargetId("062A")),
+    )
+
+
 def test_download_candidates_exclude_a_file_whose_latest_verdict_is_not_download(
     decision_store: SqliteDecisionStore,
 ) -> None:
