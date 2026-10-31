@@ -203,6 +203,14 @@ docker compose exec p2pwatch python -m p2pwatch merge \
   --into /data/catalog-b.db /data/catalog-b.db
 ```
 
+La fusion vérifie chaque source avant d'écrire quoi que ce soit. Elle refuse une source qui contient
+une valeur que le nœud ne pourrait pas relire : un texte qui n'est pas de l'UTF-8 valide, un
+`raw_metadata` qui n'est pas le JSON attendu, un caractère de contrôle dans un identifiant de cible
+ou un nom de règle. Le refus nomme la source, la table, la colonne et la première ligne en cause, en
+code 2 : `Merge failed: source catalog /data/catalog-b.db refused: match_decisions.target_id holds a
+control character, first at id 12`. La destination reste alors telle quelle : `--output` ne crée
+aucun fichier, et `--into` ne met pas son catalogue à niveau.
+
 Le journal de la fusion nomme chaque catalogue source, suivi de `merged`, ou de
 `skipped: it is the output` pour celui que désigne `--into` : il n'est jamais fusionné en lui-même,
 et sa mise à niveau a lieu à son ouverture.
