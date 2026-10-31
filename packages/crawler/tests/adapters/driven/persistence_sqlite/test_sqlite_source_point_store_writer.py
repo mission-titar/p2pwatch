@@ -17,7 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.source import (
     ContactPoint,
     SourceKey,
@@ -46,7 +46,7 @@ def _reading(role: SourceRole | None = _Q, *, counter: int = 0) -> SourceReading
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=counter,
     )
 
@@ -189,7 +189,7 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
         _reading(),
         contact_point=ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
         connectable=True,
-        raw_metadata=JsonText.from_object(
+        raw_metadata=JsonObjectText.from_object(
             {
                 "source_origin": "kad",
                 "protocol_extensions": ["a", "b"],

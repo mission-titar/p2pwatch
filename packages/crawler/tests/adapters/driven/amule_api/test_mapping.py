@@ -19,7 +19,7 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, Keyword
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.source import ContactPoint, SourceKey, SourceReading, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
@@ -552,7 +552,7 @@ def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
         role=SourceRole.QUEUED,
         contact_point=ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
         connectable=True,
-        raw_metadata=JsonText(
+        raw_metadata=JsonObjectText(
             text='{"client_mod_name": null, "ident_state": "identified",'
             ' "protocol_extensions": ["extended_source_exchange"], "reported_os": "Linux",'
             ' "server_name": "eMule Security", "shared_files_browsable": false,'
@@ -701,7 +701,7 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
 
     assert (reading.source_name, reading.software) == (None, None)
     assert (reading.contact_point, reading.connectable) == (None, None)
-    assert reading.raw_metadata == JsonText(text='{"ident_state": "unknown"}')
+    assert reading.raw_metadata == JsonObjectText(text='{"ident_state": "unknown"}')
     assert reading.session_received_bytes == 0
 
 
@@ -806,7 +806,7 @@ def _reading(
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=counter,
     )
 
@@ -856,7 +856,7 @@ def test_rows_with_neither_hash_nor_name_are_never_merged() -> None:
         role=SourceRole.QUEUED,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=0,
     )
 

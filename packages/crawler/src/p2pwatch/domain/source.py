@@ -13,7 +13,7 @@ from enum import StrEnum
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId, SourceId
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.value_bounds import require_quantity, require_well_formed_text
 
 # Its own namespace, so that a source_id never equals a file_id (stage 4 spec, D2).
@@ -131,7 +131,7 @@ class SourceReading:
     role: SourceRole | None
     contact_point: ContactPoint | None
     connectable: bool | None
-    raw_metadata: JsonText
+    raw_metadata: JsonObjectText
     session_received_bytes: int
 
     def __post_init__(self) -> None:

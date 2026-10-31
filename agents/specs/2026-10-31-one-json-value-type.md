@@ -10,7 +10,7 @@ an array of `[name, value]` pairs for a file and an object with sorted keys for 
 it is produced by the mappers, stored, hashed into its variant's `content_hash`, checked by `merge` and shown by the
 SQL console.
 
-The lot types both by one opaque value, `JsonText`, the canonical text of a JSON object, and stores both in that one
+The lot types both by one opaque value, `JsonObjectText`, the canonical text of a JSON object, and stores both in that one
 form. No migration and no pass over the rows is added: a file's new form is written inside the rewrite v5's migrations
 already make. Where the backlog item kept the stored bytes, the operator chose one form (D3).
 
@@ -24,19 +24,21 @@ already make. Where the backlog item kept the stored bytes, the operator chose o
 
 ### The concept
 
-- **D1. `JsonText`, a frozen value holding the canonical text of a JSON object, its keys sorted, its text valid UTF-8,
-  no `NaN` nor infinity; built from that text, `JsonText(text=...)`, or from a mapping, `JsonText.from_object(...)`.**
+- **D1. `JsonObjectText`, a frozen value holding the canonical text of a JSON object, its keys sorted, its text valid
+  UTF-8, no `NaN` nor infinity; built from that text, `JsonObjectText(text=...)`, or from a mapping,
+  `JsonObjectText.from_object(...)`.** (Corrected: JsonText renamed JsonObjectText after the operator's review of #590,
+  since the type requires an object)
   *No code reads inside the metadata, so the domain needs its canonical text, not its structure: equal content gives
   equal text, hence one variant, and equality is the text's, exact. A code that one day reads a field looks it up and
   checks its type, which parsing the text does as well.* (Operator, over a recursive `JsonValue` type, then over a
   `NewType`, which any code could build from an unchecked text, 2026-10-31.)
-- **D2. `raw_metadata` is a `JsonText` on both `ReportedFile` and `SourceReading`; `RawMetadata`, `SourceMetadata` and
+- **D2. `raw_metadata` is a `JsonObjectText` on both `ReportedFile` and `SourceReading`; `RawMetadata`, `SourceMetadata` and
   their two UTF-8 walks are deleted.** *The metadata is a JSON object: one concept, one type, which guards what the
   walks guarded.* `ReportedFile` keeps a default, as today: the empty object.
 
 ### The stored form
 
-- **D3. Every stored metadata is a `JsonText`, which migration 0007 writes too.** *One form for one concept, and
+- **D3. Every stored metadata is a `JsonObjectText`, which migration 0007 writes too.** *One form for one concept, and
   nothing reads the wire order. 0007 is in no release and no catalog to keep has passed it (operator), so changing
   what it writes adds no pass over the rows (Appendix B).* A source's stored bytes, already this form, do not move.
   Where a v4 row repeats a name, which v4 allowed, 0007 keeps its last value, as `json.loads` does: *the upgrade
@@ -54,22 +56,22 @@ already make. Where the backlog item kept the stored bytes, the operator chose o
 
 ### The guards
 
-- **D5. A `JsonText` refuses, when it is built, a text that is not a JSON object, holds invalid UTF-8 or a number
+- **D5. A `JsonObjectText` refuses, when it is built, a text that is not a JSON object, holds invalid UTF-8 or a number
   that is not finite, or that parsed and written back would not be the same text.** *Checked in the value itself,
-  the rule holds for every `JsonText`, whoever builds it: a mapper, the reader of a stored row, `merge`. The node
+  the rule holds for every `JsonObjectText`, whoever builds it: a mapper, the reader of a stored row, `merge`. The node
   supports UTF-8 text only (`AGENTS.md`) and RFC 8259 admits no `NaN` nor infinity; the write-back refuses every other
   spelling, an unsorted or repeated name, and the text `from_object` writes for a nested name that is not text
   (`{2: .., 10: ..}`, sorted as numbers, not as the text they become).* A nesting `json.loads` cannot parse, past about
   10 000 levels, is refused, not raised. Its error says "a JSON text", no longer its holder: no production path reads
   the message.
-- **D6. `merge` refuses a source catalog whose file or source metadata is not a `JsonText`.** *A merged row can never
+- **D6. `merge` refuses a source catalog whose file or source metadata is not a `JsonObjectText`.** *A merged row can never
   be deleted, and one the reader refuses would stop the reevaluation at start and the files page, while one in another
   spelling would give a second variant to the same content; today's check accepts all of them but the lone
   surrogate.*
 
 ### Where it lives
 
-- **D7. `JsonText` wraps the `json` module, in `domain/json_text.py`; the domain may import `json`'s `loads` and
+- **D7. `JsonObjectText` wraps the `json` module, in `domain/json_object_text.py`; the domain may import `json`'s `loads` and
   `dumps` only.** *Both are pure, parsing and writing a string, never a file, as `configparser` in `p2pwatch_amule`'s
   domain; the limit keeps out `load` and `dump`, which take a file, as `io` is limited to `StringIO`. The guards then
   hold in one place, and stage 5's mappers, which may not import `persistence_sqlite`, will use them.*
@@ -78,9 +80,9 @@ The operator decided D1 to D7 on 2026-10-31.
 
 ## 4. Acceptance
 
-1. `JsonText.from_object` writes keys sorted, and refuses `NaN`, an infinity, a lone surrogate in a name, in a text
+1. `JsonObjectText.from_object` writes keys sorted, and refuses `NaN`, an infinity, a lone surrogate in a name, in a text
    and in a text nested in a list or an object, and a nested object named by `2` and `10`.
-2. `JsonText(text=...)` refuses a text that is not an object, an object with unsorted or repeated names, one spelled
+2. `JsonObjectText(text=...)` refuses a text that is not an object, an object with unsorted or repeated names, one spelled
    with other spacing or escapes, `NaN`, `1e999`, an escaped lone surrogate and a nesting of 10 000 levels, each with
    a `ValueError`.
 3. The stored bytes are asserted against literal strings, never against the code the lot changes: the source point
@@ -136,45 +138,45 @@ The closing block deletes "One domain type for arbitrary JSON".
 - "Round-trip contracts": the next lot; a drawn metadata compares as text, exactly; it stays open.
 - "Every catalog table STRICT": a column's type, not the JSON inside it; corrected on 2026-10-31 to be declared in the
   unreleased migrations' `CREATE TABLE`s, as D3 uses 0007; it stays open.
-- "Multi network", stage 5: its mappers fill `unmapped` and build a `JsonText` with `JsonText.from_object`; it stays open.
+- "Multi network", stage 5: its mappers fill `unmapped` and build a `JsonObjectText` with `JsonObjectText.from_object`; it stays open.
 - The other items are unrelated and stay open.
 
 ## Appendix A. Design
 
 Paths under `packages/crawler/src/p2pwatch/`.
 
-- **The type** (`domain/json_text.py`): `JsonText`, a `kw_only` frozen dataclass with one field, `text`, whose
+- **The type** (`domain/json_object_text.py`): `JsonObjectText`, a `kw_only` frozen dataclass with one field, `text`, whose
   `__post_init__` holds D5: `json.loads`, its `RecursionError` turned into `ValueError` (a `JSONDecodeError` is already
   one), an object required, then `json.dumps(..., ensure_ascii=False, sort_keys=True, allow_nan=False)` of what it
   parsed, today's source form, compared with `text`, and `require_well_formed_text` on it. The classmethod
   `from_object(json_object)` takes a `Mapping[str, object]` and returns `cls(text=...)` of the same `json.dumps`, so the
-  guard checks it. `ReportedFile.raw_metadata`'s default is `JsonText(text="{}")`. `p2pwatch.domain` is one tach
+  guard checks it. `ReportedFile.raw_metadata`'s default is `JsonObjectText(text="{}")`. `p2pwatch.domain` is one tach
   module, so the new file needs no declaration.
 - **The import rules**: `ast-grep/rules/domain-imports.yml` gains `json`, `core-import-names.yml` its two names,
   each with a valid case in `ast-grep/tests/`.
 - **The producers**: the source mapper (`_source_metadata` builds a `dict`, its tuple of texts written as a list as
   today), the file mapper and `fold_raw_metadata` (`domain/observation.py`), which takes the `unmapped` mapping and
-  returns the file's `JsonText`. The mapper keeps replacing surrogates in names (`replace_surrogates`), since a
+  returns the file's `JsonObjectText`. The mapper keeps replacing surrogates in names (`replace_surrogates`), since a
   `ValueError` raised in `_map_result` would escape the search. The file mapper keeps rendering every value to text
   (`_render`), so a mapped result
   and 0007's fold of its v4 row agree (stage 1's D11, `test_migration_0007.py`).
 - **The stores and the reader**: `SqliteSourcePointStore` and `SqliteObservationStore` write `raw_metadata.text`;
-  `observation_from_row` (`observation_read.py`) reads it back as `JsonText(text=row["raw_metadata"])`.
+  `observation_from_row` (`observation_read.py`) reads it back as `JsonObjectText(text=row["raw_metadata"])`.
 - **Migration 0007**: its SQL function `fold_raw_meta` (`persistence_sqlite/variants.py`) reads v4's pairs into a
   `dict`, which keeps the last value of a repeated name, puts `media.<k>` under `unmapped`'s `media` and every other
   name, EC tags included, under `unmapped`, and folds. No `.sql` file changes. The docstrings stating the old form
   change with it: `variants.py`'s first lines (a change of serialization needs a migration), its comment "0007, which
   never changes", `sqlite_observation_store.py`'s (a list of pairs, wire order, no sorting), `domain/observation.py`'s
   first lines and `fold_raw_metadata`'s (pairs), and `_raw_metadata`'s (wire order).
-- **The merge** (`sqlite_catalog_copier.py`): each side's metadata is checked by building a `JsonText` from it, the
+- **The merge** (`sqlite_catalog_copier.py`): each side's metadata is checked by building a `JsonObjectText` from it, the
   source side in block 10, the file side in block 20, where `_is_metadata_pairs` goes; one problem text, "is not the
   canonical JSON text of an object", replaces `_NOT_PAIRS` and `_NOT_OBJECT`, and the module docstring's "a value the
   node could not read back" becomes "a value the node would not write".
-- **The tests**: `test_source_watcher.py`'s `SourceReading`s take a `JsonText` in block 10; the support writes the
+- **The tests**: `test_source_watcher.py`'s `SourceReading`s take a `JsonObjectText` in block 10; the support writes the
   object form from block 20 (`insert_observation` in `tests/support/catalog_rows.py`, `older_catalog.py`'s versions 8
   to 13, and `test_migration_0008.py`'s rows where the reader now checks them), and `test_describe_file.py`'s
-  `ReportedFile` takes a `JsonText`; the owners' tests of a surrogate in
-  `raw_metadata` move to `JsonText`'s own tests. Today's agreement case of `test_migration_0007.py` (a `media`
+  `ReportedFile` takes a `JsonObjectText`; the owners' tests of a surrogate in
+  `raw_metadata` move to `JsonObjectText`'s own tests. Today's agreement case of `test_migration_0007.py` (a `media`
   holding only mapped keys) stays beside acceptance 4's.
 
 ## Appendix B. Why D3 adds no pass over the rows

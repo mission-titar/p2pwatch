@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.source import (
     ContactPoint,
     EarlierPoints,
@@ -83,7 +83,7 @@ def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> 
         role=None,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text='{"protocol_extensions": [], "source_origin": "kad"}'),
+        raw_metadata=JsonObjectText(text='{"protocol_extensions": [], "source_origin": "kad"}'),
         session_received_bytes=0,
     )
     assert reading.source is None
@@ -100,7 +100,7 @@ def _reading() -> SourceReading:
         role=SourceRole.QUEUED,
         contact_point=None,
         connectable=True,
-        raw_metadata=JsonText.from_object(
+        raw_metadata=JsonObjectText.from_object(
             {"protocol_extensions": ["a"], "source_origin": "kad", "shared_files_browsable": True}
         ),
         session_received_bytes=5,
@@ -158,7 +158,7 @@ def _passing(session_received_bytes: int) -> SourceReading:
         role=None,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=session_received_bytes,
     )
 
