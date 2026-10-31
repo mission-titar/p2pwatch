@@ -183,7 +183,7 @@ def test_a_result_without_a_usable_hash_is_skipped_and_counted() -> None:
 
 @pytest.mark.parametrize("size_bytes", [True, -1, 2**63])
 def test_a_result_without_a_usable_size_is_skipped_and_counted(size_bytes: int) -> None:
-    """D2: a size read as 0 would catalogue a file aMule refuses to download."""
+    """A size read as 0 would catalogue a file aMule refuses to download."""
     reported_files, skipped = map_search_results(
         [_result(size_bytes=size_bytes)], keyword=Keyword("keroro")
     )
@@ -263,7 +263,7 @@ def test_a_malformed_source_count_reads_as_zero(count: object) -> None:
 def test_a_duration_or_bitrate_the_catalog_cannot_hold_reads_as_absent(
     *, reported: int, read: int | None
 ) -> None:
-    """D2: neither is negative, and the catalog holds at most a signed 64-bit integer."""
+    """Neither is negative, and the catalog holds at most a signed 64-bit integer."""
     media = {"duration_seconds": reported, "bitrate_kilobits_per_second": reported}
     (reported_file,), _ = map_search_results([_result(media=media)], keyword=Keyword("keroro"))
 
@@ -281,7 +281,7 @@ def test_a_duration_or_bitrate_the_catalog_cannot_hold_reads_as_absent(
 def test_a_surrogate_in_a_filename_reads_as_a_replacement_character(
     *, name: str, filename: str
 ) -> None:
-    """D1: amuleapi writes none, so one left comes from bytes that are not UTF-8."""
+    """Since amuleapi writes none, one left comes from bytes that are not UTF-8."""
     (reported_file,), _ = map_search_results([_result(name=name)], keyword=Keyword("keroro"))
 
     assert reported_file.filename == filename
@@ -781,6 +781,7 @@ def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
         (4242, False, False),
         (0, False, None),
         (None, False, None),
+        (-1, True, None),
         (3232238090, None, None),
         (3232238090, "true", None),
     ],
