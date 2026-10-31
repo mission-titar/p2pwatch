@@ -77,7 +77,7 @@ _INFORMATIVE_ROLES: tuple[SourceRole | None, ...] = (
     SourceRole.STANDBY,
 )
 
-# Result keys consumed by a structured field, hence EXCLUDED from raw_metadata.
+# Result keys consumed by a structured field, hence left out of ``unmapped``.
 _MAPPED_KEYS = frozenset(
     {"hash", "name", "size_bytes", "sources", "media", "file_type", "alternate_names"}
 )

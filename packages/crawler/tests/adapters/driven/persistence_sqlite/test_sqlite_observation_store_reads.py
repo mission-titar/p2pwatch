@@ -10,7 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
-from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_metadata
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
 _A = FileKey(network=Network.ED2K, native_id="a" * 32)
@@ -47,6 +47,30 @@ def test_latest_observation_returns_the_observation_whole(
 ) -> None:
     observation = FileObservation(
         reported_file=_reported_file(_A, name="Keroro 062A.avi", size=4242),
+        observed_at=_T0,
+        node_id=_NODE_ID,
+    )
+    observation_store.record_observation(observation)
+    assert observation_store.read_latest_observation(_A) == observation
+
+
+def test_latest_observation_reads_the_raw_metadata_back(
+    observation_store: SqliteObservationStore,
+) -> None:
+    observation = FileObservation(
+        reported_file=ReportedFile(
+            file=_A,
+            filename="Keroro 062A.avi",
+            size_bytes=4242,
+            source_count=1,
+            keyword=Keyword("keroro"),
+            raw_metadata=fold_raw_metadata(
+                {"0x0308": "0", "media": {"title": "Keroro"}},
+                codec="xvid",
+                file_type="Video",
+                complete_source_count=2,
+            ),
+        ),
         observed_at=_T0,
         node_id=_NODE_ID,
     )
