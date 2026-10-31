@@ -167,9 +167,10 @@ d'elle. Une source n'est jamais copiée.
 
 **Valider la configuration**, sans rien démarrer. À lancer avant un déploiement. Affiche
 `Config valid` si les trois fichiers sont valides. Sinon elle sort en erreur (code 1) : un fichier
-absent, illisible ou qui n'est pas du YAML donne `error: <fichier>: <raison>`, un fichier lisible au
-contenu faux donne `Invalid config: <fichier>: <clé>: <message>` (sans clé pour `targets.yml` et
-`matcher.yml`).
+absent, illisible, qui n'est pas du YAML, ou qui contient un texte qui n'est pas de l'UTF-8 valide
+(`"\ud800"`) ou un alias qui se contient (`&k [keroro, *k]`) donne `error: <fichier>: <raison>`, un
+fichier lisible au contenu faux donne `Invalid config: <fichier>: <clé>: <message>` (sans clé pour
+`targets.yml` et `matcher.yml`).
 
 ```bash
 docker compose run --rm p2pwatch python -m p2pwatch validate-config \
