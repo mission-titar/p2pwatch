@@ -16,7 +16,7 @@ One stack cut from `main` at `09d21e2c`, three blocks, the closing one included.
 |---|---|---|
 | 10 | #590 | `refactor/json-text-for-source-metadata` |
 | 20 | #591 | `refactor/json-text-for-file-metadata` |
-| 30 | #592 | `docs/wrap-one-json-text` |
+| 30 | #593 | `docs/wrap-one-json-text` |
 
 Not merged at writing. What the operator sees (spec section 2): `merge` refuses a source catalog whose file or source
 metadata is not the canonical JSON text of an object; in the SQL console a file's `raw_metadata` is an object whose
