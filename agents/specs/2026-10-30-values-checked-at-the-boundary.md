@@ -53,12 +53,12 @@ catalog holds, D9.)*
   one the node cannot read breaks the files page, the reevaluation and the download loop, and one whose ids do not
   match its keys blocks the node's own writes. Types, signs and closed sets are left to the STRICT lot, due before v5,
   so these blocks write no check the schema will soon hold.* Blocks 35 and 37.
+- **D10. A merged catalog's `download` decisions keep driving the download loop.** *A merge is rare and intentional,
+  between peers one trusts, and a file the webui shows as a download should be in the client too.*
 - **D11. A source the destination's schema refuses during the copy leaves the earlier sources merged.** *A single
   transaction over the whole merge cannot hold more than 10 sources (SQLite neither detaches a source read in a
   transaction nor attaches more than 10), and a copy of the destination costs its size; re-running is safe, since a
   duplicate is skipped.* Block 37.
-- **D10. A merged catalog's `download` decisions keep driving the download loop.** *A merge is rare and intentional,
-  between peers one trusts, and a file the webui shows as a download should be in the client too.*
 
 The operator decided D1 to D8 on 2026-10-30, and D9 to D11 on 2026-10-31 after the holistic review found `merge`
 unchecked; the names D3 introduces are in Appendix A.
@@ -94,10 +94,15 @@ check.
 
 ## 6. Documents
 
-- `AGENTS.md`: the invariant "UTF-8 text only", and what amuleapi really sends (block 40).
-- `docs/migration-4x.md`: the config values now refused (block 30).
+- `AGENTS.md`: the invariant "UTF-8 text only", and what amuleapi really sends (block 40). *(Added after the second
+  holistic review: the invariant "`merge` writes only to its destination" made exact, block 40.)*
+- `docs/migration-4x.md`: the config values now refused (block 30). (Corrected: the three lines `validate-config`
+  prints quoted whole, block 38.)
 - `docs/operate.md`, the catalog merge: what it refuses (blocks 35 and 37) and what a refusal during the copy leaves
-  (block 37).
+  (block 37). (Corrected: and block 39, which removes an output no source entered and gives the command to go on
+  with; block 38 lists the config's new `error:` lines.)
+- `packages/matching/AGENTS.md`: the control characters `validation.py` refuses. *(Added after the first holistic
+  review, block 38.)*
 - Stage 1's D16 and the umbrella spec: a correction beside each line D7 revokes (block 40).
 
 ## 7. Limits and scope
@@ -110,6 +115,8 @@ check.
 - **Until the STRICT lot, `merge` copies a value of the wrong type, a negative integer (but a source's received
   bytes, which a `CHECK` already holds), an unknown tier or an instant out of range** (D9). No release separates the
   two lots, and the STRICT lot must close it.
+- **An alias tree that fans out (billion laughs) takes exponential time in both config walkers**: only the config's
+  author can write one (operator, 2026-10-31, after the first holistic review).
 
 ### Backlog
 
@@ -142,20 +149,23 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
   `_int_or_zero` (0), `_optional_int` (`None`), the inline check of a search result's `size_bytes` (result dropped).
   amuled itself drops a result of size 0 and refuses a link of size 0 (Appendix C).
 - **D3.** `p2pwatch/domain/value_bounds.py` holds `require_well_formed_text(text, *, error_label)` and
-  `require_quantity(quantity, *, error_label)`, both raising `ValueError` (names: operator). A well-formed text is
-  valid UTF-8: it holds no surrogate, paired or not, since a pair left in a `str` fails every sink a lone one does. A
-  quantity is an integer in [0, 2\*\*63). `ReportedFile`, `SourceReading`, `DownloadStatus` and `ClientStatus` call
-  them from `__post_init__` on each text field (`raw_metadata`'s keys, texts and tuple elements included) and each
-  integer field, a `None` passing. `raw_metadata`'s integers stay unchecked (stored as JSON text). `FileKey` stays out:
-  its `native_id` is held to its network's canonical form, a stricter rule, by `_hash_hex` and
-  `require_canonical_native_id`, and stage 5 defines that form per network. `SourceKey` and `ContactPoint` are the
-  precedents. `quantity` and `well-formed text` stay out of `AGENTS.md`'s glossary: each function's docstring
-  defines its word.
+  `require_quantity(quantity, *, error_label)`, both raising `ValueError` (names: operator). (Corrected: it also holds
+  `is_quantity` and `replace_surrogates`, on which `require_quantity` and the mapper build, so the mapper keeps no copy
+  of either bound; block 38.) A well-formed text is valid UTF-8: it holds no surrogate, paired or not, since a pair left
+  in a `str` fails every sink a lone one does. A quantity is an integer in [0, 2\*\*63). `ReportedFile`,
+  `SourceReading`, `DownloadStatus` and `ClientStatus` call them from `__post_init__` on each text field
+  (`raw_metadata`'s keys, texts and tuple elements included) and each integer field, a `None` passing. `raw_metadata`'s
+  integers stay unchecked (stored as JSON text). `FileKey` stays out: its `native_id` is held to its network's canonical
+  form, a stricter rule, by `_hash_hex` and `require_canonical_native_id`, and stage 5 defines that form per network.
+  `SourceKey` and `ContactPoint` are the precedents. `quantity` and `well-formed text` stay out of `AGENTS.md`'s
+  glossary: each function's docstring defines its word.
 - **D4.** `adapters/driven/config/yaml_loader.py`'s `load_yaml` walks the loaded tree once and raises a
-  `BrokenInputError` naming the file and the key path, as it does for a file that is not UTF-8; its module docstring,
-  which says it validates no substance, changes. `adapters/driven/config/interpolation.py`'s `interpolate_document`
-  refuses a variable's value with the `InvalidConfigError` it raises for an unset one, naming the variable, since
-  interpolation runs after `load_yaml`. Both through `require_well_formed_text`.
+  `BrokenInputError` naming the file and the key path, as it does for a file that is not UTF-8 (Corrected: the key path
+  escapes a key's non-printable characters, and the walk refuses an alias of a value that holds it, which ended in a
+  `RecursionError`; block 38); its module docstring, which says it validates no substance, changes.
+  `adapters/driven/config/interpolation.py`'s `interpolate_document` refuses a variable's value with the
+  `InvalidConfigError` it raises for an unset one, naming the variable, since interpolation runs after `load_yaml`. Both
+  through `require_well_formed_text`.
 - **D5.** `packages/matching/src/catalog_matching/domain/validation.py` refuses a character of Unicode category `Cc`
   (C0, DEL, C1) in a target letter and a rule name, through `unicodedata`, since `catalog_matching` cannot import
   `p2pwatch`. The files page joins and splits `target_id` and `rule_name` on U+001F (`_split_concat`,
@@ -177,7 +187,9 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
   disproved (amuled drops sizes out of range). The lead re-runs Appendix C's two queries on the operator's catalog
   before the node upgrades to v5.
 - **D9.** `adapters/driven/persistence_sqlite/sqlite_catalog_copier.py` runs two passes, attaching one source at a time
-  since SQLite attaches at most 10 databases (`SQLITE_MAX_ATTACHED`). The check pass runs on a connection to `:memory:`
+  since SQLite attaches at most 10 databases (`SQLITE_MAX_ATTACHED`). (Corrected: read-only, as a
+  `file:...?mode=ro` URI, every connection the opener returns opening a URI: a read-write attach checkpointed a
+  source's pending `-wal` into it; block 39.) The check pass runs on a connection to `:memory:`
   carrying the check functions, before `open_catalog` creates (`--output`) or migrates (`--into`) the destination, so a
   refused check writes nothing at all. The copy pass then copies each source in its own transaction (D11). A check's
   refusal raises `CatalogCopyError` naming the source, the table, the column and the first offending row's key, and
@@ -199,6 +211,9 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
     unknown one), and each variant's `content_hash` equals the hash of its values, the observation variants' through the
     registered `content_hash`, the source variants' through their store's hash, moved into `variants.py` and registered
     the same way. A non-derived `file_id` would make the node's own `record_observation` of that key fail for good.
+    (Corrected: the check's `source_id` gives `NULL` for a `native_id` its network refuses, so that row is named
+    too, and the check connection registers only the functions its checks call, `content_hash` unmemoized;
+    block 39.)
 - Block 37 also turns the six `INSERT OR IGNORE ... SELECT` copies into `INSERT ... SELECT ... WHERE true ON CONFLICT DO
   NOTHING` (`WHERE true` resolves SQLite's parse ambiguity between a `SELECT` and an upsert); the seventh,
   `_COPY_MATCH_DECISIONS`, a plain `INSERT ... SELECT DISTINCT ... WHERE NOT EXISTS`, already raises. A duplicate is
@@ -206,7 +221,10 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
   the image's), so the existing sign `CHECK` on `session_received_bytes` now refuses too. The copier runs each copy
   statement so that a refusal the schema raises names the source and the table, and the sources already merged; SQLite's
   own text names no row. With `--output`, such a refusal leaves the output holding the earlier sources, and the message
-  says to go on with `--into` it. `CatalogCopier`'s docstring and `MergeError`'s state D9 and D11.
+  says to go on with `--into` it. (Corrected: an output no source entered is removed, so criterion 4's "no file is left"
+  holds as written, and the message names the command, `--into <output> <output>` and the sources not merged, printed
+  with `--output` only; block 39, the operator's option A of 2026-10-31.) `CatalogCopier`'s docstring and `MergeError`'s
+  state D9 and D11.
   Pitfalls for block 37: `tests/support/catalog_rows.py`'s `insert_source_variant` sets a stand-in hash
   (`blake2b(repr(...))`), so every merge test built on `make_catalog` would be refused until it uses the store's own
   hash; the store hashes `connectable` as a JSON boolean while it stores 0 or 1, so the SQL function must turn it back
@@ -256,11 +274,12 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
    escaped `\ud800` in an observation variant's `raw_metadata`, a `raw_metadata` that is not JSON, a U+001F in a
    `target_id`, a `\t` in a `rule_name` (block 35); a `file_id` its `native_id` does not derive, a `content_hash` that
    is not its variant's, in each variant table, and a source variant's `role` `'bogus'` in a source built without that
-   `CHECK` (block 37). For each, `uv run python -m p2pwatch merge` exits 2 naming the source and the table (and the
-   column for a check), in both modes: with `--output`, no file is left; with `--into`, the destination's
-   `database_digest` is unchanged. On `main` each exits 0, the `'bogus'` row dropped in silence. The clean source merges
-   as before, and a merge of the clean source then the `'bogus'` one leaves the clean one merged and names it (D11).
-   Blocks 35 and 37 carry their runs.
+   `CHECK` (block 37) (Corrected: seeded under `PRAGMA ignore_check_constraints` in a source keeping the `CHECK`, which
+   the destination's `CHECK` refuses either way). For each, `uv run python -m p2pwatch merge` exits 2 naming the source
+   and the table (and the column for a check), in both modes: with `--output`, no file is left; with `--into`, the
+   destination's `database_digest` is unchanged. On `main` each exits 0, the `'bogus'` row dropped in silence. The clean
+   source merges as before, and a merge of the clean source then the `'bogus'` one leaves the clean one merged and names
+   it (D11). Blocks 35 and 37 carry their runs.
 
 ## Appendix C. Facts
 
