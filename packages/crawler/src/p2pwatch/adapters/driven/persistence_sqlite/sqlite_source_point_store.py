@@ -1,6 +1,5 @@
 """``SqliteSourcePointStore``: each node's source points in the catalog (source points, D4, D5)."""
 
-import json
 import sqlite3
 from collections.abc import Sequence
 from contextlib import suppress
@@ -176,7 +175,7 @@ def _latest_point(row: NamedRow) -> LatestPoint:
 
 
 def _variant_columns(point: SourcePoint) -> tuple[bytes | str | bool | None, ...]:
-    """The variant's columns in table order, ``raw_metadata`` a JSON object with sorted keys."""
+    """The variant's columns in table order, ``raw_metadata`` its canonical JSON text."""
     reading = point.reading
     return (
         point.file.file_id,
@@ -186,6 +185,6 @@ def _variant_columns(point: SourcePoint) -> tuple[bytes | str | bool | None, ...
         point.role.value,
         None if reading.contact_point is None else reading.contact_point.server,
         reading.connectable,
-        json.dumps(dict(reading.raw_metadata), ensure_ascii=False, sort_keys=True),
+        reading.raw_metadata.text,
         point.node_id,
     )

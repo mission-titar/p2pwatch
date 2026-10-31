@@ -1,5 +1,5 @@
-"""``SqliteCatalogCopier``'s check pass: a source holding a value the node could not read back, or
-a row inconsistent with its keys, is refused before the destination is opened, whether the merge
+"""``SqliteCatalogCopier``'s check pass: a source holding a value the node would not write, or a
+row inconsistent with its keys, is refused before the destination is opened, whether the merge
 creates it or migrates it."""
 
 import dataclasses
@@ -25,6 +25,7 @@ from p2pwatch.domain.catalog_copy_error import CatalogCopyError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.source import SourceKey, SourcePoint, SourceReading, SourceRole
 from tests.support.adapters.driven.persistence_sqlite.helpers import rows_without_id
@@ -40,11 +41,24 @@ _NODE_ID = NodeId("node-a")
 _T0 = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
 _NOT_UTF8 = "is not valid UTF-8"
 _NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
-_NOT_OBJECT = "is not a JSON object, or holds text that is not valid UTF-8"
+_NOT_JSON_TEXT = "is not the canonical JSON text of an object"
 _CONTROL = "holds a control character"
 _NOT_DERIVED = "is not the id its network and native_id derive"
 _NOT_HASHED = "is not the hash of its variant's values"
 _ZERO_ID = "zeroblob(16)"
+# Each text a JsonText refuses, as an SQL literal, by its test id.
+_NOT_JSON_TEXTS = {
+    "array": "'[]'",
+    "unsorted": """'{"b": 1, "a": 2}'""",
+    "repeated": """'{"a": 1, "a": 2}'""",
+    "respaced": """'{"a":1}'""",
+    "escaped": r"""'{"a": "\u00e9"}'""",
+    "nan": """'{"a": NaN}'""",
+    "infinite": """'{"a": 1e999}'""",
+    "surrogate-name": r"""'{"\udc80": 1}'""",
+    "surrogate-in-list": r"""'{"a": ["b", "\ud800"]}'""",
+    "too-deep": """'{"a": """ + "[" * 10_000 + "]" * 10_000 + "}'",
+}
 # The key of the row ``_seed`` appends to a clean catalog.
 _SEEDED_ROW_KEYS = {
     "files": "file_id X'00000000000000000000000000000000'",
@@ -82,7 +96,7 @@ def _clean_catalog(path: Path) -> Path:
         role=SourceRole.SENDING,
         contact_point=None,
         connectable=None,
-        raw_metadata=(("ports", ("4662", "4672")), ("ecid", 7)),
+        raw_metadata=JsonText.from_object({"ports": ["4662", "4672"], "ecid": 7}),
         session_received_bytes=0,
     )
     points = [
@@ -157,16 +171,19 @@ def _state(destination: Path) -> tuple[bytes | None, list[str]]:
         ("observation_variants", "raw_metadata", """'["ab"]'""", _NOT_PAIRS),
         ("observation_variants", "raw_metadata", """'[["a"]]'""", _NOT_PAIRS),
         ("observation_variants", "raw_metadata", """'[[1, "a"]]'""", _NOT_PAIRS),
-        ("source_variants", "raw_metadata", "'[]'", _NOT_OBJECT),
-        ("source_variants", "raw_metadata", r"""'{"\udc80": 1}'""", _NOT_OBJECT),
-        ("source_variants", "raw_metadata", r"""'{"a": ["b", "\ud800"]}'""", _NOT_OBJECT),
+        *[
+            pytest.param(
+                "source_variants", "raw_metadata", text, _NOT_JSON_TEXT, id=f"source-{name}"
+            )
+            for name, text in _NOT_JSON_TEXTS.items()
+        ],
         ("files", "file_id", _ZERO_ID, _NOT_DERIVED),
         ("sources", "source_id", _ZERO_ID, _NOT_DERIVED),
         ("observation_variants", "content_hash", "randomblob(16)", _NOT_HASHED),
         ("source_variants", "content_hash", "randomblob(16)", _NOT_HASHED),
     ],
 )
-def test_a_source_holding_a_value_the_node_cannot_read_leaves_the_destination_as_it_was(
+def test_a_source_holding_a_value_the_node_would_not_write_leaves_the_destination_as_it_was(
     *, tmp_path: Path, into: bool, table: str, column: str, value_sql: str, problem: str
 ) -> None:
     source = _clean_catalog(tmp_path / "source.db")

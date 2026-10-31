@@ -10,10 +10,11 @@ valid:
   - from packaging.version import Version
   - from pathlib import PurePath
   - from jinja2 import Environment, nodes
+  - import json
 invalid:
   - import dataclasses, sqlite3
   - import sqlite3
   - import os.path
-  - import json as decoder
+  - import pickle as decoder
   - from collections import abc
   - from tests.support.virtual_time import VirtualTime

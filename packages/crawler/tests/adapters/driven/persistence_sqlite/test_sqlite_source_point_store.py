@@ -13,6 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading, SourceRole
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
@@ -84,7 +85,7 @@ def _passing(key: SourceKey | None = _KEY, *, name: str = "AnimuseeFMR") -> Sour
         role=None,
         contact_point=None,
         connectable=None,
-        raw_metadata=(),
+        raw_metadata=JsonText(text="{}"),
         session_received_bytes=0,
     )
 
