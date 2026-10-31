@@ -6,8 +6,8 @@ import pytest
 
 from p2pwatch.application.ports.driving.catalog_merger import ListedSourceCatalog, NewCatalog
 from p2pwatch.application.use_cases.merge_catalogs import MergeCatalogs
-from p2pwatch.domain.catalog_copy_error import CatalogCopyError
-from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
+from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from tests.fakes.adapters.driven.fake_catalog_copier import FakeCatalogCopier
 from tests.fakes.adapters.driven.fake_catalog_finder import FakeCatalogFinder
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -122,6 +122,20 @@ def test_a_failed_copy_is_a_merge_error_chained_to_it() -> None:
             _sources_found(), catalog_copier=FakeCatalogCopier(copy_error), logger=FakeLogger()
         ).merge_catalogs([_A, _B], destination=NewCatalog(path=_OUT, force=False))
 
+    assert raised.value.__cause__ is copy_error
+
+
+def test_a_copy_failed_after_earlier_sources_is_a_partial_merge_error_chained_to_it() -> None:
+    copy_error = PartialCopyError("copy of b.db failed at files: refused; out.db keeps a.db")
+
+    with pytest.raises(
+        PartialMergeError, match="^copy of b.db failed at files: refused;"
+    ) as raised:
+        MergeCatalogs(
+            _sources_found(), catalog_copier=FakeCatalogCopier(copy_error), logger=FakeLogger()
+        ).merge_catalogs([_A, _B], destination=NewCatalog(path=_OUT, force=False))
+
+    assert str(raised.value) == str(copy_error)
     assert raised.value.__cause__ is copy_error
 
 

@@ -4,7 +4,11 @@ from pathlib import PurePath
 
 
 class MergeError(Exception):
-    """A merge refused before copying, or a copy that failed: each source is copied whole or not."""
+    """A merge refused before any write, or a failed copy: each source is copied whole or not."""
+
+
+class PartialMergeError(MergeError):
+    """A copy that failed on a source, the sources merged before it staying in the destination."""
 
 
 class OutputIsSourceError(MergeError):

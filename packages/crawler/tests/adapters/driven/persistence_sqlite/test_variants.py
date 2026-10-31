@@ -10,9 +10,11 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     create_memoized_function,
     register_sql_functions,
     remove_migration_sql_functions,
+    source_content_hash,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.observation import fold_raw_metadata
+from p2pwatch.domain.source import SourceKey
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
@@ -137,3 +139,21 @@ def test_file_id_sql_function_is_the_file_key_file_id(connection: sqlite3.Connec
 def test_file_id_sql_function_refuses_an_unknown_network(connection: sqlite3.Connection) -> None:
     with pytest.raises(sqlite3.OperationalError, match="user-defined function raised"):
         connection.execute("SELECT file_id('kad', ?)", (_HASH,)).fetchone()
+
+
+def test_source_id_sql_function_is_the_source_key_source_id(connection: sqlite3.Connection) -> None:
+    [row] = rows(connection, sql="SELECT source_id('ed2k', ?) AS source_id", parameters=(_HASH,))
+    assert row["source_id"] == SourceKey(network=Network.ED2K, native_id=_HASH).source_id
+
+
+@pytest.mark.parametrize(("stored", "hashed"), [(1, True), (0, False), (None, None)])
+def test_source_content_hash_sql_function_hashes_connectable_as_the_bool_the_store_hashed(
+    *, connection: sqlite3.Connection, stored: int | None, hashed: bool | None
+) -> None:
+    columns = (bytes.fromhex(_HASH), None, "AnimuseeFMR", None, "queued", None)
+    [row] = rows(
+        connection,
+        sql="SELECT source_content_hash(?, ?, ?, ?, ?, ?, ?, '{}', 'node-1') AS content_hash",
+        parameters=(*columns, stored),
+    )
+    assert row["content_hash"] == source_content_hash((*columns, hashed, "{}", "node-1"))

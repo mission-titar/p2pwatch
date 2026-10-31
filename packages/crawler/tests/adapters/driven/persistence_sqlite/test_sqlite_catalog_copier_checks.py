@@ -1,6 +1,8 @@
-"""``SqliteCatalogCopier``'s check pass: a source holding a value the node could not read back is
-refused before the destination is opened, whether the merge creates it or migrates it."""
+"""``SqliteCatalogCopier``'s check pass: a source holding a value the node could not read back, or
+a row inconsistent with its keys, is refused before the destination is opened, whether the merge
+creates it or migrates it."""
 
+import dataclasses
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,10 +42,15 @@ _NOT_UTF8 = "is not valid UTF-8"
 _NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
 _NOT_OBJECT = "is not a JSON object, or holds text that is not valid UTF-8"
 _CONTROL = "holds a control character"
-# The key of the row ``_seed`` appends to a clean catalog, its table's second.
+_NOT_DERIVED = "is not the id its network and native_id derive"
+_NOT_HASHED = "is not the hash of its variant's values"
+_ZERO_ID = "zeroblob(16)"
+# The key of the row ``_seed`` appends to a clean catalog.
 _SEEDED_ROW_KEYS = {
+    "files": "file_id X'00000000000000000000000000000000'",
+    "sources": "source_id X'00000000000000000000000000000000'",
     "observation_variants": "variant_id 2",
-    "source_variants": "variant_id 2",
+    "source_variants": "variant_id 4",
     "match_decisions": "id 2",
 }
 
@@ -55,7 +62,8 @@ def _copy_catalogs(destination: Path, *, source_catalogs: list[Path]) -> None:
 
 
 def _clean_catalog(path: Path) -> Path:
-    """A catalog the stores wrote, its raw metadata holding texts, integers, a tuple and a null."""
+    """A catalog the stores wrote, its raw metadata holding texts, integers, a tuple and a null, its
+    source variants connectable, not connectable and unknown."""
     reported_file = ReportedFile(
         file=_FILE,
         filename="Keroro mission Titar 062.avi",
@@ -77,9 +85,16 @@ def _clean_catalog(path: Path) -> Path:
         raw_metadata=(("ports", ("4662", "4672")), ("ecid", 7)),
         session_received_bytes=0,
     )
-    point = SourcePoint(
-        file=_FILE, reading=reading, role=SourceRole.SENDING, observed_at=_T0, node_id=_NODE_ID
-    )
+    points = [
+        SourcePoint(
+            file=_FILE,
+            reading=dataclasses.replace(reading, connectable=connectable),
+            role=SourceRole.SENDING,
+            observed_at=_T0,
+            node_id=_NODE_ID,
+        )
+        for connectable in (None, True, False)
+    ]
     with closing(open_catalog(path)) as connection:
         SqliteObservationStore(connection).record_observation(
             FileObservation(reported_file=reported_file, observed_at=_T0, node_id=_NODE_ID)
@@ -87,15 +102,18 @@ def _clean_catalog(path: Path) -> Path:
         SqliteDecisionStore(connection).record_decision(
             DatedDecision(file=_FILE, decision=decision, decided_at=_T0, node_id=_NODE_ID)
         )
-        SqliteSourcePointStore(connection).record_points([point])
+        SqliteSourcePointStore(connection).record_points(points)
     return path
 
 
 def _seed(catalog: Path, *, table: str, column: str, value_sql: str) -> None:
     """Appends to ``table`` a copy of its first row, ``column`` set to the SQL ``value_sql``."""
-    replaced = {column: value_sql, "content_hash": "randomblob(16)"}
+    # A fresh native_id and content_hash keep the copy clear of the UNIQUE constraints.
+    replaced = {"native_id": f"'{'b' * 32}'", "content_hash": "randomblob(16)", column: value_sql}
     with closing(open_catalog(catalog)) as connection:
-        columns = connection.execute("SELECT name FROM pragma_table_info(?) WHERE pk = 0", (table,))
+        columns = connection.execute(
+            "SELECT name FROM pragma_table_info(?) WHERE pk = 0 OR name = ?", (table, column)
+        )
         names = [row["name"] for row in columns]
         values = [replaced.get(name, name) for name in names]
         connection.execute(
@@ -142,6 +160,10 @@ def _state(destination: Path) -> tuple[bytes | None, list[str]]:
         ("source_variants", "raw_metadata", "'[]'", _NOT_OBJECT),
         ("source_variants", "raw_metadata", r"""'{"\udc80": 1}'""", _NOT_OBJECT),
         ("source_variants", "raw_metadata", r"""'{"a": ["b", "\ud800"]}'""", _NOT_OBJECT),
+        ("files", "file_id", _ZERO_ID, _NOT_DERIVED),
+        ("sources", "source_id", _ZERO_ID, _NOT_DERIVED),
+        ("observation_variants", "content_hash", "randomblob(16)", _NOT_HASHED),
+        ("source_variants", "content_hash", "randomblob(16)", _NOT_HASHED),
     ],
 )
 def test_a_source_holding_a_value_the_node_cannot_read_leaves_the_destination_as_it_was(

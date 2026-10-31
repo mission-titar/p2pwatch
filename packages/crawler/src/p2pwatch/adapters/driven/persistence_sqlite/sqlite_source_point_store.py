@@ -1,6 +1,5 @@
 """``SqliteSourcePointStore``: each node's source points in the catalog (source points, D4, D5)."""
 
-import hashlib
 import json
 import sqlite3
 from collections.abc import Sequence
@@ -10,6 +9,7 @@ from datetime import datetime
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
+from p2pwatch.adapters.driven.persistence_sqlite.variants import source_content_hash
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.file_key import FileKey
@@ -103,7 +103,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         """Writes the point's variant and the point."""
         reading = point.reading
         variant = _variant_columns(point)
-        variant_content_hash = _content_hash(variant)
+        variant_content_hash = source_content_hash(variant)
         if reading.source is not None:
             source = reading.source
             self._connection.execute(
@@ -189,10 +189,3 @@ def _variant_columns(point: SourcePoint) -> tuple[bytes | str | bool | None, ...
         json.dumps(dict(reading.raw_metadata), ensure_ascii=False, sort_keys=True),
         point.node_id,
     )
-
-
-def _content_hash(variant: tuple[bytes | str | bool | None, ...]) -> bytes:
-    """blake2b-128 of the columns as compact JSON, a BLOB written as lowercase hex."""
-    columns = [column.hex() if isinstance(column, bytes) else column for column in variant]
-    canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":"))
-    return hashlib.blake2b(canonical.encode(), digest_size=16).digest()

@@ -1,4 +1,4 @@
-"""An observation variant's ``content_hash``, and the SQL functions the catalog migrations call.
+"""The variants' ``content_hash``, and the SQL functions the catalog migrations and merge call.
 
 Changing the serialization changes every stored ``content_hash``: it needs a migration.
 """
@@ -6,13 +6,15 @@ Changing the serialization changes every stored ``content_hash``: it needs a mig
 import hashlib
 import json
 import sqlite3
+from collections.abc import Sequence
 from functools import cache
 from typing import Any, Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite import micros
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import FileId
+from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.observation import fold_raw_metadata
+from p2pwatch.domain.source import SourceKey
 
 
 def content_hash(
@@ -41,13 +43,26 @@ def content_hash(
     return hashlib.blake2b(canonical.encode(), digest_size=16).digest()
 
 
+def source_content_hash(columns: Sequence[bytes | str | bool | None]) -> bytes:
+    """A source variant's: blake2b-128 of its columns as compact JSON, a BLOB as lowercase hex."""
+    hashed = [column.hex() if isinstance(column, bytes) else column for column in columns]
+    canonical = json.dumps(hashed, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.blake2b(canonical.encode(), digest_size=16).digest()
+
+
 def file_id(network: str, native_id: str) -> FileId:  # noqa: PLR0917
     """``FileKey.file_id`` for the SQL function; an unknown network raises."""
     return FileKey(network=Network(network), native_id=native_id).file_id
 
 
+def source_id(network: str, native_id: str) -> SourceId:  # noqa: PLR0917
+    """``SourceKey.source_id`` for the SQL function; an unknown network or native id raises."""
+    return SourceKey(network=Network(network), native_id=native_id).source_id
+
+
 def register_sql_functions(connection: sqlite3.Connection) -> None:
-    """Registers ``content_hash``, ``file_id``, ``fold_raw_meta`` and ``iso_to_micros``."""
+    """Registers ``content_hash``, ``source_content_hash``, ``file_id``, ``source_id``,
+    ``fold_raw_meta`` and ``iso_to_micros``."""
 
     # A stored raw_metadata, folded and serialized as record_observation serializes it.
     def fold_stored(  # noqa: PLR0917
@@ -93,7 +108,39 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     create_memoized_function(
         connection, name="fold_raw_meta", argument_count=4, function=fold_stored
     )
+
+    # SQLite passes connectable as the 0 or 1 it stores, where the store hashed a bool.
+    def source_content_hash_by_position(  # noqa: PLR0917
+        file_ref: bytes,
+        source_ref: bytes | None,
+        name: str | None,
+        software: str | None,
+        role: str,
+        contact_point: str | None,
+        connectable: int | None,
+        raw_metadata: str,
+        node_id: str,
+    ) -> bytes:
+        connectable_flag = None if connectable is None else bool(connectable)
+        return source_content_hash(
+            (
+                file_ref,
+                source_ref,
+                name,
+                software,
+                role,
+                contact_point,
+                connectable_flag,
+                raw_metadata,
+                node_id,
+            )
+        )
+
+    connection.create_function(
+        "source_content_hash", 9, source_content_hash_by_position, deterministic=True
+    )
     connection.create_function("file_id", 2, file_id, deterministic=True)
+    connection.create_function("source_id", 2, source_id, deterministic=True)
     # Never memoized: every observation has its own stamp, the memo would hold them all.
     # The migrations' reference, the one sanctioned: remove_migration_sql_functions drops it after.
     iso_to_micros = micros.iso_to_micros  # type: ignore[deprecated]

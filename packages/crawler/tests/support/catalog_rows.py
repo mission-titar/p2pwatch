@@ -1,11 +1,13 @@
 """Catalog rows for tests, written and read here only so that a schema change edits one module."""
 
-import hashlib
 import sqlite3
 from datetime import datetime
 
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
-from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
+from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    content_hash,
+    source_content_hash,
+)
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.source import SourceKey
@@ -108,16 +110,15 @@ def insert_source_variant(
     connectable: bool | None = None,
     node_id: str = "n1",
 ) -> int:
-    """The new variant's ``variant_id``; its ``content_hash`` stands in for the writer's."""
+    """The new variant's ``variant_id``, its ``content_hash`` the writer's."""
     sid = source_id(user_hash) if user_hash is not None else None
-    columns = (name, role, contact_point, connectable)
-    key = hashlib.blake2b(repr((native_id, user_hash, *columns, node_id)).encode(), digest_size=16)
+    columns = (file_id(native_id), sid, name, None, role, contact_point, connectable, "{}", node_id)
     [variant] = rows(
         connection,
-        sql="INSERT INTO source_variants (file_id, source_id, name, role, contact_point,"
+        sql="INSERT INTO source_variants (file_id, source_id, name, software, role, contact_point,"
         " connectable, raw_metadata, node_id, content_hash)"
-        " VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?) RETURNING variant_id",
-        parameters=(file_id(native_id), sid, *columns, node_id, key.digest()),
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING variant_id",
+        parameters=(*columns, source_content_hash(columns)),
     )
     variant_id: int = variant["variant_id"]
     return variant_id

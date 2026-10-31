@@ -10,4 +10,5 @@ class CatalogCopier(ABC):
 
     @abstractmethod
     def copy_catalogs(self, destination: PurePath, *, source_catalogs: Sequence[PurePath]) -> None:
-        """Copies each source into ``destination``; raises ``CatalogCopyError``."""
+        """Copies each source whole into ``destination`` once all are checked; raises
+        ``CatalogCopyError`` before any write, or ``PartialCopyError``, the sources before kept."""
