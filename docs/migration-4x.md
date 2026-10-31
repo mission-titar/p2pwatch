@@ -205,10 +205,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Un texte qui n'est pas de l'UTF-8 valide est refusé**, même écrit en échappement (`"\ud800"`),
   où qu'il soit dans les trois fichiers, en nommant le fichier et sa clé :
   `error: <fichier>: search.keywords[0] is not valid UTF-8`. Une variable d'environnement que
-  `crawler.yml` résout est refusée de même, en la nommant :
-  `search.keywords[0]: environment variable 'X' is not valid UTF-8`. Un caractère de contrôle
-  (`"\t"`, `"\x1f"`, `"\x85"`) est refusé dans une lettre de segment de `targets.yml` et dans un
-  nom de règle de `matcher.yml` : `segment letter 'a\x1fb' holds a control character`. La 4.x les
+  `crawler.yml` résout est refusée en la nommant :
+  `Invalid config: <fichier>: search.keywords[0]: environment variable 'X' is not valid UTF-8`. Un
+  caractère de contrôle (`"\t"`, `"\x1f"`, `"\x85"`) est refusé dans une lettre de segment de
+  `targets.yml` et dans un nom de règle de `matcher.yml` :
+  `Invalid config: <fichier>: segment letter 'a\x1fb' holds a control character`. La 4.x les
   acceptait : un tel mot-clé arrêtait le crawler à sa première recherche, et un `\x1f` dans une
   lettre ou un nom de règle cassait la page des fichiers.
 - **Toute erreur de `crawler.yml` commence par sa clé**, `<clé>: <message>`. Ces refus changent
