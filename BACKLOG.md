@@ -26,7 +26,8 @@ An agent adds an entry only after the operator has agreed to it.
 - **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite` without
   one, seeded through the Writers with drawn values, so each port's promise holds for any implementation. Appendix D of `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
 
-- **Every catalog table STRICT**, with sign and closed-set `CHECK`s, all rebuilt at once with v5's migrations: SQLite then
+- **Every catalog table STRICT**, with sign and closed-set `CHECK`s, declared in the `CREATE TABLE`s of v5's unreleased
+  migrations (0008, 0010, 0011, 0015), with no rebuild of its own: SQLite then
   refuses a value of the wrong type, and `merge` refuses through the schema what D9 of `agents/specs/2026-10-30-values-checked-at-the-boundary.md` left to it (types, signs, tiers, instants). D2 of `agents/specs/2026-10-28-micros-stamps.md`.
 
 ## Features
