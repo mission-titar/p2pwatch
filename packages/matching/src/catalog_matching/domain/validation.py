@@ -71,10 +71,15 @@ def _require_key(mapping: dict[str, Any], *, key: str, error_label: str) -> Any:
     return mapping[key]
 
 
-def _refuse_control_characters(text: str, *, error_label: str) -> str:
-    """``text``, unless it holds a control character (``Cc``: C0, DEL, C1), which no identifier
+def has_control_character(text: str) -> bool:
+    """Whether ``text`` holds a control character (``Cc``: C0, DEL, C1), which no identifier
     holds: the files page splits target ids and rule names on U+001F."""
-    if any(unicodedata.category(char) == "Cc" for char in text):
+    return any(unicodedata.category(char) == "Cc" for char in text)
+
+
+def _refuse_control_characters(text: str, *, error_label: str) -> str:
+    """``text``, unless it holds a control character."""
+    if has_control_character(text):
         raise MatchingConfigError(f"{error_label} {text!r} holds a control character")
     return text
 

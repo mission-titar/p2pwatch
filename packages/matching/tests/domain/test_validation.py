@@ -18,6 +18,7 @@ from catalog_matching.domain.validation import (
     DepthExceededError,
     MatchingConfigError,
     UnknownTokenError,
+    has_control_character,
     parse_matcher_config,
     parse_targets,
     validate_config,
@@ -486,6 +487,22 @@ def test_parse_targets_accepts_a_letter_beyond_ascii_that_is_no_control_characte
         }
     )
     assert targets[0].letter == "\xe9\xa0"
+
+
+# A format character such as a zero width space is no control character.
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("a\x1fb", True),
+        ("\x85", True),
+        ("\t", True),
+        ("062A", False),
+        ("\xe9\xa0", False),
+        ("\N{ZERO WIDTH SPACE}", False),
+    ],
+)
+def test_has_control_character_tells_a_text_holding_one(*, text: str, expected: bool) -> None:
+    assert has_control_character(text) is expected
 
 
 def test_parse_targets_episode_without_segments() -> None:
