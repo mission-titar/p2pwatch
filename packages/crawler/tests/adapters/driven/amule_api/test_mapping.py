@@ -84,7 +84,7 @@ def test_the_ed2k_only_fields_sit_beside_what_no_field_consumes() -> None:
 
 
 def test_a_name_the_network_sends_never_meets_one_the_mapper_derives() -> None:
-    """D4: flattened, each of these would repeat a name the mapper chose."""
+    """Flattened, each of these would repeat a name the mapper chose."""
     search_result = _result(
         codec="h264",
         complete_source_count=7,
