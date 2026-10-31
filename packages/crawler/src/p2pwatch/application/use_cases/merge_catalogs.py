@@ -12,8 +12,8 @@ from p2pwatch.application.ports.driving.catalog_merger import (
     ListedSourceCatalog,
     NewCatalog,
 )
-from p2pwatch.domain.catalog_copy_error import CatalogCopyError
-from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
+from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 
 
 class MergeCatalogs(CatalogMerger):
@@ -54,6 +54,8 @@ class MergeCatalogs(CatalogMerger):
                 catalogs_to_copy.append(source_catalog)
         try:
             self._catalog_copier.copy_catalogs(path, source_catalogs=catalogs_to_copy)
+        except PartialCopyError as error:
+            raise PartialMergeError(str(error)) from error
         except CatalogCopyError as error:
             raise MergeError(str(error)) from error
         self._logger.info("merge done: %s", path)

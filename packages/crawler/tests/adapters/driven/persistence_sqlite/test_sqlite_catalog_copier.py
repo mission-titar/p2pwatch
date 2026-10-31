@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
-from p2pwatch.domain.catalog_copy_error import CatalogCopyError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_A,
     HASH_B,
@@ -26,6 +27,7 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
     open_catalog,
+    open_reader,
 )
 
 # The current catalog schema version = the last catalog migration's number.
@@ -327,7 +329,7 @@ def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
             " BEGIN SELECT RAISE(ABORT, 'decisions refused'); END"
         )
 
-    with pytest.raises(CatalogCopyError, match="copy of .* failed: decisions refused"):
+    with pytest.raises(CatalogCopyError, match="copy of .* failed at match_decisions: decisions"):
         _copy_catalogs(destination, source_catalogs=[second])
 
     # files (1st table) was copied BEFORE the failure on match_decisions; the ROLLBACK must have
@@ -473,3 +475,64 @@ def test_a_copy_diverged_from_a_restored_catalog_merges_into_the_union(tmp_path:
 
     observations = rows_without_id(destination, table="source_observations")
     assert observations == rows_without_id(union, table="source_observations")
+
+
+_BOGUS_ROLE = (
+    "INSERT INTO source_variants (file_id, role, raw_metadata, node_id, content_hash)"
+    " SELECT file_id, 'bogus', '{}', 'n1',"
+    " source_content_hash(file_id, NULL, NULL, NULL, 'bogus', NULL, NULL, '{}', 'n1') FROM files"
+)
+# Rows the check pass leaves to the destination's CHECKs: an unknown network, role or sign.
+_ROWS_THE_SCHEMA_REFUSES = [
+    ("files", f"INSERT INTO files VALUES (zeroblob(16), 'kad', '{HASH_B}', 100)"),
+    ("sources", f"INSERT INTO sources VALUES (zeroblob(16), 'kad', '{HASH_B}')"),
+    ("source_variants", _BOGUS_ROLE),
+    ("source_observations", "INSERT INTO source_observations VALUES (1, 99, -1)"),
+]
+
+
+def _with_a_row_the_schema_refuses(catalog: Path, *, sql: str) -> None:
+    with closing(open_catalog(catalog)) as connection:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(sql)
+
+
+def _digest(catalog: Path) -> bytes:
+    with closing(open_reader(catalog)) as reader:
+        return database_digest(reader)
+
+
+@pytest.mark.parametrize(("table", "sql"), _ROWS_THE_SCHEMA_REFUSES)
+def test_a_row_the_destination_refuses_fails_its_source_whole(
+    *, tmp_path: Path, table: str, sql: str
+) -> None:
+    source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    _with_a_row_the_schema_refuses(source, sql=sql)
+    destination = make_catalog(tmp_path / "out.db", content=_full_catalog("c", node_id="node-c"))
+    before = _digest(destination)
+
+    with pytest.raises(PartialCopyError) as raised:
+        _copy_catalogs(destination, source_catalogs=[source])
+
+    assert str(raised.value).startswith(f"copy of {source} failed at {table}: CHECK constraint")
+    assert str(raised.value).endswith(f"; {destination} keeps the sources merged before it: none")
+    assert _digest(destination) == before
+
+
+def test_a_source_the_destination_refuses_leaves_the_sources_before_it_merged(
+    tmp_path: Path,
+) -> None:
+    merged = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    refused = make_catalog(tmp_path / "b.db", content=_full_catalog("b", node_id="node-b"))
+    _with_a_row_the_schema_refuses(refused, sql=_BOGUS_ROLE)
+    destination = tmp_path / "out.db"
+
+    with pytest.raises(PartialCopyError) as raised:
+        _copy_catalogs(destination, source_catalogs=[merged, refused])
+
+    assert str(raised.value).startswith(f"copy of {refused} failed at source_variants: ")
+    assert str(raised.value).endswith(
+        f"; {destination} keeps the sources merged before it: {merged}"
+    )
+    for table in _ALL_TABLES:
+        assert rows_without_id(destination, table=table) == rows_without_id(merged, table=table)

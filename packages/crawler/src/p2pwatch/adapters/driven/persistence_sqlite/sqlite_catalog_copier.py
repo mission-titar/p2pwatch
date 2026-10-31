@@ -1,21 +1,21 @@
 """``CatalogCopier`` over SQLite: idempotent copy of N ``catalog.db`` into a single output.
 
-A check pass first refuses a source at another schema version, or holding a value the node could
-not read back (values-at-the-boundary spec, D9), before the output is opened: a refused merge
-writes nothing.
+A check pass first refuses a source at another schema version, holding a value the node could not
+read back, or a row its keys do not derive (values-at-the-boundary spec, D9), before the output is
+opened: a refused merge writes nothing.
 
 Mechanism (merge spec §3/§4): the output is created/opened via ``open_catalog`` (the catalog
 migrations, NO duplicated DDL). For each source: we ``ATTACH`` it (outside a transaction),
 then INSIDE an explicit transaction (``BEGIN``…``COMMIT``, best-effort ``ROLLBACK`` on error)
 we copy its tables in **FK order** (identities first), then ``COMMIT`` and ``DETACH``. A half-copied
-source is never committed; a failed merge is re-run safely.
+source is never committed, the sources before it stay (D11); a failed merge is re-run safely.
 
 Idempotence (spec §4):
-- ``files`` (global content PK) → ``INSERT OR IGNORE`` (first observation
+- ``files`` (global content PK) → ``ON CONFLICT DO NOTHING`` (first observation
   wins); NEVER ``OR REPLACE`` (= DELETE + INSERT → collides with the append-only trigger).
-- ``observation_variants`` → ``INSERT OR IGNORE`` on its ``content_hash`` (the output
+- ``observation_variants`` → ``ON CONFLICT DO NOTHING`` on its ``content_hash`` (the output
   numbers its own ``variant_id``), then ``observations`` mapped to the output's variant by
-  ``content_hash``, ``INSERT OR IGNORE`` on their full key (stage 1, D4).
+  ``content_hash``, ``ON CONFLICT DO NOTHING`` on their full key (stage 1, D4).
 - ``match_decisions`` (LOCAL ``id``, no global meaning) → explicit columns WITHOUT ``id`` (the
   DB reassigns the ``id``) + dedup by **full natural key** via ``WHERE NOT EXISTS``,
   comparisons with the ``IS`` operator (not ``=``) because some columns are nullable
@@ -40,8 +40,10 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
 from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
-from p2pwatch.domain.catalog_copy_error import CatalogCopyError
+from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
+from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _logger = logging.getLogger(__name__)
@@ -50,11 +52,14 @@ _logger = logging.getLogger(__name__)
 # whatever N, well under the SQLITE_MAX_ATTACHED cap of 10, spec §8).
 _SRC = "src"
 
-# --- Content-identity tables: INSERT OR IGNORE, explicit columns (no SELECT *). ---
+# --- Content-identity tables: ON CONFLICT DO NOTHING, explicit columns (no SELECT *). ---
+# Never OR IGNORE, which also drops a row a CHECK or a NOT NULL refuses. WHERE true parts the
+# SELECT from the upsert, which SQLite would otherwise read as a join's ON.
 
 _COPY_FILES = (
-    f"INSERT OR IGNORE INTO main.files (file_id, network, native_id, size_bytes) "
-    f"SELECT file_id, network, native_id, size_bytes FROM {_SRC}.files"
+    f"INSERT INTO main.files (file_id, network, native_id, size_bytes) "
+    f"SELECT file_id, network, native_id, size_bytes FROM {_SRC}.files WHERE true "
+    "ON CONFLICT DO NOTHING"
 )
 
 
@@ -64,16 +69,19 @@ _VARIANT_COLUMNS = (
 )
 
 _COPY_VARIANTS = (
-    f"INSERT OR IGNORE INTO main.observation_variants ({_VARIANT_COLUMNS}) "
-    f"SELECT {_VARIANT_COLUMNS} FROM {_SRC}.observation_variants ORDER BY variant_id"
+    f"INSERT INTO main.observation_variants ({_VARIANT_COLUMNS}) "
+    f"SELECT {_VARIANT_COLUMNS} FROM {_SRC}.observation_variants WHERE true ORDER BY variant_id "
+    "ON CONFLICT DO NOTHING"
 )
 
 _COPY_OBSERVATIONS = f"""
-INSERT OR IGNORE INTO main.observations (variant_id, observed_at_micros, source_count)
+INSERT INTO main.observations (variant_id, observed_at_micros, source_count)
 SELECT d.variant_id, o.observed_at_micros, o.source_count
 FROM {_SRC}.observations AS o
 JOIN {_SRC}.observation_variants AS s ON s.variant_id = o.variant_id
 JOIN main.observation_variants AS d ON d.content_hash = s.content_hash
+WHERE true
+ON CONFLICT DO NOTHING
 """
 
 # DISTINCT drops the source's own twins, which NOT EXISTS against the destination cannot see.
@@ -93,8 +101,8 @@ WHERE NOT EXISTS (
 """
 
 _COPY_SOURCES = (
-    f"INSERT OR IGNORE INTO main.sources (source_id, network, native_id) "
-    f"SELECT source_id, network, native_id FROM {_SRC}.sources"
+    f"INSERT INTO main.sources (source_id, network, native_id) "
+    f"SELECT source_id, network, native_id FROM {_SRC}.sources WHERE true ON CONFLICT DO NOTHING"
 )
 
 _SOURCE_VARIANT_COLUMNS = (
@@ -103,28 +111,33 @@ _SOURCE_VARIANT_COLUMNS = (
 )
 
 _COPY_SOURCE_VARIANTS = (
-    f"INSERT OR IGNORE INTO main.source_variants ({_SOURCE_VARIANT_COLUMNS}) "
-    f"SELECT {_SOURCE_VARIANT_COLUMNS} FROM {_SRC}.source_variants ORDER BY variant_id"
+    f"INSERT INTO main.source_variants ({_SOURCE_VARIANT_COLUMNS}) "
+    f"SELECT {_SOURCE_VARIANT_COLUMNS} FROM {_SRC}.source_variants WHERE true ORDER BY variant_id "
+    "ON CONFLICT DO NOTHING"
 )
 
 _COPY_SOURCE_OBSERVATIONS = f"""
-INSERT OR IGNORE INTO main.source_observations
+INSERT INTO main.source_observations
     (variant_id, observed_at_micros, session_received_bytes)
 SELECT d.variant_id, o.observed_at_micros, o.session_received_bytes
 FROM {_SRC}.source_observations AS o
 JOIN {_SRC}.source_variants AS s ON s.variant_id = o.variant_id
 JOIN main.source_variants AS d ON d.content_hash = s.content_hash
+WHERE true
+ON CONFLICT DO NOTHING
 """
 
 # MANDATORY FK order (spec §4.3): the identities (files) BEFORE the journals that reference them.
-_COPY_STATEMENTS = (
-    _COPY_FILES,
-    _COPY_VARIANTS,
-    _COPY_OBSERVATIONS,
-    _COPY_MATCH_DECISIONS,
-    _COPY_SOURCES,
-    _COPY_SOURCE_VARIANTS,
-    _COPY_SOURCE_OBSERVATIONS,
+# Each step named by the table it copies, so that a failure says where.
+_COPY_STEPS = (
+    ("files", _COPY_FILES),
+    ("observation_variants", _COPY_VARIANTS),
+    ("observations", _COPY_OBSERVATIONS),
+    ("match_decisions", _COPY_MATCH_DECISIONS),
+    ("sources", _COPY_SOURCES),
+    ("source_variants", _COPY_SOURCE_VARIANTS),
+    ("source_observations", _COPY_SOURCE_OBSERVATIONS),
+    ("the commit", "COMMIT"),
 )
 
 # --- The check pass: SQL over the attached source, through the functions it registers. ---
@@ -144,6 +157,23 @@ _NOT_UTF8_WHERE = "NOT is_valid_utf8(CAST({column} AS BLOB))"
 _NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
 _NOT_OBJECT = "is not a JSON object, or holds text that is not valid UTF-8"
 _CONTROL = "holds a control character"
+_NOT_DERIVED = "is not the id its network and native_id derive"
+_NOT_HASHED = "is not the hash of its variant's values"
+
+# CASE, never AND, whose terms SQLite may reorder: the id functions raise on an unknown network,
+# which the destination's CHECK refuses at copy time.
+_NOT_DERIVED_WHERE = (
+    "CASE WHEN network IN ({networks}) THEN {{column}} IS NOT {function}(network, native_id) END"
+)
+_KNOWN_NETWORKS = ", ".join(f"'{network}'" for network in Network)
+_OBSERVATION_VARIANT_HASH = (
+    "content_hash(file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
+    " keyword, node_id)"
+)
+_SOURCE_VARIANT_HASH = (
+    "source_content_hash(file_id, source_id, name, software, role, contact_point, connectable,"
+    " raw_metadata, node_id)"
+)
 
 # (table, column, SQL true of a refused value of ``{column}``, what the refusal says of it)
 _CONTENT_CHECKS = (
@@ -151,6 +181,25 @@ _CONTENT_CHECKS = (
     ("source_variants", "raw_metadata", "NOT is_metadata_object({column})", _NOT_OBJECT),
     ("match_decisions", "target_id", "has_control_character({column})", _CONTROL),
     ("match_decisions", "rule_name", "has_control_character({column})", _CONTROL),
+    (
+        "files",
+        "file_id",
+        _NOT_DERIVED_WHERE.format(networks=_KNOWN_NETWORKS, function="file_id"),
+        _NOT_DERIVED,
+    ),
+    (
+        "sources",
+        "source_id",
+        _NOT_DERIVED_WHERE.format(networks=_KNOWN_NETWORKS, function="source_id"),
+        _NOT_DERIVED,
+    ),
+    (
+        "observation_variants",
+        "content_hash",
+        f"{{column}} IS NOT {_OBSERVATION_VARIANT_HASH}",
+        _NOT_HASHED,
+    ),
+    ("source_variants", "content_hash", f"{{column}} IS NOT {_SOURCE_VARIANT_HASH}", _NOT_HASHED),
 )
 
 
@@ -175,17 +224,25 @@ def _copy_catalogs(
     ``destination`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
     existing older catalog is first migrated in place, and the copy APPENDS (never a truncate).
 
-    Any ``sqlite3.Error`` (corrupt source, incompatible schema, FK…), and ``open_catalog``'s
-    ``PersistenceError`` on the destination, is wrapped in ``CatalogCopyError``; ``ROLLBACK`` is
-    best-effort.
+    ``open_catalog``'s ``PersistenceError`` raises ``CatalogCopyError``; a source whose copy fails
+    (a row the destination's schema refuses, FK…) raises ``PartialCopyError``, naming the sources
+    merged before it, which stay.
     """
     try:
         connection = database_opener.open_catalog(destination)
     except PersistenceError as error:
         raise CatalogCopyError(f"cannot open output {destination}: {error}") from error
+    merged_catalogs: list[str] = []
     try:
         for source_catalog in source_catalogs:
-            _copy_catalog(connection, source_catalog=source_catalog)
+            try:
+                _copy_catalog(connection, source_catalog=source_catalog)
+            except CatalogCopyError as error:
+                merged = ", ".join(merged_catalogs) or "none"
+                raise PartialCopyError(
+                    f"{error}; {destination} keeps the sources merged before it: {merged}"
+                ) from error
+            merged_catalogs.append(str(source_catalog))
             _logger.info("%s merged", source_catalog)
     finally:
         connection.close()
@@ -201,14 +258,15 @@ def _copy_catalog(connection: sqlite3.Connection, *, source_catalog: PurePath) -
     """
     with _attached(connection, source_catalog=source_catalog):
         connection.execute("BEGIN")
-        try:
-            for statement in _COPY_STATEMENTS:
+        for step, statement in _COPY_STEPS:
+            try:
                 connection.execute(statement)
-            connection.execute("COMMIT")
-        except sqlite3.Error as error:
-            with suppress(sqlite3.Error):
-                connection.execute("ROLLBACK")
-            raise CatalogCopyError(f"copy of {source_catalog} failed: {error}") from error
+            except sqlite3.Error as error:
+                with suppress(sqlite3.Error):
+                    connection.execute("ROLLBACK")
+                raise CatalogCopyError(
+                    f"copy of {source_catalog} failed at {step}: {error}"
+                ) from error
 
 
 def _check_catalogs(
@@ -217,6 +275,7 @@ def _check_catalogs(
     """Checks each source attached to a database in memory, before the output is opened."""
     expected_version = database_opener.catalog_version()
     connection = database_opener.open_in_memory()
+    register_sql_functions(connection)
     connection.create_function("is_valid_utf8", 1, _is_valid_utf8, deterministic=True)
     connection.create_function("is_metadata_pairs", 1, _is_metadata_pairs, deterministic=True)
     connection.create_function("is_metadata_object", 1, _is_metadata_object, deterministic=True)
