@@ -23,10 +23,11 @@ An agent adds an entry only after the operator has agreed to it.
 - **aMule 3.2.0 pinned**: `ARG AMULE_VERSION` and `ARG AMULE_COMMIT` moved from 3.1.0 to 3.2.0, which fixes 15
   advisories, by the weekly bump or by hand. `packages/amule/Dockerfile`, `.github/workflows/amule-bump.yml`.
 
-- **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite`
-  without one, seeded through the Writers with drawn values, so each port's promise is written once for any
-  implementation. Appendix B of `agents/specs/2026-10-29-rows-read-by-column-name.md`, amended by Appendix D of
-  `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
+- **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite` without
+  one, seeded through the Writers with drawn values, so each port's promise holds for any implementation. Appendix D of `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
+
+- **Every catalog table STRICT**, with sign and closed-set `CHECK`s, all rebuilt at once with v5's migrations: SQLite then
+  refuses a value of the wrong type, and `merge` refuses through the schema what D9 of `agents/specs/2026-10-30-values-checked-at-the-boundary.md` left to it (types, signs, tiers, instants). D2 of `agents/specs/2026-10-28-micros-stamps.md`.
 
 ## Features
 
@@ -48,9 +49,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
-
-- **Every catalog table STRICT**, as `local.db`'s are: all of them rebuilt at once, so SQLite refuses a value of the
-  wrong type; it costs a rebuild of the catalog's largest tables. D2 of `agents/specs/2026-10-28-micros-stamps.md`.
 
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.

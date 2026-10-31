@@ -383,6 +383,10 @@ it would be YAGNI.*
 
 ### D16. No release until the first new network; a `release/4.x` branch if a fix needs one
 
+(Corrected: revoked on 2026-10-30. v5 waits for no new network, and no fix is backported to v4, whose node
+stays stopped until v5: aMule 3.2.0 fixes 15 advisories present in 3.1.0, four of them triggered by any peer
+(GHSA-52mv, GHSA-cvxg, GHSA-hv8p, GHSA-7rxg); D7 of `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.)
+
 The stage 1 lot ships no image beyond `main`. The node pulls `latest` since 2026-10-08, to stay out of this
 work.
 

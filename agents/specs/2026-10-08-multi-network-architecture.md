@@ -5,7 +5,10 @@
 - Scope: turn mulewatch into p2pwatch, a generic watch core that drives several P2P networks, each client in
   its own container; this is an umbrella spec, every stage below gets its own detailed spec
 - Release: staged; stage 3 (aMule leaves the core image) is breaking and ships as `v5.0.0` (Corrected: the
-  major release ships with the first new network, not with stage 3; stage 1's spec, D16)
+  major release ships with the first new network, not with stage 3; stage 1's spec, D16) (Corrected: the
+  major release no longer waits for a new network: it ships once the conditions under "Must be done before the
+  next release" in `BACKLOG.md` are met, aMule 3.2.0 among them; D7 of
+  `agents/specs/2026-10-30-values-checked-at-the-boundary.md`)
 - Related: `agents/specs/2026-09-16-single-container-embedded-amule.md` (partly reversed here),
   `agents/specs/2026-09-13-scope-reduction-catalog-notify-download.md`,
   `application/port_sync_loop.py`, `adapters/persistence_sqlite/migrations/catalog/0001_initial.sql`,
@@ -484,7 +487,7 @@ Domain changes come before topology changes, so that every stage ships on its ow
 |---|---|---|
 | 1 | Generic identity | D8: catalog migration to `(network, native_id)`, network-agnostic `FileObservation`, in today's single container |
 | 2 | Search, download and status ports | D9, D13, D14: generic ports, aMule adapters on them; persistent and passive search ports declared (Corrected: not declared in stage 2, they arrive with their first client in stage 5; stage 2's spec, D1) |
-| 3 | aMule leaves the core | D1, D4, D5, D6, D7 for aMule: rename to p2pwatch (D15), `p2pwatch-amule` image, local port-sync, base compose with includes, core hardening (Corrected: no core hardening; stage 3's spec, Non-goals). Breaking: `v5.0.0` (Corrected: no `v5.0.0` here, the major release waits for the first new network; stage 1's spec, D16) |
+| 3 | aMule leaves the core | D1, D4, D5, D6, D7 for aMule: rename to p2pwatch (D15), `p2pwatch-amule` image, local port-sync, base compose with includes, core hardening (Corrected: no core hardening; stage 3's spec, Non-goals). Breaking: `v5.0.0` (Corrected: no `v5.0.0` here, the major release waits for the first new network; stage 1's spec, D16) (Corrected: the major release no longer waits for a new network; D7 of `agents/specs/2026-10-30-values-checked-at-the-boundary.md`) |
 | 4 | Sources and events | D10, D11: source history, eD2k download sources, `docs/legal.md` (Corrected: the history is ranges, not one row per day; no `new-location`; `new-source` and `reappeared` after 12 h, for a source with parts we lack; stage 4's spec, D4, D9 and D11) |
 | 5 | New networks, one by one | search, download (D13) and status (D14) per client: Soulseek (slskd), Direct Connect (AirDC++), Gnutella (gtk-gnutella + patch + shim), Bitmagnet + qBittorrent (opt-in) |
 
