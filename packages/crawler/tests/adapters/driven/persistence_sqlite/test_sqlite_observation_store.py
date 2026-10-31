@@ -1,5 +1,4 @@
 import dataclasses
-import json
 import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -35,7 +34,7 @@ def _reported_file(
     duration_seconds: int | None = None,
     bitrate_kbps: int | None = None,
 ) -> ReportedFile:
-    # raw_metadata with a DUPLICATE, wire order, non-ASCII and the fold's native types.
+    # raw_metadata with non-ASCII, a nested object and the fold's native types.
     return ReportedFile(
         file=_KEY,
         filename=filename,
@@ -45,7 +44,7 @@ def _reported_file(
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
         raw_metadata=fold_raw_metadata(
-            (("0x0308", "0"), ("0x0308", "0"), ("0x0999", "mystère")),
+            {"0x0999": "mystère", "0x0308": "0", "media": {"title": "Keroro"}},
             codec=None,
             file_type=None,
             complete_source_count=2,
@@ -92,8 +91,8 @@ def test_record_observation_round_trip(
         "size_bytes": 234567890,
         "duration_seconds": None,
         "bitrate_kbps": None,
-        "raw_metadata": '[["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"], ["codec", null],'
-        ' ["file_type", null], ["complete_source_count", 2]]',
+        "raw_metadata": '{"codec": null, "complete_source_count": 2, "file_type": null,'
+        ' "unmapped": {"0x0308": "0", "0x0999": "mystère", "media": {"title": "Keroro"}}}',
         "keyword": "keroro",
         "node_id": _NODE_ID,
     }
@@ -106,18 +105,6 @@ def test_record_observation_round_trip(
     assert rows(connection, sql="SELECT observed_at_micros, source_count FROM observations") == [
         {"observed_at_micros": instant_to_micros(_T0), "source_count": 5}
     ]
-
-
-def test_raw_metadata_preserves_order_duplicates_and_non_ascii(
-    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
-) -> None:
-    observation_store.record_observation(
-        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
-    )
-    [variant] = rows(connection, sql="SELECT raw_metadata FROM observation_variants")
-    stored = variant["raw_metadata"]
-    assert "mystère" in stored  # ensure_ascii=False: the accent is stored AS IS
-    assert json.loads(stored)[:3] == [["0x0308", "0"], ["0x0308", "0"], ["0x0999", "mystère"]]
 
 
 def test_record_observation_twice_first_seen_wins_in_files(

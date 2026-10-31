@@ -46,14 +46,14 @@ def insert_observation(
         size_bytes=size_bytes,
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
-        raw_metadata="[]",
+        raw_metadata="{}",
         keyword="keroro",
         node_id=node_id,
     )
     connection.execute(
         "INSERT OR IGNORE INTO observation_variants"
         " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
-        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, '[]', 'keroro', ?, ?)",
+        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, '{}', 'keroro', ?, ?)",
         (variant_file_id, filename, size_bytes, duration_seconds, bitrate_kbps, node_id, key),
     )
     connection.execute(

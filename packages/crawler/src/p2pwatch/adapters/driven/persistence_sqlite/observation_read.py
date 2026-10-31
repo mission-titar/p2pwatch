@@ -1,6 +1,5 @@
 """Every read of a file's observations, as a ``FileObservation``."""
 
-import json
 import sqlite3
 from collections.abc import Iterator
 
@@ -8,6 +7,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 
 # Each file's latest observation: its variant with the newest observation, then that variant's
@@ -101,7 +101,7 @@ def observation_from_row(row: NamedRow) -> FileObservation:
         keyword=Keyword(row["keyword"]),
         duration_seconds=row["duration_seconds"],
         bitrate_kbps=row["bitrate_kbps"],
-        raw_metadata=tuple((name, rendered) for name, rendered in json.loads(row["raw_metadata"])),
+        raw_metadata=JsonObjectText(text=row["raw_metadata"]),
     )
     return FileObservation(
         reported_file=reported_file,

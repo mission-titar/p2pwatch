@@ -6,6 +6,7 @@ import pytest
 from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_metadata
 from tests.support.domain.value_bounds import (
     NOT_QUANTITIES,
@@ -26,7 +27,7 @@ def _full_reported_file() -> ReportedFile:
         keyword=Keyword("keroro"),
         duration_seconds=1234,
         bitrate_kbps=1500,
-        raw_metadata=(("0x0308", "0"), ("codec", None), ("complete_source_count", 2)),
+        raw_metadata=JsonObjectText(text='{"codec": null, "unmapped": {"0x0308": "0"}}'),
     )
 
 
@@ -37,10 +38,8 @@ def test_file_observation_is_frozen_and_holds_fields() -> None:
     assert reported_file.size_bytes == 3 * 1024 * 1024
     assert reported_file.source_count == 5
     assert reported_file.keyword == "keroro"
-    assert reported_file.raw_metadata == (
-        ("0x0308", "0"),
-        ("codec", None),
-        ("complete_source_count", 2),
+    assert reported_file.raw_metadata == JsonObjectText(
+        text='{"codec": null, "unmapped": {"0x0308": "0"}}'
     )
     with pytest.raises(dataclasses.FrozenInstanceError):
         reported_file.filename = "autre"  # type: ignore[misc]
@@ -56,10 +55,10 @@ def test_media_fields_and_raw_metadata_default_to_absent() -> None:
     )
     assert reported_file.duration_seconds is None
     assert reported_file.bitrate_kbps is None
-    assert reported_file.raw_metadata == ()
+    assert reported_file.raw_metadata == JsonObjectText(text="{}")
 
 
-_TEXT_POSITIONS = ("filename", "keyword", "raw_metadata key", "raw_metadata text")
+_TEXT_POSITIONS = ("filename", "keyword")
 
 _QUANTITY_FIELDS = ("size_bytes", "source_count", "duration_seconds", "bitrate_kbps")
 
@@ -69,8 +68,6 @@ def _holding_text(position: str, *, text: str) -> dict[str, Any]:
     fields_by_position: dict[str, dict[str, Any]] = {
         "filename": {"filename": text},
         "keyword": {"keyword": Keyword(text)},
-        "raw_metadata key": {"raw_metadata": ((text, "0"),)},
-        "raw_metadata text": {"raw_metadata": (("0x0308", text),)},
     }
     return fields_by_position[position]
 
@@ -169,18 +166,31 @@ def test_candidate_from_fields_maps_absent_media_metadata_to_none() -> None:
     )
 
 
-def test_fold_raw_metadata_appends_the_three_values_after_the_pairs() -> None:
+def test_fold_raw_metadata_writes_the_derived_values_beside_what_no_field_consumes() -> None:
     folded = fold_raw_metadata(
-        (("0x0308", "0"),), codec="xvid", file_type="Video", complete_source_count=2
+        {"0x0308": "0", "media": {"title": "Keroro"}},
+        codec="xvid",
+        file_type="Video",
+        complete_source_count=2,
     )
-    assert folded == (
-        ("0x0308", "0"),
-        ("codec", "xvid"),
-        ("file_type", "Video"),
-        ("complete_source_count", 2),
+    assert folded == JsonObjectText(
+        text='{"codec": "xvid", "complete_source_count": 2, "file_type": "Video",'
+        ' "unmapped": {"0x0308": "0", "media": {"title": "Keroro"}}}'
     )
 
 
-def test_fold_raw_metadata_keeps_an_absent_value_as_none() -> None:
-    folded = fold_raw_metadata((), codec=None, file_type=None, complete_source_count=0)
-    assert folded == (("codec", None), ("file_type", None), ("complete_source_count", 0))
+def test_fold_raw_metadata_keeps_an_absent_value_as_null() -> None:
+    folded = fold_raw_metadata({}, codec=None, file_type=None, complete_source_count=0)
+    assert folded == JsonObjectText(
+        text='{"codec": null, "complete_source_count": 0, "file_type": null, "unmapped": {}}'
+    )
+
+
+def test_fold_raw_metadata_keeps_a_name_the_network_sends_apart_from_its_own() -> None:
+    folded = fold_raw_metadata(
+        {"codec": "h264"}, codec="xvid", file_type=None, complete_source_count=0
+    )
+    assert folded == JsonObjectText(
+        text='{"codec": "xvid", "complete_source_count": 0, "file_type": null,'
+        ' "unmapped": {"codec": "h264"}}'
+    )
