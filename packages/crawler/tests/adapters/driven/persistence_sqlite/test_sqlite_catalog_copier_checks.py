@@ -185,14 +185,27 @@ def test_a_source_holding_a_value_the_node_cannot_read_leaves_the_destination_as
 def test_a_text_column_of_a_table_the_schema_does_not_hold_is_checked_too(tmp_path: Path) -> None:
     source = _clean_catalog(tmp_path / "source.db")
     with closing(open_catalog(source)) as connection:
-        connection.execute("CREATE TABLE notes (body TEXT)")
-        connection.execute("INSERT INTO notes (body) VALUES (CAST(x'ff' AS TEXT))")
+        connection.execute('CREATE TABLE "no""tes" (body TEXT)')
+        connection.execute("""INSERT INTO "no""tes" (body) VALUES (CAST(x'ff' AS TEXT))""")
 
     with pytest.raises(CatalogCopyError) as raised:
         _copy_catalogs(tmp_path / "merged.db", source_catalogs=[source])
 
-    expected = f"source catalog {source} refused: notes.body {_NOT_UTF8}, first at rowid 1"
+    expected = f'source catalog {source} refused: no"tes.body {_NOT_UTF8}, first at rowid 1'
     assert str(raised.value) == expected
+
+
+def test_a_source_native_id_its_network_refuses_is_named(tmp_path: Path) -> None:
+    source = _clean_catalog(tmp_path / "source.db")
+    with closing(open_catalog(source)) as connection:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute("INSERT INTO sources VALUES (zeroblob(16), 'ed2k', 'not a user hash')")
+
+    with pytest.raises(CatalogCopyError) as raised:
+        _copy_catalogs(tmp_path / "merged.db", source_catalogs=[source])
+
+    expected = f"source catalog {source} refused: sources.source_id {_NOT_DERIVED}, first at"
+    assert str(raised.value) == f"{expected} {_SEEDED_ROW_KEYS['sources']}"
 
 
 def test_a_source_missing_a_table_cannot_be_checked(tmp_path: Path) -> None:

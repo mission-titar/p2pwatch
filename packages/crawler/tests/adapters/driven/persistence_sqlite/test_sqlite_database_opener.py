@@ -11,6 +11,7 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import read_only_uri
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -126,6 +127,24 @@ def test_open_in_memory_attaches_a_catalog_and_reads_its_rows_by_column_name(
     assert main_files == [{"file": ""}]
 
 
+@pytest.mark.parametrize("in_memory", [True, False], ids=["in_memory", "catalog"])
+def test_a_connection_attaches_a_database_read_only_by_its_uri(
+    *, tmp_path: Path, in_memory: bool
+) -> None:
+    directory = tmp_path / "data #%?"
+    directory.mkdir()
+    path = _seeded_catalog(directory / "catalog.db")
+    connection = (
+        database_opener().open_in_memory() if in_memory else open_catalog(tmp_path / "other.db")
+    )
+    with closing(connection):
+        connection.execute("ATTACH DATABASE ? AS attached", (read_only_uri(path),))
+        attached_files = rows(connection, sql="SELECT native_id FROM attached.files")
+        with pytest.raises(sqlite3.OperationalError, match="readonly database"):
+            connection.execute("DELETE FROM attached.files")
+    assert attached_files == [{"native_id": _CANONICAL_HASH}]
+
+
 def test_catalog_version_is_the_one_open_catalog_brings_a_catalog_to(tmp_path: Path) -> None:
     with closing(open_catalog(tmp_path / "catalog.db")) as connection:
         [stamped] = rows(connection, sql="PRAGMA user_version")
@@ -165,6 +184,17 @@ def test_open_reader_opens_a_path_holding_characters_a_uri_escapes(tmp_path: Pat
     path = _seeded_catalog(directory / "catalog.db")
     with closing(database_opener().open_reader(path)) as reader:
         assert rows(reader, sql="SELECT native_id FROM files") == [{"native_id": _CANONICAL_HASH}]
+
+
+def test_open_catalog_opens_a_path_holding_characters_a_uri_escapes(tmp_path: Path) -> None:
+    directory = tmp_path / "data #%?"
+    directory.mkdir()
+    path = _seeded_catalog(directory / "catalog.db")
+    assert sorted(child.name for child in directory.iterdir()) == ["catalog.db"]
+    with closing(open_catalog(path)) as connection:
+        assert rows(connection, sql="SELECT native_id FROM files") == [
+            {"native_id": _CANONICAL_HASH}
+        ]
 
 
 def test_a_refused_open_closes_its_connection(tmp_path: Path) -> None:

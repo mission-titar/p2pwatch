@@ -60,6 +60,58 @@ def source_id(network: str, native_id: str) -> SourceId:  # noqa: PLR0917
     return SourceKey(network=Network(network), native_id=native_id).source_id
 
 
+def content_hash_by_position(  # noqa: PLR0917
+    file_ref: str | bytes,
+    filename: str,
+    size_bytes: int,
+    duration_seconds: int | None,
+    bitrate_kbps: int | None,
+    raw_metadata: str,
+    keyword: str,
+    node_id: str,
+) -> bytes:
+    """``content_hash`` for the SQL function, which SQLite passes the columns by position."""
+    return content_hash(
+        file_ref=file_ref,
+        filename=filename,
+        size_bytes=size_bytes,
+        duration_seconds=duration_seconds,
+        bitrate_kbps=bitrate_kbps,
+        raw_metadata=raw_metadata,
+        keyword=keyword,
+        node_id=node_id,
+    )
+
+
+def source_content_hash_by_position(  # noqa: PLR0917
+    file_ref: bytes,
+    source_ref: bytes | None,
+    name: str | None,
+    software: str | None,
+    role: str,
+    contact_point: str | None,
+    connectable: int | None,
+    raw_metadata: str,
+    node_id: str,
+) -> bytes:
+    """``source_content_hash`` for the SQL function, which SQLite passes ``connectable`` as the 0
+    or 1 it stores, where the store hashed a bool."""
+    connectable_flag = None if connectable is None else bool(connectable)
+    return source_content_hash(
+        (
+            file_ref,
+            source_ref,
+            name,
+            software,
+            role,
+            contact_point,
+            connectable_flag,
+            raw_metadata,
+            node_id,
+        )
+    )
+
+
 def register_sql_functions(connection: sqlite3.Connection) -> None:
     """Registers ``content_hash``, ``source_content_hash``, ``file_id``, ``source_id``,
     ``fold_raw_meta`` and ``iso_to_micros``."""
@@ -78,28 +130,6 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
             ensure_ascii=False,
         )
 
-    # SQLite passes the columns by position.
-    def content_hash_by_position(  # noqa: PLR0917
-        file_ref: str | bytes,
-        filename: str,
-        size_bytes: int,
-        duration_seconds: int | None,
-        bitrate_kbps: int | None,
-        raw_metadata: str,
-        keyword: str,
-        node_id: str,
-    ) -> bytes:
-        return content_hash(
-            file_ref=file_ref,
-            filename=filename,
-            size_bytes=size_bytes,
-            duration_seconds=duration_seconds,
-            bitrate_kbps=bitrate_kbps,
-            raw_metadata=raw_metadata,
-            keyword=keyword,
-            node_id=node_id,
-        )
-
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
     create_memoized_function(
         connection, name="content_hash", argument_count=8, function=content_hash_by_position
@@ -108,34 +138,6 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     create_memoized_function(
         connection, name="fold_raw_meta", argument_count=4, function=fold_stored
     )
-
-    # SQLite passes connectable as the 0 or 1 it stores, where the store hashed a bool.
-    def source_content_hash_by_position(  # noqa: PLR0917
-        file_ref: bytes,
-        source_ref: bytes | None,
-        name: str | None,
-        software: str | None,
-        role: str,
-        contact_point: str | None,
-        connectable: int | None,
-        raw_metadata: str,
-        node_id: str,
-    ) -> bytes:
-        connectable_flag = None if connectable is None else bool(connectable)
-        return source_content_hash(
-            (
-                file_ref,
-                source_ref,
-                name,
-                software,
-                role,
-                contact_point,
-                connectable_flag,
-                raw_metadata,
-                node_id,
-            )
-        )
-
     connection.create_function(
         "source_content_hash", 9, source_content_hash_by_position, deterministic=True
     )

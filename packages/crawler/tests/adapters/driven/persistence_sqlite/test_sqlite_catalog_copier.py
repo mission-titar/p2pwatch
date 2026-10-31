@@ -4,6 +4,8 @@ Everything is tested without Docker: we build N real ``catalog.db`` files (helpe
 and assert content + cardinality + reassigned ``id`` + idempotence.
 """
 
+import hashlib
+import shutil
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -29,6 +31,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
     open_catalog,
     open_reader,
 )
+from tests.support.catalog_rows import insert_file
 
 # The current catalog schema version = the last catalog migration's number.
 # open_catalog stamps the output to it; the guard rejects any source that is not at it.
@@ -511,12 +514,46 @@ def test_a_row_the_destination_refuses_fails_its_source_whole(
     destination = make_catalog(tmp_path / "out.db", content=_full_catalog("c", node_id="node-c"))
     before = _digest(destination)
 
-    with pytest.raises(PartialCopyError) as raised:
+    with pytest.raises(CatalogCopyError) as raised:
         _copy_catalogs(destination, source_catalogs=[source])
 
+    assert type(raised.value) is CatalogCopyError
     assert str(raised.value).startswith(f"copy of {source} failed at {table}: CHECK constraint")
-    assert str(raised.value).endswith(f"; {destination} keeps the sources merged before it: none")
     assert _digest(destination) == before
+
+
+def test_a_first_source_the_destination_refuses_leaves_no_output(tmp_path: Path) -> None:
+    source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    _with_a_row_the_schema_refuses(source, sql=_BOGUS_ROLE)
+    destination = tmp_path / "output" / "out.db"
+    destination.parent.mkdir()
+
+    with pytest.raises(CatalogCopyError) as raised:
+        _copy_catalogs(destination, source_catalogs=[source])
+
+    assert type(raised.value) is CatalogCopyError
+    assert str(raised.value).startswith(f"copy of {source} failed at source_variants: CHECK")
+    assert list(destination.parent.iterdir()) == []
+
+
+def test_a_source_holding_a_pending_wal_merges_and_keeps_its_bytes(tmp_path: Path) -> None:
+    # A copy of a running node's catalog: its rows still wait in its -wal.
+    live = tmp_path / "live.db"
+    source = tmp_path / "source.db"
+    with closing(open_catalog(live)) as connection:
+        connection.execute("PRAGMA wal_autocheckpoint = 0")
+        insert_file(connection, native_id=HASH_A)
+        for suffix in ("", "-wal"):
+            shutil.copyfile(f"{live}{suffix}", f"{source}{suffix}")
+    source_files = (source, Path(f"{source}-wal"))
+    before = [hashlib.sha256(path.read_bytes()).digest() for path in source_files]
+
+    _copy_catalogs(tmp_path / "out.db", source_catalogs=[source])
+
+    assert [hashlib.sha256(path.read_bytes()).digest() for path in source_files] == before
+    assert rows_without_id(tmp_path / "out.db", table="files") == [
+        {"native_id": HASH_A, "size_bytes": 100}
+    ]
 
 
 def test_a_source_the_destination_refuses_leaves_the_sources_before_it_merged(

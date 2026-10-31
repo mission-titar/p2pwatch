@@ -163,7 +163,8 @@ Ces deux outils sont ponctuels et jamais déclenchés par le crawler. La fusion 
 destination** : un fichier neuf (`--output`), ou le catalogue que vous désignez par `--into`. Seule
 exception : quand elle met à niveau une destination existante par une migration qui réécrit des
 lignes, elle en garde d'abord une [copie d'avant migration](#la-copie-davant-migration) à côté
-d'elle. Une source n'est jamais copiée.
+d'elle. Une source est ouverte en lecture seule : son contenu reste intact, même quand un `-wal` en
+attente l'accompagne, comme sur la copie du catalogue d'un nœud en marche.
 
 **Valider la configuration**, sans rien démarrer. À lancer avant un déploiement. Affiche
 `Config valid` si les trois fichiers sont valides. Sinon elle sort en erreur (code 1) : un fichier
@@ -193,7 +194,7 @@ docker compose exec p2pwatch python -m p2pwatch merge \
 ```
 
 Un catalogue source doit être au même schéma que votre version : la fusion refuse une copie faite
-par une version plus ancienne (`has schema version 5, expected 12`), car elle ne migre jamais un
+par une version plus ancienne (`has schema version 5, expected 15`), car elle ne migre jamais un
 catalogue source. Migrez-le d'abord en le fusionnant dans lui-même, qui l'ouvre et le met à niveau
 sur place. Si une migration en attente réécrit des lignes, la fusion le copie d'abord à côté de lui,
 comme le crawler au démarrage. Travaillez tout de même de préférence sur une copie, puisqu'une
@@ -216,10 +217,12 @@ La destination reste alors telle quelle : `--output` ne crée aucun fichier, et 
 son catalogue à niveau.
 
 Une ligne que le schéma de la destination refuse pendant la copie, un rôle de source inconnu par
-exemple, arrête la fusion sur sa source, qui n'est pas copiée du tout. Les sources fusionnées avant
-elle restent dans la destination, `--output` compris : le message, en code 2, nomme la table en
-cause et ces sources, puis vous invite à poursuivre par `--into` sur la destination. Relancer ne
-copie pas deux fois une ligne déjà présente.
+exemple, arrête la fusion sur sa source, qui n'est pas copiée du tout. Si c'est la première, rien
+n'est copié, et une sortie `--output` neuve est supprimée. Sinon les sources fusionnées avant elle
+restent dans la destination, `--output` compris : le message, en code 2, nomme la table en cause et
+ces sources. Avec `--output`, il indique aussi comment poursuivre une fois la source fautive
+corrigée ou écartée : `--into <sortie> <sortie>` suivi des sources non fusionnées. Relancer ne copie
+pas deux fois une ligne déjà présente.
 
 Le journal de la fusion nomme chaque catalogue source, suivi de `merged`, ou de
 `skipped: it is the output` pour celui que désigne `--into` : il n'est jamais fusionné en lui-même,
