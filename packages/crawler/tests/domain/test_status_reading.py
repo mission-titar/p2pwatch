@@ -10,7 +10,7 @@ from p2pwatch.domain.status_reading import (
     ClientStatus,
     is_reading_fresh,
 )
-from tests.support.domain.value_bounds import MALFORMED_TEXTS, WELL_FORMED_TEXTS
+from tests.support.domain.value_bounds import NOT_WELL_FORMED_TEXTS, WELL_FORMED_TEXTS
 
 
 def test_a_reading_stays_fresh_for_two_status_periods() -> None:
@@ -33,7 +33,7 @@ def test_a_client_status_is_frozen_and_holds_its_channels() -> None:
         status.version = None  # type: ignore[misc]
 
 
-@pytest.mark.parametrize("version", MALFORMED_TEXTS)
+@pytest.mark.parametrize("version", NOT_WELL_FORMED_TEXTS)
 def test_a_client_status_refuses_a_version_that_is_not_valid_utf8(version: str) -> None:
     with pytest.raises(ValueError, match="^a client status's version is not valid UTF-8$"):
         ClientStatus(version=version, channels=())

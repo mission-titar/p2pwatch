@@ -16,8 +16,18 @@ def require_well_formed_text(text: str | None, *, error_label: str) -> None:
         raise ValueError(f"{error_label} is not valid UTF-8")
 
 
+def replace_surrogates(text: str) -> str:
+    """``text`` made well formed: each surrogate, paired or not, replaced with U+FFFD."""
+    return _SURROGATES.sub("\N{REPLACEMENT CHARACTER}", text)
+
+
+def is_quantity(quantity: int) -> bool:
+    """Whether ``quantity`` is one: an integer in [0, 2**63), since no count nor size is negative
+    and the catalog's ``INTEGER`` holds none larger."""
+    return 0 <= quantity < _QUANTITY_END
+
+
 def require_quantity(quantity: int | None, *, error_label: str) -> None:
-    """Refuses ``quantity`` unless it is one: an integer in [0, 2**63), since no count nor size is
-    negative and the catalog's ``INTEGER`` holds none larger. ``None`` passes."""
-    if quantity is not None and not 0 <= quantity < _QUANTITY_END:
+    """Refuses ``quantity`` unless it is one (``is_quantity``). ``None`` passes."""
+    if quantity is not None and not is_quantity(quantity):
         raise ValueError(f"{error_label} is not a quantity in [0, 2**63): {quantity}")

@@ -19,8 +19,8 @@ from p2pwatch.domain.source import (
     parse_contact_point,
 )
 from tests.support.domain.value_bounds import (
-    MALFORMED_TEXTS,
     NOT_QUANTITIES,
+    NOT_WELL_FORMED_TEXTS,
     QUANTITIES,
     WELL_FORMED_TEXTS,
 )
@@ -129,11 +129,13 @@ def _holding_text(position: str, *, text: str) -> dict[str, Any]:
     return fields_by_position[position]
 
 
-@pytest.mark.parametrize("text", MALFORMED_TEXTS)
+@pytest.mark.parametrize("text", NOT_WELL_FORMED_TEXTS)
 @pytest.mark.parametrize("position", _TEXT_POSITIONS)
 def test_a_reading_refuses_text_that_is_not_valid_utf8(*, position: str, text: str) -> None:
-    with pytest.raises(ValueError, match=r"^a source reading's \w+ is not valid UTF-8$"):
-        dataclasses.replace(_reading(), **_holding_text(position, text=text))
+    fields = _holding_text(position, text=text)
+    (field,) = fields
+    with pytest.raises(ValueError, match=f"^a source reading's {field} is not valid UTF-8$"):
+        dataclasses.replace(_reading(), **fields)
 
 
 @pytest.mark.parametrize("text", WELL_FORMED_TEXTS)
