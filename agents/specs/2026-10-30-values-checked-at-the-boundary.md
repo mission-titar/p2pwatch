@@ -11,13 +11,17 @@ separator in a target letter or a rule name breaks the files page. amuled alread
 (stage 5), or a change of amuleapi's format, may not, and the store would then stop the process.
 
 The lot gives every boundary one rule: the domain refuses a value it cannot carry, the mapper cleans what a network
-sends, and the config refuses what the operator wrote.
+sends, and the config refuses what the operator wrote. *(Added after the holistic review: `merge` refuses what another
+catalog holds, D9.)*
 
 ## 2. What the operator will see
 
 - `validate-config` and `crawl` refuse a config file holding text that is not valid UTF-8, a control character in a
   target letter or a rule name, or an environment variable that is not valid UTF-8; each error says where.
-- Nothing else changes: amuled's answers already pass every new check.
+- `merge` checks every source before touching the destination, and refuses one holding a value the node could not
+  read back, saying where; it copies each source whole or not at all, and no longer drops a row in silence. *(Added
+  after the holistic review, D9.)*
+- Nothing else changes: amuled's answers already pass every new check, and so does the operator's catalog.
 
 ## 3. Decisions
 
@@ -44,25 +48,43 @@ sends, and the config refuses what the operator wrote.
 - **D8. No catalog migration.** *No stored row breaks D3: amuled never sent such a value and the operator's catalog
   holds none, which the lead checks again before the node upgrades.*
 
-The operator decided each of D1 to D8 on 2026-10-30; the names D3 introduces are in Appendix A.
+- **D9. `merge` checks every source before touching the destination and refuses one the node could not use, then
+  copies each source whole or not at all, and no longer drops a row in silence.** *A merged row can never be deleted:
+  one the node cannot read breaks the files page, the reevaluation and the download loop, and one whose ids do not
+  match its keys blocks the node's own writes. Types, signs and closed sets are left to the STRICT lot, due before v5,
+  so these blocks write no check the schema will soon hold.* Blocks 35 and 37.
+- **D11. A source the destination's schema refuses during the copy leaves the earlier sources merged.** *A single
+  transaction over the whole merge cannot hold more than 10 sources (SQLite neither detaches a source read in a
+  transaction nor attaches more than 10), and a copy of the destination costs its size; re-running is safe, since a
+  duplicate is skipped.* Block 37.
+- **D10. A merged catalog's `download` decisions keep driving the download loop.** *A merge is rare and intentional,
+  between peers one trusts, and a file the webui shows as a download should be in the client too.*
+
+The operator decided D1 to D8 on 2026-10-30, and D9 to D11 on 2026-10-31 after the holistic review found `merge`
+unchecked; the names D3 introduces are in Appendix A.
 
 ## 4. Acceptance
 
 1. The mapper cleans each kind of invalid text and integer of D1 and D2, which `main` lets through (Appendix B).
 2. Each domain value of D3 refuses each invalid text and integer, and accepts the limits and valid non-ASCII text.
 3. `validate-config` refuses each invalid config of D4 and D5 and says where, where `main` accepts it.
-4. `uv run poe check` passes at each block's tip.
+4. `merge` refuses a source holding each invalid value of D9 and leaves the destination as it was, in both its modes,
+   where `main` merges it with exit 0.
+5. `uv run poe check` passes at each block's tip.
 
 ## 5. Blocks
 
-Estimates by `boundary-values-estimates` (Sonnet, 2026-10-30). The bound is checked after committing.
+Estimates by `boundary-values-estimates` (Sonnet): rows 10 to 30 on 2026-10-30, rows 35 to 40 on 2026-10-31. The
+bound is checked after committing.
 
 | # | Branch | Holds | Lines, files |
 |---|---|---|---|
 | 10 | `fix/amuleapi-values-cleaned` | D1, D2 | 175, 4 |
 | 20 | `feat/domain-value-bounds` | D3, D6 | 285, 15 |
 | 30 | `fix/config-refuses-invalid-text` | D4, D5 | 140, 8 |
-| 40 | `docs/wrap-values-at-the-boundary` | closing | 20, 2 |
+| 35 | `fix/merge-refuses-invalid-sources` | D9's unreadable values, D10 | 330, 11 |
+| 37 | `fix/merge-refuses-inconsistent-rows` | D9's inconsistent rows | 195, 9 |
+| 40 | `docs/wrap-values-at-the-boundary` | closing | 190, 17 |
 
 The mapper comes first, so nothing arriving is refused once the domain starts refusing; block 30 reuses the domain's
 check.
@@ -71,6 +93,8 @@ check.
 
 - `AGENTS.md`: the invariant "UTF-8 text only", and what amuleapi really sends (block 40).
 - `docs/migration-4x.md`: the config values now refused (block 30).
+- `docs/operate.md`, the catalog merge: what it refuses (blocks 35 and 37) and what a refusal during the copy leaves
+  (block 37).
 - Stage 1's D16 and the umbrella spec: a correction beside each line D7 revokes (block 40).
 
 ## 7. Limits and scope
@@ -80,17 +104,22 @@ check.
 - **A text D1 cleans is no longer the sender's**: two names differing only by invalid UTF-8 read the same.
 - **A value D1 or D2 cleans leaves no trace**, except a dropped size, which a metric counts.
 - **The integers inside a file's raw metadata stay unchecked**: they are stored as text and read by no decision.
+- **Until the STRICT lot, `merge` copies a value of the wrong type, a negative integer (but a source's received
+  bytes, which a `CHECK` already holds), an unknown tier or an instant out of range** (D9). No release separates the
+  two lots, and the STRICT lot must close it.
 
 ### Backlog
 
 With block 10's first commit, as agreed on 2026-10-30: "aMule 3.2.0 pinned" added and "Round-trip contracts" moved,
-both under "Must be done before the next release" (Appendix A, D7).
+both under "Must be done before the next release" (Appendix A, D7). With block 40, as agreed on 2026-10-31: "Every
+catalog table STRICT" moved there too and extended to what D9 leaves it (Appendix A, D9).
 
 ### Adjacent backlog items
 
 - "Round-trip contracts": the next lot, whose draws D3 defines (Appendix D); it stays open.
 - "Multi network", stage 5: its mappers inherit D3's guard; it stays open.
-- "Every catalog table STRICT": a guarantee on a value's type, not its range or its encoding; it stays open.
+- "Every catalog table STRICT": moved before the v5 tag by the closing block, so operators pay one rebuild with v5's
+  migrations, and extended to what D9 leaves it (Appendix A, D9); it stays open.
 - "Contract tests for the fakes of outside systems": the fake against amuled, not what amuled sends; it stays open.
 - "aMule 3.2.0 pinned", "The Grype scan back on p2pwatch": with the round-trip contracts, the other conditions of the
   v5 tag; they stay open.
@@ -144,6 +173,51 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
 - **D8.** The operator first chose a migration rewriting negative values, on a premise the second spec review
   disproved (amuled drops sizes out of range). The lead re-runs Appendix C's two queries on the operator's catalog
   before the node upgrades to v5.
+- **D9.** `adapters/driven/persistence_sqlite/sqlite_catalog_copier.py` runs two passes, attaching one source at a time
+  since SQLite attaches at most 10 databases (`SQLITE_MAX_ATTACHED`). The check pass runs on a connection to `:memory:`
+  carrying the check functions, before `open_catalog` creates (`--output`) or migrates (`--into`) the destination, so a
+  refused check writes nothing at all. The copy pass then copies each source in its own transaction (D11). A check's
+  refusal raises `CatalogCopyError` naming the source, the table, the column and the first offending row's key, and
+  reaches the operator as `Merge failed: ...`, exit 2. Block 35 holds the two passes, the checks of unreadable values
+  and that error; block 37 the consistency checks and D11. The checks run in SQL over the attached source, through
+  registered functions, in this order, since a Python function handed a text that is not UTF-8 raises SQLite's generic
+  `user-defined function raised exception` before its body runs:
+  - every TEXT column of every table is valid UTF-8, first: a function over `CAST(x AS BLOB)` decoding strictly, which
+    refuses what `require_well_formed_text` refuses (SQLite has no UTF-8 validator, and fetching invalid bytes raises an
+    `OperationalError` that names no row);
+  - every `raw_metadata` (a JSON array of pairs in `observation_variants`, a JSON object in `source_variants`) is JSON
+    of that shape whose every text passes `require_well_formed_text`: an escaped surrogate is valid UTF-8 until a read
+    decodes it;
+  - `match_decisions.target_id` and `rule_name` hold no `Cc` character, through D5's rule, shared as
+    `has_control_character(text) -> bool`, public in `catalog_matching/domain/validation.py` (name: operator,
+    2026-10-31), which its validation and the copier both call;
+  - block 37: `files.file_id` and `sources.source_id` equal the ids their `network` and `native_id` derive, on the rows
+    whose `network` the node knows (the schema's `CHECK` refuses the others at copy time, and `file_id` raises on an
+    unknown one), and each variant's `content_hash` equals the hash of its values, the observation variants' through the
+    registered `content_hash`, the source variants' through their store's hash, moved into `variants.py` and registered
+    the same way. A non-derived `file_id` would make the node's own `record_observation` of that key fail for good.
+- Block 37 also turns the six `INSERT OR IGNORE ... SELECT` copies into `INSERT ... SELECT ... WHERE true ON CONFLICT DO
+  NOTHING` (`WHERE true` resolves SQLite's parse ambiguity between a `SELECT` and an upsert); the seventh,
+  `_COPY_MATCH_DECISIONS`, a plain `INSERT ... SELECT DISTINCT ... WHERE NOT EXISTS`, already raises. A duplicate is
+  still skipped, while a row breaking a `CHECK` or a `NOT NULL` raises (probed on SQLite 3.49.1, the host's, and 3.46.1,
+  the image's), so the existing sign `CHECK` on `session_received_bytes` now refuses too. The copier runs each copy
+  statement so that a refusal the schema raises names the source and the table, and the sources already merged; SQLite's
+  own text names no row. With `--output`, such a refusal leaves the output holding the earlier sources, and the message
+  says to go on with `--into` it. `CatalogCopier`'s docstring and `MergeError`'s state D9 and D11.
+  Pitfalls for block 37: `tests/support/catalog_rows.py`'s `insert_source_variant` sets a stand-in hash
+  (`blake2b(repr(...))`), so every merge test built on `make_catalog` would be refused until it uses the store's own
+  hash; the store hashes `connectable` as a JSON boolean while it stores 0 or 1, so the SQL function must turn it back
+  into a boolean before hashing; `test_t16_merger_wraps_source_copy_in_a_transaction`'s broken source now fails the
+  check before any copy, so its mid-copy failure needs another trigger (a destination trigger, for one).
+  **Left to the STRICT lot**, which its backlog entry and the handoff must name, since this lot relies on it to close
+  the gap: a value of the wrong type in any column (a text or a real in an `INTEGER` column, a blob in a `TEXT` one), a
+  negative size, count, duration or bitrate, a `tier` outside `DecisionTier` and `retracted`, an instant in micros
+  outside `datetime`'s range. The closing block extends the STRICT entry with sign and closed-set `CHECK`s "so `merge`
+  refuses through the schema what D9 of `agents/specs/2026-10-30-values-checked-at-the-boundary.md` left to it (types,
+  signs, tiers, instants)", and moves it under "Must be done before the next release".
+- **D10.** `_SELECT_DOWNLOAD_DECISIONS` (`sqlite_decision_store.py`) keeps reading every node's decisions; the
+  `DecisionReader` port's docstring states it, with D10's reason, and one download-candidate test sets another node's
+  decision, so no later lot filters it as a bug. Block 35.
 - **Documents.** `AGENTS.md`'s design invariants gain: "the node supports UTF-8 text only; a text that is not valid
   UTF-8 is refused where the operator wrote it and replaced with U+FFFD where a network sent it". Its amuleapi
   gotchas gain: amuleapi writes valid UTF-8 only, a lone surrogate as U+FFFD; every integer the mapper stores is a
@@ -174,6 +248,16 @@ For the teammates. Paths under `packages/crawler/src/p2pwatch/` unless stated.
    letter `"a\x1fb"`, a letter holding `"\x85"` and a rule name holding `"\t"`, and names the variable when
    `crawler.yml` interpolates one whose value is not valid UTF-8; each of the eight exits 0 on `main`. Block 30's pull
    request carries the sixteen runs.
+4. A source catalog at the current schema, its clean rows written through the real stores (a source variant's
+   `connectable` true, false and absent), then seeded one value at a time: a filename of bytes that are not UTF-8, an
+   escaped `\ud800` in an observation variant's `raw_metadata`, a `raw_metadata` that is not JSON, a U+001F in a
+   `target_id`, a `\t` in a `rule_name` (block 35); a `file_id` its `native_id` does not derive, a `content_hash` that
+   is not its variant's, in each variant table, and a source variant's `role` `'bogus'` in a source built without that
+   `CHECK` (block 37). For each, `uv run python -m p2pwatch merge` exits 2 naming the source and the table (and the
+   column for a check), in both modes: with `--output`, no file is left; with `--into`, the destination's
+   `database_digest` is unchanged. On `main` each exits 0, the `'bogus'` row dropped in silence. The clean source merges
+   as before, and a merge of the clean source then the `'bogus'` one leaves the clean one merged and names it (D11).
+   Blocks 35 and 37 carry their runs.
 
 ## Appendix C. Facts
 
@@ -230,6 +314,23 @@ reading, 2026-10-30. amuled's sources: amule-org/amule at `909d304d` (the pinned
   page when one holds U+001F. `crawl` and `validate-config` share `read_targets`
   (`adapters/driven/config/crawler_config.py`) and `load_yaml`; `interpolate_document` runs after `load_yaml`.
 - **aMule 3.2.0** (`gh release view 3.2.0 -R amule-org/amule`, 2026-10-28): 15 advisories, every one also in 3.1.0.
+- **`merge` today** (`merge-boundary-inventory`, probes in the session's scratchpad, 2026-10-31). `SqliteCatalogCopier`
+  attaches each source, refuses a `user_version` other than the destination's, then copies six tables by `INSERT OR
+  IGNORE ... SELECT` and the decisions by `INSERT ... SELECT DISTINCT ... WHERE NOT EXISTS`, in one transaction per
+  source; Python never decodes a row. Merged without error and failing on read afterwards: a text of bytes that are not
+  UTF-8 (`OperationalError`), an escaped surrogate in `raw_metadata` (`ValueError`, D3), a `raw_metadata` that is not
+  JSON (`JSONDecodeError`), a text in an `INTEGER` column (`TypeError`), a negative size (`ValueError`); merged and
+  never re-checked: an unknown `tier`, a U+001F in a `target_id` (the files page's `_split_concat`), a `file_id` not
+  derived from its key (it then blocks the node's own writes of that key), a real such as 3.5 in an `INTEGER` column.
+  `INSERT OR IGNORE` skips a row breaking a destination `CHECK` or `NOT NULL`, and the observations of a skipped variant
+  with it: a source row `role 'bogus'` merged 0 rows, exit 0; `ON CONFLICT DO NOTHING` skips the duplicate and raises on
+  the `CHECK` (lead's probe). Already refused: a source that cannot be attached (UTF-16 included), another schema
+  version, a foreign key violation. D9's own checks scale with the variants, not the observations: per 20,000 variants,
+  the UTF-8 check of four text columns about 14 ms, `raw_metadata`'s JSON 14 to 33 ms, `file_id` 4 ms, `content_hash` 64
+  ms; reading every observation back through `observation_from_row` would take about 115 s for 15.8 million. SQLite
+  3.49.1 has no UTF-8 validator: `json_valid` accepts every invalid case probed, and a function over `CAST(x AS BLOB)`
+  decoding strictly refuses them all. A merged catalog's `download` decisions drive the download loop
+  (`_SELECT_DOWNLOAD_DECISIONS` reads every node's), kept by D10.
 
 ## Appendix D. The round-trip contracts
 
