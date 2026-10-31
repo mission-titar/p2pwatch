@@ -113,6 +113,25 @@ def test_open_reader_refuses_a_column_name_that_appears_twice(tmp_path: Path) ->
         reader.execute("SELECT 1 AS a, 2 AS a").fetchone()
 
 
+def test_open_in_memory_attaches_a_catalog_and_reads_its_rows_by_column_name(
+    tmp_path: Path,
+) -> None:
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with closing(database_opener().open_in_memory()) as connection:
+        connection.execute("ATTACH DATABASE ? AS attached", (str(path),))
+        row = connection.execute("SELECT native_id FROM attached.files").fetchone()
+        main_files = rows(connection, sql="SELECT file FROM pragma_database_list WHERE seq = 0")
+    assert isinstance(row, NamedRow)
+    assert row == {"native_id": _CANONICAL_HASH}
+    assert main_files == [{"file": ""}]
+
+
+def test_catalog_version_is_the_one_open_catalog_brings_a_catalog_to(tmp_path: Path) -> None:
+    with closing(open_catalog(tmp_path / "catalog.db")) as connection:
+        [stamped] = rows(connection, sql="PRAGMA user_version")
+    assert database_opener().catalog_version() == stamped["user_version"]
+
+
 def test_open_reader_refuses_writes(tmp_path: Path) -> None:
     """``mode=ro`` + ``query_only`` is a double guard: an INSERT raises ``OperationalError``."""
     path = _seeded_catalog(tmp_path / "catalog.db")

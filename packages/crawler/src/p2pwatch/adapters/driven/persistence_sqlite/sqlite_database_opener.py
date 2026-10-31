@@ -1,11 +1,12 @@
 """Opens every SQLite connection: ``catalog.db`` and ``local.db``, each migrated to the code's
-version, and the read-only readers; each reads its rows by column name, the factory private here.
+version, the read-only readers, and an empty one in memory; each reads its rows by column name, the
+factory private here.
 
 Each connection is opened in REAL autocommit (``autocommit=True``, Python ≥ 3.12):
 transactions are EXPLICIT (``BEGIN``/``COMMIT``/``ROLLBACK`` written by the
 stores), no implicit isolation. Opening PRAGMAs (spec §3):
 ``journal_mode=WAL`` - REQUIRED: ``:memory:`` does not carry it (it answers ``memory``)
-and is therefore refused outright; the tests use real files (spec §8) -
+and is therefore refused by ``open``; the tests use real files (spec §8) -
 ``foreign_keys=ON``, and ``recursive_triggers=ON`` (without which ``INSERT OR REPLACE``
 crosses the append-only triggers, spec §3 post-review amendment).
 
@@ -62,6 +63,10 @@ class SqliteDatabaseOpener:
         """Opens/migrates ``local.db``."""
         return self.open(path, scripts=load_scripts(_MIGRATIONS / "local"))
 
+    def catalog_version(self) -> int:
+        """The schema version ``open_catalog`` brings a catalog to."""
+        return _latest_version(load_scripts(_MIGRATIONS / "catalog"))
+
     def open(self, path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
         copy; a database newer than the ``scripts`` raises ``MigrationError``."""
@@ -89,6 +94,13 @@ class SqliteDatabaseOpener:
         connection.row_factory = _build_named_row
         connection.execute("PRAGMA query_only=ON")
         connection.execute("PRAGMA temp_store=FILE")
+        return connection
+
+    def open_in_memory(self) -> sqlite3.Connection:
+        """Opens an empty database in memory, its rows read by column name, to attach the
+        databases a check reads."""
+        connection = sqlite3.connect(":memory:", autocommit=True)
+        connection.row_factory = _build_named_row
         return connection
 
 
@@ -135,7 +147,7 @@ def _pending_migrations(
     ``MigrationError``."""
     with wrap_sqlite_errors():
         current_version = int(connection.execute("PRAGMA user_version").fetchone()["user_version"])
-    latest = scripts[-1].version if scripts else 0
+    latest = _latest_version(scripts)
     if current_version > latest:
         raise MigrationError(
             f"db at version {current_version}, code at version {latest}: "
@@ -143,6 +155,10 @@ def _pending_migrations(
         )
     migrations = tuple(migration for migration in scripts if migration.version > current_version)
     return PendingMigrations(current_version=current_version, migrations=migrations)
+
+
+def _latest_version(scripts: tuple[Migration, ...]) -> int:
+    return scripts[-1].version if scripts else 0
 
 
 def _apply_migrations(connection: sqlite3.Connection, *, pending: PendingMigrations) -> None:

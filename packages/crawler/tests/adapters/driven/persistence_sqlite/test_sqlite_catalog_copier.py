@@ -5,13 +5,13 @@ and assert content + cardinality + reassigned ``id`` + idempotence.
 """
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError
-from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_A,
     HASH_B,
@@ -315,46 +315,37 @@ def test_t15_append_only_triggers_present_on_output(tmp_path: Path) -> None:
 
 
 def test_t16_merger_wraps_source_copy_in_a_transaction(tmp_path: Path) -> None:
-    # A source with a broken schema (empty SQLite DB, no tables) → the copy fails
-    # midway → ROLLBACK: the output keeps NO partial copy of this source.
+    # A destination trigger refuses the decisions, copied after the files: the copy fails midway
+    # → ROLLBACK: the output keeps NO partial copy of this source.
     good = make_catalog(tmp_path / "good.db", content=_full_catalog("a", node_id="node-a"))
-
-    broken = tmp_path / "broken.db"
-    raw = sqlite3.connect(broken)
-    raw.execute("PRAGMA journal_mode=WAL")
-    raw.execute("CREATE TABLE files (file_id BLOB, network TEXT, native_id TEXT, size_bytes INT)")
-    raw.execute(
-        "INSERT INTO files VALUES (?, 'ed2k', ?, 200)",
-        (FileKey(network=Network.ED2K, native_id=HASH_B).file_id, HASH_B),
-    )
-    raw.commit()
-    raw.close()
-    # Stamp the current schema version so this source clears the version guard and reaches
-    # the copy: we are exercising the mid-copy ROLLBACK, not the version rejection.
-    stamp_user_version(broken, version=_CURRENT_SCHEMA_VERSION)
-
+    second = make_catalog(tmp_path / "second.db", content=_full_catalog("b", node_id="node-b"))
     destination = tmp_path / "out.db"
-    _copy_catalogs(
-        destination, source_catalogs=[good]
-    )  # the good source first, in its own successful merge.
+    _copy_catalogs(destination, source_catalogs=[good])
+    with closing(open_catalog(destination)) as connection:
+        connection.execute(
+            "CREATE TRIGGER refuse_decisions BEFORE INSERT ON match_decisions"
+            " BEGIN SELECT RAISE(ABORT, 'decisions refused'); END"
+        )
 
-    with pytest.raises(CatalogCopyError, match="copy of .* failed"):
-        _copy_catalogs(destination, source_catalogs=[broken])
+    with pytest.raises(CatalogCopyError, match="copy of .* failed: decisions refused"):
+        _copy_catalogs(destination, source_catalogs=[second])
 
-    # files (1st table) may have been copied BEFORE the failure on observation_variants (missing
-    # table); the ROLLBACK must have undone it → the output still has ONLY the content of `good`.
+    # files (1st table) was copied BEFORE the failure on match_decisions; the ROLLBACK must have
+    # undone it → the output still has ONLY the content of `good`.
     assert rows_without_id(destination, table="files") == [{"native_id": HASH_A, "size_bytes": 100}]
 
 
 def test_t16_unattachable_source_errors(tmp_path: Path) -> None:
     # A source that is NOT a SQLite database (file exists but header invalid) →
-    # the ATTACH itself raises → clear CatalogCopyError (attach branch, distinct from the copy).
+    # the ATTACH itself raises → clear CatalogCopyError, before the output is created.
     not_a_db = tmp_path / "garbage.db"
     not_a_db.write_bytes(b"not a sqlite database header" * 8)
     destination = tmp_path / "out.db"
 
     with pytest.raises(CatalogCopyError, match="cannot attach source catalog"):
         _copy_catalogs(destination, source_catalogs=[not_a_db])
+
+    assert not destination.exists()
 
 
 def test_t17_single_source_merge(tmp_path: Path) -> None:
@@ -393,8 +384,8 @@ def test_rejects_source_with_older_schema_version(tmp_path: Path) -> None:
     assert f"source catalog {src} has schema version" in message
     assert str(_CURRENT_SCHEMA_VERSION - 1) in message
     assert str(_CURRENT_SCHEMA_VERSION) in message
-    # Rejected before its BEGIN: no row of the source reached the output.
-    assert count(destination, table="files") == 0
+    # Refused before the output is opened: nothing was written.
+    assert not destination.exists()
 
 
 def test_rejects_source_with_newer_schema_version(tmp_path: Path) -> None:
@@ -407,7 +398,7 @@ def test_rejects_source_with_newer_schema_version(tmp_path: Path) -> None:
     with pytest.raises(CatalogCopyError, match="has schema version"):
         _copy_catalogs(destination, source_catalogs=[src])
 
-    assert count(destination, table="files") == 0
+    assert not destination.exists()
 
 
 def test_source_at_current_schema_version_still_merges(tmp_path: Path) -> None:
@@ -423,8 +414,8 @@ def test_source_at_current_schema_version_still_merges(tmp_path: Path) -> None:
 
 
 def test_guard_checks_every_source_not_just_the_first(tmp_path: Path) -> None:
-    # A valid first source then an off-version second: the guard runs per source, so the
-    # second is rejected. The first was committed in its own transaction and survives.
+    # A valid first source then an off-version second: every source is checked before the
+    # output is opened, so the second refuses the whole merge and nothing is written.
     good = make_catalog(tmp_path / "good.db", content=_full_catalog("a", node_id="node-a"))
     bad = make_catalog(tmp_path / "bad.db", content=_full_catalog("b", node_id="node-b"))
     stamp_user_version(bad, version=_CURRENT_SCHEMA_VERSION - 1)
@@ -433,11 +424,7 @@ def test_guard_checks_every_source_not_just_the_first(tmp_path: Path) -> None:
     with pytest.raises(CatalogCopyError, match=f"{bad} has schema version"):
         _copy_catalogs(destination, source_catalogs=[good, bad])
 
-    # The good source merged first (own transaction, committed); only its row is present.
-    assert count(destination, table="files") == 1
-    assert rows_without_id(destination, table="files") == [
-        {"native_id": hash_for("a"), "size_bytes": 100}
-    ]
+    assert not destination.exists()
 
 
 def test_an_output_open_catalog_refuses_raises_a_merge_error(tmp_path: Path) -> None:
