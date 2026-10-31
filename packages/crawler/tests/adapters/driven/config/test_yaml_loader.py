@@ -67,8 +67,9 @@ def test_a_malformed_yaml_is_a_broken_input_on_one_line(tmp_path: Path) -> None:
         ('title: "\\ud83d\\ude00"\n', "title"),
         ('search:\n  keywords: [keroro, "a\\udcffb"]\n', "search.keywords[1]"),
         ('rules:\n  - { name: "\\ud800", tier: catalog }\n', "rules[0].name"),
-        ('"\\ud800": x\n', "\ud800"),
-        ('webui:\n  "\\ud800": x\n', "webui.\ud800"),
+        ('"\\ud800": x\n', "\\ud800"),
+        ('webui:\n  "\\ud800": x\n', "webui.\\ud800"),
+        ('"a\\tb\\xe9": { title: "\\ud800" }\n', "a\\tb\xe9.title"),
     ],
 )
 def test_a_text_that_is_not_utf8_is_a_broken_input_naming_the_file_and_its_key_path(
@@ -89,3 +90,27 @@ def test_a_text_beyond_ascii_that_is_valid_utf8_loads_unchanged(tmp_path: Path) 
     assert load_yaml(path) == {
         "title": "\N{GRINNING FACE} \N{REPLACEMENT CHARACTER} \N{GRINNING FACE} \xe9"
     }
+
+
+@pytest.mark.parametrize(
+    ("text", "key_path"),
+    [
+        ("search:\n  keywords: &k [keroro, *k]\n", "search.keywords[1]"),
+        ("webui: &w\n  bind: { webui: *w }\n", "webui.bind.webui"),
+        ("&root\nwebui: *root\n", "webui"),
+    ],
+)
+def test_an_alias_of_a_value_holding_it_is_a_broken_input_naming_its_key_path(
+    *, tmp_path: Path, text: str, key_path: str
+) -> None:
+    path = tmp_path / "cycle.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(BrokenInputError) as raised:
+        load_yaml(path)
+    assert str(raised.value) == f"{path}: {key_path} refers to a value that holds it"
+
+
+def test_an_alias_reused_beside_its_anchor_loads(tmp_path: Path) -> None:
+    path = tmp_path / "shared.yaml"
+    path.write_text("a: &k [keroro]\nb: { c: *k, d: *k }\n", encoding="utf-8")
+    assert load_yaml(path) == {"a": ["keroro"], "b": {"c": ["keroro"], "d": ["keroro"]}}

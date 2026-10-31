@@ -16,26 +16,27 @@ def interpolate_document(document: dict[str, Any], *, env: Mapping[str, str]) ->
     The keys are left as they are: they name the schema. A lone ``$`` is left untouched.
     """
     return {
-        key: _interpolate_node(node, env=env, key_path=str(key)) for key, node in document.items()
+        key: _interpolate_subtree(subtree, env=env, key_path=str(key))
+        for key, subtree in document.items()
     }
 
 
-def _interpolate_node(node: Any, *, env: Mapping[str, str], key_path: str) -> Any:
-    match node:
+def _interpolate_subtree(subtree: Any, *, env: Mapping[str, str], key_path: str) -> Any:
+    match subtree:
         case str():
-            return _interpolate_text(node, env=env, key_path=key_path)
+            return _interpolate_text(subtree, env=env, key_path=key_path)
         case dict():
             return {
-                key: _interpolate_node(child, env=env, key_path=f"{key_path}.{key}")
-                for key, child in node.items()
+                key: _interpolate_subtree(child, env=env, key_path=f"{key_path}.{key}")
+                for key, child in subtree.items()
             }
         case list():
             return [
-                _interpolate_node(child, env=env, key_path=f"{key_path}[{index}]")
-                for index, child in enumerate(node)
+                _interpolate_subtree(child, env=env, key_path=f"{key_path}[{index}]")
+                for index, child in enumerate(subtree)
             ]
         case _:
-            return node
+            return subtree
 
 
 def _interpolate_text(text: str, *, env: Mapping[str, str], key_path: str) -> str:

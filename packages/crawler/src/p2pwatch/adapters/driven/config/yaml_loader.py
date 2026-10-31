@@ -1,9 +1,4 @@
-"""Adapter: reads a YAML file into Python structures (cf. spec §4 I/O boundary).
-
-The ONLY module in the project that imports ``yaml`` and touches the filesystem for
-config. Checks the file's form only: UTF-8, YAML, a mapping at its root, and every text valid
-UTF-8; the substance is the domain's (``catalog_matching.domain.validation``).
-"""
+"""Adapter: the ONLY module reading a config file and importing ``yaml``; it checks the form."""
 
 from pathlib import Path
 from typing import Any
@@ -15,14 +10,8 @@ from p2pwatch.domain.value_bounds import require_well_formed_text
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
-    """Reads ``path`` and returns its root (a mapping) parsed by ``yaml.safe_load``.
-
-    ``safe_load`` parses ISO dates into ``datetime.date`` and instantiates no arbitrary
-    Python object (no unsafe ``yaml.load``). A file absent, unreadable, not UTF-8, not YAML,
-    whose root is no mapping (an empty file's is ``None``) or holding a text that is not valid
-    UTF-8, a key's included (an escaped surrogate, ``"\\ud800"``), raises
-    :class:`BrokenInputError`.
-    """
+    """``path``'s root mapping, by ``yaml.safe_load``. Raises ``BrokenInputError`` on a file absent,
+    unreadable, not UTF-8 nor YAML, with no mapping at its root, an alias cycle or a surrogate."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
@@ -36,25 +25,45 @@ def load_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(root, dict):
         raise BrokenInputError(f"{path}: mapping expected at its root, got {type(root).__name__}")
     try:
-        _require_well_formed_texts(root, key_path="")
+        _require_well_formed_tree(root, key_path="", enclosing_ids=frozenset())
     except ValueError as error:
         raise BrokenInputError(f"{path}: {error}") from error
     return root
 
 
-def _require_well_formed_texts(node: Any, *, key_path: str) -> None:
-    """Refuses a text of ``node``, a key's included, that is not valid UTF-8, naming its path."""
-    match node:
+def _require_well_formed_tree(
+    subtree: Any, *, key_path: str, enclosing_ids: frozenset[int]
+) -> None:
+    """Refuses in ``subtree`` a text that is not valid UTF-8, a key's included, and an alias of a
+    value enclosing it (``enclosing_ids``), which ``safe_load`` builds as a cycle."""
+    match subtree:
         case str():
-            require_well_formed_text(node, error_label=key_path)
+            require_well_formed_text(subtree, error_label=key_path)
+        case dict() | list() if id(subtree) in enclosing_ids:
+            raise ValueError(f"{key_path} refers to a value that holds it")
         case dict():
-            for key, child in node.items():
-                child_path = f"{key_path}.{key}" if key_path else str(key)
-                _require_well_formed_texts(key, key_path=child_path)
-                _require_well_formed_texts(child, key_path=child_path)
+            child_enclosing_ids = enclosing_ids | {id(subtree)}
+            for key, child in subtree.items():
+                key_text = _printable_key(key)
+                child_path = f"{key_path}.{key_text}" if key_path else key_text
+                _require_well_formed_tree(key, key_path=child_path, enclosing_ids=enclosing_ids)
+                _require_well_formed_tree(
+                    child, key_path=child_path, enclosing_ids=child_enclosing_ids
+                )
         case list():
-            for index, child in enumerate(node):
-                _require_well_formed_texts(child, key_path=f"{key_path}[{index}]")
+            child_enclosing_ids = enclosing_ids | {id(subtree)}
+            for index, child in enumerate(subtree):
+                _require_well_formed_tree(
+                    child, key_path=f"{key_path}[{index}]", enclosing_ids=child_enclosing_ids
+                )
+
+
+def _printable_key(key: object) -> str:
+    """``key`` as text, each character ``isprintable`` refuses escaped, so an error can name it."""
+    return "".join(
+        character if character.isprintable() else character.encode("unicode_escape").decode()
+        for character in str(key)
+    )
 
 
 def _on_one_line(error: yaml.YAMLError) -> str:
