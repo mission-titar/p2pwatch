@@ -90,7 +90,7 @@ read-only, and leaves no `--output` that no source entered. amuled's answers alr
 - **The closing block** (block 40): `AGENTS.md`'s invariant "the node supports UTF-8 text only", the amuleapi gotcha on
   what amuleapi writes, and the invariant "`merge` writes only to its destination" made exact; `BACKLOG.md`'s "Every
   catalog table STRICT" moved under "Must be done before the next release" and extended to what D9 leaves it,
-  "Round-trip contracts" trimmed to two lines; D7's `(Corrected: ...)` beside stage 1's D16, the umbrella spec's
+  "Round-trip contracts" trimmed to two lines, "One domain type for arbitrary JSON" added (below); D7's `(Corrected: ...)` beside stage 1's D16, the umbrella spec's
   "Release" line and stage 3 row, and the keyword-only handoff's "Next"; the spec's `(Corrected: ...)` lines.
 
 ## Evidence
@@ -101,7 +101,7 @@ coverage).
 
 Budgets against each parent (lines, files; estimate in parentheses): 10, 142 and 3 (175, 4); 20, 349 and 17 (285,
 15); 30, 162 and 7 (140, 8); 35, 497 and 10 (330, 11), compacted from 677 (Departures); 37, 352 and 15 (195, 9); 38,
-181 and 15 (200, 16); 39, 373 and 11 (325, 13); 40, 11 and 2 (30, 2).
+181 and 15 (200, 16); 39, 373 and 11 (325, 13); 40, 14 and 2 (30, 2).
 
 Continuous integration, `gh pr checks <n> --required` (2026-10-31): `validate / gate` passes on #581, #582, #584,
 #585, #586, #587 and #588; #589's run started with its pull request.
@@ -241,6 +241,15 @@ operator decided three exits on 2026-10-31: option A for the MAJOR, no re-split 
 | 11 | the handoff: four v5 conditions, STRICT's gap, CI, `source_id`, the compaction, D10 before D11 | fixed, block 40 |
 | 12 | `docs/operate.md`'s `expected 12` | fixed, block 39: `expected 15` |
 | 13 | `_quoted` has no test | fixed, block 39: the table `no"tes` |
+
+## Arbitrary JSON in the domain
+
+The operator's review of #582's typing found the raw metadata of files and of sources typed twice by hand:
+`RawMetadata` (`domain/observation.py`, its values `str | int | None`) and `SourceMetadata` (`domain/source.py`, its
+values also a `bool` or a `tuple[str, ...]`), two unions of value types for one concept. Agreed with the operator on
+2026-10-31, for `BACKLOG.md`'s "Technical improvements": one domain type for arbitrary JSON, its values a JSON value
+named once in the domain, used by both. The domain keeps the metadata an arbitrary bag, no network's keys in it,
+since stage 5 brings others; the stored JSON stays byte-identical, so no variant's content hash moves.
 
 ## Counts
 
