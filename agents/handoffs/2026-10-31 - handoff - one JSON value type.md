@@ -144,6 +144,6 @@ next release" in `BACKLOG.md`, the round-trip contracts being the next lot.
 - Fix-backs: none. Cascaded rebases: none. Runs re-triggered: none (one run per pull request: 41244483955 for #590,
   41245540445 for #591).
 - Bodies the operator called unreadable: none so far.
-- Friction: the spec went through five reviews by named agents (`json-value-spec-review`, `-2`, `-3`,
+- Friction: the spec went through four reviews by named agents (`json-value-spec-review`, `-2`, `-3`,
   `json-text-spec-review`), and the operator changed the design twice in Discuss, from a recursive `JsonValue` type to
   a `NewType`, then to the value dataclass `JsonText`.
