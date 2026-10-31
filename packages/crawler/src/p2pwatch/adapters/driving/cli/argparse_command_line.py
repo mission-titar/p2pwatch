@@ -189,11 +189,11 @@ class ArgparseCommandLine:
             )
             return 2
         except PartialMergeError as error:
-            print(
-                f"Merge failed: {error} (go on with --into {destination.path})",
-                file=sys.stderr,
-                flush=True,
-            )
+            hint = ""
+            if isinstance(destination, NewCatalog):
+                output = destination.path
+                hint = f" (go on with --into {output} {output} and the sources not merged)"
+            print(f"Merge failed: {error}{hint}", file=sys.stderr, flush=True)
             return 2
         except MergeError as error:
             print(f"Merge failed: {error}", file=sys.stderr, flush=True)

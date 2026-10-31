@@ -1,6 +1,6 @@
 """Opens every SQLite connection: ``catalog.db`` and ``local.db``, each migrated to the code's
 version, the read-only readers, and an empty one in memory; each reads its rows by column name, the
-factory private here.
+factory private here, and opens a URI, so that it can attach a database read-only.
 
 Each connection is opened in REAL autocommit (``autocommit=True``, Python ≥ 3.12):
 transactions are EXPLICIT (``BEGIN``/``COMMIT``/``ROLLBACK`` written by the
@@ -89,8 +89,7 @@ class SqliteDatabaseOpener:
         """Opens ``path`` read-only, ``mode=ro`` and ``query_only``, its rows read by column name,
         its temporary b-trees on disk (``temp_store=FILE``): an in-memory sort is unbounded.
         Only the thread that opens it may use or close it."""
-        # Not as_uri(), which refuses a relative path.
-        connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
+        connection = sqlite3.connect(read_only_uri(path), uri=True)
         connection.row_factory = _build_named_row
         connection.execute("PRAGMA query_only=ON")
         connection.execute("PRAGMA temp_store=FILE")
@@ -99,16 +98,22 @@ class SqliteDatabaseOpener:
     def open_in_memory(self) -> sqlite3.Connection:
         """Opens an empty database in memory, its rows read by column name, to attach the
         databases a check reads."""
-        connection = sqlite3.connect(":memory:", autocommit=True)
+        connection = sqlite3.connect(":memory:", autocommit=True, uri=True)
         connection.row_factory = _build_named_row
         return connection
+
+
+def read_only_uri(path: Path) -> str:
+    """``path`` as the URI SQLite opens, or attaches, read-only."""
+    # Not as_uri(), which refuses a relative path.
+    return f"file:{quote(str(path))}?mode=ro"
 
 
 def _connect(path: Path) -> sqlite3.Connection:
     """A connection to ``path`` in WAL, its rows read by column name, its pragmas set and the SQL
     functions registered."""
     with wrap_sqlite_errors():
-        connection = sqlite3.connect(path, autocommit=True)
+        connection = sqlite3.connect(f"file:{quote(str(path))}", autocommit=True, uri=True)
     connection.row_factory = _build_named_row
     try:
         with wrap_sqlite_errors():

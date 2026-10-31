@@ -8,7 +8,8 @@ Mechanism (merge spec §3/§4): the output is created/opened via ``open_catalog`
 migrations, NO duplicated DDL). For each source: we ``ATTACH`` it (outside a transaction),
 then INSIDE an explicit transaction (``BEGIN``…``COMMIT``, best-effort ``ROLLBACK`` on error)
 we copy its tables in **FK order** (identities first), then ``COMMIT`` and ``DETACH``. A half-copied
-source is never committed, the sources before it stay (D11); a failed merge is re-run safely.
+source is never committed, the sources before it stay, and a new output no source entered is
+removed; a failed merge is re-run safely.
 
 Idempotence (spec §4):
 - ``files`` (global content PK) → ``ON CONFLICT DO NOTHING`` (first observation
@@ -25,7 +26,8 @@ Idempotence (spec §4):
   ``observation_variants`` and ``observations`` (source points spec, D7).
 
 The SQL lives in **Python constants** (consistent with ``sqlite_observation_store.py``; no
-new ``.sql`` for sqlfluff to lint). We NEVER write to the source (only SELECTs).
+new ``.sql`` for sqlfluff to lint). A source is attached read-only: a merge never writes to it, not
+even the pending ``-wal`` of a copy taken from a running node.
 """
 
 import json
@@ -33,17 +35,25 @@ import logging
 import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path, PurePath
 
 from catalog_matching.domain.validation import has_control_character
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
+    read_only_uri,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
+from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    content_hash_by_position,
+    file_id,
+    source_content_hash_by_position,
+    source_id,
+)
 from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _logger = logging.getLogger(__name__)
@@ -128,8 +138,8 @@ ON CONFLICT DO NOTHING
 """
 
 # MANDATORY FK order (spec §4.3): the identities (files) BEFORE the journals that reference them.
-# Each step named by the table it copies, so that a failure says where.
-_COPY_STEPS = (
+# Each statement named by the table it fills, so that a failure says where.
+_COPY_STATEMENTS = (
     ("files", _COPY_FILES),
     ("observation_variants", _COPY_VARIANTS),
     ("observations", _COPY_OBSERVATIONS),
@@ -137,7 +147,6 @@ _COPY_STEPS = (
     ("sources", _COPY_SOURCES),
     ("source_variants", _COPY_SOURCE_VARIANTS),
     ("source_observations", _COPY_SOURCE_OBSERVATIONS),
-    ("the commit", "COMMIT"),
 )
 
 # --- The check pass: SQL over the attached source, through the functions it registers. ---
@@ -153,17 +162,17 @@ ORDER BY t.name, c.cid
 
 _SELECT_KEY_COLUMNS = f"SELECT name FROM pragma_table_info(?, '{_SRC}') WHERE pk > 0 ORDER BY pk"
 
-_NOT_UTF8_WHERE = "NOT is_valid_utf8(CAST({column} AS BLOB))"
+_NOT_UTF8 = "is not valid UTF-8"
 _NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
 _NOT_OBJECT = "is not a JSON object, or holds text that is not valid UTF-8"
 _CONTROL = "holds a control character"
 _NOT_DERIVED = "is not the id its network and native_id derive"
 _NOT_HASHED = "is not the hash of its variant's values"
 
-# CASE, never AND, whose terms SQLite may reorder: the id functions raise on an unknown network,
-# which the destination's CHECK refuses at copy time.
+# Each id checked against the SQL function of its name. CASE, never AND, whose terms SQLite may
+# reorder: file_id raises on an unknown network, which the destination's CHECK refuses at copy time.
 _NOT_DERIVED_WHERE = (
-    "CASE WHEN network IN ({networks}) THEN {{column}} IS NOT {function}(network, native_id) END"
+    "CASE WHEN network IN ({networks}) THEN {column} IS NOT {column}(network, native_id) END"
 )
 _KNOWN_NETWORKS = ", ".join(f"'{network}'" for network in Network)
 _OBSERVATION_VARIANT_HASH = (
@@ -175,31 +184,67 @@ _SOURCE_VARIANT_HASH = (
     " raw_metadata, node_id)"
 )
 
-# (table, column, SQL true of a refused value of ``{column}``, what the refusal says of it)
+
+@dataclass(frozen=True, kw_only=True)
+class _RowCheck:
+    """Refuses a source holding a row of ``table`` where ``refused_where``, a test of its
+    ``column``, holds; the refusal says ``problem`` of the column."""
+
+    table: str
+    column: str
+    refused_where: str
+    problem: str
+
+
 _CONTENT_CHECKS = (
-    ("observation_variants", "raw_metadata", "NOT is_metadata_pairs({column})", _NOT_PAIRS),
-    ("source_variants", "raw_metadata", "NOT is_metadata_object({column})", _NOT_OBJECT),
-    ("match_decisions", "target_id", "has_control_character({column})", _CONTROL),
-    ("match_decisions", "rule_name", "has_control_character({column})", _CONTROL),
-    (
-        "files",
-        "file_id",
-        _NOT_DERIVED_WHERE.format(networks=_KNOWN_NETWORKS, function="file_id"),
-        _NOT_DERIVED,
+    _RowCheck(
+        table="observation_variants",
+        column="raw_metadata",
+        refused_where="NOT is_metadata_pairs(raw_metadata)",
+        problem=_NOT_PAIRS,
     ),
-    (
-        "sources",
-        "source_id",
-        _NOT_DERIVED_WHERE.format(networks=_KNOWN_NETWORKS, function="source_id"),
-        _NOT_DERIVED,
+    _RowCheck(
+        table="source_variants",
+        column="raw_metadata",
+        refused_where="NOT is_metadata_object(raw_metadata)",
+        problem=_NOT_OBJECT,
     ),
-    (
-        "observation_variants",
-        "content_hash",
-        f"{{column}} IS NOT {_OBSERVATION_VARIANT_HASH}",
-        _NOT_HASHED,
+    _RowCheck(
+        table="match_decisions",
+        column="target_id",
+        refused_where="has_control_character(target_id)",
+        problem=_CONTROL,
     ),
-    ("source_variants", "content_hash", f"{{column}} IS NOT {_SOURCE_VARIANT_HASH}", _NOT_HASHED),
+    _RowCheck(
+        table="match_decisions",
+        column="rule_name",
+        refused_where="has_control_character(rule_name)",
+        problem=_CONTROL,
+    ),
+    _RowCheck(
+        table="files",
+        column="file_id",
+        refused_where=_NOT_DERIVED_WHERE.format(networks=_KNOWN_NETWORKS, column="file_id"),
+        problem=_NOT_DERIVED,
+    ),
+    _RowCheck(
+        table="sources",
+        column="source_id",
+        refused_where=_NOT_DERIVED_WHERE.format(networks=_KNOWN_NETWORKS, column="source_id"),
+        problem=_NOT_DERIVED,
+    ),
+    _RowCheck(
+        table="observation_variants",
+        column="content_hash",
+        refused_where=f"content_hash IS NOT {_OBSERVATION_VARIANT_HASH}",
+        problem=_NOT_HASHED,
+    ),
+    _RowCheck(
+        table="source_variants",
+        column="content_hash",
+        refused_where=f"content_hash IS NOT {_SOURCE_VARIANT_HASH}",
+        problem=_NOT_HASHED,
+    ),
 )
 
 
@@ -224,10 +269,11 @@ def _copy_catalogs(
     ``destination`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
     existing older catalog is first migrated in place, and the copy APPENDS (never a truncate).
 
-    ``open_catalog``'s ``PersistenceError`` raises ``CatalogCopyError``; a source whose copy fails
-    (a row the destination's schema refuses, FK…) raises ``PartialCopyError``, naming the sources
-    merged before it, which stay.
+    ``open_catalog``'s ``PersistenceError`` raises ``CatalogCopyError``, and so does the first
+    source whose copy fails (a row the destination's schema refuses, FK…), a new ``destination``
+    then removed; a later one raises ``PartialCopyError``, naming the sources merged, which stay.
     """
+    is_new = not destination.exists()
     try:
         connection = database_opener.open_catalog(destination)
     except PersistenceError as error:
@@ -238,7 +284,9 @@ def _copy_catalogs(
             try:
                 _copy_catalog(connection, source_catalog=source_catalog)
             except CatalogCopyError as error:
-                merged = ", ".join(merged_catalogs) or "none"
+                if not merged_catalogs:
+                    raise
+                merged = ", ".join(merged_catalogs)
                 raise PartialCopyError(
                     f"{error}; {destination} keeps the sources merged before it: {merged}"
                 ) from error
@@ -246,6 +294,10 @@ def _copy_catalogs(
             _logger.info("%s merged", source_catalog)
     finally:
         connection.close()
+        # Left behind, it would make the same command refuse to run again.
+        if is_new and not merged_catalogs:
+            for suffix in ("", "-wal", "-shm"):
+                Path(f"{destination}{suffix}").unlink(missing_ok=True)
 
 
 def _copy_catalog(connection: sqlite3.Connection, *, source_catalog: PurePath) -> None:
@@ -258,15 +310,26 @@ def _copy_catalog(connection: sqlite3.Connection, *, source_catalog: PurePath) -
     """
     with _attached(connection, source_catalog=source_catalog):
         connection.execute("BEGIN")
-        for step, statement in _COPY_STEPS:
-            try:
-                connection.execute(statement)
-            except sqlite3.Error as error:
-                with suppress(sqlite3.Error):
-                    connection.execute("ROLLBACK")
-                raise CatalogCopyError(
-                    f"copy of {source_catalog} failed at {step}: {error}"
-                ) from error
+        for table, statement in _COPY_STATEMENTS:
+            _execute_or_roll_back(
+                connection,
+                statement=statement,
+                failure=f"copy of {source_catalog} failed at {table}",
+            )
+        _execute_or_roll_back(
+            connection, statement="COMMIT", failure=f"copy of {source_catalog} failed at the commit"
+        )
+
+
+def _execute_or_roll_back(connection: sqlite3.Connection, *, statement: str, failure: str) -> None:
+    """Runs ``statement`` of a source's copy; an error rolls the copy back and raises
+    ``CatalogCopyError``, ``failure`` then SQLite's message."""
+    try:
+        connection.execute(statement)
+    except sqlite3.Error as error:
+        with suppress(sqlite3.Error):
+            connection.execute("ROLLBACK")
+        raise CatalogCopyError(f"{failure}: {error}") from error
 
 
 def _check_catalogs(
@@ -275,7 +338,13 @@ def _check_catalogs(
     """Checks each source attached to a database in memory, before the output is opened."""
     expected_version = database_opener.catalog_version()
     connection = database_opener.open_in_memory()
-    register_sql_functions(connection)
+    # Unmemoized: a check calls each once per row, so a memo would hold every row of the merge.
+    connection.create_function("content_hash", 8, content_hash_by_position, deterministic=True)
+    connection.create_function(
+        "source_content_hash", 9, source_content_hash_by_position, deterministic=True
+    )
+    connection.create_function("file_id", 2, file_id, deterministic=True)
+    connection.create_function("source_id", 2, _source_id_or_none, deterministic=True)
     connection.create_function("is_valid_utf8", 1, _is_valid_utf8, deterministic=True)
     connection.create_function("is_metadata_pairs", 1, _is_metadata_pairs, deterministic=True)
     connection.create_function("is_metadata_object", 1, _is_metadata_object, deterministic=True)
@@ -295,8 +364,8 @@ def _check_catalogs(
 def _check_catalog(
     connection: sqlite3.Connection, *, source_catalog: PurePath, expected_version: int
 ) -> None:
-    """Refuses ``source_catalog`` at another schema version (a merge never migrates a source), or
-    holding a value the node could not read back."""
+    """Refuses ``source_catalog`` at another schema version (a merge never migrates a source),
+    holding a value the node could not read back, or a row its keys do not derive."""
     try:
         source_version = int(
             connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()["user_version"]
@@ -308,17 +377,22 @@ def _check_catalog(
                 "out-of-version catalog (it never migrates a source catalog in place)"
             )
         text_checks = [
-            (row["table_name"], row["column_name"], _NOT_UTF8_WHERE, "is not valid UTF-8")
+            _RowCheck(
+                table=row["table_name"],
+                column=row["column_name"],
+                refused_where=f"NOT is_valid_utf8(CAST({_quoted(row['column_name'])} AS BLOB))",
+                problem=_NOT_UTF8,
+            )
             for row in connection.execute(_SELECT_TEXT_COLUMNS)
         ]
-        for table, column, refused_where, problem in (*text_checks, *_CONTENT_CHECKS):
+        for check in (*text_checks, *_CONTENT_CHECKS):
             refused_row_key = _refused_row_key(
-                connection, table=table, refused_where=refused_where.format(column=_quoted(column))
+                connection, table=check.table, refused_where=check.refused_where
             )
             if refused_row_key is not None:
                 raise CatalogCopyError(
-                    f"source catalog {source_catalog} refused: {table}.{column} {problem},"
-                    f" first at {refused_row_key}"
+                    f"source catalog {source_catalog} refused: {check.table}.{check.column}"
+                    f" {check.problem}, first at {refused_row_key}"
                 )
     except sqlite3.Error as error:
         raise CatalogCopyError(f"cannot check source catalog {source_catalog}: {error}") from error
@@ -342,6 +416,15 @@ def _refused_row_key(
 def _quoted(name: str) -> str:
     """``name`` as an SQL identifier, whatever it holds: the source names its own tables."""
     return '"' + name.replace('"', '""') + '"'
+
+
+def _source_id_or_none(network: str, native_id: str) -> SourceId | None:  # noqa: PLR0917
+    """``source_id``, or ``None`` where ``SourceKey`` refuses the key, so that the check names the
+    row."""
+    try:
+        return source_id(network, native_id)
+    except ValueError:
+        return None
 
 
 def _is_valid_utf8(encoded: bytes | None) -> bool:
@@ -382,9 +465,11 @@ def _well_formed_json(text: str) -> object:
 
 @contextmanager
 def _attached(connection: sqlite3.Connection, *, source_catalog: PurePath) -> Iterator[None]:
-    """``source_catalog`` attached for the block, outside any transaction, detached best-effort."""
+    """``source_catalog`` attached read-only for the block, outside any transaction, detached
+    best-effort."""
     try:
-        connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (str(Path(source_catalog).resolve()),))
+        source_uri = read_only_uri(Path(source_catalog).resolve())
+        connection.execute(f"ATTACH DATABASE ? AS {_SRC}", (source_uri,))
     except sqlite3.Error as error:
         raise CatalogCopyError(f"cannot attach source catalog {source_catalog}: {error}") from error
     try:

@@ -198,6 +198,7 @@ def test_a_root_logger_with_a_handler_is_left_as_it_is() -> None:
 
 _A = _CWD / "a.db"
 _B = PurePath("/data/b.db")
+_OUT = _CWD / "out.db"
 
 
 @pytest.mark.parametrize(
@@ -253,16 +254,24 @@ def test_merge_reports_a_refused_merge(capsys: pytest.CaptureFixture[str]) -> No
     assert capsys.readouterr().err == "Merge failed: source catalog not found: b.db\n"
 
 
-@pytest.mark.parametrize("mode", ["--output", "--into"])
-def test_merge_points_a_merge_failed_after_earlier_sources_at_into(
-    *, capsys: pytest.CaptureFixture[str], mode: str
+@pytest.mark.parametrize(
+    ("destination", "hint"),
+    [
+        (["--output", "out.db"], f" (go on with --into {_OUT} {_OUT} and the sources not merged)"),
+        (["--into", "a.db"], ""),
+    ],
+    ids=["output", "into"],
+)
+def test_merge_points_an_output_a_merge_failed_after_earlier_sources_at_into(
+    *, capsys: pytest.CaptureFixture[str], destination: list[str], hint: str
 ) -> None:
     catalog_merger = FakeCatalogMerger(PartialMergeError("copy of b.db failed at files: refused"))
 
-    assert _command_line(catalog_merger=catalog_merger).run(["merge", mode, "a.db", "b.db"]) == 2
+    argv = ["merge", *destination, "a.db", "b.db"]
+    assert _command_line(catalog_merger=catalog_merger).run(argv) == 2
 
     assert capsys.readouterr().err == (
-        f"Merge failed: copy of b.db failed at files: refused (go on with --into {_A})\n"
+        f"Merge failed: copy of b.db failed at files: refused{hint}\n"
     )
 
 
