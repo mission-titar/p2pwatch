@@ -54,7 +54,7 @@ from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import SourceId
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _logger = logging.getLogger(__name__)
@@ -165,7 +165,7 @@ _SELECT_KEY_COLUMNS = f"SELECT name FROM pragma_table_info(?, '{_SRC}') WHERE pk
 
 _NOT_UTF8 = "is not valid UTF-8"
 _NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
-_NOT_JSON_TEXT = "is not the canonical JSON text of an object"
+_NOT_JSON_OBJECT_TEXT = "is not the canonical JSON text of an object"
 _CONTROL = "holds a control character"
 _NOT_DERIVED = "is not the id its network and native_id derive"
 _NOT_HASHED = "is not the hash of its variant's values"
@@ -207,8 +207,8 @@ _CONTENT_CHECKS = (
     _RowCheck(
         table="source_variants",
         column="raw_metadata",
-        refused_where="NOT is_json_text(raw_metadata)",
-        problem=_NOT_JSON_TEXT,
+        refused_where="NOT is_json_object_text(raw_metadata)",
+        problem=_NOT_JSON_OBJECT_TEXT,
     ),
     _RowCheck(
         table="match_decisions",
@@ -348,7 +348,7 @@ def _check_catalogs(
     connection.create_function("source_id", 2, _source_id_or_none, deterministic=True)
     connection.create_function("is_valid_utf8", 1, _is_valid_utf8, deterministic=True)
     connection.create_function("is_metadata_pairs", 1, _is_metadata_pairs, deterministic=True)
-    connection.create_function("is_json_text", 1, _is_json_text, deterministic=True)
+    connection.create_function("is_json_object_text", 1, _is_json_object_text, deterministic=True)
     connection.create_function(
         "has_control_character", 1, has_control_character, deterministic=True
     )
@@ -446,10 +446,10 @@ def _is_metadata_pairs(raw_metadata: str) -> bool:
     )
 
 
-def _is_json_text(text: str) -> bool:
-    """Whether ``text`` is a ``JsonText``'s: the canonical text of a JSON object."""
+def _is_json_object_text(text: str) -> bool:
+    """Whether ``text`` is a ``JsonObjectText``'s: the canonical text of a JSON object."""
     try:
-        JsonText(text=text)
+        JsonObjectText(text=text)
     except ValueError:
         return False
     return True

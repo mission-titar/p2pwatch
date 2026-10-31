@@ -14,7 +14,7 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, Keyword
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.observation import ReportedFile, fold_raw_metadata
 from p2pwatch.domain.source import (
     ContactPoint,
@@ -195,7 +195,7 @@ def map_source(row: dict[str, Any], *, detail: dict[str, Any]) -> SourceReading:
         role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
         contact_point=_contact_point(detail),
         connectable=_connectable(detail),
-        raw_metadata=JsonText.from_object(
+        raw_metadata=JsonObjectText.from_object(
             {
                 **_source_metadata(row, keys=_SOURCE_META_KEYS),
                 **_source_metadata(detail, keys=_SOURCE_DETAIL_META_KEYS),

@@ -13,7 +13,7 @@ from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.json_text import JsonText
+from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import SourceAlert, SourceAlertKind
 from p2pwatch.domain.source import (
@@ -54,7 +54,7 @@ def _reading(name: str, *, role: SourceRole | None = SourceRole.QUEUED) -> Sourc
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=0,
     )
 
@@ -135,7 +135,7 @@ async def test_a_reading_with_neither_source_nor_name_is_dropped() -> None:
         role=None,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=0,
     )
     readings: dict[str, tuple[SourceReading, ...]] = {HASH_A: (nameless, _reading("peer"))}
@@ -264,7 +264,7 @@ def _read(
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=0,
     )
 
@@ -498,7 +498,7 @@ def _peer(key: SourceKey, *, role: SourceRole = SourceRole.QUEUED) -> SourceRead
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=JsonText(text="{}"),
+        raw_metadata=JsonObjectText(text="{}"),
         session_received_bytes=0,
     )
 

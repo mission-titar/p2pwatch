@@ -9,7 +9,7 @@ from p2pwatch.domain.value_bounds import require_well_formed_text
 
 
 @dataclass(kw_only=True, frozen=True)
-class JsonText:
+class JsonObjectText:
     """The canonical text of a JSON object: as ``json.dumps`` writes it, keys sorted, non-ASCII
     unescaped; valid UTF-8, no ``NaN`` nor infinity. Equal content, equal text."""
 
