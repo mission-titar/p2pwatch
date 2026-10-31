@@ -8,8 +8,8 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword
 from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_metadata
 from tests.support.domain.value_bounds import (
-    MALFORMED_TEXTS,
     NOT_QUANTITIES,
+    NOT_WELL_FORMED_TEXTS,
     QUANTITIES,
     WELL_FORMED_TEXTS,
 )
@@ -75,11 +75,13 @@ def _holding_text(position: str, *, text: str) -> dict[str, Any]:
     return fields_by_position[position]
 
 
-@pytest.mark.parametrize("text", MALFORMED_TEXTS)
+@pytest.mark.parametrize("text", NOT_WELL_FORMED_TEXTS)
 @pytest.mark.parametrize("position", _TEXT_POSITIONS)
 def test_a_reported_file_refuses_text_that_is_not_valid_utf8(*, position: str, text: str) -> None:
-    with pytest.raises(ValueError, match=r"^a reported file's \w+ is not valid UTF-8$"):
-        dataclasses.replace(_full_reported_file(), **_holding_text(position, text=text))
+    fields = _holding_text(position, text=text)
+    (field,) = fields
+    with pytest.raises(ValueError, match=f"^a reported file's {field} is not valid UTF-8$"):
+        dataclasses.replace(_full_reported_file(), **fields)
 
 
 @pytest.mark.parametrize("text", WELL_FORMED_TEXTS)
