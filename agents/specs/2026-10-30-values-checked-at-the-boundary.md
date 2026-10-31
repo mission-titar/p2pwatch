@@ -74,8 +74,9 @@ unchecked; the names D3 introduces are in Appendix A.
 
 ## 5. Blocks
 
-Estimates by `boundary-values-estimates` (Sonnet): rows 10 to 30 on 2026-10-30, rows 35 to 40 on 2026-10-31. The
-bound is checked after committing.
+Estimates by `boundary-values-estimates` (Sonnet): rows 10 to 30 on 2026-10-30, rows 35 and 37 on 2026-10-31;
+rows 38 to 40 by `block-40-closing`, which split the closing block past the 20-file bound (2026-10-31). The bound is
+checked after committing.
 
 | # | Branch | Holds | Lines, files |
 |---|---|---|---|
@@ -84,7 +85,9 @@ bound is checked after committing.
 | 30 | `fix/config-refuses-invalid-text` | D4, D5 | 140, 8 |
 | 35 | `fix/merge-refuses-invalid-sources` | D9's unreadable values, D10 | 330, 11 |
 | 37 | `fix/merge-refuses-inconsistent-rows` | D9's inconsistent rows | 195, 9 |
-| 40 | `docs/wrap-values-at-the-boundary` | closing | 190, 17 |
+| 38 | `fix/values-at-the-boundary-review` | first holistic review's findings | 200, 16 |
+| 39 | `fix/merge-review` | second holistic review's findings | 325, 13 |
+| 40 | `docs/wrap-values-at-the-boundary` | closing | 30, 2 |
 
 The mapper comes first, so nothing arriving is refused once the domain starts refusing; block 30 reuses the domain's
 check.
