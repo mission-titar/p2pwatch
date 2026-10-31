@@ -122,7 +122,8 @@ check.
 
 With block 10's first commit, as agreed on 2026-10-30: "aMule 3.2.0 pinned" added and "Round-trip contracts" moved,
 both under "Must be done before the next release" (Appendix A, D7). With block 40, as agreed on 2026-10-31: "Every
-catalog table STRICT" moved there too and extended to what D9 leaves it (Appendix A, D9).
+catalog table STRICT" moved there too and extended to what D9 leaves it (Appendix A, D9), and "One domain type for
+arbitrary JSON" added under "Technical improvements", from the operator's review of #582's typing (the handoff).
 
 ### Adjacent backlog items
 

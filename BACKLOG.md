@@ -53,6 +53,9 @@ An agent adds an entry only after the operator has agreed to it.
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
 
+- **One domain type for arbitrary JSON**: the raw metadata of files and of sources typed by one JSON value named in the
+  domain, in place of two hand-written unions for one concept, the stored JSON byte-identical. Section "Arbitrary JSON in the domain" of `agents/handoffs/2026-10-30 - handoff - values checked at the boundary.md`.
+
 ## Postponed
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
