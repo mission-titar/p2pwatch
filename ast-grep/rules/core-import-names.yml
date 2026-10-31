@@ -1,7 +1,7 @@
 id: core-import-names
 language: python
 severity: error
-message: The core reaches asyncio, uuid and io by the names on this list only, and pathlib by `PurePath`, since each also holds I/O or entropy.
+message: The core reaches asyncio, uuid, io and json by the names on this list only, and pathlib by `PurePath`, since each also holds I/O or entropy.
 note: "Write `import asyncio` then `asyncio.TaskGroup`, so that every name it reaches is checked."
 files: ["packages/*/src/*/domain/**/*.py", "packages/*/src/*/application/**/*.py"]
 rule:
@@ -9,10 +9,11 @@ rule:
     - pattern: asyncio.$ASYNCIO
     - pattern: uuid.$UUID
     - pattern: io.$IO
+    - pattern: json.$JSON
     - kind: import_from_statement
-      has: { field: module_name, regex: ^(asyncio|uuid|io)$ }
+      has: { field: module_name, regex: ^(asyncio|uuid|io|json)$ }
     - kind: aliased_import
-      has: { field: name, regex: ^(asyncio|uuid|io)$ }
+      has: { field: name, regex: ^(asyncio|uuid|io|json)$ }
       inside: { kind: import_statement }
     - kind: dotted_name
       matches: imported-module
@@ -27,3 +28,4 @@ constraints:
   ASYNCIO: { not: { regex: ^(CancelledError|FIRST_COMPLETED|TaskGroup|ensure_future|sleep|wait|wait_for)$ } }
   UUID: { not: { regex: ^(NAMESPACE_URL|uuid5)$ } }
   IO: { not: { regex: ^StringIO$ } }
+  JSON: { not: { regex: ^(dumps|loads)$ } }

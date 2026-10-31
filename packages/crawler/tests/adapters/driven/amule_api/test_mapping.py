@@ -19,6 +19,7 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.source import ContactPoint, SourceKey, SourceReading, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus
@@ -551,14 +552,11 @@ def test_a_source_maps_to_a_reading_of_its_row_and_its_detail() -> None:
         role=SourceRole.QUEUED,
         contact_point=ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
         connectable=True,
-        raw_metadata=(
-            ("ident_state", "identified"),
-            ("source_origin", "kad"),
-            ("client_mod_name", None),
-            ("reported_os", "Linux"),
-            ("shared_files_browsable", False),
-            ("protocol_extensions", ("extended_source_exchange",)),
-            ("server_name", "eMule Security"),
+        raw_metadata=JsonText(
+            text='{"client_mod_name": null, "ident_state": "identified",'
+            ' "protocol_extensions": ["extended_source_exchange"], "reported_os": "Linux",'
+            ' "server_name": "eMule Security", "shared_files_browsable": false,'
+            ' "source_origin": "kad"}'
         ),
         session_received_bytes=1024,
     )
@@ -703,7 +701,7 @@ def test_a_sparse_row_and_detail_keep_the_meta_keys_they_carry_and_read_unknown(
 
     assert (reading.source_name, reading.software) == (None, None)
     assert (reading.contact_point, reading.connectable) == (None, None)
-    assert reading.raw_metadata == (("ident_state", "unknown"),)
+    assert reading.raw_metadata == JsonText(text='{"ident_state": "unknown"}')
     assert reading.session_received_bytes == 0
 
 
@@ -727,13 +725,13 @@ def test_a_surrogate_in_a_sources_name_or_software_reads_as_a_replacement_charac
 @pytest.mark.parametrize(
     ("protocol_extensions", "kept"),
     [
-        ([], ()),
-        (["ipv6", 7], ("ipv6", "7")),
+        ([], []),
+        (["ipv6", 7], ["ipv6", "7"]),
         ({"bits": 3}, '{"bits": 3}'),
         (1.5, "1.5"),
         (None, None),
         (f"ipv6{_SURROGATE}", f"ipv6{_REPLACEMENT}"),
-        ([f"ipv6{_SURROGATE}"], (f"ipv6{_REPLACEMENT}",)),
+        ([f"ipv6{_SURROGATE}"], [f"ipv6{_REPLACEMENT}"]),
         ({f"bits{_SURROGATE}": 3}, f'{{"bits{_REPLACEMENT}": 3}}'),
     ],
 )
@@ -744,7 +742,7 @@ def test_a_meta_value_is_kept_in_a_shape_the_catalog_stores(
         _client_row(protocol_extensions=protocol_extensions), detail=_client_detail()
     )
 
-    assert dict(reading.raw_metadata)["protocol_extensions"] == kept
+    assert json.loads(reading.raw_metadata.text)["protocol_extensions"] == kept
 
 
 @pytest.mark.parametrize(
@@ -771,7 +769,9 @@ def test_a_sources_contact_point_is_its_server_as_ip_and_port(
 def test_the_server_name_is_kept_unknown_when_the_server_is() -> None:
     detail = _client_detail(server_ip=None, server_port=None, server_name=None)
 
-    assert dict(map_source(_client_row(), detail=detail).raw_metadata)["server_name"] is None
+    reading = map_source(_client_row(), detail=detail)
+
+    assert json.loads(reading.raw_metadata.text)["server_name"] is None
 
 
 @pytest.mark.parametrize(
@@ -806,7 +806,7 @@ def _reading(
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=(),
+        raw_metadata=JsonText(text="{}"),
         session_received_bytes=counter,
     )
 
@@ -856,7 +856,7 @@ def test_rows_with_neither_hash_nor_name_are_never_merged() -> None:
         role=SourceRole.QUEUED,
         contact_point=None,
         connectable=None,
-        raw_metadata=(),
+        raw_metadata=JsonText(text="{}"),
         session_received_bytes=0,
     )
 

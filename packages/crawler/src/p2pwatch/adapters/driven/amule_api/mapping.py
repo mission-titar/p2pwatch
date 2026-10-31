@@ -14,11 +14,11 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.observation import ReportedFile, fold_raw_metadata
 from p2pwatch.domain.source import (
     ContactPoint,
     SourceKey,
-    SourceMetadata,
     SourceReading,
     SourceRole,
     parse_contact_point,
@@ -195,9 +195,11 @@ def map_source(row: dict[str, Any], *, detail: dict[str, Any]) -> SourceReading:
         role=_source_role(row.get("download_state")) if asked else SourceRole.STANDBY,
         contact_point=_contact_point(detail),
         connectable=_connectable(detail),
-        raw_metadata=(
-            *_source_metadata(row, keys=_SOURCE_META_KEYS),
-            *_source_metadata(detail, keys=_SOURCE_DETAIL_META_KEYS),
+        raw_metadata=JsonText.from_object(
+            {
+                **_source_metadata(row, keys=_SOURCE_META_KEYS),
+                **_source_metadata(detail, keys=_SOURCE_DETAIL_META_KEYS),
+            }
         ),
         session_received_bytes=_int_or_zero(row.get("downloaded_bytes_session")),
     )
@@ -251,18 +253,18 @@ def _connectable(detail: dict[str, Any]) -> bool | None:
     return high_id
 
 
-def _source_metadata(fields: dict[str, Any], *, keys: tuple[str, ...]) -> SourceMetadata:
+def _source_metadata(fields: dict[str, Any], *, keys: tuple[str, ...]) -> dict[str, object]:
     """The ``keys`` that ``fields`` holds; an absent one is left out, not read as ``None``."""
-    return tuple((key, _meta_value(fields[key])) for key in keys if key in fields)
+    return {key: _meta_value(fields[key]) for key in keys if key in fields}
 
 
-def _meta_value(field: object) -> str | int | bool | tuple[str, ...] | None:
-    """A JSON value in a shape ``SourceMetadata`` holds: a list as a tuple of text, anything else
-    unforeseen as its JSON text."""
+def _meta_value(field: object) -> str | int | bool | list[str] | None:
+    """A JSON value as the catalog keeps it: a list as a list of text, anything else unforeseen
+    as its JSON text."""
     if field is None or isinstance(field, int | bool):
         return field
     if isinstance(field, list):
-        return tuple(_render(element) for element in field)
+        return [_render(element) for element in field]
     return _render(field)
 
 

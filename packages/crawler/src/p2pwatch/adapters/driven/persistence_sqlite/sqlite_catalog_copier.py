@@ -1,7 +1,7 @@
 """``CatalogCopier`` over SQLite: idempotent copy of N ``catalog.db`` into a single output.
 
-A check pass first refuses a source at another schema version, holding a value the node could not
-read back, or a row its keys do not derive (values-at-the-boundary spec, D9), before the output is
+A check pass first refuses a source at another schema version, holding a value the node would not
+write, or a row its keys do not derive (values-at-the-boundary spec, D9), before the output is
 opened: a refused merge writes nothing.
 
 Mechanism (merge spec §3/§4): the output is created/opened via ``open_catalog`` (the catalog
@@ -54,6 +54,7 @@ from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import SourceId
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _logger = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ _SELECT_KEY_COLUMNS = f"SELECT name FROM pragma_table_info(?, '{_SRC}') WHERE pk
 
 _NOT_UTF8 = "is not valid UTF-8"
 _NOT_PAIRS = "is not a JSON array of [name, value] pairs, or holds text that is not valid UTF-8"
-_NOT_OBJECT = "is not a JSON object, or holds text that is not valid UTF-8"
+_NOT_JSON_TEXT = "is not the canonical JSON text of an object"
 _CONTROL = "holds a control character"
 _NOT_DERIVED = "is not the id its network and native_id derive"
 _NOT_HASHED = "is not the hash of its variant's values"
@@ -206,8 +207,8 @@ _CONTENT_CHECKS = (
     _RowCheck(
         table="source_variants",
         column="raw_metadata",
-        refused_where="NOT is_metadata_object(raw_metadata)",
-        problem=_NOT_OBJECT,
+        refused_where="NOT is_json_text(raw_metadata)",
+        problem=_NOT_JSON_TEXT,
     ),
     _RowCheck(
         table="match_decisions",
@@ -347,7 +348,7 @@ def _check_catalogs(
     connection.create_function("source_id", 2, _source_id_or_none, deterministic=True)
     connection.create_function("is_valid_utf8", 1, _is_valid_utf8, deterministic=True)
     connection.create_function("is_metadata_pairs", 1, _is_metadata_pairs, deterministic=True)
-    connection.create_function("is_metadata_object", 1, _is_metadata_object, deterministic=True)
+    connection.create_function("is_json_text", 1, _is_json_text, deterministic=True)
     connection.create_function(
         "has_control_character", 1, has_control_character, deterministic=True
     )
@@ -365,7 +366,7 @@ def _check_catalog(
     connection: sqlite3.Connection, *, source_catalog: PurePath, expected_version: int
 ) -> None:
     """Refuses ``source_catalog`` at another schema version (a merge never migrates a source),
-    holding a value the node could not read back, or a row its keys do not derive."""
+    holding a value the node would not write, or a row its keys do not derive."""
     try:
         source_version = int(
             connection.execute(f"PRAGMA {_SRC}.user_version").fetchone()["user_version"]
@@ -445,9 +446,13 @@ def _is_metadata_pairs(raw_metadata: str) -> bool:
     )
 
 
-def _is_metadata_object(raw_metadata: str) -> bool:
-    """Whether ``raw_metadata`` is a JSON object, every text in it well formed."""
-    return isinstance(_well_formed_json(raw_metadata), dict)
+def _is_json_text(text: str) -> bool:
+    """Whether ``text`` is a ``JsonText``'s: the canonical text of a JSON object."""
+    try:
+        JsonText(text=text)
+    except ValueError:
+        return False
+    return True
 
 
 def _well_formed_json(text: str) -> object:

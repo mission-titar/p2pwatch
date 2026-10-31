@@ -6,13 +6,14 @@ PURE domain. Never a network address of the peer (stage 4 spec, D2, D3 and D7).
 import ipaddress
 import re
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId, SourceId
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.value_bounds import require_quantity, require_well_formed_text
 
 # Its own namespace, so that a source_id never equals a file_id (stage 4 spec, D2).
@@ -21,8 +22,6 @@ _NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://mission-titar.github.io/p2p
 _NATIVE_IDS = {Network.ED2K: (re.compile("[0-9a-f]{32}"), "32 lowercase hex characters")}
 
 _PORT = re.compile("[1-9][0-9]{0,4}")
-
-SourceMetadata = tuple[tuple[str, str | int | bool | tuple[str, ...] | None], ...]
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -132,27 +131,15 @@ class SourceReading:
     role: SourceRole | None
     contact_point: ContactPoint | None
     connectable: bool | None
-    raw_metadata: SourceMetadata
+    raw_metadata: JsonText
     session_received_bytes: int
 
     def __post_init__(self) -> None:
         require_well_formed_text(self.source_name, error_label="a source reading's source_name")
         require_well_formed_text(self.software, error_label="a source reading's software")
-        for text in _metadata_texts(self.raw_metadata):
-            require_well_formed_text(text, error_label="a source reading's raw_metadata")
         require_quantity(
             self.session_received_bytes, error_label="a source reading's session_received_bytes"
         )
-
-
-def _metadata_texts(raw_metadata: SourceMetadata) -> Iterator[str]:
-    """Each key of ``raw_metadata``, and each value that is text or a tuple of texts."""
-    for key, field in raw_metadata:
-        yield key
-        if isinstance(field, str):
-            yield field
-        elif isinstance(field, tuple):
-            yield from field
 
 
 @dataclass(kw_only=True, frozen=True)

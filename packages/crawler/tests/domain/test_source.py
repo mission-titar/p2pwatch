@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.source import (
     ContactPoint,
     EarlierPoints,
@@ -82,22 +83,13 @@ def test_a_reading_in_a_passing_state_has_no_role_and_may_have_no_identity() -> 
         role=None,
         contact_point=None,
         connectable=None,
-        raw_metadata=(("protocol_extensions", ()), ("source_origin", "kad")),
+        raw_metadata=JsonText(text='{"protocol_extensions": [], "source_origin": "kad"}'),
         session_received_bytes=0,
     )
     assert reading.source is None
     assert reading.role is None
     with pytest.raises(dataclasses.FrozenInstanceError):
         reading.role = SourceRole.QUEUED  # type: ignore[misc]
-
-
-_TEXT_POSITIONS = (
-    "source_name",
-    "software",
-    "raw_metadata key",
-    "raw_metadata text",
-    "raw_metadata tuple element",
-)
 
 
 def _reading() -> SourceReading:
@@ -108,42 +100,26 @@ def _reading() -> SourceReading:
         role=SourceRole.QUEUED,
         contact_point=None,
         connectable=True,
-        raw_metadata=(
-            ("protocol_extensions", ("a",)),
-            ("source_origin", "kad"),
-            ("shared_files_browsable", True),
+        raw_metadata=JsonText.from_object(
+            {"protocol_extensions": ["a"], "source_origin": "kad", "shared_files_browsable": True}
         ),
         session_received_bytes=5,
     )
 
 
-def _holding_text(position: str, *, text: str) -> dict[str, Any]:
-    """The fields that put ``text`` at ``position`` of a reading."""
-    fields_by_position: dict[str, dict[str, Any]] = {
-        "source_name": {"source_name": text},
-        "software": {"software": text},
-        "raw_metadata key": {"raw_metadata": ((text, "kad"),)},
-        "raw_metadata text": {"raw_metadata": (("source_origin", text),)},
-        "raw_metadata tuple element": {"raw_metadata": (("protocol_extensions", ("a", text)),)},
-    }
-    return fields_by_position[position]
-
-
 @pytest.mark.parametrize("text", NOT_WELL_FORMED_TEXTS)
-@pytest.mark.parametrize("position", _TEXT_POSITIONS)
-def test_a_reading_refuses_text_that_is_not_valid_utf8(*, position: str, text: str) -> None:
-    fields = _holding_text(position, text=text)
-    (field,) = fields
+@pytest.mark.parametrize("field", ["source_name", "software"])
+def test_a_reading_refuses_text_that_is_not_valid_utf8(*, field: str, text: str) -> None:
+    fields: dict[str, Any] = {field: text}
     with pytest.raises(ValueError, match=f"^a source reading's {field} is not valid UTF-8$"):
         dataclasses.replace(_reading(), **fields)
 
 
 @pytest.mark.parametrize("text", WELL_FORMED_TEXTS)
-@pytest.mark.parametrize("position", _TEXT_POSITIONS)
-def test_a_reading_holds_valid_non_ascii_text(*, position: str, text: str) -> None:
-    fields = _holding_text(position, text=text)
-    reading = dataclasses.replace(_reading(), **fields)
-    assert fields.items() <= dataclasses.asdict(reading).items()
+@pytest.mark.parametrize("field", ["source_name", "software"])
+def test_a_reading_holds_valid_non_ascii_text(*, field: str, text: str) -> None:
+    fields: dict[str, Any] = {field: text}
+    assert dataclasses.asdict(dataclasses.replace(_reading(), **fields))[field] == text
 
 
 @pytest.mark.parametrize("field", ["source_name", "software"])
@@ -182,7 +158,7 @@ def _passing(session_received_bytes: int) -> SourceReading:
         role=None,
         contact_point=None,
         connectable=None,
-        raw_metadata=(),
+        raw_metadata=JsonText(text="{}"),
         session_received_bytes=session_received_bytes,
     )
 

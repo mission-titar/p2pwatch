@@ -17,6 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.json_text import JsonText
 from p2pwatch.domain.source import (
     ContactPoint,
     SourceKey,
@@ -45,7 +46,7 @@ def _reading(role: SourceRole | None = _Q, *, counter: int = 0) -> SourceReading
         role=role,
         contact_point=None,
         connectable=None,
-        raw_metadata=(),
+        raw_metadata=JsonText(text="{}"),
         session_received_bytes=counter,
     )
 
@@ -188,12 +189,23 @@ def test_the_variant_and_the_source_are_written_as_d2_states(
         _reading(),
         contact_point=ContactPoint(network=Network.ED2K, server="176.103.48.36:4184"),
         connectable=True,
-        raw_metadata=(("source_origin", "kad"), ("protocol_extensions", ("a", "b"))),
+        raw_metadata=JsonText.from_object(
+            {
+                "source_origin": "kad",
+                "protocol_extensions": ["a", "b"],
+                "shared_files_browsable": True,
+                "ecid": 7,
+                "client_mod_name": None,
+            }
+        ),
     )
     source_point_store.record_points(
         [SourcePoint(file=_FILE, reading=reading, role=_Q, observed_at=_T0, node_id=NodeId("n1"))]
     )
-    raw_metadata = '{"protocol_extensions": ["a", "b"], "source_origin": "kad"}'
+    raw_metadata = (
+        '{"client_mod_name": null, "ecid": 7, "protocol_extensions": ["a", "b"],'
+        ' "shared_files_browsable": true, "source_origin": "kad"}'
+    )
     columns: list[object] = [_FILE.file_id.hex(), _KEY.source_id.hex(), "AnimuseeFMR"]
     columns += ["emule 0.50a", "queued", "176.103.48.36:4184", True, raw_metadata, "n1"]
     canonical = json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode()

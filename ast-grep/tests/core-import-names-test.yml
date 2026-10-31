@@ -6,6 +6,8 @@ valid:
   - out = io.StringIO()
   - from pathlib import PurePath
   - self.io.read()
+  - decoded = json.loads(text)
+  - text = json.dumps(decoded, sort_keys=True)
 invalid:
   - await asyncio.to_thread(work)
   - asyncio.get_running_loop()
@@ -21,3 +23,7 @@ invalid:
   - import asyncio as aio
   - import uuid as u
   - import io as i
+  - json.load(handle)
+  - json.dump(decoded, handle)
+  - from json import loads
+  - import json as j
