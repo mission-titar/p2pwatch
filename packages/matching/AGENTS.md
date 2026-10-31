@@ -6,7 +6,9 @@ The core is one layered, declarative matching engine under `src/catalog_matching
 load_yaml(path)                         # the crawler's adapters/driven/config/yaml_loader.py: the ONLY I/O
   → parse_matcher_config / parse_targets   # validation.py: schema + fail-fast graph validation:
   →                                        #   DAG/named-cycle, depth bound (32), regex compile-check,
-  →                                        #   unique target_id, closed tier/attr enums → MatchingConfigError
+  →                                        #   unique target_id, closed tier/attr enums,
+  →                                        #   no control character (Cc) in a segment letter or a
+  →                                        #   rule name → MatchingConfigError
   → MatchingEngine(config, targets=..., max_filename_length=...)  # engine.py: one matcher tree PER TARGET
   → engine.evaluate_file(candidates)       #   one FileCandidate per filename of a file;
   →                                        #   brute-force over all targets (no funnel)

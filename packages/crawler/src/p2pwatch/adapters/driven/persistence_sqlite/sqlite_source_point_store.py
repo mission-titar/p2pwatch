@@ -50,7 +50,7 @@ INSERT INTO source_variants (
 ON CONFLICT (content_hash) DO NOTHING
 """
 
-# Not OR IGNORE, which would also swallow the CHECK on session_received_bytes (D2).
+# Not OR IGNORE: the domain refuses a negative session_received_bytes, and its CHECK stays loud.
 _INSERT_POINT = """
 INSERT INTO source_observations (variant_id, observed_at_micros, session_received_bytes)
 SELECT variant_id, ?, ? FROM source_variants WHERE content_hash = ?
