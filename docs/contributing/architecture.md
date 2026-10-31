@@ -492,8 +492,9 @@ pas des observations.
 `catalog/0007` stocke les observations en variantes plus horodatages : une variante
 (`observation_variants`) porte ce qui se répète d'une observation à l'autre (nom, taille, durée,
 débit, `raw_meta`, mot-clé, nœud), et `observations` ne garde par ligne que l'instant, en
-microsecondes, et le nombre de sources. `codec`, `file_type` et `complete_source_count` sont
-repliés dans `raw_meta`. `catalog/0008` identifie un fichier par `(network, native_id)`, avec pour
+microsecondes, et le nombre de sources. `raw_meta` devient un objet JSON : `codec`, `file_type`
+et `complete_source_count` à son premier niveau, le reste sous `unmapped`.
+`catalog/0008` identifie un fichier par `(network, native_id)`, avec pour
 clé `file_id`, un UUID v5 de ce couple, identique sur tous les nœuds ; `aich_hash` disparaît.
 `catalog/0009` rend au disque, par un `VACUUM`, la place que ces réécritures ont libérée.
 `catalog/0010` crée l'historique des sources en plages de présence. `catalog/0011` le refait en

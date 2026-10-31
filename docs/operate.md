@@ -206,9 +206,10 @@ docker compose exec p2pwatch python -m p2pwatch merge \
 ```
 
 La fusion vérifie chaque source avant d'écrire quoi que ce soit. Elle refuse une source qui contient
-une valeur que le nœud ne pourrait pas relire : un texte qui n'est pas de l'UTF-8 valide, un
-`raw_metadata` qui n'est pas le JSON attendu, un caractère de contrôle dans un identifiant de cible
-ou un nom de règle. Elle refuse aussi une ligne qui contredit ses clés, et qui bloquerait les
+une valeur que le nœud n'écrirait pas : un texte qui n'est pas de l'UTF-8 valide, un
+`raw_metadata` qui n'est pas un objet JSON écrit comme le nœud l'écrit (ses clés triées, chacune
+une fois), un caractère de contrôle dans un identifiant de cible ou un nom de règle. Elle refuse
+aussi une ligne qui contredit ses clés, et qui bloquerait les
 écritures du nœud : un `file_id` ou un `source_id` que son réseau et son identifiant natif ne
 donnent pas, un `content_hash` qui n'est pas celui de sa variante. Le refus nomme la source, la
 table, la colonne et la première ligne en cause, en code 2 : `Merge failed: source catalog

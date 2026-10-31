@@ -167,6 +167,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
 - **Dans le catalogue, la colonne `media_length_sec` devient `duration_seconds`**, désormais dans
   `observation_variants`, et la colonne `raw_meta` de `observation_variants` et de
   `source_variants` devient `raw_metadata`. Adaptez vos requêtes de la console SQL.
+- **Dans le catalogue, le `raw_metadata` d'un fichier devient un objet JSON**, au lieu d'une liste
+  de paires `[nom, valeur]` : `codec`, `file_type` et `complete_source_count` à son premier
+  niveau, et sous `unmapped`, toujours présent, ce que le réseau a envoyé sans qu'aucun champ ne le
+  reprenne, `media` compris (`media.title` devient `unmapped.media.title`). Adaptez vos requêtes de
+  la console SQL : `json_extract(raw_metadata, '$.unmapped.media.title')`.
 - **Un instant stocké en entier de microsecondes depuis l'epoch porte son unité dans son nom** :
   `observed_at` devient `observed_at_micros` dans `observations` et `source_observations` du
   catalogue, et `started_at` devient `started_at_micros` dans `backoff_states` de `local.db`.

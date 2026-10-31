@@ -187,7 +187,28 @@ Paths under `packages/crawler/src/p2pwatch/`.
   text 0007 wrote; among 0009 to 0015, none reads or rehashes it (0013 renames the column). Changing
   `fold_raw_meta`'s output is enough.
 - On a copy of the operator's catalog (version 5, 15.7 M observations, 2026-10-31), the 22 distinct stored metadata
-  repeat no name, before the fold and after it, every value is text, and they stay 22 once D4 folds them: no two
-  variants merge. Their names spelled `media.<k>` are `media.album`, `media.artist` and `media.title`, keys of
+  repeat no name, before the fold and after it, every value is text, and the fold's 149 distinct inputs (each with its
+  `codec`, `file_type` and `complete_source_count`) give 149 texts: no two variants merge. (Corrected: re-measured on
+  2026-10-31 with block 20's `fold_raw_meta`, which reads those three columns too; the approved text read "they stay
+  22 once D4 folds them".) Their names spelled `media.<k>` are `media.album`, `media.artist` and `media.title`, keys of
   amuleapi's `media` object, so D4's move puts each back where amuleapi sent it.
+- The command, from `packages/crawler`, prints `(22, 149, 149, 0, 0)`: distinct stored metadata, distinct inputs,
+  distinct folded texts, stored metadata repeating a name, values not text. The last two print `1` on
+  `[["a","0"],["a",1]]`.
+
+```bash
+uv run python -c '
+import sqlite3, sys
+from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
+c = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+register_sql_functions(c)
+print(c.execute("""
+WITH i AS (SELECT DISTINCT raw_meta, codec, file_type, complete_source_count FROM file_observations)
+SELECT (SELECT count(DISTINCT raw_meta) FROM i), count(*),
+  count(DISTINCT fold_raw_meta(raw_meta, codec, file_type, complete_source_count)),
+  (SELECT count(*) FROM (SELECT DISTINCT raw_meta FROM i) WHERE (SELECT count(*) FROM json_each(raw_meta))
+    != (SELECT count(DISTINCT value ->> 0) FROM json_each(raw_meta))),
+  (SELECT count(*) FROM i, json_each(raw_meta) WHERE json_type(value, "$[1]") != "text")
+FROM i""").fetchone())' catalog.db
+```
 - v4's source rows never reach a stored source metadata: 0006 drops them.
