@@ -118,6 +118,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/fakes/test_fake_amule_api_server.py" = "the amuleapi fake of tests/fakes, on a loopback socket"
 "tests/integration/" = "a real daemon or the compose stack: integration suites, deselected by marker"
 "tests/support/adapters/driven/persistence_sqlite/test_named_row.py" = "a helper of tests/support"
+"tests/support/domain/test_file_target_decision.py" = "a helper of tests/support"
 "tests/support/domain/test_observation.py" = "a helper of tests/support"
 "tests/support/test_draws.py" = "a helper of tests/support"
 "tests/test_contract_subclasses.py" = "every package's contracts: each implementation of a contracted port runs its contract"
