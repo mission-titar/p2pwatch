@@ -59,14 +59,16 @@ Le projet a **deux niveaux** :
    `observation_writer` pour un `Writer` qui prépare l'état lu). Les paramètres de chaque test sont
    typés par les ports : mypy vérifie ainsi chaque appel qu'un test fait à un port, `pytest.fixture`
    effaçant le type d'une fixture mais pas celui d'un paramètre.
-   Un contrat sur une base de données tire ses valeurs larges (textes, quantités, instants) de la
-   fixture `randomness`, un `random.Random` semé par l'identifiant du test, donc les mêmes à chaque
-   exécution quels que soient l'ordre et la sélection, par un `draw_<valeur>` par valeur qu'un
-   `Writer` prend, dans `tests/support/` au miroir du module de la valeur (`draw_file_observation`
-   dans `tests/support/domain/observation.py`). Ce tirage rend distincts les champs d'un même type
-   d'une valeur, si bien qu'une colonne échangée dans une requête fait échouer le contrat ; le test
-   n'écrit que les valeurs étroites, celles qui choisissent une branche (une valeur présente ou
-   absente, un palier, un état), et ce qu'il relie (le même fichier, un instant plus tard).
+   Un contrat sur une base de données tire au hasard, sur de larges plages, ses valeurs larges
+   (textes, quantités, instants), de la fixture `randomness`, un `random.Random` semé par
+   l'identifiant du test, donc les mêmes à chaque exécution quels que soient l'ordre et la
+   sélection, par un `draw_<valeur>` par valeur qu'un `Writer` prend, dans `tests/support/` au
+   miroir du module de la valeur (`draw_file_observation` dans `tests/support/domain/observation.py`).
+   Deux colonnes reçoivent ainsi presque sûrement deux valeurs différentes, si bien qu'une colonne
+   échangée dans une requête fait échouer le contrat ; les valeurs d'un champ que le test veut
+   distinctes sont tirées sans remise (`draw_instants`). Le test n'écrit que les valeurs étroites,
+   celles qui choisissent une branche (une valeur présente ou absente, un palier, un état), et ce
+   qu'il relie (le même fichier, un instant plus tard).
    Chaque implémentation lance le contrat par une sous-classe `Test<Implémentation>` qui définit
    ces fixtures (le `writer` et le `reader` d'une paire rendent le même store), dans son propre
    module de test (celui de l'adaptateur, ou le
