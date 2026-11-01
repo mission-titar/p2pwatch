@@ -3,6 +3,7 @@
 from datetime import datetime
 from random import Random
 
+from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.json_object_text import JsonObjectText
@@ -59,3 +60,12 @@ def draw_file_observation(
         observed_at=draw_instant(randomness) if observed_at is None else observed_at,
         node_id=NodeId(draw_text(randomness)),
     )
+
+
+def draw_observed_file(randomness: Random, *, observation_writer: ObservationWriter) -> FileKey:
+    """A drawn file, once ``observation_writer`` has recorded a drawn observation of it."""
+    file = draw_file(randomness)
+    observation_writer.record_observation(
+        draw_file_observation(randomness, file=file, has_media=True)
+    )
+    return file
