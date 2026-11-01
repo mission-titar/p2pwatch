@@ -184,6 +184,14 @@ def test_open_reader_sorts_through_temporary_files(tmp_path: Path) -> None:
         assert rows(reader, sql="PRAGMA temp_store") == [{"temp_store": 1}]
 
 
+def test_open_reader_folds_a_search_text(tmp_path: Path) -> None:
+    path = _seeded_catalog(tmp_path / "catalog.db")
+    with closing(database_opener().open_reader(path)) as reader:
+        assert rows(reader, sql="SELECT fold_for_search('ÉCOLE') AS folded") == [
+            {"folded": "ecole"}
+        ]
+
+
 def test_open_reader_refuses_use_from_another_thread(tmp_path: Path) -> None:
     path = _seeded_catalog(tmp_path / "catalog.db")
     with closing(database_opener().open_reader(path)) as reader:

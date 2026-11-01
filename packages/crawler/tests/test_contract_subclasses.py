@@ -32,6 +32,8 @@ _EXEMPTIONS: dict[str, str] = {
     "::FakeSourcePointStore": "a stub and a spy: its reads return what its test gives it",
     "crawler/tests/fakes/adapters/driven/fake_coverage_reader.py"
     "::FakeCoverageReader": "a stub: its coverage is what its test gives it",
+    "crawler/tests/fakes/adapters/driven/fake_catalog_file_reader.py"
+    "::FakeCatalogFileReader": "a stub and a spy: its reads return what its test gives it",
 }
 
 

@@ -23,8 +23,9 @@ class SortDirection(StrEnum):
 
 @dataclass(kw_only=True, frozen=True)
 class CatalogEntry:
-    """A file, its latest observation (``None`` before its first) and its current decisions,
-    one per target, in target order; a retracted target has none."""
+    """A file, the size it was first observed with, its latest observation (``None`` before its
+    first) and its current decisions, one per target, in target order; a retracted target has
+    none, the legacy ``target_id=""`` sentinel is none."""
 
     file: FileKey
     size_bytes: int
