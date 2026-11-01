@@ -484,24 +484,86 @@ def test_a_copy_diverged_from_a_restored_catalog_merges_into_the_union(tmp_path:
     assert observations == rows_without_id(union, table="source_observations")
 
 
-_BOGUS_ROLE = (
-    "INSERT INTO source_variants (file_id, role, raw_metadata, node_id, content_hash)"
-    " SELECT file_id, 'bogus', '{}', 'n1',"
-    " source_content_hash(file_id, NULL, NULL, NULL, 'bogus', NULL, NULL, '{}', 'n1') FROM files"
+@dataclass(frozen=True, kw_only=True)
+class _Forgery:
+    """``value`` in ``column`` of a row ``sql`` inserts, ``?1`` bound to it; ``loose`` recreates
+    ``table`` without ``STRICT`` first."""
+
+    table: str
+    column: str
+    value: int | str
+    sql: str
+    loose: bool = False
+
+
+def _recreate_without_strict(connection: sqlite3.Connection, *, table: str) -> None:
+    """``table`` under the same declarations, ``STRICT`` aside, its rows kept."""
+    [schema] = rows(
+        connection, sql="SELECT sql FROM sqlite_schema WHERE name = ?", parameters=(table,)
+    )
+    loose = (
+        schema["sql"]
+        .replace(f"CREATE TABLE {table} (", "CREATE TABLE loose (")
+        .replace(") STRICT, WITHOUT ROWID", ") WITHOUT ROWID")
+        .replace(") STRICT", ")")
+    )
+    connection.execute("PRAGMA foreign_keys = OFF")
+    connection.execute(loose)
+    connection.execute(f"INSERT INTO loose SELECT * FROM {table}")
+    connection.execute(f"DROP TABLE {table}")
+    connection.execute(f"ALTER TABLE loose RENAME TO {table}")
+
+
+def _forge(catalog: Path, *, forgery: _Forgery) -> None:
+    """Writes ``forgery``'s row past the schema, then checks it holds the value as forged."""
+    with closing(open_catalog(catalog)) as connection:
+        if forgery.loose:
+            _recreate_without_strict(connection, table=forgery.table)
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(forgery.sql, (forgery.value,))
+        connection.execute("PRAGMA ignore_check_constraints = OFF")
+        assert rows(connection, sql="PRAGMA ignore_check_constraints") == [
+            {"ignore_check_constraints": 0}
+        ]
+        forged = rows(
+            connection,
+            sql=f"SELECT typeof({forgery.column}) = typeof(?1) AS is_as_forged"
+            f" FROM {forgery.table} WHERE {forgery.column} IS ?1",
+            parameters=(forgery.value,),
+        )
+        assert forged == [{"is_as_forged": 1}]
+
+
+_BOGUS_ROLE = _Forgery(
+    table="source_variants",
+    column="role",
+    value="bogus",
+    sql="INSERT INTO source_variants (file_id, role, raw_metadata, node_id, content_hash)"
+    " SELECT file_id, ?1, '{}', 'n1',"
+    " source_content_hash(file_id, NULL, NULL, NULL, ?1, NULL, NULL, '{}', 'n1') FROM files",
 )
 # Rows the check pass leaves to the destination's CHECKs: an unknown network, role or sign.
 _ROWS_THE_SCHEMA_REFUSES = [
-    ("files", f"INSERT INTO files VALUES (zeroblob(16), 'kad', '{HASH_B}', 100)"),
-    ("sources", f"INSERT INTO sources VALUES (zeroblob(16), 'kad', '{HASH_B}')"),
-    ("source_variants", _BOGUS_ROLE),
-    ("source_observations", "INSERT INTO source_observations VALUES (1, 99, -1)"),
+    _Forgery(
+        table="files",
+        column="network",
+        value="kad",
+        sql=f"INSERT INTO files VALUES (zeroblob(16), ?1, '{HASH_B}', 100)",
+    ),
+    _Forgery(
+        table="sources",
+        column="network",
+        value="kad",
+        sql=f"INSERT INTO sources VALUES (zeroblob(16), ?1, '{HASH_B}')",
+    ),
+    _BOGUS_ROLE,
+    _Forgery(
+        table="source_observations",
+        column="session_received_bytes",
+        value=-1,
+        sql="INSERT INTO source_observations VALUES (1, 99, ?1)",
+    ),
 ]
-
-
-def _with_a_row_the_schema_refuses(catalog: Path, *, sql: str) -> None:
-    with closing(open_catalog(catalog)) as connection:
-        connection.execute("PRAGMA ignore_check_constraints = ON")
-        connection.execute(sql)
 
 
 def _digest(catalog: Path) -> bytes:
@@ -509,12 +571,12 @@ def _digest(catalog: Path) -> bytes:
         return database_digest(reader)
 
 
-@pytest.mark.parametrize(("table", "sql"), _ROWS_THE_SCHEMA_REFUSES)
+@pytest.mark.parametrize("forgery", _ROWS_THE_SCHEMA_REFUSES, ids=lambda forgery: forgery.table)
 def test_a_row_the_destination_refuses_fails_its_source_whole(
-    *, tmp_path: Path, table: str, sql: str
+    *, tmp_path: Path, forgery: _Forgery
 ) -> None:
     source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
-    _with_a_row_the_schema_refuses(source, sql=sql)
+    _forge(source, forgery=forgery)
     destination = make_catalog(tmp_path / "out.db", content=_full_catalog("c", node_id="node-c"))
     before = _digest(destination)
 
@@ -522,13 +584,15 @@ def test_a_row_the_destination_refuses_fails_its_source_whole(
         _copy_catalogs(destination, source_catalogs=[source])
 
     assert type(raised.value) is CatalogCopyError
-    assert str(raised.value).startswith(f"copy of {source} failed at {table}: CHECK constraint")
+    assert str(raised.value).startswith(
+        f"copy of {source} failed at {forgery.table}: CHECK constraint"
+    )
     assert _digest(destination) == before
 
 
 def test_a_first_source_the_destination_refuses_leaves_no_output(tmp_path: Path) -> None:
     source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
-    _with_a_row_the_schema_refuses(source, sql=_BOGUS_ROLE)
+    _forge(source, forgery=_BOGUS_ROLE)
     destination = tmp_path / "output" / "out.db"
     destination.parent.mkdir()
 
@@ -565,7 +629,7 @@ def test_a_source_the_destination_refuses_leaves_the_sources_before_it_merged(
 ) -> None:
     merged = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
     refused = make_catalog(tmp_path / "b.db", content=_full_catalog("b", node_id="node-b"))
-    _with_a_row_the_schema_refuses(refused, sql=_BOGUS_ROLE)
+    _forge(refused, forgery=_BOGUS_ROLE)
     destination = tmp_path / "out.db"
 
     with pytest.raises(PartialCopyError) as raised:
@@ -577,18 +641,6 @@ def test_a_source_the_destination_refuses_leaves_the_sources_before_it_merged(
     )
     for table in _ALL_TABLES:
         assert rows_without_id(destination, table=table) == rows_without_id(merged, table=table)
-
-
-@dataclass(frozen=True, kw_only=True)
-class _Forgery:
-    """``value`` in ``column`` of a row ``sql`` inserts, ``?1`` bound to it; ``loose`` recreates
-    ``table`` without ``STRICT`` first."""
-
-    table: str
-    column: str
-    value: int | str
-    sql: str
-    loose: bool = False
 
 
 _FORGED_FILE = hash_for("f")
@@ -675,44 +727,6 @@ _FORGERIES = [
         sql="INSERT INTO source_observations VALUES (1, ?1, 0)",
     ),
 ]
-
-
-def _recreate_without_strict(connection: sqlite3.Connection, *, table: str) -> None:
-    """``table`` under the same declarations, ``STRICT`` aside, its rows kept."""
-    [schema] = rows(
-        connection, sql="SELECT sql FROM sqlite_schema WHERE name = ?", parameters=(table,)
-    )
-    loose = (
-        schema["sql"]
-        .replace(f"CREATE TABLE {table} (", "CREATE TABLE loose (")
-        .replace(") STRICT, WITHOUT ROWID", ") WITHOUT ROWID")
-        .replace(") STRICT", ")")
-    )
-    connection.execute("PRAGMA foreign_keys = OFF")
-    connection.execute(loose)
-    connection.execute(f"INSERT INTO loose SELECT * FROM {table}")
-    connection.execute(f"DROP TABLE {table}")
-    connection.execute(f"ALTER TABLE loose RENAME TO {table}")
-
-
-def _forge(catalog: Path, *, forgery: _Forgery) -> None:
-    """Writes ``forgery``'s row past the schema, then checks it holds the value as forged."""
-    with closing(open_catalog(catalog)) as connection:
-        if forgery.loose:
-            _recreate_without_strict(connection, table=forgery.table)
-        connection.execute("PRAGMA ignore_check_constraints = ON")
-        connection.execute(forgery.sql, (forgery.value,))
-        connection.execute("PRAGMA ignore_check_constraints = OFF")
-        assert rows(connection, sql="PRAGMA ignore_check_constraints") == [
-            {"ignore_check_constraints": 0}
-        ]
-        forged = rows(
-            connection,
-            sql=f"SELECT typeof({forgery.column}) AS storage_class, typeof(?1) AS forged_class"
-            f" FROM {forgery.table} WHERE {forgery.column} IS ?1",
-            parameters=(forgery.value,),
-        )
-        assert [row["storage_class"] for row in forged] == [forged[0]["forged_class"]]
 
 
 @pytest.mark.parametrize("into", [False, True], ids=["output", "into"])
