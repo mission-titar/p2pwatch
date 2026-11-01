@@ -16,12 +16,14 @@ from tests.support.port_implementations import (
     source_ring,
 )
 
-# Implementations that break their port on purpose, by `shown` name, each with its reason.
+# Doubles that cannot pass their contract (a stub, a spy, one breaking its port), by `shown` name.
 _EXEMPTIONS: dict[str, str] = {
     "crawler/tests/fakes/adapters/driven/fake_no_set_state_tracked_download_store.py"
     "::FakeNoSetStateTrackedDownloadStore": "fails the test on any set_state, by design",
     "crawler/tests/fakes/adapters/driven/fake_blocking_monotonic_clock.py"
     "::FakeBlockingMonotonicClock": "sleeps for good and fails the test on any now, by design",
+    "crawler/tests/fakes/adapters/driven/fake_observation_reader.py"
+    "::FakeObservationReader": "a stub: its reads return what its test gives it",
 }
 
 
