@@ -18,8 +18,11 @@ CREATE TABLE match_decisions (
     rule_name TEXT NOT NULL,
     tier TEXT NOT NULL,
     decided_at_micros INTEGER NOT NULL,
-    node_id TEXT NOT NULL
-);
+    node_id TEXT NOT NULL,
+    CHECK (tier IN ('catalog', 'notify', 'download', 'retracted')),
+    -- The micros of datetime.min and datetime.max in UTC, the instants micros_to_instant reads.
+    CHECK (decided_at_micros BETWEEN -62135596800000000 AND 253402300799999999)
+) STRICT;
 
 CREATE INDEX idx_match_decisions_file_target_decided_at_micros
 ON match_decisions (file_id, target_id, decided_at_micros);

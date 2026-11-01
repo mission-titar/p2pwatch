@@ -8,7 +8,7 @@ CREATE TABLE sources (
     UNIQUE (network, native_id),
     CHECK (network IN ('ed2k')),
     CHECK (network <> 'ed2k' OR (LENGTH(native_id) = 32 AND native_id NOT GLOB '*[^0-9a-f]*'))
-);
+) STRICT;
 
 CREATE TABLE source_variants (
     variant_id INTEGER PRIMARY KEY,
