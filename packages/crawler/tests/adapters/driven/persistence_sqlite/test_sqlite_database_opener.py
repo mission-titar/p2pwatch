@@ -30,6 +30,7 @@ _CANONICAL_HASH = "a" * 32
 _HASH = "0123456789abcdef0123456789abcdef"
 _USER_HASH = "1f" * 16
 _INSTANT = "2026-03-01T00:00:00.000000+00:00"
+_LATEST_V4_INSTANT = "2026-10-28T21:43:14.401885+00:00"
 # The support opener's FakeTime starts at 2026-06-12 00:00:00 UTC.
 _FAKE_TIME_START = "2026-06-12_00-00-00"
 
@@ -51,6 +52,15 @@ def _table_names(connection: sqlite3.Connection) -> set[str]:
     return {table["name"] for table in tables}
 
 
+def _strict_by_table(connection: sqlite3.Connection) -> dict[str, int]:
+    tables = rows(
+        connection,
+        sql="SELECT name, strict FROM pragma_table_list"
+        " WHERE schema = 'main' AND name NOT LIKE 'sqlite_%'",
+    )
+    return {table["name"]: table["strict"] for table in tables}
+
+
 def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
     connection = database_opener().open_catalog(tmp_path / "catalog.db")
     try:
@@ -58,6 +68,11 @@ def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path)
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 15}]
     finally:
         connection.close()
+
+
+def test_open_catalog_makes_every_table_strict(tmp_path: Path) -> None:
+    with closing(database_opener().open_catalog(tmp_path / "catalog.db")) as connection:
+        assert _strict_by_table(connection) == dict.fromkeys(_CATALOG_TABLES, 1)
 
 
 def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
@@ -245,22 +260,31 @@ def _copy_names(directory: Path) -> list[str]:
 
 def _write_catalog_at_5(path: Path) -> None:
     """A version 5 catalog holding a row in every table 0006 keeps or drops, ranges aside (0006
-    refuses them)."""
+    refuses them), at the extremes of the operator's v4 catalog."""
     with closing(open_catalog_at(path, version=5)) as connection:
-        connection.execute(f"INSERT INTO files (ed2k_hash, size_bytes) VALUES ('{_HASH}', 100)")
-        connection.execute(
+        connection.executemany(
+            "INSERT INTO files (ed2k_hash, size_bytes) VALUES (?, ?)",
+            [(_HASH, 196), (_CANONICAL_HASH, 28_737_952_534)],
+        )
+        connection.executemany(
             "INSERT INTO file_observations (ed2k_hash, filename, size_bytes, source_count,"
-            " complete_source_count, raw_meta, keyword, observed_at, node_id) VALUES"
-            f" ('{_HASH}', 'Keroro 062A.avi', 100, 3, 1, '{{}}', 'keroro', '{_INSTANT}', 'n1')"
+            " complete_source_count, media_length_sec, bitrate_kbps, raw_meta, keyword,"
+            " observed_at, node_id) VALUES (?, 'Keroro 062A.avi', ?, ?, 1, ?, ?, '{}', 'keroro',"
+            " ?, 'n1')",
+            [
+                (_HASH, 196, 0, 32, 0, "2026-07-04T04:30:19.228441+00:00"),
+                (_CANONICAL_HASH, 28_737_952_534, 12, 3576, 4498, _LATEST_V4_INSTANT),
+            ],
         )
         connection.execute(f"INSERT INTO sources (user_hash) VALUES ('{_USER_HASH}')")
         connection.execute(
             "INSERT INTO source_observations (user_hash, ed2k_hash, raw_meta, observed_at,"
             f" node_id) VALUES ('{_USER_HASH}', '{_HASH}', '{{}}', '{_INSTANT}', 'n1')"
         )
-        connection.execute(
+        connection.executemany(
             "INSERT INTO match_decisions (ed2k_hash, target_id, rule_name, tier, decided_at,"
-            f" node_id) VALUES ('{_HASH}', '062A', 'rule', 'download', '{_INSTANT}', 'n1')"
+            f" node_id) VALUES ('{_HASH}', ?, 'rule', ?, '{_INSTANT}', 'n1')",
+            [("062A", "catalog"), ("062A", "notify"), ("062A", "download"), ("", "retracted")],
         )
 
 
@@ -281,6 +305,23 @@ def test_a_version_5_catalog_leaves_one_copy_at_version_5_holding_its_rows(
         "file_observation_ranges"
     ]
     assert _version(path) == 15
+
+
+def test_a_version_5_catalog_migrates_into_strict_tables_its_quick_check_ok(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "catalog.db"
+    _write_catalog_at_5(path)
+
+    with closing(database_opener().open_catalog(path)) as connection:
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 15}]
+        assert _strict_by_table(connection) == dict.fromkeys(_CATALOG_TABLES, 1)
+        assert rows(connection, sql="PRAGMA quick_check") == [{"quick_check": "ok"}]
+        assert rows(
+            connection,
+            sql="SELECT (SELECT count(*) FROM observations) AS observation_count,"
+            " (SELECT count(*) FROM match_decisions) AS decision_count",
+        ) == [{"observation_count": 2, "decision_count": 4}]
 
 
 def test_a_migrated_catalog_opened_again_adds_no_file(tmp_path: Path) -> None:

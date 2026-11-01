@@ -18,8 +18,9 @@ CREATE TABLE source_variants (
     raw_meta TEXT NOT NULL,
     node_id TEXT NOT NULL,
     content_hash BLOB NOT NULL UNIQUE,
-    CHECK (role IN ('sending', 'queued', 'nothing_new', 'standby', 'undetermined'))
-);
+    CHECK (role IN ('sending', 'queued', 'nothing_new', 'standby', 'undetermined')),
+    CHECK (directly_reachable IN (0, 1))
+) STRICT;
 
 CREATE INDEX idx_source_variants_file_source ON source_variants (file_id, source_id);
 CREATE INDEX idx_source_variants_source_id ON source_variants (source_id);
@@ -31,8 +32,10 @@ CREATE TABLE source_observations (
     observed_at INTEGER NOT NULL,
     transfer_counter INTEGER NOT NULL,
     PRIMARY KEY (variant_id, observed_at),
-    CHECK (transfer_counter >= 0)
-) WITHOUT ROWID;
+    CHECK (transfer_counter >= 0),
+    -- The micros of datetime.min and datetime.max in UTC, the instants micros_to_instant reads.
+    CHECK (observed_at BETWEEN -62135596800000000 AND 253402300799999999)
+) STRICT, WITHOUT ROWID;
 
 CREATE TRIGGER source_variants_no_update
 BEFORE UPDATE ON source_variants

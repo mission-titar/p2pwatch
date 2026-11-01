@@ -32,8 +32,9 @@ CREATE TABLE files (
     size_bytes INTEGER NOT NULL,
     UNIQUE (network, native_id),
     CHECK (network IN ('ed2k')),
-    CHECK (network <> 'ed2k' OR (LENGTH(native_id) = 32 AND native_id NOT GLOB '*[^0-9a-f]*'))
-);
+    CHECK (network <> 'ed2k' OR (LENGTH(native_id) = 32 AND native_id NOT GLOB '*[^0-9a-f]*')),
+    CHECK (size_bytes >= 0)
+) STRICT;
 
 CREATE TABLE match_decisions (
     id INTEGER PRIMARY KEY,
@@ -59,8 +60,11 @@ CREATE TABLE observation_variants (
     raw_meta TEXT NOT NULL,
     keyword TEXT NOT NULL,
     node_id TEXT NOT NULL,
-    content_hash BLOB NOT NULL UNIQUE
-);
+    content_hash BLOB NOT NULL UNIQUE,
+    CHECK (size_bytes >= 0),
+    CHECK (media_length_sec >= 0),
+    CHECK (bitrate_kbps >= 0)
+) STRICT;
 
 CREATE INDEX idx_observation_variants_file_id ON observation_variants (file_id);
 
@@ -68,8 +72,11 @@ CREATE TABLE observations (
     variant_id INTEGER NOT NULL REFERENCES observation_variants (variant_id),
     observed_at INTEGER NOT NULL,
     source_count INTEGER NOT NULL,
-    PRIMARY KEY (variant_id, observed_at, source_count)
-) WITHOUT ROWID;
+    PRIMARY KEY (variant_id, observed_at, source_count),
+    CHECK (source_count >= 0),
+    -- The micros of datetime.min and datetime.max in UTC, the instants micros_to_instant reads.
+    CHECK (observed_at BETWEEN -62135596800000000 AND 253402300799999999)
+) STRICT, WITHOUT ROWID;
 
 -- 4. Copy. Ids are kept, so observations copy as they are; content_hash now hashes the file_id.
 INSERT INTO files (file_id, network, native_id, size_bytes)

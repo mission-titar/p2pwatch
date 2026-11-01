@@ -1,17 +1,20 @@
 """The catalog's guarantees ENFORCED IN SQL (spec data-model §3): SCHEMA properties, not the code's.
 
 Every table in ``catalog.db`` carries a ``BEFORE UPDATE`` and a ``BEFORE DELETE`` trigger →
-``RAISE(ABORT, '<table> is append-only')``, and ``session_received_bytes`` a sign ``CHECK``.
+``RAISE(ABORT, '<table> is append-only')``; each quantity a sign ``CHECK``, ``tier`` and
+``connectable`` their closed sets, each ``*_micros`` the range of ``datetime``.
 Verified here by DIRECT statements on the connection (as a third-party tool would): a violation
 surfaces as ``sqlite3.IntegrityError`` (the REAL class observed, SQLite 3.47.1).
 """
 
 import sqlite3
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
@@ -89,3 +92,88 @@ def test_a_negative_session_received_bytes_is_refused_by_the_database(
         insert_source_point(
             seeded_catalog, variant_id=variant_id, observed_at_micros=1, session_received_bytes=-1
         )
+
+
+_MIN_MICROS = instant_to_micros(datetime.min.replace(tzinfo=UTC))
+_MAX_MICROS = instant_to_micros(datetime.max.replace(tzinfo=UTC))
+_VARIANT = (
+    "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
+    " bitrate_kbps, raw_metadata, keyword, node_id, content_hash)"
+    " SELECT file_id, 'f', {size_bytes}, {duration_seconds}, {bitrate_kbps}, '{{}}', 'k', 'n',"
+    " randomblob(16) FROM files"
+)
+_DECISION = (
+    "INSERT INTO match_decisions (file_id, target_id, rule_name, tier, decided_at_micros, node_id)"
+    " SELECT file_id, '062A', 'r', {tier}, {decided_at_micros}, 'n' FROM files"
+)
+
+
+def _variant_holding(column: str) -> str:
+    return _VARIANT.format_map(
+        {"size_bytes": "1", "duration_seconds": "NULL", "bitrate_kbps": "NULL", column: "?1"}
+    )
+
+
+# An INSERT per column of a CHECK, its value bound to ?1.
+_INSERT_BY_COLUMN = {
+    "files.size_bytes": f"INSERT INTO files VALUES (randomblob(16), 'ed2k', '{'b' * 32}', ?1)",
+    "observation_variants.size_bytes": _variant_holding("size_bytes"),
+    "observation_variants.duration_seconds": _variant_holding("duration_seconds"),
+    "observation_variants.bitrate_kbps": _variant_holding("bitrate_kbps"),
+    "observations.source_count": "INSERT INTO observations VALUES (1, 0, ?1)",
+    "observations.observed_at_micros": "INSERT INTO observations VALUES (1, ?1, 0)",
+    "match_decisions.tier": _DECISION.format(tier="?1", decided_at_micros="0"),
+    "match_decisions.decided_at_micros": _DECISION.format(
+        tier="'download'", decided_at_micros="?1"
+    ),
+    "source_variants.connectable": (
+        "INSERT INTO source_variants (file_id, role, connectable, raw_metadata, node_id,"
+        " content_hash) SELECT file_id, 'queued', ?1, '{}', 'n', randomblob(16) FROM files"
+    ),
+    "source_observations.observed_at_micros": "INSERT INTO source_observations VALUES (1, ?1, 0)",
+}
+_SIGN_COLUMNS = (
+    "files.size_bytes",
+    "observation_variants.size_bytes",
+    "observation_variants.duration_seconds",
+    "observation_variants.bitrate_kbps",
+    "observations.source_count",
+)
+_MICROS_COLUMNS = (
+    "observations.observed_at_micros",
+    "match_decisions.decided_at_micros",
+    "source_observations.observed_at_micros",
+)
+_REFUSED = [
+    *((column, -1) for column in _SIGN_COLUMNS),
+    ("match_decisions.tier", "rejected"),
+    ("source_variants.connectable", 2),
+    *((column, _MIN_MICROS - 1) for column in _MICROS_COLUMNS),
+    *((column, _MAX_MICROS + 1) for column in _MICROS_COLUMNS),
+]
+_ACCEPTED = [
+    *((column, 0) for column in _SIGN_COLUMNS),
+    ("observation_variants.duration_seconds", None),
+    ("observation_variants.bitrate_kbps", None),
+    *(("match_decisions.tier", tier) for tier in ("catalog", "notify", "download", "retracted")),
+    *(("source_variants.connectable", connectable) for connectable in (0, 1, None)),
+    *((column, _MIN_MICROS) for column in _MICROS_COLUMNS),
+    *((column, _MAX_MICROS) for column in _MICROS_COLUMNS),
+]
+
+
+@pytest.mark.parametrize(("column", "value"), _REFUSED)
+def test_a_value_out_of_its_column_s_check_is_refused_by_the_database(
+    *, seeded_catalog: sqlite3.Connection, column: str, value: object
+) -> None:
+    with pytest.raises(
+        sqlite3.IntegrityError, match=f"CHECK constraint failed: .*{column.split('.')[1]}"
+    ):
+        seeded_catalog.execute(_INSERT_BY_COLUMN[column], (value,))
+
+
+@pytest.mark.parametrize(("column", "value"), _ACCEPTED)
+def test_a_value_within_its_column_s_check_is_accepted_by_the_database(
+    *, seeded_catalog: sqlite3.Connection, column: str, value: object
+) -> None:
+    assert seeded_catalog.execute(_INSERT_BY_COLUMN[column], (value,)).rowcount == 1
