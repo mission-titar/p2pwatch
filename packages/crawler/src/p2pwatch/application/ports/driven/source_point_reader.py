@@ -22,8 +22,8 @@ class SourcePointReader(ABC):
         before: datetime,
         node_id: NodeId,
     ) -> LatestPoint | None:
-        """The latest point of ``reading``'s source on ``file`` from ``since`` to ``before``,
-        a source without identity being told apart by its name among those without one."""
+        """The latest point of ``reading``'s source on ``file`` from ``since`` included to
+        ``before`` excluded; a source without identity is its name among those without one."""
 
     @abstractmethod
     def read_earlier_points(
