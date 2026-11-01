@@ -8,8 +8,8 @@ import pytest
 
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
-from tests.support.domain.observation import draw_file, draw_file_observation, draw_source_counts
-from tests.support.draws import draw_instants
+from tests.support.domain.observation import draw_file, draw_file_observation
+from tests.support.draws import draw_instants, draw_quantities
 
 
 class ObservationStoreContract(ABC):
@@ -69,7 +69,7 @@ class ObservationStoreContract(ABC):
     ) -> None:
         file = draw_file(randomness)
         earlier_at, later_at = draw_instants(randomness, count=2)
-        fewer_sources, more_sources = draw_source_counts(randomness, count=2)
+        fewer_sources, more_sources = draw_quantities(randomness, count=2)
         first = draw_file_observation(
             randomness, file=file, has_media=True, observed_at=earlier_at, source_count=more_sources
         )
@@ -87,7 +87,7 @@ class ObservationStoreContract(ABC):
     ) -> None:
         file = draw_file(randomness)
         earlier_at, later_at = draw_instants(randomness, count=2)
-        fewer_sources, more_sources = draw_source_counts(randomness, count=2)
+        fewer_sources, more_sources = draw_quantities(randomness, count=2)
         most_sourced = draw_file_observation(
             randomness, file=file, has_media=True, observed_at=earlier_at, source_count=more_sources
         )
