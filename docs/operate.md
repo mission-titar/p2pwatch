@@ -217,9 +217,11 @@ table, la colonne et la première ligne en cause, en code 2 : `Merge failed: sou
 La destination reste alors telle quelle : `--output` ne crée aucun fichier, et `--into` ne met pas
 son catalogue à niveau.
 
-Une ligne que le schéma de la destination refuse pendant la copie, un rôle de source inconnu par
-exemple, arrête la fusion sur sa source, qui n'est pas copiée du tout. Si c'est la première, rien
-n'est copié, et une sortie `--output` neuve est supprimée. Sinon les sources fusionnées avant elle
+Une ligne que le schéma de la destination refuse pendant la copie arrête la fusion sur sa source,
+qui n'est pas copiée du tout : une valeur qui n'est pas du type de sa colonne (un texte dans
+`size_bytes`), une taille, une durée, un débit ou un nombre de sources négatif, un `tier`, un
+`connectable` ou un rôle de source inconnu, un instant hors de la plage que le nœud sait lire.
+Si c'est la première, rien n'est copié, et une sortie `--output` neuve est supprimée. Sinon les sources fusionnées avant elle
 restent dans la destination, `--output` compris : le message, en code 2, nomme la table en cause et
 ces sources. Avec `--output`, il indique aussi comment poursuivre une fois la source fautive
 corrigée ou écartée : `--into <sortie> <sortie>` suivi des sources non fusionnées. Relancer ne copie

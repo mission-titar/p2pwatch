@@ -1,22 +1,21 @@
 # Handoff: every catalog table STRICT
 
-Drafted by block 10 from its own report, for the closing block 20 to correct with the holistic review and its own
-report.
-
 ## State
 
 Tier Spec lot. Spec `agents/specs/2026-11-01-strict-catalog.md`, D1 to D3 approved by the operator on 2026-11-01, from
 `BACKLOG.md`'s "Every catalog table STRICT". Spec reviewed by `strict-catalog-spec-review`; estimates by
-`strict-catalog-estimates` (Sonnet); holistic review: to come.
+`strict-catalog-estimates` (Sonnet); holistic review waived by the operator (a lot of one block before the closing one:
+"Je relis, pas de revue holistique.").
 
-One stack cut from `main` at `a8f0f777`, two blocks, the closing one included.
+Cut from `main` at `a8f0f777`, two blocks, the closing one included. Block 10 merged on 2026-11-01 at 17:01 UTC
+(`ecf4079c` on `main`); the closing block was cut from `main` after it, with no stack.
 
 | Block | Pull request | Branch |
 |---|---|---|
-| 10 | (block 10's) | `feat/strict-catalog-schema` |
-| 20 | (to open) | `docs/wrap-strict-catalog` |
+| 10 | #594, merged | `feat/strict-catalog-schema` |
+| 20 | #595 | `docs/wrap-strict-catalog` |
 
-Not merged at writing. What the operator sees (spec section 2): `merge` refuses a source holding, in a column it
+What the operator sees (spec section 2): `merge` refuses a source holding, in a column it
 copies, a value of the wrong type, a negative quantity, an unknown tier, `connectable` other than 0 or 1, or an
 instant out of `datetime`'s range, the source whole, at copy time; `PRAGMA table_list` shows every catalog table
 `strict`. Nothing else: the upgrade from v4 rebuilds no more tables than before.
@@ -40,11 +39,12 @@ instant out of `datetime`'s range, the source whole, at copy time; `PRAGMA table
 
 ## Evidence
 
-`uv run poe check` exit 0 at block 10's tip (crawler: 2020 passed, 15 deselected). Continuous integration: see block
-10's pull request.
+`uv run poe check` exit 0 at block 10's tip (crawler: 2020 passed, 15 deselected). Continuous integration on #594:
+run 41296188116, then 41328694226 after the fix-back, both green.
+Block 20: `uv run poe check` exit 0 (crawler: 2020 passed, 15 deselected), `uv run poe docs-build` "No issues found".
 
 Budget against `main` (lines, files; estimate in parentheses): 10, 234 and 8 (400, 14); 365 and 8 before the operator's
-review of #594 trimmed the merge tests.
+review of #594 trimmed the merge tests. 20, 20 and 4 (35, 3), the architecture page being the fourth file (Class 1 fixes).
 
 Acceptance:
 
@@ -80,11 +80,13 @@ Acceptance:
 
 ## Holistic review
 
-To come.
+Waived by the operator, the lot holding one block before the closing one: "Je relis, pas de revue holistique." No
+finding to exit.
 
 ## Class 1 fixes
 
-None.
+- Block 20: `docs/contributing/architecture.md`, section 8, said every `local.db` table is `STRICT` and nothing of the
+  catalog's; one sentence names the catalog's tables `STRICT` and their `CHECK`s, beside section 6's two pages.
 
 ## Class 2 questions
 
@@ -95,6 +97,9 @@ None.
 - A table recreated without `STRICT`: `foreign_keys` off, the copy created under another name, the rows copied, the
   table dropped (its triggers with it), the copy renamed; `) STRICT, WITHOUT ROWID` is replaced before `) STRICT`.
 - sqlfluff's sqlite dialect parses `STRICT` and `STRICT, WITHOUT ROWID` (`sql-lint` green).
+- pytest reuses a stale `.pyc` when a module is changed to the same size within the same second, so a mutation run
+  (a value swapped by a script, then the test run at once) can execute the old code and pass. Change the size, wait a
+  second, or clear `__pycache__` before trusting a mutant that survives.
 - Serena's Claude Code hook blocks a shell command after several consecutive reads or greps; a blocked command applies
   nothing, so check `git diff --stat` after each scripted edit.
 
@@ -106,13 +111,18 @@ None.
 
 ## Next
 
-The closing block 20: section 6's documents (`docs/migration-4x.md`, `docs/operate.md`), the holistic review's
-findings, `BACKLOG.md`'s "Every catalog table STRICT" deleted, this handoff corrected. The lot changes the image and
-ships with v5, whose tag still waits for the entries under "Must be done before the next release" in `BACKLOG.md`.
+Per `BACKLOG.md`, the round-trip contracts. The lot changes the image and ships with v5, whose tag still waits for the
+three entries under "Must be done before the next release": the round-trip contracts, aMule 3.2.0 pinned and the Grype
+scan back on p2pwatch.
 
 ## Counts
 
-- Fix-backs: one, block 10's merge tests trimmed to acceptance 4's type cases, from the operator's review of #594.
-- Cascaded rebases: none at writing.
-- Runs re-triggered: see the lead's report.
-- Bodies the operator called unreadable: none so far.
+- Fix-backs: one, block 10's merge tests trimmed to acceptance 4's type cases, from the operator's review of #594
+  (acceptance 4 corrected in the spec).
+- Cascaded rebases: none.
+- Runs re-triggered: one, #594 ran 41296188116 then 41328694226.
+- Bodies the operator called unreadable: none.
+- Friction, for the lead's report: in Discuss, three probes by the lead reached the operator as facts and were wrong:
+  `ignore_check_constraints` left on while reading, an integer written to a `TEXT`-affinity column taken for a wrong
+  type, and one table's `typeof` compared with the whole database's `quick_check`. The spec review and the operator
+  corrected them before D3 was decided (Appendix C now prints each forged value's `typeof`).

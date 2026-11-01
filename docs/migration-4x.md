@@ -180,6 +180,14 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   `downloads` dans `local.db` : `queued_at`, `completed_at`, `latest_seen_at` et
   `latest_progress_at` deviennent `queued_at_micros`, `completed_at_micros`,
   `latest_seen_at_micros` et `latest_progress_at_micros`. Adaptez vos requêtes de la console SQL.
+- **Chaque table du catalogue devient `STRICT`** : SQLite y refuse une valeur qui n'est pas du type
+  de sa colonne. Des `CHECK` refusent aussi une taille, une durée, un débit ou un nombre de sources
+  négatif, un `tier` autre que `catalog`, `notify`, `download` et `retracted`, un `connectable`
+  autre que 0 ou 1, et un instant `*_micros` hors de la plage que le crawler sait lire. Les
+  migrations qui reconstruisent déjà ces tables les posent : la mise à niveau n'en reconstruit
+  aucune de plus. Vos requêtes de la console SQL ne changent pas ; `PRAGMA table_list` montre
+  chaque table `strict`. La fusion refuse donc une source qui porte une telle valeur, voir
+  [Outils de catalogue](operate.md#outils-de-catalogue).
 - **Dans `local.db`, la table `node_runtime` devient `node_identity`**, une seule ligne : ses
   colonnes `node_id` et `created_at_micros` remplacent les clés `node_id` et `created_at`, l'instant
   devenant un entier de microsecondes. Adaptez vos requêtes de la console SQL. Un `local.db` dont
