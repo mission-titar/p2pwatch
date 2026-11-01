@@ -1,7 +1,6 @@
 import pytest
 
 from tests.contracts.application.ports.driven.node_metric_store_contract import (
-    NodeMetricPorts,
     NodeMetricStoreContract,
 )
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
@@ -13,5 +12,9 @@ class TestFakeNodeMetricStore(NodeMetricStoreContract):
         return FakeNodeMetricStore()
 
     @pytest.fixture
-    def node_metric_ports(self, node_metric_store: FakeNodeMetricStore) -> NodeMetricPorts:
-        return NodeMetricPorts(writer=node_metric_store, reader=node_metric_store)
+    def writer(self, node_metric_store: FakeNodeMetricStore) -> FakeNodeMetricStore:
+        return node_metric_store
+
+    @pytest.fixture
+    def reader(self, node_metric_store: FakeNodeMetricStore) -> FakeNodeMetricStore:
+        return node_metric_store

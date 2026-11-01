@@ -1,7 +1,6 @@
 import pytest
 
 from tests.contracts.application.ports.driven.policy_fingerprint_store_contract import (
-    PolicyFingerprintPorts,
     PolicyFingerprintStoreContract,
 )
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
@@ -13,9 +12,13 @@ class TestFakePolicyFingerprintStore(PolicyFingerprintStoreContract):
         return FakePolicyFingerprintStore(stored_fingerprint=None)
 
     @pytest.fixture
-    def policy_fingerprint_ports(
+    def writer(
         self, policy_fingerprint_store: FakePolicyFingerprintStore
-    ) -> PolicyFingerprintPorts:
-        return PolicyFingerprintPorts(
-            writer=policy_fingerprint_store, reader=policy_fingerprint_store
-        )
+    ) -> FakePolicyFingerprintStore:
+        return policy_fingerprint_store
+
+    @pytest.fixture
+    def reader(
+        self, policy_fingerprint_store: FakePolicyFingerprintStore
+    ) -> FakePolicyFingerprintStore:
+        return policy_fingerprint_store
