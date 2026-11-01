@@ -91,15 +91,6 @@ def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Conn
     ) == (observation,)
 
 
-def test_latest_observation_is_the_latest_raw_observation(connection: sqlite3.Connection) -> None:
-    insert_file(connection, native_id=_A)
-    _raw(connection, native_id=_A, name="old.avi", at="2026-06-01T10:00:00.000000+00:00")
-    _raw(connection, native_id=_A, name="new.avi", at="2026-06-02T10:00:00.000000+00:00", media=60)
-    _raw(connection, native_id=_A, name="older.avi", at="2026-05-01T10:00:00.000000+00:00")
-    latest = _observation("new.avi", at="2026-06-02T10:00:00.000000+00:00", media=60)
-    assert observation_read.latest_observation(connection, file=_key(_A)) == latest
-
-
 def test_latest_observation_breaks_an_observed_at_tie_on_the_newest_variant_then_the_sources(
     connection: sqlite3.Connection,
 ) -> None:
@@ -131,48 +122,6 @@ def test_iter_latest_observations_yields_one_per_seen_file_sorted_by_hash(
         _observation("new.avi", at="2026-06-02T10:00:00.000000+00:00"),
         _observation("c.avi", at="2026-05-01T10:00:00.000000+00:00", native_id=_C),
     ]
-
-
-def test_known_names_are_every_distinct_name_of_the_file_sorted(
-    connection: sqlite3.Connection,
-) -> None:
-    insert_file(connection, native_id=_A)
-    insert_file(connection, native_id=_B)
-    _raw(connection, native_id=_A, name="raw.avi", at="2026-06-01T10:00:00.000000+00:00")
-    _raw(connection, native_id=_A, name="raw.avi", at="2026-06-02T10:00:00.000000+00:00")
-    _raw(connection, native_id=_A, name="old [ES].avi", at="2026-05-01T10:00:00.000000+00:00")
-    _raw(connection, native_id=_B, name="other.avi", at="2026-05-01T10:00:00.000000+00:00")
-    assert observation_read.known_filenames(connection, file=_key(_A)) == (
-        "old [ES].avi",
-        "raw.avi",
-    )
-    assert observation_read.known_filenames(connection, file=_key(_C)) == ()
-
-
-def test_best_observation_is_the_most_sourced(connection: sqlite3.Connection) -> None:
-    insert_file(connection, native_id=_A)
-    _raw(
-        connection, native_id=_A, name="clean.avi", at="2026-06-01T10:00:00.000000+00:00", sources=8
-    )
-    _raw(
-        connection,
-        native_id=_A,
-        name="mojibake.avi",
-        at="2026-06-02T10:00:00.000000+00:00",
-        sources=3,
-    )
-    best = _observation("clean.avi", at="2026-06-01T10:00:00.000000+00:00", sources=8)
-    assert observation_read.best_observation(connection, file=_key(_A)) == best
-
-
-def test_best_observation_takes_the_latest_seen_on_a_source_tie(
-    connection: sqlite3.Connection,
-) -> None:
-    insert_file(connection, native_id=_A)
-    _raw(connection, native_id=_A, name="later.avi", at="2026-06-02T10:00:00.000000+00:00")
-    _raw(connection, native_id=_A, name="earlier.avi", at="2026-06-01T10:00:00.000000+00:00")
-    best = _observation("later.avi", at="2026-06-02T10:00:00.000000+00:00")
-    assert observation_read.best_observation(connection, file=_key(_A)) == best
 
 
 def test_best_observation_of_a_file_never_seen_is_none(connection: sqlite3.Connection) -> None:

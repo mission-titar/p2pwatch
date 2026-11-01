@@ -16,6 +16,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile, fold_raw_metadata
+from tests.contracts.application.ports.driven.observation_store_contract import (
+    ObservationStoreContract,
+)
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import count_observations, insert_file
@@ -62,6 +65,16 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 @pytest.fixture
 def observation_store(connection: sqlite3.Connection) -> SqliteObservationStore:
     return SqliteObservationStore(connection)
+
+
+class TestSqliteObservationStore(ObservationStoreContract):
+    @pytest.fixture
+    def writer(self, observation_store: SqliteObservationStore) -> SqliteObservationStore:
+        return observation_store
+
+    @pytest.fixture
+    def reader(self, observation_store: SqliteObservationStore) -> SqliteObservationStore:
+        return observation_store
 
 
 def _file_count(connection: sqlite3.Connection) -> int:

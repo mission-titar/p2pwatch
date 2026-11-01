@@ -16,7 +16,8 @@ class ObservationReader(ABC):
 
     @abstractmethod
     def read_best_observation(self, file: FileKey) -> FileObservation | None:
-        """The observation of its clean filename: the most sourced, then the latest."""
+        """The observation of its clean filename: the most sourced, then the latest; ``None`` for a
+        file never observed."""
 
     @abstractmethod
     def read_known_filenames(self, file: FileKey) -> tuple[str, ...]:
