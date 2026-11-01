@@ -30,6 +30,8 @@ _EXEMPTIONS: dict[str, str] = {
     "::FakeShutdownDuringCycleDecisionReader": "a stub requesting the shutdown on its first read",
     "crawler/tests/fakes/adapters/driven/fake_source_point_store.py"
     "::FakeSourcePointStore": "a stub and a spy: its reads return what its test gives it",
+    "crawler/tests/fakes/adapters/driven/fake_coverage_reader.py"
+    "::FakeCoverageReader": "a stub: its coverage is what its test gives it",
 }
 
 

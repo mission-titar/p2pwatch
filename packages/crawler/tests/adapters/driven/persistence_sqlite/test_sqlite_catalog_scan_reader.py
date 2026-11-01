@@ -1,7 +1,6 @@
-import dataclasses
 import sqlite3
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,31 +14,27 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from tests.contracts.application.ports.driven.catalog_scan_reader_contract import (
+    CatalogScanReaderContract,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
-_HASH_B = "b" * 32
 _KEY = FileKey(network=Network.ED2K, native_id=_HASH)
 _NODE_ID = NodeId("11111111-2222-3333-4444-555555555555")
 _T0 = datetime(2026, 6, 11, 12, 0, 0, tzinfo=UTC)
 
 
-def _reported_file(
-    *,
-    filename: str = "Keroro 062A.avi",
-    size_bytes: int = 234567890,
-    duration_seconds: int | None = None,
-    bitrate_kbps: int | None = None,
-) -> ReportedFile:
+def _reported_file(*, filename: str) -> ReportedFile:
     return ReportedFile(
         file=_KEY,
         filename=filename,
-        size_bytes=size_bytes,
+        size_bytes=234567890,
         source_count=5,
         keyword=Keyword("keroro"),
-        duration_seconds=duration_seconds,
-        bitrate_kbps=bitrate_kbps,
+        duration_seconds=None,
+        bitrate_kbps=None,
     )
 
 
@@ -60,44 +55,16 @@ def catalog_scan_reader(connection: sqlite3.Connection) -> SqliteCatalogScanRead
     return SqliteCatalogScanReader(connection)
 
 
-def test_iter_latest_observations_returns_the_latest_per_hash(
-    *,
-    observation_store: SqliteObservationStore,
-    catalog_scan_reader: SqliteCatalogScanReader,
-) -> None:
-    # _HASH gets TWO observations a minute apart: only the LATEST must come back.
-    # _HASH_B gets a single observation with media metadata present, by another node.
-    newest = FileObservation(
-        reported_file=_reported_file(filename="new.avi", size_bytes=200),
-        observed_at=_T0 + timedelta(minutes=1),
-        node_id=_NODE_ID,
-    )
-    other = FileObservation(
-        reported_file=dataclasses.replace(
-            _reported_file(
-                filename="other.avi", size_bytes=300, duration_seconds=1234, bitrate_kbps=1500
-            ),
-            file=FileKey(network=Network.ED2K, native_id=_HASH_B),
-        ),
-        observed_at=_T0,
-        node_id=NodeId("n2"),
-    )
-    observation_store.record_observation(
-        FileObservation(
-            reported_file=_reported_file(filename="old.avi", size_bytes=100),
-            observed_at=_T0,
-            node_id=_NODE_ID,
-        )
-    )
-    observation_store.record_observation(newest)
-    observation_store.record_observation(other)
-    assert list(catalog_scan_reader.iter_latest_observations()) == [newest, other]
+class TestSqliteCatalogScanReader(CatalogScanReaderContract):
+    @pytest.fixture
+    def observation_writer(
+        self, observation_store: SqliteObservationStore
+    ) -> SqliteObservationStore:
+        return observation_store
 
-
-def test_iter_latest_observations_is_empty_with_an_empty_catalogue(
-    catalog_scan_reader: SqliteCatalogScanReader,
-) -> None:
-    assert list(catalog_scan_reader.iter_latest_observations()) == []
+    @pytest.fixture
+    def reader(self, catalog_scan_reader: SqliteCatalogScanReader) -> SqliteCatalogScanReader:
+        return catalog_scan_reader
 
 
 def test_iter_latest_observations_breaks_an_observed_at_tie_on_the_highest_variant(
@@ -121,30 +88,6 @@ def test_iter_latest_observations_breaks_an_observed_at_tie_on_the_highest_varia
         for observation in catalog_scan_reader.iter_latest_observations()
     ]
     assert filenames == ["second.avi"]
-
-
-def test_read_file_count_counts_catalogued_hashes_not_observations(
-    *,
-    observation_store: SqliteObservationStore,
-    catalog_scan_reader: SqliteCatalogScanReader,
-) -> None:
-    assert catalog_scan_reader.read_file_count() == 0
-    observation_store.record_observation(
-        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
-    )
-    observation_store.record_observation(
-        FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
-    )
-    observation_store.record_observation(
-        FileObservation(
-            reported_file=dataclasses.replace(
-                _reported_file(), file=FileKey(network=Network.ED2K, native_id=_HASH_B)
-            ),
-            observed_at=_T0,
-            node_id=_NODE_ID,
-        ),
-    )
-    assert catalog_scan_reader.read_file_count() == 2
 
 
 def test_iter_latest_observations_skips_a_file_never_observed(
