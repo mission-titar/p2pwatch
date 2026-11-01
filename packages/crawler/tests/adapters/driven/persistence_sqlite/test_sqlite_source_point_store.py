@@ -8,6 +8,9 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
 )
@@ -15,6 +18,9 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading, SourceRole
+from tests.contracts.application.ports.driven.source_point_store_contract import (
+    SourcePointStoreContract,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
     file_id,
@@ -62,19 +68,43 @@ def _points(
 
 
 @pytest.fixture
-def catalog(tmp_path: Path) -> Iterator[sqlite3.Connection]:
-    connection = open_catalog(tmp_path / "catalog.db")
+def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    catalog = open_catalog(tmp_path / "catalog.db")
+    yield catalog
+    catalog.close()
+
+
+@pytest.fixture
+def catalog(connection: sqlite3.Connection) -> sqlite3.Connection:
     for native_id in (_FILE, _OTHER_FILE):
         insert_file(connection, native_id=native_id)
     for user_hash in (_USER, _OTHER_USER):
         insert_source(connection, user_hash=user_hash)
-    yield connection
-    connection.close()
+    return connection
 
 
 @pytest.fixture
 def source_point_store(catalog: sqlite3.Connection) -> SqliteSourcePointStore:
     return SqliteSourcePointStore(catalog)
+
+
+class TestSqliteSourcePointStore(SourcePointStoreContract):
+    @pytest.fixture
+    def observation_writer(self, connection: sqlite3.Connection) -> SqliteObservationStore:
+        return SqliteObservationStore(connection)
+
+    @pytest.fixture
+    def source_point_store(self, connection: sqlite3.Connection) -> SqliteSourcePointStore:
+        # Without the module's raw rows: the contract seeds only through the Writers.
+        return SqliteSourcePointStore(connection)
+
+    @pytest.fixture
+    def writer(self, source_point_store: SqliteSourcePointStore) -> SqliteSourcePointStore:
+        return source_point_store
+
+    @pytest.fixture
+    def reader(self, source_point_store: SqliteSourcePointStore) -> SqliteSourcePointStore:
+        return source_point_store
 
 
 def _passing(key: SourceKey | None = _KEY, *, name: str = "AnimuseeFMR") -> SourceReading:
