@@ -54,14 +54,18 @@ text or a catalog file, so no other implementation can exist.
   `<Thing>Ports` of 2026-10-30 (`c9f3fd4a`), which replaced a `Protocol` copying the ports' signatures, and keeps the
   "one abstract fixture per port it uses" of 2026-10-29.*
 - **D4. The wide values are drawn, the narrow ones written by the test.** A draw fills every text, integer and instant
-  of a value, distinct from the value's other fields of the same type by construction; the test writes only what would
-  pick a Python branch (a value present or absent, a tier, a role, a state). One `random.Random` per test, seeded from
-  its node id, so a test's values are the same on every run whatever the order or the selection. *Catching a swap
-  needs two columns with distinct values, which a draw guarantees and a hand-picked pair may not; Hypothesis's hundred
-  examples and shrinking add nothing here, for a new dependency and a much longer mutation run (operator,
-  2026-10-30); distinct by construction, since a seed giving two equal values would weaken a test silently; narrow
-  values written so that no draw picks a branch, and renaming a test or editing a draw cannot move a branch's
-  coverage (operator, 2026-11-01).* The values a draw avoids: Appendix C.
+  of a value at random over a wide range, a text at least 8 characters long, and draws without replacement the values of
+  one field a test needs distinct (two instants in order); the test writes only what would pick a Python branch (a value
+  present or absent, a tier, a role, a state). One `random.Random` per test, seeded from its node id, so a test's values
+  are the same on every run whatever the order or the selection. *Catching a swap needs two columns with distinct
+  values, which a draw gives all but surely and a hand-picked pair may not; Hypothesis's hundred examples and shrinking
+  add nothing here, for a new dependency and a much longer mutation run (operator, 2026-10-30); plain random values,
+  since two of them collide with a chance under 10\*\*-15 (two instants to the microsecond over a century) that the seed
+  then fixes for good, where a length band or a residue per field costs every new field one to choose and every value a
+  test writes one to respect (Corrected: blocks 20 and 30 first built the distinctness by construction, a length band
+  per text and a residue modulo 8 per quantity; the operator chose plain random values on 2026-11-01); narrow values
+  written so that no draw picks a branch, and renaming a test or editing a draw cannot move a branch's coverage
+  (operator, 2026-11-01).* The values a draw avoids: Appendix C.
 - **D5. The search is literal, and ignores case and accents**: `CatalogFileReader` and `SourceReader` find a text as
   typed, `%`, `_` and every other character included, as a substring of a filename or a name, or the start of a user
   hash, both sides compared casefolded and stripped of their accents. *`CatalogFileReader` promises a filename that
@@ -99,7 +103,7 @@ by the block that first applies them.
 - **C1** (D3, block 10): a contract receives each port it uses through an abstract fixture of its own, `writer` and
   `reader` for a pair's ports, `reader` for a reader-only port, each Writer it seeds through named after its port in
   snake case, each test's parameters typed by the ports. It replaces `AGENTS.md`'s `<Thing>Ports` sentence.
-- **C2** (D4, block 20): a contract over a database draws its wide values from a `randomness` fixture, a
+- **C2** (D4, block 20): a contract over a database draws its wide values at random from a `randomness` fixture, a
   `random.Random` seeded from the test's node id, through a `draw_<value>` per value a Writer takes, in
   `tests/support/`; the test writes only the narrow values.
 
@@ -120,9 +124,11 @@ by the block that first applies them.
    or `\` finds only a name holding it as typed; `ÉCOLE` and `ecole` find `école`; `KERORO` finds `Keroro`. The `%`,
    `_`, `ÉCOLE` and `ecole` cases fail first on `main`; the ASCII case and the `\` one pass there (`LIKE` without
    `ESCAPE` takes `\` as typed), the latter guarding against a fix built on `ESCAPE`.
-5. The draws' own test: over 1000 seeds, the same-type fields of each drawn value differ, and two `random.Random` of the
-   same seed give the same value. `git grep -nE 'datetime\(|timedelta\(|" \* 32|TargetId\("[^"]|_bytes=[0-9]'` over the
-   twelve contract modules over a database prints nothing; on `main` it prints the constants of the four existing ones.
+5. The draws' own test: a drawn text is at least 8 characters long, and two `random.Random` of the same seed give the
+   same value (Corrected: "the same-type fields of each drawn value differ over 1000 seeds" dropped with the
+   distinctness by construction, D4). `git grep -nE 'datetime\(|timedelta\(|" \* 32|TargetId\("[^"]|_bytes=[0-9]'` over
+   the twelve contract modules over a database prints nothing; on `main` it prints the constants of the four existing
+   ones.
 6. Each block's report maps every adapter test it deletes to the contract test that restates it.
 7. No `<Thing>Ports` is left: `git grep -nE 'class [A-Z][A-Za-z]*Ports\b' -- packages` prints nothing, where on
    `main` it prints the nine pair contracts' dataclasses (9 lines; with `-- 'packages/*/tests'` and `-E`, git grep
@@ -176,9 +182,9 @@ Two size exemptions, granted by the operator on 2026-11-01:
   it (D7).
 - **A reading's `software` and `raw_metadata` are returned by no port**: only their adapter test checks them.
 - **`Network` has one member**, so a swap between two `Network` columns stays invisible until stage 5 adds one.
-- **Two draws, unlike two fields of one value, differ by width alone**, and so do two fields of different types stored
-  as `INTEGER` (an instant's micros and a received bytes count, a backoff's attempts and its start): a collision has a
-  negligible chance, and a seed that gave one would give it on every run, never flake.
+- **Two drawn values differ by width alone**, two fields of one value as two draws (Corrected: two fields of one value
+  were kept apart by construction until D4's correction): a collision has a chance under 10\*\*-15 (two instants to
+  the microsecond over a century), and a seed that gave one would give it on every run, never flake.
 - **A working fake wired into an SQLite subclass would pass every contract test**: no check reads what a fixture
   builds, under `<Thing>Ports` as under plain fixtures (D3); the subclass's name and module say what it must build.
 - **The search does not find a name whose encoding is broken** (`Ã©cole` for `école`): the fold strips accents from
@@ -234,9 +240,9 @@ Paths under `packages/crawler/`. Contracts in `tests/contracts/application/ports
   (`tests/support/domain/observation.py` for `ReportedFile` and `FileObservation`, `.../file_target_decision.py` for
   `DatedDecision`, `.../source.py` for `SourcePoint`), the draws of a text, a quantity and an instant in
   `tests/support/draws.py`; keyword arguments for the narrow values and for what a test relates (the same file, a later
-  instant). Distinct without a retry loop: a branch that only a colliding seed takes would fail the 100 % of
-  `tests/support`. The `randomness` fixture lives in `tests/conftest.py`: `random.Random(request.node.nodeid)`, a `str`
-  seed hashed by SHA-512, the same in every process whatever `PYTHONHASHSEED`.
+  instant). No retry loop: a branch that only a colliding seed takes would fail the 100 % of `tests/support`. The
+  `randomness` fixture lives in `tests/conftest.py`: `random.Random(request.node.nodeid)`, a `str` seed hashed by
+  SHA-512, the same in every process whatever `PYTHONHASHSEED`.
 - **The search (D5)** compares with `instr(fold_for_search(<column>), fold_for_search(:search_text))`, `> 0` for a
   substring and `= 1` for a hash prefix, so no character of the text is a wildcard and nothing needs escaping.
   `fold_for_search` is a Python function of the adapter, the text casefolded, decomposed (NFD) and stripped of its
@@ -339,7 +345,8 @@ and 49 stay. Re-counted by each block on its tree.
 - **The fold's cost**, isolated (`fold_bench.py` in the lead's scratchpad, 300,000 random names of 20 to 80 letters
   with accents, in memory, median of 5): `instr(lower())` 50 ms, a registered `casefold` 180 ms, casefold and accents
   stripped 1,004 ms, so about 7 ms for the node's 2,162 files by proportion (not measured on them). In the files
-  list's real query over 50,000 files, the spec review measured `LIKE` 444 ms, `instr(lower())` 455 ms, a registered `casefold` 458 ms and no search 452 ms:
+  list's real query over 50,000 files, the spec review measured `LIKE` 444 ms, `instr(lower())` 455 ms, a registered
+  `casefold` 458 ms and no search 452 ms:
   the latest observation's CTE dominates.
 - **`LIKE`** (`round-trip-survey`, sqlite3): `'axb.avi' LIKE '%a_b%'` is 1, `'Keroro 062A.avi' LIKE '%KERORO%'` is 1,
   `'école' LIKE '%ÉCOLE%'` is 0. The webui passes the visitor's text stripped only (`app.py:844`, `app.py:934`).
