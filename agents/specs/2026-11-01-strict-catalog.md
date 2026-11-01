@@ -53,10 +53,12 @@ The operator decided D1 to D3 on 2026-11-01.
 3. A v4 catalog holding a row in each v4 table, at Appendix B's extremes and with a `retracted` row whose `target_id`
    is `''`, migrates to the current version, every table `STRICT`, its `PRAGMA quick_check` `ok` on a read-write
    connection.
-4. `merge`, in both its modes, given a clean source then a source holding one of: a non-numeric text in an `INTEGER`
-   column of a rowid table (`files.size_bytes`) and of a `WITHOUT ROWID` one (`observations.source_count`), each
-   `CHECK` of D2 broken, refuses the second source whole, names it, and keeps the first merged. On `main`, each of
-   these merges.
+4. `merge`, in both its modes, given a clean source then a source holding a non-numeric text in an `INTEGER` column
+   of a rowid table (`files.size_bytes`) and of a `WITHOUT ROWID` one (`observations.source_count`), refuses the
+   second source whole, names it, and keeps the first merged. On `main`, each of these merges. (Corrected: each
+   `CHECK` of D2 broken through `merge` dropped, after the operator's review of #594: acceptance 2 proves each `CHECK`
+   refuses, and `main`'s tests prove a schema refusal fails its source whole; only the type `STRICT` refuses is new
+   to `merge`.)
 5. `uv run poe check` passes at each block's tip.
 
 ## 5. Blocks
@@ -120,12 +122,11 @@ Paths under `packages/crawler/src/p2pwatch/adapters/driven/persistence_sqlite/`.
   253402300799999999, with a one-line comment naming `datetime.min` and `datetime.max`. The rebuilds of 0008 and 0015
   copy into the `STRICT` tables as they do today.
 - **The tests**: no existing test writes a value `STRICT` refuses (`strict-catalog-estimates` ran the crawler's suite
-  over the patched migrations outside the repository; the review counted 1981 passed at a8f0f777). A merge test
+  over the patched migrations outside the repository; the review counted 1981 passed at a8f0f777). The merge test
   forges a wrong type by recreating a source table without `STRICT`, under the same columns, then inserting the row
-  (the append-only triggers refuse an `UPDATE`), the text non-numeric (`'abc'`: affinity stores `'123'` as `123`); a
-  broken `CHECK` under `PRAGMA ignore_check_constraints`, as the copier tests do today. A forged variant carries
-  `content_hash` or `source_content_hash` over its forged values, or the existing check pass refuses it before any
-  copy. The existing `_ROWS_THE_SCHEMA_REFUSES` cases keep passing.
+  (the append-only triggers refuse an `UPDATE`), the text non-numeric (`'abc'`: affinity stores `'123'` as `123`).
+  The existing `_ROWS_THE_SCHEMA_REFUSES` cases keep passing. (Corrected: the forged `CHECK` cases and their
+  variants' hashes dropped with acceptance 4's, after the operator's review of #594.)
 
 ## Appendix B. Facts, 2026-11-01
 
