@@ -33,6 +33,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
     load_scripts,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
+from p2pwatch.adapters.driven.persistence_sqlite.search_fold import fold_for_search
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
 )
@@ -88,11 +89,14 @@ class SqliteDatabaseOpener:
     def open_reader(self, path: Path) -> sqlite3.Connection:
         """Opens ``path`` read-only, ``mode=ro`` and ``query_only``, its rows read by column name,
         its temporary b-trees on disk (``temp_store=FILE``): an in-memory sort is unbounded.
-        Only the thread that opens it may use or close it."""
+        The searches' ``fold_for_search`` registered. Only the thread that opens it may use or
+        close it."""
         connection = sqlite3.connect(read_only_uri(path), uri=True)
         connection.row_factory = _build_named_row
         connection.execute("PRAGMA query_only=ON")
         connection.execute("PRAGMA temp_store=FILE")
+        # Not register_sql_functions: on the SQL console's reader, its memoized ones grow unbounded.
+        connection.create_function("fold_for_search", 1, fold_for_search, deterministic=True)
         return connection
 
     def open_in_memory(self) -> sqlite3.Connection:

@@ -62,10 +62,13 @@ def draw_file_observation(
     )
 
 
-def draw_observed_file(randomness: Random, *, observation_writer: ObservationWriter) -> FileKey:
-    """A drawn file, once ``observation_writer`` has recorded a drawn observation of it."""
+def draw_observed_file(
+    randomness: Random, *, observation_writer: ObservationWriter, filename: str | None = None
+) -> FileKey:
+    """A drawn file, once ``observation_writer`` has recorded a drawn observation of it, of
+    ``filename`` if given."""
     file = draw_file(randomness)
     observation_writer.record_observation(
-        draw_file_observation(randomness, file=file, has_media=True)
+        draw_file_observation(randomness, file=file, has_media=True, filename=filename)
     )
     return file
