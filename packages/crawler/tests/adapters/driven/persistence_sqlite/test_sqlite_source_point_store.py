@@ -17,7 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.json_object_text import JsonObjectText
-from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading, SourceRole
+from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading
 from tests.contracts.application.ports.driven.source_point_store_contract import (
     SourcePointStoreContract,
 )
@@ -45,25 +45,11 @@ def _us(moment: datetime) -> int:
     return (moment - _EPOCH) // timedelta(microseconds=1)
 
 
-def _points(
-    catalog: sqlite3.Connection,
-    *moments: datetime,
-    role: str = "queued",
-    native_id: str = _FILE,
-    user_hash: str | None = _USER,
-    name: str = "AnimuseeFMR",
-    node_id: str = "n1",
-    session_received_bytes: int = 0,
-) -> None:
-    variant_id = insert_source_variant(
-        catalog, native_id=native_id, user_hash=user_hash, name=name, role=role, node_id=node_id
-    )
+def _points(catalog: sqlite3.Connection, *moments: datetime) -> None:
+    variant_id = insert_source_variant(catalog, native_id=_FILE, user_hash=_USER)
     for moment in moments:
         insert_source_point(
-            catalog,
-            variant_id=variant_id,
-            observed_at_micros=_us(moment),
-            session_received_bytes=session_received_bytes,
+            catalog, variant_id=variant_id, observed_at_micros=_us(moment), session_received_bytes=0
         )
 
 
@@ -107,10 +93,10 @@ class TestSqliteSourcePointStore(SourcePointStoreContract):
         return source_point_store
 
 
-def _passing(key: SourceKey | None = _KEY, *, name: str = "AnimuseeFMR") -> SourceReading:
+def _passing() -> SourceReading:
     return SourceReading(
-        source=key,
-        source_name=name,
+        source=_KEY,
+        source_name="AnimuseeFMR",
         software=None,
         role=None,
         contact_point=None,
@@ -126,121 +112,10 @@ def _latest(
     reading: SourceReading,
     since: datetime,
     before: datetime,
-    native_id: str = _FILE,
-    node_id: NodeId = _NODE_ID,
 ) -> LatestPoint | None:
-    file = FileKey(network=Network.ED2K, native_id=native_id)
+    file = FileKey(network=Network.ED2K, native_id=_FILE)
     return source_point_store.read_latest_point(
-        file, reading=reading, since=since, before=before, node_id=node_id
-    )
-
-
-def test_the_latest_point_is_the_latest_since_the_window_opens_before_it_closes(
-    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    later = _T0 + timedelta(seconds=30)
-    _points(catalog, _T0, role="nothing_new", session_received_bytes=5)
-    _points(catalog, later, role="sending", session_received_bytes=7)
-    assert _latest(source_point_store, reading=_passing(), since=_T0, before=later) == LatestPoint(
-        role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=5
-    )
-    assert (
-        _latest(
-            source_point_store,
-            reading=_passing(),
-            since=_T0 + timedelta(microseconds=1),
-            before=later,
-        )
-        is None
-    )
-    assert _latest(
-        source_point_store, reading=_passing(), since=_T0, before=later + timedelta(seconds=1)
-    ) == (LatestPoint(role=SourceRole.SENDING, observed_at=later, session_received_bytes=7))
-
-
-def test_a_reading_without_identity_reads_only_its_name_without_identity(
-    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    before = _T0 + timedelta(seconds=30)
-    _points(catalog, _T0, role="nothing_new")
-    _points(catalog, _T0, role="sending", user_hash=None)
-    _points(catalog, _T0, role="standby", user_hash=None, name="Teammate")
-    assert _latest(
-        source_point_store, reading=_passing(_KEY, name="Renamed"), since=_T0, before=before
-    ) == LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0)
-    assert _latest(
-        source_point_store, reading=_passing(None), since=_T0, before=before
-    ) == LatestPoint(role=SourceRole.SENDING, observed_at=_T0, session_received_bytes=0)
-    assert (
-        _latest(source_point_store, reading=_passing(None, name="Nobody"), since=_T0, before=before)
-        is None
-    )
-
-
-def test_the_latest_point_reads_this_file_on_the_given_node_only(
-    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    before = _T0 + timedelta(seconds=30)
-    _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
-    _points(catalog, _T0, role="nothing_new", node_id="n2")
-    assert _latest(source_point_store, reading=_passing(), since=_T0, before=before) is None
-    assert _latest(
-        source_point_store, reading=_passing(), since=_T0, before=before, node_id=NodeId("n2")
-    ) == LatestPoint(role=SourceRole.NOTHING_NEW, observed_at=_T0, session_received_bytes=0)
-
-
-def test_earlier_points_are_each_variants_latest_point_before_the_round(
-    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    round_started_at = _T0 + timedelta(hours=3)
-    _points(catalog, _T0, _T0 + timedelta(seconds=30), role="nothing_new")
-    _points(catalog, _T0 + timedelta(hours=1), role="standby", session_received_bytes=9_728)
-    _points(catalog, round_started_at, round_started_at + timedelta(seconds=30))
-    assert set(
-        source_point_store.read_earlier_points(_KEY, before=round_started_at, node_id=NodeId("n1"))
-    ) == {
-        LatestPoint(
-            role=SourceRole.NOTHING_NEW,
-            observed_at=_T0 + timedelta(seconds=30),
-            session_received_bytes=0,
-        ),
-        LatestPoint(
-            role=SourceRole.STANDBY,
-            observed_at=_T0 + timedelta(hours=1),
-            session_received_bytes=9_728,
-        ),
-    }
-
-
-def test_earlier_points_read_this_sources_points_on_every_file_of_the_given_node_only(
-    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    later = _T0 + timedelta(hours=1)
-    _points(catalog, _T0, role="sending", native_id=_OTHER_FILE)
-    _points(catalog, later, user_hash=_OTHER_USER)
-    _points(catalog, later, node_id="n2")
-    assert source_point_store.read_earlier_points(
-        _KEY, before=later + timedelta(seconds=30), node_id=NodeId("n1")
-    ) == (LatestPoint(role=SourceRole.SENDING, observed_at=_T0, session_received_bytes=0),)
-    assert (
-        source_point_store.read_earlier_points(_OTHER_KEY, before=later, node_id=NodeId("n1")) == ()
-    )
-    assert source_point_store.read_earlier_points(
-        _KEY, before=later + timedelta(seconds=30), node_id=NodeId("n2")
-    ) == (LatestPoint(role=SourceRole.QUEUED, observed_at=later, session_received_bytes=0),)
-
-
-def test_has_points_before_reads_only_the_given_nodes_points_before(
-    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
-) -> None:
-    assert not source_point_store.has_points_before(_T0, node_id=NodeId("n1"))
-    _points(catalog, _T0 - timedelta(hours=1), node_id="n2")
-    assert not source_point_store.has_points_before(_T0, node_id=NodeId("n1"))
-    assert source_point_store.has_points_before(_T0, node_id=NodeId("n2"))
-    _points(catalog, _T0, role="standby")
-    assert not source_point_store.has_points_before(_T0, node_id=NodeId("n1"))
-    assert source_point_store.has_points_before(
-        _T0 + timedelta(microseconds=1), node_id=NodeId("n1")
+        file, reading=reading, since=since, before=before, node_id=_NODE_ID
     )
 
 

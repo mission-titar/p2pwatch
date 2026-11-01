@@ -1,6 +1,7 @@
 """The draws of our downloads' source points, for the contracts that seed through
 ``SourcePointWriter``."""
 
+from dataclasses import replace
 from datetime import datetime
 from random import Random
 
@@ -61,3 +62,11 @@ def draw_source_point(
         observed_at=observed_at,
         node_id=NodeId(draw_text(randomness)) if node_id is None else node_id,
     )
+
+
+def draw_point_read_again(
+    randomness: Random, *, point: SourcePoint, observed_at: datetime
+) -> SourcePoint:
+    """``point``'s variant read again at ``observed_at``, its session's received bytes drawn."""
+    reading = replace(point.reading, session_received_bytes=draw_quantity(randomness))
+    return replace(point, reading=reading, observed_at=observed_at)
