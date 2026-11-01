@@ -529,7 +529,9 @@ ses quatre instants en microsecondes : `queued_at_micros`, `completed_at_micros`
 `node_runtime` par `node_identity`, une seule ligne typée : `node_id` et `created_at_micros`. Une
 base dont `node_runtime` porte un `node_id` sans son `created_at` refuse de migrer plutôt que de
 perdre l'identité du nœud. `reevaluation_state` est reconstruite elle aussi, si bien que chaque table
-de `local.db` est désormais `STRICT`.
+de `local.db` est désormais `STRICT`. Chaque table du catalogue l'est aussi, déclarée ainsi là où
+`catalog/0008`, `0010`, `0011` et `0015` la créent, avec un `CHECK` sur chaque quantité (`>= 0`), sur
+`tier` et `connectable`, et sur chaque `*_micros`, entre `datetime.min` et `datetime.max` en UTC.
 
 ### 8.1 Écrire une migration
 
