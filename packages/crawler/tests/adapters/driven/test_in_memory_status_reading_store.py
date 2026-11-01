@@ -8,7 +8,6 @@ from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.status_reading import ClientStatus, StatusReading
 from tests.contracts.application.ports.driven.status_reading_store_contract import (
     CLIENT_NAMES,
-    StatusReadingPorts,
     StatusReadingStoreContract,
 )
 
@@ -23,10 +22,16 @@ class TestInMemoryStatusReadingStore(StatusReadingStoreContract):
         return InMemoryStatusReadingStore(CLIENT_NAMES)
 
     @pytest.fixture
-    def status_reading_ports(
+    def writer(
         self, status_reading_store: InMemoryStatusReadingStore
-    ) -> StatusReadingPorts:
-        return StatusReadingPorts(writer=status_reading_store, reader=status_reading_store)
+    ) -> InMemoryStatusReadingStore:
+        return status_reading_store
+
+    @pytest.fixture
+    def reader(
+        self, status_reading_store: InMemoryStatusReadingStore
+    ) -> InMemoryStatusReadingStore:
+        return status_reading_store
 
 
 def test_publishing_replaces_the_snapshot_and_never_changes_one_already_read() -> None:

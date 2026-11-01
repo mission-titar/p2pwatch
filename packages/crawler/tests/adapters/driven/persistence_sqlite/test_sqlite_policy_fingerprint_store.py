@@ -7,7 +7,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store
     SqlitePolicyFingerprintStore,
 )
 from tests.contracts.application.ports.driven.policy_fingerprint_store_contract import (
-    PolicyFingerprintPorts,
     PolicyFingerprintStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
@@ -21,9 +20,13 @@ class TestSqlitePolicyFingerprintStore(PolicyFingerprintStoreContract):
         connection.close()
 
     @pytest.fixture
-    def policy_fingerprint_ports(
+    def writer(
         self, policy_fingerprint_store: SqlitePolicyFingerprintStore
-    ) -> PolicyFingerprintPorts:
-        return PolicyFingerprintPorts(
-            writer=policy_fingerprint_store, reader=policy_fingerprint_store
-        )
+    ) -> SqlitePolicyFingerprintStore:
+        return policy_fingerprint_store
+
+    @pytest.fixture
+    def reader(
+        self, policy_fingerprint_store: SqlitePolicyFingerprintStore
+    ) -> SqlitePolicyFingerprintStore:
+        return policy_fingerprint_store
