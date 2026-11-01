@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +25,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader impo
     _tier_rank_case,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
@@ -32,15 +35,20 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import FileId, Keyword, NodeId
-from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.identifiers import FileId, NodeId
+from tests.contracts.application.ports.driven.catalog_file_reader_contract import (
+    CatalogFileReaderContract,
+)
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
     seed,
     seed_retracted,
     seed_whole_episode,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_reader,
+)
 from tests.support.catalog_rows import (
     SEEN_AT,
     file_id,
@@ -59,13 +67,38 @@ _YEAR_3000 = datetime(3000, 1, 1, tzinfo=UTC)  # after every instant a test writ
 _LIMIT = 50
 
 
+@pytest.fixture
+def connection(catalog_db: Path) -> Iterator[sqlite3.Connection]:
+    catalog = open_catalog(catalog_db)
+    yield catalog
+    catalog.close()
+
+
+@pytest.fixture
+def thread_read_connections(catalog_db: Path) -> Iterator[ThreadReadConnections]:
+    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
+        yield thread_read_connections
+
+
+class TestSqliteCatalogFileReader(CatalogFileReaderContract):
+    @pytest.fixture
+    def observation_writer(self, connection: sqlite3.Connection) -> SqliteObservationStore:
+        return SqliteObservationStore(connection)
+
+    @pytest.fixture
+    def decision_writer(self, connection: sqlite3.Connection) -> SqliteDecisionStore:
+        return SqliteDecisionStore(connection)
+
+    @pytest.fixture
+    def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteCatalogFileReader:
+        return SqliteCatalogFileReader(thread_read_connections)
+
+
 def _entries(
     catalog_db: Path,
     *,
     target_id: TargetId | None = None,
-    tier: DecisionTier | None = None,
     search_text: str | None = None,
-    matched_only: bool = False,
     sort: CatalogEntrySort = CatalogEntrySort.LATEST_SEEN,
     direction: SortDirection = SortDirection.DESC,
     offset: int = 0,
@@ -73,9 +106,9 @@ def _entries(
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_catalog_entries(
             target_id=target_id,
-            tier=tier,
+            tier=None,
             search_text=search_text,
-            matched_only=matched_only,
+            matched_only=False,
             sort=sort,
             direction=direction,
             limit=_LIMIT,
@@ -111,61 +144,8 @@ def _latest_filename(catalog_entry: CatalogEntry) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: explorer, filters present / absent
+# Tests: explorer, its page
 # ---------------------------------------------------------------------------
-
-
-def test_read_catalog_entries_no_filter_returns_all(catalog_db: Path) -> None:
-    seed(catalog_db)
-    rows = _entries(catalog_db)
-    assert rows == (
-        CatalogEntry(
-            file=FileKey(network=Network.ED2K, native_id="a" * 32),
-            size_bytes=100,
-            latest_observation=FileObservation(
-                reported_file=ReportedFile(
-                    file=FileKey(network=Network.ED2K, native_id="a" * 32),
-                    filename="keroro_062.avi",
-                    size_bytes=100,
-                    source_count=5,
-                    keyword=Keyword("keroro"),
-                ),
-                observed_at=datetime(2026, 6, 22, 10, tzinfo=UTC),
-                node_id=NodeId("n1"),
-            ),
-            decisions=(
-                DecisionRecord(
-                    target_id=TargetId("062A"),
-                    rule_name="id_segment_exact",
-                    tier=DecisionTier.DOWNLOAD,
-                ),
-            ),
-        ),
-    )
-
-
-def test_read_catalog_entries_filter_by_target(catalog_db: Path) -> None:
-    seed(catalog_db)
-    hit = _entries(catalog_db, target_id=TargetId("062A"))
-    miss = _entries(catalog_db, target_id=TargetId("001A"))
-    assert len(hit) == 1
-    assert miss == ()
-
-
-def test_read_catalog_entries_filter_by_tier(catalog_db: Path) -> None:
-    seed(catalog_db)
-    hit = _entries(catalog_db, tier=DecisionTier.DOWNLOAD)
-    miss = _entries(catalog_db, tier=DecisionTier.NOTIFY)
-    assert len(hit) == 1
-    assert miss == ()
-
-
-def test_read_catalog_entries_filter_by_search_text(catalog_db: Path) -> None:
-    seed(catalog_db)
-    hit = _entries(catalog_db, search_text="keroro")
-    miss = _entries(catalog_db, search_text="unknown")
-    assert len(hit) == 1
-    assert miss == ()
 
 
 def test_read_catalog_entries_reads_none_past_the_offset(catalog_db: Path) -> None:
@@ -174,40 +154,8 @@ def test_read_catalog_entries_reads_none_past_the_offset(catalog_db: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# Tests: read_catalog_entries / read_matched_and_total_file_counts: one row per file, decisions
-# aggregated (spec §9)
+# Tests: read_matched_and_total_file_counts: one row per file, decisions aggregated (spec §9)
 # ---------------------------------------------------------------------------
-
-
-def test_read_catalog_entries_whole_episode_is_one_row_with_two_decisions(catalog_db: Path) -> None:
-    seed_whole_episode(catalog_db)
-    rows = _entries(catalog_db)
-    assert len(rows) == 1
-    assert rows[0].decisions == (
-        DecisionRecord(
-            target_id=TargetId("072A"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
-        ),
-        DecisionRecord(
-            target_id=TargetId("072B"), rule_name="numero_nu_confirmed", tier=DecisionTier.DOWNLOAD
-        ),
-    )
-    assert rows[0].decisions[0].tier is DecisionTier.DOWNLOAD
-
-
-@pytest.mark.parametrize("target_id", [TargetId("072A"), TargetId("072B")])
-def test_read_catalog_entries_filter_by_one_target_returns_whole_episode(
-    *, catalog_db: Path, target_id: TargetId
-) -> None:
-    seed_whole_episode(catalog_db)
-    rows = _entries(catalog_db, target_id=target_id)
-    assert len(rows) == 1
-    assert [d.target_id for d in rows[0].decisions] == ["072A", "072B"]
-
-
-def test_read_catalog_entries_unmatched_file_has_empty_decisions(catalog_db: Path) -> None:
-    _seed_unmatched(catalog_db)
-    [row] = _entries(catalog_db)
-    assert row.decisions == ()
 
 
 def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
@@ -339,14 +287,6 @@ def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> No
 # ---------------------------------------------------------------------------
 
 
-def test_read_catalog_entries_combined_target_and_tier_filters(catalog_db: Path) -> None:
-    seed(catalog_db)
-    hit = _entries(catalog_db, target_id=TargetId("062A"), tier=DecisionTier.DOWNLOAD)
-    miss = _entries(catalog_db, target_id=TargetId("062A"), tier=DecisionTier.NOTIFY)
-    assert len(hit) == 1
-    assert miss == ()
-
-
 def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         for n in range(_LIMIT + 2):
@@ -403,63 +343,6 @@ def _seed_unmatched(db: Path) -> None:
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
-
-
-def test_read_catalog_entries_matched_only_excludes_unmatched(catalog_db: Path) -> None:
-    seed(catalog_db)
-    _seed_unmatched(catalog_db)
-    rows = _entries(catalog_db, matched_only=True)
-    hashes = {r.file.native_id for r in rows}
-    assert hashes == {"a" * 32}  # only the matched file
-
-
-def test_read_catalog_entries_matched_only_excludes_retracted(catalog_db: Path) -> None:
-    """A file whose latest decision is a retraction is NOT matched, even though its
-    ``target_id`` column is non-NULL (the crawler's sentinel is an empty string, not NULL)."""
-    seed(catalog_db)
-    seed_retracted(catalog_db)
-    rows = _entries(catalog_db, matched_only=True)
-    hashes = {r.file.native_id for r in rows}
-    assert hashes == {"a" * 32}  # the retracted file ("c"*32) is excluded
-
-
-def test_read_catalog_entries_lists_a_retracted_file_with_no_decision(catalog_db: Path) -> None:
-    seed_retracted(catalog_db)
-    [row] = _entries(catalog_db)
-    assert row.decisions == ()
-
-
-def test_read_catalog_entries_default_includes_unmatched(catalog_db: Path) -> None:
-    seed(catalog_db)
-    _seed_unmatched(catalog_db)
-    rows = _entries(catalog_db)
-    hashes = {r.file.native_id for r in rows}
-    assert hashes == {"a" * 32, "b" * 32}  # default matched_only=False → both
-
-
-def test_read_catalog_entries_shows_latest_observation(catalog_db: Path) -> None:
-    """Same hash with two observations → read_catalog_entries returns the most recent filename."""
-    h = "c" * 32
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id=h, size_bytes=300)
-        insert_observation(
-            connection,
-            native_id=h,
-            filename="old_name.avi",
-            observed_at="2026-06-22T09:00:00.000000+00:00",
-            size_bytes=300,
-        )
-        insert_observation(
-            connection,
-            native_id=h,
-            filename="new_name.avi",
-            observed_at="2026-06-22T12:00:00.000000+00:00",
-            size_bytes=300,
-            source_count=2,
-        )
-    rows = _entries(catalog_db)
-    assert len(rows) == 1
-    assert _latest_filename(rows[0]) == "new_name.avi"
 
 
 # ---------------------------------------------------------------------------
@@ -534,13 +417,6 @@ def test_target_scope_excludes_catalog_tier(catalog_db: Path) -> None:
     assert rows == ()
     matched, _total = _counts(catalog_db, target_id=TargetId("001A"))
     assert matched == 0
-
-
-def test_target_scope_keeps_non_catalog_tier(catalog_db: Path) -> None:
-    """A non-catalog (download) decision on 062A is still returned under target='062A'."""
-    seed(catalog_db)  # existing helper: a 'download' decision on 062A
-    rows = _entries(catalog_db, target_id=TargetId("062A"))
-    assert len(rows) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -735,7 +611,7 @@ def test_read_matched_and_total_file_counts_counts_file_with_no_observation(
 def test_read_catalog_entries_search_text_filter_excludes_file_with_no_observation(
     catalog_db: Path,
 ) -> None:
-    """No observation means no filename to match: ``NULL LIKE ?`` is NULL, so the row drops."""
+    """No observation means no filename to match: its fold is NULL, so the row drops."""
     _seed_file_without_observation(catalog_db)
     rows = _entries(catalog_db, search_text="keroro")
     assert rows == ()

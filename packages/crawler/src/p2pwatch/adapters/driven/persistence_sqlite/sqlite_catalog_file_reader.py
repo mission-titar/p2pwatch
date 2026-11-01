@@ -227,8 +227,9 @@ def _filter_clauses(
         )
         params.append(tier)
     if search_text is not None:
-        clauses.append("obs.filename LIKE ?")
-        params.append(f"%{search_text}%")
+        # instr, not LIKE: no character of the text is a wildcard, so nothing needs escaping.
+        clauses.append("instr(fold_for_search(obs.filename), fold_for_search(?)) > 0")
+        params.append(search_text)
     return clauses, params
 
 
