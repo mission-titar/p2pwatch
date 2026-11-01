@@ -148,7 +148,8 @@ restate, its report mapping each to its contract test (acceptance 6).
 | 10 | `refactor/contract-port-fixtures` | the spec, the nine pair contracts' `<Thing>Ports` replaced by fixtures (D3), C1; mechanical | about 490, 30 |
 | 20 | `test/observation-store-contract` | `randomness`, the draws of observations, `ObservationStoreContract`, C2, the tests it restates | 629 (411, 350 to 480), 14 |
 | 30 | `test/decision-store-contract` | `DecisionStoreContract`, the draws of decisions, the tests it restates | 553 (317), 8 |
-| 40 | `test/source-point-store-contract` | `SourcePointStoreContract`, the draws of source points, the tests it restates | 439 (329), 7 |
+| 40 | `test/source-point-store-contract` | `SourcePointStoreContract`: the draws of source points, the read back | about 340, 5 |
+| 45 | `test/source-point-reads-contract` | `SourcePointStoreContract`: the reads' promises, the tests it restates | about 410 (300), 3 |
 | 50 | `test/scan-and-coverage-reader-contracts` | `CatalogScanReaderContract`, `CoverageReaderContract`, the tests they restate | 449 (278), 7 |
 | 60 | `fix/file-search` | `CatalogFileReaderContract`: the listing's filters, D5 for files, the tests it restates | 554 (386), 5 |
 | 70 | `test/file-listing-and-history-contract` | `CatalogFileReaderContract`: the listing's order and page, a file's history, the tests it restates | 546 (325), 2 |
@@ -169,10 +170,14 @@ Two size exemptions, granted by the operator on 2026-11-01:
   modules and 19 subclass modules in the crawler, `amule` and `amule_bump`, plus `AGENTS.md` and
   `docs/contributing/testing.md`.
 - **A block may pass 500 lines when the lines past it are adapter tests deleted**, each mapped to the contract test
-  that restates it (acceptance 6), which the review reads in place of every deleted line, as the pruning blocks of
-  "Test quality" do (D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`); the rest of the block stays
-  under 500 lines and 20 files. So each block holds a contract, or a group of a large reader's methods, with the tests
-  it restates, and no block only deletes.
+  that restates it (acceptance 6), which the review reads in place of every deleted line; the rest of the block stays
+  under 500 lines and 20 files. The holistic review checks every row of every mapping, that the contract test checks
+  what the deleted test checked (Corrected: "as the pruning blocks of "Test quality" do", D15 of
+  `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, left out that those blocks carry a mutation proof too;
+  none here, since mutmut cannot see the SQL these tests check, and the holistic review's check in its place,
+  operator, 2026-11-01). So each block holds a contract, or a group of a large reader's methods, with the tests
+  it restates, and no block only deletes. Block 40 split in two (Corrected: one block in the approved table; its
+  contract and draws came to 644 lines past the deleted tests, block 40's report, 2026-11-01).
 
 ## 7. Limits and scope
 
