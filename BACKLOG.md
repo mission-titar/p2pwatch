@@ -45,6 +45,9 @@ An agent adds an entry only after the operator has agreed to it.
 
 ## Technical improvements
 
+- **`merge` refuses a source whose schema is not the node's**: a catalog at the current version whose declarations
+  differ (a fork's, a dev database, a pre-lot build's). Section 7 of `agents/specs/2026-11-01-strict-catalog.md`.
+
 - **Mutation testing in the gate**: mutmut run cold on a pull request's impact set, from the per-test coverage, so
   a test that stops detecting a fault fails the gate. D13 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`.
 
