@@ -16,6 +16,7 @@ from p2pwatch.domain.file_target_decision import Retraction
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,
     draw_decision_record,
+    draw_target_id,
     draw_target_ids,
 )
 from tests.support.domain.observation import draw_file, draw_file_observation
@@ -149,7 +150,7 @@ class DecisionStoreContract(ABC):
         reader: DecisionReader,
     ) -> None:
         file = _draw_observed_file(randomness, observation_writer=observation_writer)
-        [target_id] = draw_target_ids(randomness, count=1)
+        target_id = draw_target_id(randomness)
         earlier_at, later_at = draw_instants(randomness, count=2)
         for tier, decided_at in (
             (DecisionTier.DOWNLOAD, later_at),
@@ -174,7 +175,7 @@ class DecisionStoreContract(ABC):
         latest_tier: DecisionTier,
     ) -> None:
         file = _draw_observed_file(randomness, observation_writer=observation_writer)
-        [target_id] = draw_target_ids(randomness, count=1)
+        target_id = draw_target_id(randomness)
         earlier_at, later_at = draw_instants(randomness, count=2)
         for tier, decided_at in ((latest_tier, later_at), (DecisionTier.DOWNLOAD, earlier_at)):
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
@@ -194,7 +195,7 @@ class DecisionStoreContract(ABC):
         candidate_file, other_file = (
             _draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
         )
-        [target_id] = draw_target_ids(randomness, count=1)
+        target_id = draw_target_id(randomness)
         earliest_at, earlier_at, latest_at = draw_instants(randomness, count=3)
         for file, tier, decided_at in (
             (other_file, DecisionTier.CATALOG, latest_at),

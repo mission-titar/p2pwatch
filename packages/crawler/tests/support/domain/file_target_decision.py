@@ -11,20 +11,15 @@ from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecisi
 from p2pwatch.domain.identifiers import NodeId
 from tests.support.draws import draw_instant, draw_text
 
-# Each text in a length band of its own, beside a native id 32 long.
-_TARGET_ID_LENGTHS = range(1, 16)
-_NODE_ID_LENGTHS = range(16, 32)
-_RULE_NAME_LENGTHS = range(33, 81)
+
+def draw_target_id(randomness: Random) -> TargetId:
+    """A target id, a text as ``draw_text`` draws it."""
+    return TargetId(draw_text(randomness))
 
 
 def draw_target_ids(randomness: Random, *, count: int) -> tuple[TargetId, ...]:
-    """``count`` distinct target ids, ascending, each of a length of its own."""
-    lengths = randomness.sample(_TARGET_ID_LENGTHS, count)
-    return tuple(
-        sorted(
-            TargetId(draw_text(randomness, lengths=range(length, length + 1))) for length in lengths
-        )
-    )
+    """``count`` target ids, ascending."""
+    return tuple(sorted(draw_target_id(randomness) for _ in range(count)))
 
 
 def draw_decision_record(
@@ -32,8 +27,8 @@ def draw_decision_record(
 ) -> DecisionRecord:
     """A record of ``tier`` by a drawn rule, for ``target_id`` drawn unless given."""
     return DecisionRecord(
-        target_id=draw_target_ids(randomness, count=1)[0] if target_id is None else target_id,
-        rule_name=draw_text(randomness, lengths=_RULE_NAME_LENGTHS),
+        target_id=draw_target_id(randomness) if target_id is None else target_id,
+        rule_name=draw_text(randomness),
         tier=tier,
     )
 
@@ -50,5 +45,5 @@ def draw_dated_decision(
         file=file,
         decision=decision,
         decided_at=draw_instant(randomness) if decided_at is None else decided_at,
-        node_id=NodeId(draw_text(randomness, lengths=_NODE_ID_LENGTHS)),
+        node_id=NodeId(draw_text(randomness)),
     )
