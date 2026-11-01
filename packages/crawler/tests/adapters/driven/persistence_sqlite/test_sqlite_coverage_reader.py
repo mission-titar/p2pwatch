@@ -1,122 +1,62 @@
 """TDD tests for the catalog's coverage reader (spec W-D6 / §6)."""
 
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import closing
 from pathlib import Path
+
+import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import SqliteCoverageReader
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
-from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
-    seed,
-    seed_retracted,
-    seed_whole_episode,
+from tests.contracts.application.ports.driven.coverage_reader_contract import (
+    CoverageReaderContract,
 )
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_reader,
+)
 from tests.support.catalog_rows import insert_decision, insert_file
 
-# ---------------------------------------------------------------------------
-# Tests: coverage
-# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def connection(catalog_db: Path) -> Iterator[sqlite3.Connection]:
+    catalog = open_catalog(catalog_db)
+    yield catalog
+    catalog.close()
+
+
+@pytest.fixture
+def thread_read_connections(catalog_db: Path) -> Iterator[ThreadReadConnections]:
+    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
+        yield thread_read_connections
+
+
+class TestSqliteCoverageReader(CoverageReaderContract):
+    @pytest.fixture
+    def observation_writer(self, connection: sqlite3.Connection) -> SqliteObservationStore:
+        return SqliteObservationStore(connection)
+
+    @pytest.fixture
+    def decision_writer(self, connection: sqlite3.Connection) -> SqliteDecisionStore:
+        return SqliteDecisionStore(connection)
+
+    @pytest.fixture
+    def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteCoverageReader:
+        return SqliteCoverageReader(thread_read_connections)
 
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[TargetId, tuple[DecisionTier, ...]]:
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         return SqliteCoverageReader(thread_read_connections).read_target_coverage()
-
-
-def test_target_coverage_groups_by_target(catalog_db: Path) -> None:
-    seed(catalog_db)
-    coverage = _read_target_coverage(catalog_db)
-    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
-
-
-def test_target_coverage_reads_each_tier_as_the_type(catalog_db: Path) -> None:
-    seed(catalog_db)
-    (tier,) = _read_target_coverage(catalog_db)[TargetId("062A")]
-    assert tier is DecisionTier.DOWNLOAD
-
-
-def test_target_coverage_empty_db_returns_empty(catalog_db: Path) -> None:
-    coverage = _read_target_coverage(catalog_db)
-    assert coverage == {}
-
-
-def test_target_coverage_multiple_files_same_target(catalog_db: Path) -> None:
-    """Two files matching the same target_id → two tiers."""
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        for suffix in ("a", "b"):
-            insert_file(connection, native_id=suffix * 32)
-            insert_decision(connection, native_id=suffix * 32, target_id="062A", tier="download")
-    coverage = _read_target_coverage(catalog_db)
-    assert len(coverage[TargetId("062A")]) == 2
-
-
-def test_target_coverage_whole_episode_contributes_to_both_targets(catalog_db: Path) -> None:
-    seed_whole_episode(catalog_db)
-    coverage = _read_target_coverage(catalog_db)
-    assert coverage[TargetId("072A")] == (DecisionTier.DOWNLOAD,)
-    assert coverage[TargetId("072B")] == (DecisionTier.DOWNLOAD,)
-
-
-def test_target_coverage_ignores_legacy_empty_target_sentinel(catalog_db: Path) -> None:
-    h = "e" * 32
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id=h)
-        insert_decision(
-            connection,
-            native_id=h,
-            target_id="090A",
-            tier="download",
-            rule_name="id_segment_exact",
-            decided_at="2026-07-05T10:00:00.000000+00:00",
-        )
-        insert_decision(
-            connection,
-            native_id=h,
-            target_id="",
-            tier="retracted",
-            rule_name="",
-            decided_at="2026-07-05T11:00:00.000000+00:00",
-        )
-    coverage = _read_target_coverage(catalog_db)
-    assert coverage[TargetId("090A")] == (DecisionTier.DOWNLOAD,)
-    assert "" not in coverage
-
-
-# ---------------------------------------------------------------------------
-# Tests: "latest per hash", tie-break on decided_at then id
-# ---------------------------------------------------------------------------
-
-
-def test_target_coverage_uses_latest_decision_per_hash(catalog_db: Path) -> None:
-    """Same hash with two decisions (T1 < T2) → the coverage reads T2's tier."""
-    h = "a" * 32
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id=h)
-        insert_decision(connection, native_id=h, target_id="062A", tier="catalog")
-        insert_decision(
-            connection,
-            native_id=h,
-            target_id="062A",
-            tier="download",
-            decided_at="2026-06-22T11:00:00.000000+00:00",
-        )
-    coverage = _read_target_coverage(catalog_db)
-    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
-
-
-def test_target_coverage_omits_retracted(catalog_db: Path) -> None:
-    """A file whose latest decision is a retraction contributes to NO target's coverage."""
-    seed(catalog_db)
-    seed_retracted(catalog_db)
-    coverage = _read_target_coverage(catalog_db)
-    assert coverage[TargetId("062A")] == (DecisionTier.DOWNLOAD,)
-    assert "063A" not in coverage  # the retracted file's earlier (now stale) target
 
 
 def test_coverage_tie_break_on_id(catalog_db: Path) -> None:
