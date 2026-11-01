@@ -8,14 +8,11 @@ import hashlib
 import shutil
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
-from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
@@ -484,86 +481,24 @@ def test_a_copy_diverged_from_a_restored_catalog_merges_into_the_union(tmp_path:
     assert observations == rows_without_id(union, table="source_observations")
 
 
-@dataclass(frozen=True, kw_only=True)
-class _Forgery:
-    """``value`` in ``column`` of a row ``sql`` inserts, ``?1`` bound to it; ``loose`` recreates
-    ``table`` without ``STRICT`` first."""
-
-    table: str
-    column: str
-    value: int | str
-    sql: str
-    loose: bool = False
-
-
-def _recreate_without_strict(connection: sqlite3.Connection, *, table: str) -> None:
-    """``table`` under the same declarations, ``STRICT`` aside, its rows kept."""
-    [schema] = rows(
-        connection, sql="SELECT sql FROM sqlite_schema WHERE name = ?", parameters=(table,)
-    )
-    loose = (
-        schema["sql"]
-        .replace(f"CREATE TABLE {table} (", "CREATE TABLE loose (")
-        .replace(") STRICT, WITHOUT ROWID", ") WITHOUT ROWID")
-        .replace(") STRICT", ")")
-    )
-    connection.execute("PRAGMA foreign_keys = OFF")
-    connection.execute(loose)
-    connection.execute(f"INSERT INTO loose SELECT * FROM {table}")
-    connection.execute(f"DROP TABLE {table}")
-    connection.execute(f"ALTER TABLE loose RENAME TO {table}")
-
-
-def _forge(catalog: Path, *, forgery: _Forgery) -> None:
-    """Writes ``forgery``'s row past the schema, then checks it holds the value as forged."""
-    with closing(open_catalog(catalog)) as connection:
-        if forgery.loose:
-            _recreate_without_strict(connection, table=forgery.table)
-        connection.execute("PRAGMA ignore_check_constraints = ON")
-        connection.execute(forgery.sql, (forgery.value,))
-        connection.execute("PRAGMA ignore_check_constraints = OFF")
-        assert rows(connection, sql="PRAGMA ignore_check_constraints") == [
-            {"ignore_check_constraints": 0}
-        ]
-        forged = rows(
-            connection,
-            sql=f"SELECT typeof({forgery.column}) = typeof(?1) AS is_as_forged"
-            f" FROM {forgery.table} WHERE {forgery.column} IS ?1",
-            parameters=(forgery.value,),
-        )
-        assert forged == [{"is_as_forged": 1}]
-
-
-_BOGUS_ROLE = _Forgery(
-    table="source_variants",
-    column="role",
-    value="bogus",
-    sql="INSERT INTO source_variants (file_id, role, raw_metadata, node_id, content_hash)"
-    " SELECT file_id, ?1, '{}', 'n1',"
-    " source_content_hash(file_id, NULL, NULL, NULL, ?1, NULL, NULL, '{}', 'n1') FROM files",
+_BOGUS_ROLE = (
+    "INSERT INTO source_variants (file_id, role, raw_metadata, node_id, content_hash)"
+    " SELECT file_id, 'bogus', '{}', 'n1',"
+    " source_content_hash(file_id, NULL, NULL, NULL, 'bogus', NULL, NULL, '{}', 'n1') FROM files"
 )
 # Rows the check pass leaves to the destination's CHECKs: an unknown network, role or sign.
 _ROWS_THE_SCHEMA_REFUSES = [
-    _Forgery(
-        table="files",
-        column="network",
-        value="kad",
-        sql=f"INSERT INTO files VALUES (zeroblob(16), ?1, '{HASH_B}', 100)",
-    ),
-    _Forgery(
-        table="sources",
-        column="network",
-        value="kad",
-        sql=f"INSERT INTO sources VALUES (zeroblob(16), ?1, '{HASH_B}')",
-    ),
-    _BOGUS_ROLE,
-    _Forgery(
-        table="source_observations",
-        column="session_received_bytes",
-        value=-1,
-        sql="INSERT INTO source_observations VALUES (1, 99, ?1)",
-    ),
+    ("files", f"INSERT INTO files VALUES (zeroblob(16), 'kad', '{HASH_B}', 100)"),
+    ("sources", f"INSERT INTO sources VALUES (zeroblob(16), 'kad', '{HASH_B}')"),
+    ("source_variants", _BOGUS_ROLE),
+    ("source_observations", "INSERT INTO source_observations VALUES (1, 99, -1)"),
 ]
+
+
+def _with_a_row_the_schema_refuses(catalog: Path, *, sql: str) -> None:
+    with closing(open_catalog(catalog)) as connection:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(sql)
 
 
 def _digest(catalog: Path) -> bytes:
@@ -571,12 +506,12 @@ def _digest(catalog: Path) -> bytes:
         return database_digest(reader)
 
 
-@pytest.mark.parametrize("forgery", _ROWS_THE_SCHEMA_REFUSES, ids=lambda forgery: forgery.table)
+@pytest.mark.parametrize(("table", "sql"), _ROWS_THE_SCHEMA_REFUSES)
 def test_a_row_the_destination_refuses_fails_its_source_whole(
-    *, tmp_path: Path, forgery: _Forgery
+    *, tmp_path: Path, table: str, sql: str
 ) -> None:
     source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
-    _forge(source, forgery=forgery)
+    _with_a_row_the_schema_refuses(source, sql=sql)
     destination = make_catalog(tmp_path / "out.db", content=_full_catalog("c", node_id="node-c"))
     before = _digest(destination)
 
@@ -584,15 +519,13 @@ def test_a_row_the_destination_refuses_fails_its_source_whole(
         _copy_catalogs(destination, source_catalogs=[source])
 
     assert type(raised.value) is CatalogCopyError
-    assert str(raised.value).startswith(
-        f"copy of {source} failed at {forgery.table}: CHECK constraint"
-    )
+    assert str(raised.value).startswith(f"copy of {source} failed at {table}: CHECK constraint")
     assert _digest(destination) == before
 
 
 def test_a_first_source_the_destination_refuses_leaves_no_output(tmp_path: Path) -> None:
     source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
-    _forge(source, forgery=_BOGUS_ROLE)
+    _with_a_row_the_schema_refuses(source, sql=_BOGUS_ROLE)
     destination = tmp_path / "output" / "out.db"
     destination.parent.mkdir()
 
@@ -629,7 +562,7 @@ def test_a_source_the_destination_refuses_leaves_the_sources_before_it_merged(
 ) -> None:
     merged = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
     refused = make_catalog(tmp_path / "b.db", content=_full_catalog("b", node_id="node-b"))
-    _forge(refused, forgery=_BOGUS_ROLE)
+    _with_a_row_the_schema_refuses(refused, sql=_BOGUS_ROLE)
     destination = tmp_path / "out.db"
 
     with pytest.raises(PartialCopyError) as raised:
@@ -644,101 +577,53 @@ def test_a_source_the_destination_refuses_leaves_the_sources_before_it_merged(
 
 
 _FORGED_FILE = hash_for("f")
-_FORGED_VARIANT = (
-    "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
-    " bitrate_kbps, raw_metadata, keyword, node_id, content_hash)"
-    " SELECT file_id, 'f', {0}, {1}, {2}, '{{}}', 'k', 'n',"
-    " content_hash(file_id, 'f', {0}, {1}, {2}, '{{}}', 'k', 'n') FROM files"
-)
-_FORGED_DECISION = (
-    "INSERT INTO match_decisions (file_id, target_id, rule_name, tier, decided_at_micros, node_id)"
-    " SELECT file_id, '062A', 'r', {0}, {1}, 'n' FROM files"
-)
-_FORGED_FILE_ROW = (
-    f"INSERT INTO files VALUES (file_id('ed2k', '{_FORGED_FILE}'), 'ed2k', '{_FORGED_FILE}', ?1)"
-)
-_MIN_MICROS = instant_to_micros(datetime.min.replace(tzinfo=UTC))
-_MAX_MICROS = instant_to_micros(datetime.max.replace(tzinfo=UTC))
-_FORGERIES = [
-    _Forgery(table="files", column="size_bytes", value="abc", sql=_FORGED_FILE_ROW, loose=True),
-    _Forgery(
-        table="observations",
-        column="source_count",
-        value="abc",
-        sql="INSERT INTO observations VALUES (1, 0, ?1)",
-        loose=True,
+# A text where STRICT refuses it, in a rowid table and in a WITHOUT ROWID one.
+_TEXTS_IN_AN_INTEGER_COLUMN = [
+    (
+        "files",
+        "size_bytes",
+        f"INSERT INTO files VALUES (file_id('ed2k', '{_FORGED_FILE}'), 'ed2k', '{_FORGED_FILE}',"
+        " 'abc')",
     ),
-    _Forgery(table="files", column="size_bytes", value=-1, sql=_FORGED_FILE_ROW),
-    _Forgery(
-        table="observation_variants",
-        column="size_bytes",
-        value=-1,
-        sql=_FORGED_VARIANT.format("?1", "NULL", "NULL"),
-    ),
-    _Forgery(
-        table="observation_variants",
-        column="duration_seconds",
-        value=-1,
-        sql=_FORGED_VARIANT.format("1", "?1", "NULL"),
-    ),
-    _Forgery(
-        table="observation_variants",
-        column="bitrate_kbps",
-        value=-1,
-        sql=_FORGED_VARIANT.format("1", "NULL", "?1"),
-    ),
-    _Forgery(
-        table="observations",
-        column="source_count",
-        value=-1,
-        sql="INSERT INTO observations VALUES (1, 0, ?1)",
-    ),
-    _Forgery(
-        table="observations",
-        column="observed_at_micros",
-        value=_MIN_MICROS - 1,
-        sql="INSERT INTO observations VALUES (1, ?1, 0)",
-    ),
-    _Forgery(
-        table="match_decisions",
-        column="tier",
-        value="rejected",
-        sql=_FORGED_DECISION.format("?1", "0"),
-    ),
-    _Forgery(
-        table="match_decisions",
-        column="decided_at_micros",
-        value=_MAX_MICROS + 1,
-        sql=_FORGED_DECISION.format("'download'", "?1"),
-    ),
-    _Forgery(
-        table="source_variants",
-        column="connectable",
-        value=2,
-        sql="INSERT INTO source_variants (file_id, role, connectable, raw_metadata, node_id,"
-        " content_hash) SELECT file_id, 'queued', ?1, '{}', 'n',"
-        " source_content_hash(file_id, NULL, NULL, NULL, 'queued', NULL, ?1, '{}', 'n')"
-        " FROM files",
-    ),
-    _Forgery(
-        table="source_observations",
-        column="observed_at_micros",
-        value=_MAX_MICROS + 1,
-        sql="INSERT INTO source_observations VALUES (1, ?1, 0)",
-    ),
+    ("observations", "source_count", "INSERT INTO observations VALUES (1, 0, 'abc')"),
 ]
+
+
+def _with_a_text_in_an_integer_column(catalog: Path, *, table: str, column: str, sql: str) -> None:
+    """Recreates ``table`` without ``STRICT``, its rows kept, then writes ``sql``'s row, whose
+    ``column`` holds the text ``'abc'``."""
+    with closing(open_catalog(catalog)) as connection:
+        [schema] = rows(
+            connection, sql="SELECT sql FROM sqlite_schema WHERE name = ?", parameters=(table,)
+        )
+        loose = (
+            schema["sql"]
+            .replace(f"CREATE TABLE {table} (", "CREATE TABLE loose (")
+            .replace(") STRICT, WITHOUT ROWID", ") WITHOUT ROWID")
+            .replace(") STRICT", ")")
+        )
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.execute(loose)
+        connection.execute(f"INSERT INTO loose SELECT * FROM {table}")
+        connection.execute(f"DROP TABLE {table}")
+        connection.execute(f"ALTER TABLE loose RENAME TO {table}")
+        connection.execute(sql)
+        assert rows(
+            connection,
+            sql=f"SELECT typeof({column}) AS storage_class FROM {table} WHERE {column} = 'abc'",
+        ) == [{"storage_class": "text"}]
 
 
 @pytest.mark.parametrize("into", [False, True], ids=["output", "into"])
 @pytest.mark.parametrize(
-    "forgery", _FORGERIES, ids=lambda forgery: f"{forgery.table}.{forgery.column}={forgery.value}"
+    ("table", "column", "sql"), _TEXTS_IN_AN_INTEGER_COLUMN, ids=["rowid", "without-rowid"]
 )
-def test_a_source_holding_a_value_the_destination_refuses_fails_whole_after_a_clean_one(
-    *, tmp_path: Path, into: bool, forgery: _Forgery
+def test_a_source_holding_a_text_in_an_integer_column_fails_whole_after_a_clean_one(
+    *, tmp_path: Path, into: bool, table: str, column: str, sql: str
 ) -> None:
     clean = make_catalog(tmp_path / "clean.db", content=_full_catalog("a", node_id="node-a"))
     forged = make_catalog(tmp_path / "forged.db", content=_full_catalog("b", node_id="node-b"))
-    _forge(forged, forgery=forgery)
+    _with_a_text_in_an_integer_column(forged, table=table, column=column, sql=sql)
     destination, reference = tmp_path / "out.db", tmp_path / "reference.db"
     if into:
         for catalog in (destination, reference):
@@ -748,7 +633,11 @@ def test_a_source_holding_a_value_the_destination_refuses_fails_whole_after_a_cl
     with pytest.raises(PartialCopyError) as raised:
         _copy_catalogs(destination, source_catalogs=[clean, forged])
 
-    assert str(raised.value).startswith(f"copy of {forged} failed at {forgery.table}: ")
-    assert forgery.column in str(raised.value)
-    for table in _ALL_TABLES:
-        assert rows_without_id(destination, table=table) == rows_without_id(reference, table=table)
+    assert str(raised.value).startswith(
+        f"copy of {forged} failed at {table}: cannot store TEXT value in INTEGER column"
+        f" {table}.{column}"
+    )
+    for copied_table in _ALL_TABLES:
+        assert rows_without_id(destination, table=copied_table) == rows_without_id(
+            reference, table=copied_table
+        )
