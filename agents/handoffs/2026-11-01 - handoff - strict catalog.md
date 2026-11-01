@@ -32,18 +32,19 @@ instant out of `datetime`'s range, the source whole, at copy time; `PRAGMA table
   `datetime.max`. 0012 and 0014's `RENAME COLUMN` carry the `CHECK`s to `duration_seconds`, `connectable` and both
   `observed_at_micros` (the refusal messages name them). 0010's `source_variants` and `source_ranges` are untouched,
   0011 drops both.
-- **`merge`** (block 10, D3): no code change. The copier's tests forge every row through one helper, `_forge`, which
-  recreates the table without `STRICT` when the forged value is of the wrong type, writes the row under
-  `ignore_check_constraints`, turns it back off and checks it, and checks the row holds the value with the storage
-  class it was bound with. The existing rows the schema refuses (`_ROWS_THE_SCHEMA_REFUSES`, `_BOGUS_ROLE`) go through
-  it too.
+- **`merge`** (block 10, D3): no code change. One copier test, over the two cases of acceptance 4 and both modes,
+  forges a source through `_with_a_text_in_an_integer_column`, which recreates the table without `STRICT`, writes the
+  row and asserts its `typeof` is `text`. The `CHECK`s are not broken through `merge`: acceptance 2 proves each
+  refuses, and `main`'s `_ROWS_THE_SCHEMA_REFUSES` prove a schema refusal fails its source whole (spec, acceptance 4,
+  corrected after the operator's review of #594).
 
 ## Evidence
 
-`uv run poe check` exit 0 at block 10's tip (crawler: 2040 passed, 15 deselected). Continuous integration: see block
+`uv run poe check` exit 0 at block 10's tip (crawler: 2020 passed, 15 deselected). Continuous integration: see block
 10's pull request.
 
-Budget against `main` (lines, files; estimate in parentheses): 10, 365 and 8 (400, 14).
+Budget against `main` (lines, files; estimate in parentheses): 10, 234 and 8 (400, 14); 365 and 8 before the operator's
+review of #594 trimmed the merge tests.
 
 Acceptance:
 
@@ -58,22 +59,24 @@ Acceptance:
   and 12, duration 32 and 3 576, bitrate 0 and 4 498, the first and last `observed_at`) and one decision per tier, the
   `retracted` one with `target_id = ''`; at the tip it migrates to 15, every table `strict`, `quick_check` `ok` on the
   opener's read-write connection, 2 observations and 4 decisions.
-- 4: `test_a_source_holding_a_value_the_destination_refuses_fails_whole_after_a_clean_one`, 12 forgeries in both modes
-  (`output`, `into`), 24 cases, each failed first on `Failed: DID NOT RAISE PartialCopyError`: on `main` each merges.
-  At the tip each refusal names the forged column: `cannot store TEXT value in INTEGER column files.size_bytes` and
-  `observations.source_count` (`'abc'`), otherwise `CHECK constraint failed: <the CHECK>`. The destination equals a
-  reference that merged the clean source alone.
-- The forging check can fail: with the `files.size_bytes` forgery's `'abc'` mutated to `'123'`, which affinity stores
-  as an integer, `_forge` failed on `AssertionError: assert [{'is_as_forged': 0}] == [{'is_as_forged': 1}]`, then
-  passed once restored.
+- 4: `test_a_source_holding_a_text_in_an_integer_column_fails_whole_after_a_clean_one`, `files.size_bytes` (rowid)
+  and `observations.source_count` (`WITHOUT ROWID`) in both modes (`output`, `into`), 4 cases, each failed on
+  `Failed: DID NOT RAISE PartialCopyError` with `main`'s four migrations swapped back in: on `main` each merges. At
+  the tip each refusal reads `cannot store TEXT value in INTEGER column files.size_bytes` (or
+  `observations.source_count`), and the destination equals a reference that merged the clean source alone. The
+  first version of the test, a 12-forgery matrix that broke each `CHECK` of D2 through `merge` too, failed the same
+  way on all 24 cases; it was cut after the operator's review.
+- The forging check can fail: with the `observations` row's `'abc'` mutated to `'123'`, which affinity stores as an
+  integer, the helper failed on `AssertionError: assert [] == [{'storage_class': 'text'}]`, then passed once
+  restored.
 - 5: the gate above.
 
 ## Departures from the spec
 
-- Acceptance 4 breaks each `CHECK` of D2 once, each instant `CHECK` at one bound (`observations` below the minimum,
-  `match_decisions` and `source_observations` above the maximum); acceptance 2 tries both bounds of each.
 - Acceptance 3 extends the existing v5 writer, shared with the pre-migration copy tests, rather than adding a second
   one.
+- Acceptance 4 corrected after the operator's review of #594 (the spec marks it): only the type `STRICT` refuses is
+  forged through `merge`.
 
 ## Holistic review
 
@@ -81,8 +84,7 @@ To come.
 
 ## Class 1 fixes
 
-- Block 10: the rows the schema refuses that the copier's tests forged before this lot (`_ROWS_THE_SCHEMA_REFUSES`,
-  `_BOGUS_ROLE`) never checked what they wrote; they now go through `_forge`.
+None.
 
 ## Class 2 questions
 
@@ -90,11 +92,8 @@ None.
 
 ## Pitfalls
 
-- pytest caches a rewritten test module by its mtime and size: a `sed` mutation of the same length, within the same
-  second, reran the stale module until its `.pyc` was deleted.
 - A table recreated without `STRICT`: `foreign_keys` off, the copy created under another name, the rows copied, the
   table dropped (its triggers with it), the copy renamed; `) STRICT, WITHOUT ROWID` is replaced before `) STRICT`.
-- `?1` binds one value at every place it appears: a forged variant's value and its `content_hash` over it.
 - sqlfluff's sqlite dialect parses `STRICT` and `STRICT, WITHOUT ROWID` (`sql-lint` green).
 - Serena's Claude Code hook blocks a shell command after several consecutive reads or greps; a blocked command applies
   nothing, so check `git diff --stat` after each scripted edit.
@@ -113,7 +112,7 @@ ships with v5, whose tag still waits for the entries under "Must be done before 
 
 ## Counts
 
-- Fix-backs: none at writing.
+- Fix-backs: one, block 10's merge tests trimmed to acceptance 4's type cases, from the operator's review of #594.
 - Cascaded rebases: none at writing.
 - Runs re-triggered: see the lead's report.
 - Bodies the operator called unreadable: none so far.
