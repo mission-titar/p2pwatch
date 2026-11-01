@@ -16,7 +16,6 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.contracts.application.ports.driven.tracked_download_store_contract import (
-    TrackedDownloadPorts,
     TrackedDownloadStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
@@ -83,10 +82,16 @@ class TestSqliteTrackedDownloadStore(TrackedDownloadStoreContract):
         return SqliteTrackedDownloadStore(connection)
 
     @pytest.fixture
-    def tracked_download_ports(
+    def writer(
         self, tracked_download_store: SqliteTrackedDownloadStore
-    ) -> TrackedDownloadPorts:
-        return TrackedDownloadPorts(writer=tracked_download_store, reader=tracked_download_store)
+    ) -> SqliteTrackedDownloadStore:
+        return tracked_download_store
+
+    @pytest.fixture
+    def reader(
+        self, tracked_download_store: SqliteTrackedDownloadStore
+    ) -> SqliteTrackedDownloadStore:
+        return tracked_download_store
 
 
 def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(

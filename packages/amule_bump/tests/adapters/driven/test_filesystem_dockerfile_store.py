@@ -4,7 +4,6 @@ import pytest
 
 from amule_bump.adapters.driven.filesystem_dockerfile_store import FilesystemDockerfileStore
 from tests.contracts.application.ports.driven.dockerfile_store_contract import (
-    DockerfilePorts,
     DockerfileStoreContract,
 )
 
@@ -15,8 +14,12 @@ class TestFilesystemDockerfileStore(DockerfileStoreContract):
         return FilesystemDockerfileStore()
 
     @pytest.fixture
-    def dockerfile_ports(self, dockerfile_store: FilesystemDockerfileStore) -> DockerfilePorts:
-        return DockerfilePorts(writer=dockerfile_store, reader=dockerfile_store)
+    def writer(self, dockerfile_store: FilesystemDockerfileStore) -> FilesystemDockerfileStore:
+        return dockerfile_store
+
+    @pytest.fixture
+    def reader(self, dockerfile_store: FilesystemDockerfileStore) -> FilesystemDockerfileStore:
+        return dockerfile_store
 
 
 def test_set_dockerfile_replaces_the_file_s_text(tmp_path: Path) -> None:

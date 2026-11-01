@@ -8,7 +8,6 @@ import pytest
 from p2pwatch_amule.adapters.driven.posix_amule_conf_store import PosixAmuleConfStore
 from p2pwatch_amule.domain.identifiers import Gid, Uid
 from tests.contracts.application.ports.driven.amule_conf_store_contract import (
-    AmuleConfPorts,
     AmuleConfStoreContract,
 )
 from tests.fakes.adapters.driven.fake_ownership import FakeOwnership
@@ -30,16 +29,18 @@ class TestPosixAmuleConfStore(AmuleConfStoreContract):
         return _amule_conf_store(tmp_path / "amule.conf", ownership=FakeOwnership())
 
     @pytest.fixture
-    def amule_conf_ports(self, amule_conf_store: PosixAmuleConfStore) -> AmuleConfPorts:
-        return AmuleConfPorts(writer=amule_conf_store, reader=amule_conf_store)
+    def writer(self, amule_conf_store: PosixAmuleConfStore) -> PosixAmuleConfStore:
+        return amule_conf_store
 
     @pytest.fixture
-    def unreadable_amule_conf_ports(
+    def reader(self, amule_conf_store: PosixAmuleConfStore) -> PosixAmuleConfStore:
+        return amule_conf_store
+
+    @pytest.fixture
+    def unreadable_reader(
         self, unreadable_amule_conf_store: PosixAmuleConfStore
-    ) -> AmuleConfPorts:
-        return AmuleConfPorts(
-            writer=unreadable_amule_conf_store, reader=unreadable_amule_conf_store
-        )
+    ) -> PosixAmuleConfStore:
+        return unreadable_amule_conf_store
 
 
 def test_the_written_conf_is_owned_and_private(tmp_path: Path) -> None:

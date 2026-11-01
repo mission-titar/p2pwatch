@@ -51,14 +51,16 @@ Le projet a **deux niveaux** :
    Un port dont les fakes fonctionnent vraiment (un store qui relit ce qu'on lui a écrit, une
    horloge qui avance) a un **contrat** : sa promesse, écrite une fois comme une suite pytest abstraite,
    `<Port>Contract` (ou `<Chose>StoreContract` pour une paire `Writer`/`Reader`), dans
-   `tests/contracts/` au miroir du port. Sa fixture abstraite construit l'implémentation testée, et
-   ses tests énoncent les docstrings du port : le port fait référence, jamais l'adaptateur réel.
-   Le contrat d'une paire reçoit un `<Chose>Ports` de ses deux ports, une dataclass du module du
-   contrat dont les champs `writer` et `reader` sont typés par les ports : mypy vérifie ainsi chaque
-   appel du contrat, ce qu'une copie des signatures des ports ne permettrait pas, `pytest.fixture`
-   effaçant le type d'une fixture. Chaque sous-classe le construit de sa fixture concrète.
+   `tests/contracts/` au miroir du port. Ses tests énoncent les docstrings du port : le port fait
+   référence, jamais l'adaptateur réel. Le contrat reçoit chaque port dont il se sert par une
+   fixture abstraite à lui : `writer` et `reader` pour les ports d'une paire, `reader` pour un
+   `Reader` sans paire, tout autre port nommé d'après lui en snake case (`wall_clock`, ou
+   `observation_writer` pour un `Writer` qui prépare l'état lu). Les paramètres de chaque test sont
+   typés par les ports : mypy vérifie ainsi chaque appel qu'un test fait à un port, `pytest.fixture`
+   effaçant le type d'une fixture mais pas celui d'un paramètre.
    Chaque implémentation lance le contrat par une sous-classe `Test<Implémentation>` qui définit
-   cette fixture, dans son propre module de test (celui de l'adaptateur, ou le
+   ces fixtures (le `writer` et le `reader` d'une paire rendent le même store), dans son propre
+   module de test (celui de l'adaptateur, ou le
    `test_<module du fake>.py` à côté du fake). `packages/crawler/tests/test_contract_subclasses.py`
    refuse un contrat qui ne nomme aucun port de son paquet, une implémentation d'un port sous
    contrat sans sa sous-classe, une sous-classe hors du module de test de son implémentation, une

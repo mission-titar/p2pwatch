@@ -1,7 +1,6 @@
 """The promise of the ``TrackedDownloadReader`` and ``TrackedDownloadWriter`` pair."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -31,143 +30,110 @@ def _status(file: FileKey) -> DownloadStatus:
     )
 
 
-@dataclass(kw_only=True, frozen=True)
-class TrackedDownloadPorts:
-    """The pair's two ports, which one store implements."""
-
-    writer: TrackedDownloadWriter
-    reader: TrackedDownloadReader
-
-
 class TrackedDownloadStoreContract(ABC):
     @pytest.fixture
     @abstractmethod
-    def tracked_download_ports(self) -> TrackedDownloadPorts:
-        """The ports of a store tracking no download yet."""
+    def writer(self) -> TrackedDownloadWriter:
+        """The writer of a store tracking no download yet."""
 
-    def test_no_download_is_read_before_one_is_queued(
-        self, tracked_download_ports: TrackedDownloadPorts
-    ) -> None:
-        assert tracked_download_ports.reader.read_tracked_states() == {}
-        assert tracked_download_ports.reader.read_latest_seen_at_by_file() == {}
+    @pytest.fixture
+    @abstractmethod
+    def reader(self) -> TrackedDownloadReader:
+        """The reader of the writer's store."""
+
+    def test_no_download_is_read_before_one_is_queued(self, reader: TrackedDownloadReader) -> None:
+        assert reader.read_tracked_states() == {}
+        assert reader.read_latest_seen_at_by_file() == {}
 
     def test_a_file_never_queued_is_not_tracked_and_has_no_target(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, reader: TrackedDownloadReader
     ) -> None:
-        assert tracked_download_ports.reader.is_tracked(_A) is False
-        assert tracked_download_ports.reader.read_queued_target_id(_A) is None
+        assert reader.is_tracked(_A) is False
+        assert reader.read_queued_target_id(_A) is None
 
     def test_a_queued_download_is_tracked_as_queued_for_its_target(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        assert tracked_download_ports.reader.is_tracked(_A) is True
-        assert tracked_download_ports.reader.read_tracked_states() == {_A: DownloadState.QUEUED}
-        assert tracked_download_ports.reader.read_queued_target_id(_A) == "062A"
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        assert reader.is_tracked(_A) is True
+        assert reader.read_tracked_states() == {_A: DownloadState.QUEUED}
+        assert reader.read_queued_target_id(_A) == "062A"
 
     def test_a_queued_download_never_listed_is_read_as_seen_when_queued(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        assert tracked_download_ports.reader.read_latest_seen_at_by_file() == {_A: _QUEUED_AT}
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        assert reader.read_latest_seen_at_by_file() == {_A: _QUEUED_AT}
 
     def test_a_file_queued_again_keeps_its_row(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.set_state(_A, state=DownloadState.DOWNLOADING)
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("063A"), size_bytes=200, queued_at=_SEEN_AT
-        )
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        writer.set_state(_A, state=DownloadState.DOWNLOADING)
+        writer.record_queued(_A, target_id=TargetId("063A"), size_bytes=200, queued_at=_SEEN_AT)
         assert (
-            tracked_download_ports.reader.read_queued_target_id(_A),
-            tracked_download_ports.reader.read_tracked_states(),
-            tracked_download_ports.reader.read_latest_seen_at_by_file(),
+            reader.read_queued_target_id(_A),
+            reader.read_tracked_states(),
+            reader.read_latest_seen_at_by_file(),
         ) == ("062A", {_A: DownloadState.DOWNLOADING}, {_A: _QUEUED_AT})
 
     def test_set_state_moves_each_download_to_its_state(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.record_queued(
-            _B, target_id=TargetId("063A"), size_bytes=200, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.set_state(_A, state=DownloadState.DOWNLOADING)
-        tracked_download_ports.writer.set_state(
-            _B, state=DownloadState.FAILED, failure_reason=FailureReason.LOST
-        )
-        assert tracked_download_ports.reader.read_tracked_states() == {
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        writer.record_queued(_B, target_id=TargetId("063A"), size_bytes=200, queued_at=_QUEUED_AT)
+        writer.set_state(_A, state=DownloadState.DOWNLOADING)
+        writer.set_state(_B, state=DownloadState.FAILED, failure_reason=FailureReason.LOST)
+        assert reader.read_tracked_states() == {
             _A: DownloadState.DOWNLOADING,
             _B: DownloadState.FAILED,
         }
 
     def test_a_completed_download_stays_tracked_as_completed(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.set_completed(_A, completed_at=_SEEN_AT)
-        assert tracked_download_ports.reader.is_tracked(_A) is True
-        assert tracked_download_ports.reader.read_tracked_states() == {_A: DownloadState.COMPLETED}
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        writer.set_completed(_A, completed_at=_SEEN_AT)
+        assert reader.is_tracked(_A) is True
+        assert reader.read_tracked_states() == {_A: DownloadState.COMPLETED}
 
     def test_a_listed_download_is_read_at_its_latest_listing(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.record_queued(
-            _B, target_id=TargetId("063A"), size_bytes=200, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.set_state(_B, state=DownloadState.DOWNLOADING)
-        tracked_download_ports.writer.set_seen(
-            [_status(_B)], seen_at=_QUEUED_AT + timedelta(minutes=1)
-        )
-        tracked_download_ports.writer.set_seen([_status(_B)], seen_at=_SEEN_AT)
-        assert tracked_download_ports.reader.read_latest_seen_at_by_file() == {
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        writer.record_queued(_B, target_id=TargetId("063A"), size_bytes=200, queued_at=_QUEUED_AT)
+        writer.set_state(_B, state=DownloadState.DOWNLOADING)
+        writer.set_seen([_status(_B)], seen_at=_QUEUED_AT + timedelta(minutes=1))
+        writer.set_seen([_status(_B)], seen_at=_SEEN_AT)
+        assert reader.read_latest_seen_at_by_file() == {
             _A: _QUEUED_AT,
             _B: _SEEN_AT,
         }
 
     def test_the_finished_downloads_are_left_out_of_the_latest_listings(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         for file in (_A, _B, _C):
-            tracked_download_ports.writer.record_queued(
+            writer.record_queued(
                 file, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
             )
-        tracked_download_ports.writer.set_completed(_B, completed_at=_SEEN_AT)
-        tracked_download_ports.writer.set_state(
-            _C, state=DownloadState.FAILED, failure_reason=FailureReason.LOST
-        )
-        assert tracked_download_ports.reader.read_latest_seen_at_by_file() == {_A: _QUEUED_AT}
+        writer.set_completed(_B, completed_at=_SEEN_AT)
+        writer.set_state(_C, state=DownloadState.FAILED, failure_reason=FailureReason.LOST)
+        assert reader.read_latest_seen_at_by_file() == {_A: _QUEUED_AT}
 
     def test_a_listed_file_not_tracked_stays_untracked(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.set_seen([_status(_A)], seen_at=_SEEN_AT)
-        assert tracked_download_ports.reader.is_tracked(_A) is False
-        assert tracked_download_ports.reader.read_tracked_states() == {}
-        assert tracked_download_ports.reader.read_latest_seen_at_by_file() == {}
+        writer.set_seen([_status(_A)], seen_at=_SEEN_AT)
+        assert reader.is_tracked(_A) is False
+        assert reader.read_tracked_states() == {}
+        assert reader.read_latest_seen_at_by_file() == {}
 
     def test_each_latest_listing_is_read_aware_in_utc(
-        self, tracked_download_ports: TrackedDownloadPorts
+        self, *, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        tracked_download_ports.writer.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.record_queued(
-            _B, target_id=TargetId("063A"), size_bytes=200, queued_at=_QUEUED_AT
-        )
-        tracked_download_ports.writer.set_seen([_status(_B)], seen_at=_SEEN_AT)
-        latest_seen_ats = tracked_download_ports.reader.read_latest_seen_at_by_file().values()
+        writer.record_queued(_A, target_id=TargetId("062A"), size_bytes=100, queued_at=_QUEUED_AT)
+        writer.record_queued(_B, target_id=TargetId("063A"), size_bytes=200, queued_at=_QUEUED_AT)
+        writer.set_seen([_status(_B)], seen_at=_SEEN_AT)
+        latest_seen_ats = reader.read_latest_seen_at_by_file().values()
         assert [seen_at.utcoffset() for seen_at in latest_seen_ats] == [timedelta(0), timedelta(0)]

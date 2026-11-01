@@ -8,10 +8,7 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.domain.identifiers import NodeId
-from tests.contracts.application.ports.driven.node_id_store_contract import (
-    NodeIdPorts,
-    NodeIdStoreContract,
-)
+from tests.contracts.application.ports.driven.node_id_store_contract import NodeIdStoreContract
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
@@ -37,8 +34,12 @@ class TestSqliteNodeIdStore(NodeIdStoreContract):
         return SqliteNodeIdStore(connection)
 
     @pytest.fixture
-    def node_id_ports(self, node_id_store: SqliteNodeIdStore) -> NodeIdPorts:
-        return NodeIdPorts(writer=node_id_store, reader=node_id_store)
+    def writer(self, node_id_store: SqliteNodeIdStore) -> SqliteNodeIdStore:
+        return node_id_store
+
+    @pytest.fixture
+    def reader(self, node_id_store: SqliteNodeIdStore) -> SqliteNodeIdStore:
+        return node_id_store
 
 
 def test_a_recorded_node_id_is_read_back_by_any_later_instance(
