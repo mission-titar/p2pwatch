@@ -56,20 +56,23 @@ class FileJudge:
     async def rejudge(
         self, file: FileKey, *, base_candidate: FileCandidate, node_id: NodeId
     ) -> int:
-        """Judge the file on all its known filenames for every target, then record what changed
-        (``base_candidate`` gives the fields other than the filename).
-
-        Returns the number of rows written (0..N). May propagate ``StoreError`` (pure
-        orchestration; the caller absorbs it); raises ``RuntimeError`` on a file never observed."""
+        """Judge the file on its known filenames, ``base_candidate`` giving the other fields, and
+        record what changed; a change on a file never observed raises ``RuntimeError`` first."""
         filenames = self._observation_reader.read_known_filenames(file)
         fresh = self._engine.evaluate_file(
             replace(base_candidate, filename=filename) for filename in filenames
         )
         persisted = self._decision_reader.read_latest_decisions(file)
-        changes: list[DecisionChange] = []
-        for new_decision in records_to_write(
+        new_decisions = records_to_write(
             [to_record(decision) for decision in fresh], persisted=persisted
-        ):
+        )
+        if not new_decisions:
+            return 0
+        best = self._observation_reader.read_best_observation(file)
+        if best is None:
+            raise RuntimeError(f"file {file.native_id} judged without an observation")
+        changes: list[DecisionChange] = []
+        for new_decision in new_decisions:
             target_id = new_decision.target_id
             self._decision_writer.record_decision(
                 DatedDecision(
@@ -93,17 +96,13 @@ class FileJudge:
                     new_decision=new_decision,
                 )
             )
-        if changes:
-            best = self._observation_reader.read_best_observation(file)
-            if best is None:
-                raise RuntimeError(f"file {file.native_id} judged without an observation")
-            await self._observability_dispatcher.dispatch(
-                DecisionsRecorded(
-                    file=file,
-                    filename=best.reported_file.filename,
-                    size_bytes=best.reported_file.size_bytes,
-                    changes=tuple(changes),
-                    node_id=node_id,
-                )
+        await self._observability_dispatcher.dispatch(
+            DecisionsRecorded(
+                file=file,
+                filename=best.reported_file.filename,
+                size_bytes=best.reported_file.size_bytes,
+                changes=tuple(changes),
+                node_id=node_id,
             )
+        )
         return len(changes)
