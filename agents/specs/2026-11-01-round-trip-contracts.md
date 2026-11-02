@@ -85,7 +85,11 @@ text or a catalog file, so no other implementation can exist.
   (Appendix B). A consumer relies on a behaviour when another implementation's different choice would make its outcome
   wrong: a value it shows or acts on, the order of a list it shows, an order a port already states, which is then
   stated whole (its ties, where an absent value falls). Which of two rows of the same instant wins and a duplicate row
-  stored once stay unstated and tested by their adapter: no consumer's outcome is wrong for another choice.
+  stored once stay unstated and tested by their adapter: no consumer's outcome is wrong for another choice. (Corrected:
+  so does which of a file's sizes the catalog keeps, the first recorded in SQLite, held by its adapter test: an eD2k
+  hash names one content, so a file has one size, two coming only from a peer reporting a wrong one; Appendix B's size
+  row says "the file's size", and the draws give every observation of a file one size; operator, 2026-11-02, from the
+  holistic review, block 135.)
   *`AGENTS.md`, "The port is the reference": a port's docstring is its promise; promising more than a consumer needs
   would bind every implementation for nothing.*
 - **D7. An adapter test a contract restates is deleted; the rest stays** (Appendix D): what no port returns (the
@@ -276,7 +280,7 @@ From `round-trip-survey` (2026-11-01); each consumer is a production path that r
 | `ObservationReader.read_best_observation` | `None` for a file never observed | `application/steps/download_labeler.py:31` | the missing row read without its `None` check |
 | `DecisionReader.read_download_candidates` | a file's candidates in target id order (the decider's queueing order, by file, is arbitrary and stays unstated) | `application/steps/download_labeler.py:36` lists a file's targets in this order | `target_id DESC` |
 | `CatalogFileReader.read_file_count_by_tier` | a tier no file holds is absent, not 0 | `adapters/driving/webui/app.py:541` | every tier counted, 0 included |
-| `CatalogFileReader`, `CatalogEntry.size_bytes`, `FileHistory.size_bytes` | the size the file was first observed with | `app.py:218`, `app.py:1111`, the size sort | the latest observation's size |
+| `CatalogFileReader`, `CatalogEntry.size_bytes`, `FileHistory.size_bytes` | the size the file was first observed with (Corrected: the file's size, D6) | `app.py:218`, `app.py:1111`, the size sort | the latest observation's size (Corrected: none, a file having one size, D6) |
 | `CatalogFileReader`, `CoverageReader` | the old retraction with an empty target id, which v4 catalogs hold, left out | the webui's file and targets pages | the `target_id <> ''` filter dropped |
 | `CatalogFileReader`, `SourceReader` | D5's search, literal, case and accents ignored; for sources, a substring of any name the source carried | `app.py:844`, `app.py:934` | the `LIKE` of `main`; the fold without its accents stripped |
 | `NodeStateReader` | its stated orders whole: a client's whole-client backoff before its channels; downloads of the same `queued_at` by native id | `app.py:697`, `app.py:681` | `channel DESC`; `native_id DESC` |
@@ -335,7 +339,7 @@ and 49 stay. Re-counted by each block on its tree.
   |---|---|
   | `observation_read.py`, the latest observation | `size_bytes` and `source_count` |
   | `observation_read.py`, the timeline | `filename` and `keyword` |
-  | `_SQL_LIST_FILES_BASE` | `duration_seconds` and `bitrate_kbps`; `obs.size_bytes` and `f.size_bytes`; `target_ids` and `rule_names` |
+  | `_SQL_LIST_FILES_BASE` | `duration_seconds` and `bitrate_kbps`; `obs.size_bytes` and `f.size_bytes` (Corrected: equal since block 135, the draws giving a file one size, D6); `target_ids` and `rule_names` |
   | `sqlite_catalog_file_reader.py`, a file's decisions | `target_id` and `rule_name` |
   | `sqlite_catalog_file_reader.py`, the matched and total counts | `matched` and `total` |
   | `sqlite_decision_store.py`, the latest decisions; the download candidates | `target_id` and `rule_name`; `native_id` and `target_id` |

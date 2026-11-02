@@ -10,13 +10,12 @@ from p2pwatch.domain.observation import FileObservation
 
 @dataclass(kw_only=True, frozen=True)
 class FileHistory:
-    """A file, the size it was first observed with, its observations over an interval, oldest
-    first, its latest one over any, its current decisions, one per target in target order (the
-    legacy ``target_id=""`` sentinel is none), and each filename it was seen under, once."""
+    """A file, its size, its observations over an interval, its latest one over any, its current
+    decisions, the legacy retraction of no target left out."""
 
     file: FileKey
     size_bytes: int
-    observations: tuple[FileObservation, ...]
+    observations: tuple[FileObservation, ...]  # oldest first
     latest_observation: FileObservation | None
-    decisions: tuple[DatedDecision[DecisionRecord], ...]
-    known_filenames: tuple[str, ...]  # sorted
+    decisions: tuple[DatedDecision[DecisionRecord], ...]  # one per target in target order
+    known_filenames: tuple[str, ...]  # each filename it was seen under, once, sorted

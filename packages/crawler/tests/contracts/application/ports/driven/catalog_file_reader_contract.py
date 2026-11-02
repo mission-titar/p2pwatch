@@ -181,7 +181,7 @@ class CatalogFileReaderContract(ABC):
     def reader(self) -> CatalogFileReader:
         """The reader of the writers' catalog."""
 
-    def test_an_entry_holds_its_first_size_its_latest_observation_and_its_decisions_by_target(
+    def test_an_entry_holds_its_size_its_latest_observation_and_its_decisions_by_target(
         self,
         *,
         randomness: Random,
@@ -757,7 +757,7 @@ class CatalogFileReaderContract(ABC):
             {DecisionTier.DOWNLOAD: 1, DecisionTier.CATALOG: 1},
         )
 
-    def test_a_history_holds_the_first_size_the_interval_s_observations_and_the_latest_of_all(
+    def test_a_history_holds_the_size_the_interval_s_observations_and_the_latest_of_all(
         self,
         *,
         randomness: Random,

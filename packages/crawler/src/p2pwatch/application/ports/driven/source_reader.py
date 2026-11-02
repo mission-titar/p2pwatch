@@ -35,9 +35,8 @@ class SourceReader(ABC):
     def read_source_name_history(
         self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceNameHistory | None:
-        """The sources that carried the name whenever read, at most ``limit`` from ``offset``, and
-        its periods without a user hash over their points in ``window`` alone; ``None`` for a name
-        no reading carried, with a user hash or without."""
+        """The name's sources whenever read, at most ``limit`` from ``offset``, its periods without
+        a user hash over their points in ``window`` alone; ``None`` if no reading carried it."""
 
     @abstractmethod
     def read_sharing_periods(
