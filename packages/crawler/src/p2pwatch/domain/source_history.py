@@ -22,8 +22,9 @@ class SourceNaming:
 
 @dataclass(kw_only=True, frozen=True)
 class SourceHistory:
-    """A source, the names read of it, last seen first, its sharing periods over every file,
-    newest first, and the best filename of each of their files ever seen."""
+    """A source, the names read of it, last seen first, then on ``source_name`` ascending, its
+    sharing periods over every file, the latest started first, and their files' best filenames,
+    of the most sourced observation, then the latest, none for a file never observed."""
 
     source: SourceKey
     source_namings: tuple[SourceNaming, ...]
@@ -33,8 +34,9 @@ class SourceHistory:
 
 @dataclass(kw_only=True, frozen=True)
 class SourceNameHistory:
-    """A name, the sources read under it, last seen first, its sharing periods without a user
-    hash, newest first, and the best filename of each of their files ever seen."""
+    """A name, the sources read under it, last seen first, then on ``source_id`` ascending, its
+    sharing periods without a user hash, the latest started first, and their files' best
+    filenames, of the most sourced observation, then the latest, none for a file never observed."""
 
     source_name: str
     source_namings: tuple[SourceNaming, ...]
