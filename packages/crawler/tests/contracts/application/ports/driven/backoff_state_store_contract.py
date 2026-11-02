@@ -1,24 +1,26 @@
 """The promise of the ``BackoffStateReader`` and ``BackoffStateWriter`` pair."""
 
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime, timedelta
+from datetime import UTC
+from random import Random
 
 import pytest
 
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
-from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from tests.support.domain.search.backoff import draw_backoff_key, draw_backoff_state
 
-_STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
-_BACKOFF = {
-    BackoffKey(client_name=ClientName("amule-1"), channel=Channel("kad")): BackoffState(
-        attempts=2, started_at=_STARTED_AT, delay=timedelta(seconds=300)
-    ),
-    BackoffKey(client_name=ClientName("amule-1"), channel=None): BackoffState(
-        attempts=1, started_at=_STARTED_AT, delay=timedelta(seconds=2.75)
-    ),
-}
+
+def _draw_client_backoff(
+    randomness: Random, *, whole_client: BackoffKey
+) -> dict[BackoffKey, BackoffState]:
+    """Drawn states of ``whole_client`` and of a drawn channel of its client."""
+    channel = draw_backoff_key(randomness, has_channel=True, client_name=whole_client.client_name)
+    return {
+        whole_client: draw_backoff_state(randomness),
+        channel: draw_backoff_state(randomness),
+    }
 
 
 class BackoffStateStoreContract(ABC):
@@ -38,36 +40,34 @@ class BackoffStateStoreContract(ABC):
         assert reader.read_backoff_states() == {}
 
     def test_the_backoff_states_saved_are_read_back(
-        self, *, writer: BackoffStateWriter, reader: BackoffStateReader
+        self, *, randomness: Random, writer: BackoffStateWriter, reader: BackoffStateReader
     ) -> None:
-        writer.set_backoff_states(_BACKOFF)
-        assert reader.read_backoff_states() == _BACKOFF
+        whole_client = draw_backoff_key(randomness, has_channel=False)
+        backoff_state_by_key = _draw_client_backoff(randomness, whole_client=whole_client)
+        writer.set_backoff_states(backoff_state_by_key)
+        assert reader.read_backoff_states() == backoff_state_by_key
 
     def test_a_save_replaces_every_backoff_state_saved_before(
-        self, *, writer: BackoffStateWriter, reader: BackoffStateReader
+        self, *, randomness: Random, writer: BackoffStateWriter, reader: BackoffStateReader
     ) -> None:
-        later = {
-            BackoffKey(client_name=ClientName("amule-1"), channel=None): BackoffState(
-                attempts=2, started_at=_STARTED_AT, delay=timedelta(seconds=4)
-            ),
-            BackoffKey(client_name=ClientName("amule-1"), channel=Channel("ed2k")): BackoffState(
-                attempts=1, started_at=_STARTED_AT, delay=timedelta(seconds=2)
-            ),
-        }
-        writer.set_backoff_states(_BACKOFF)
-        writer.set_backoff_states(later)
-        assert reader.read_backoff_states() == later
+        whole_client = draw_backoff_key(randomness, has_channel=False)
+        writer.set_backoff_states(_draw_client_backoff(randomness, whole_client=whole_client))
+        latest = _draw_client_backoff(randomness, whole_client=whole_client)
+        writer.set_backoff_states(latest)
+        assert reader.read_backoff_states() == latest
 
     def test_an_empty_save_replaces_every_backoff_state_saved_before(
-        self, *, writer: BackoffStateWriter, reader: BackoffStateReader
+        self, *, randomness: Random, writer: BackoffStateWriter, reader: BackoffStateReader
     ) -> None:
-        writer.set_backoff_states(_BACKOFF)
+        whole_client = draw_backoff_key(randomness, has_channel=False)
+        writer.set_backoff_states(_draw_client_backoff(randomness, whole_client=whole_client))
         writer.set_backoff_states({})
         assert reader.read_backoff_states() == {}
 
     def test_a_backoff_state_is_read_with_its_start_aware_in_utc(
-        self, *, writer: BackoffStateWriter, reader: BackoffStateReader
+        self, *, randomness: Random, writer: BackoffStateWriter, reader: BackoffStateReader
     ) -> None:
-        writer.set_backoff_states(_BACKOFF)
+        whole_client = draw_backoff_key(randomness, has_channel=False)
+        writer.set_backoff_states(_draw_client_backoff(randomness, whole_client=whole_client))
         starts = [state.started_at for state in reader.read_backoff_states().values()]
-        assert [started_at.utcoffset() for started_at in starts] == [timedelta(0), timedelta(0)]
+        assert [started_at.utcoffset() for started_at in starts] == [UTC.utcoffset(None)] * 2
