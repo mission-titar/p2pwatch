@@ -111,13 +111,13 @@ def observation_from_row(row: NamedRow) -> FileObservation:
 
 
 def latest_observation(connection: sqlite3.Connection, *, file: FileKey) -> FileObservation | None:
-    """The latest observation; ``None`` for a file never seen."""
+    """The latest observation; ``None`` for a file never observed."""
     row = connection.execute(SELECT_LATEST_OBSERVATION, (file.file_id,)).fetchone()
     return None if row is None else observation_from_row(row)
 
 
 def iter_latest_observations(connection: sqlite3.Connection) -> Iterator[FileObservation]:
-    """Each seen file's latest observation, sorted by network and native id, streamed."""
+    """Each observed file's latest observation, sorted by network and native id, streamed."""
     return map(observation_from_row, connection.execute(SELECT_LATEST_OBSERVATIONS))
 
 
@@ -128,7 +128,8 @@ def known_filenames(connection: sqlite3.Connection, *, file: FileKey) -> tuple[s
 
 
 def best_observation(connection: sqlite3.Connection, *, file: FileKey) -> FileObservation | None:
-    """The observation of the clean filename (most sources, then latest); ``None`` if never seen."""
+    """The observation of the clean filename (most sources, then latest); ``None`` if never
+    observed."""
     row = connection.execute(_SELECT_BEST_OBSERVATION, (file.file_id,)).fetchone()
     return None if row is None else observation_from_row(row)
 
