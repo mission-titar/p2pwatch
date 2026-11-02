@@ -107,7 +107,8 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None:
-        """UPDATE the state and its ``failure_reason``, which any other call clears.
+        """UPDATE the state and its ``failure_reason``, which another ``set_state`` or
+        ``set_completed`` clears (``set_seen`` leaves it).
 
         Requires an existing download (an unknown file → ``PersistenceError``: caller-code bug).
         ``failed`` does not overwrite the ``completed_at_micros``.
