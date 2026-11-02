@@ -98,7 +98,6 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    tracked_download_store.sizes[HASH_A] = 10
     decision_reader = FakeDecisionReader(
         candidates=(candidate(HASH_B, target_id=TargetId("062A")),)
     )
@@ -131,7 +130,6 @@ async def test_completion_store_failure_does_not_starve_new_candidates() -> None
     tracked_download_store.states[HASH_A] = (
         DownloadState.DOWNLOADING
     )  # completed at step 2, which raises
-    tracked_download_store.sizes[HASH_A] = 10
     decision_reader = FakeDecisionReader(
         candidates=(candidate(HASH_B, target_id=TargetId("062A")),)  # new candidate step 3
     )
@@ -161,7 +159,6 @@ async def test_candidate_store_failure_does_not_starve_completions() -> None:
     tracked_download_store = FakeTrackedDownloadStore(fail_record=True)  # step 3 raises StoreError
     # HASH_A shared → completed step 2
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    tracked_download_store.sizes[HASH_A] = 10
     decision_reader = FakeDecisionReader(
         candidates=(
             candidate(HASH_B, target_id=TargetId("062A")),
@@ -192,7 +189,6 @@ async def test_monitor_unreachable_aborts_subsequent_steps() -> None:
     client = FakeDownloadClient(list_failures=[ClientUnreachableError("daemon down")])
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.COMPLETED  # a pending completion (step 2)
-    tracked_download_store.sizes[HASH_A] = 10
     decision_reader = FakeDecisionReader(
         candidates=(candidate(HASH_B, target_id=TargetId("062A")),)  # a candidate (step 3)
     )

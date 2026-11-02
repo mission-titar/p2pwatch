@@ -97,9 +97,7 @@ class TestSqliteTrackedDownloadStore(TrackedDownloadStoreContract):
 def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     assert rows(connection, sql="SELECT file_id, network, native_id FROM downloads") == [
         {"file_id": _A.file_id, "network": "ed2k", "native_id": _A.native_id}
     ]
@@ -108,23 +106,19 @@ def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
 def test_record_queued_is_dedup_safe(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("063A"), size_bytes=200, queued_at=_T0 + _DAY
+        _A, target_id=TargetId("063A"), queued_at=_T0 + _DAY
     )  # duplicate ignored
-    assert rows(
-        connection, sql="SELECT target_id, size_bytes, queued_at_micros FROM downloads"
-    ) == [{"target_id": "062A", "size_bytes": 100, "queued_at_micros": instant_to_micros(_T0)}]
+    assert rows(connection, sql="SELECT target_id, queued_at_micros FROM downloads") == [
+        {"target_id": "062A", "queued_at_micros": instant_to_micros(_T0)}
+    ]
 
 
 def test_set_completed_stamps_the_completed_at_it_is_given(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     tracked_download_store.set_completed(_A, completed_at=_T0 + _DAY)
     assert rows(
         connection,
@@ -137,9 +131,7 @@ def test_set_completed_stamps_the_completed_at_it_is_given(
 def test_set_state_non_completed_leaves_completed_at_null(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     tracked_download_store.set_state(_A, state=DownloadState.DOWNLOADING)
     assert rows(
         connection,
@@ -170,9 +162,7 @@ def test_record_queued_is_atomic_on_injected_failure(
         " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
     )
     with pytest.raises(PersistenceError, match="injected failure"):
-        tracked_download_store.record_queued(
-            _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-        )
+        tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     assert tracked_download_store.is_tracked(_A) is False
 
 
@@ -190,9 +180,7 @@ def test_record_queued_stamps_latest_seen_at_with_queued_at(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     # A row amuled never picks up must still age out, from its queuing.
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     [queued] = rows(
         connection,
         sql="SELECT typeof(queued_at_micros) AS queued_at_type, queued_at_micros"
@@ -207,9 +195,7 @@ def test_latest_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
     # Only a row written by hand can hold a NULL: it ages from its queuing, as local 0005 did.
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     connection.execute("UPDATE downloads SET latest_seen_at_micros = NULL")
     assert tracked_download_store.read_latest_seen_at_by_file() == {_A: _T0}
 
@@ -217,9 +203,7 @@ def test_latest_seen_at_by_file_reads_a_row_never_stamped_at_its_queuing(
 def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     assert _lifecycle(connection, file=_A) == _lifecycle_row(
         0, latest_progress_at_micros=None, waiting_reason=None, failure_reason=None
     )
@@ -228,9 +212,7 @@ def test_a_queued_download_starts_at_zero_bytes_with_no_progress(
 def test_set_seen_stamps_progress_only_when_the_bytes_grow(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     tracked_download_store.set_seen(
         [_status(_A, done=0, waiting=WaitingReason.NO_SOURCE)], seen_at=_T0
     )
@@ -258,9 +240,7 @@ def test_set_seen_stamps_progress_only_when_the_bytes_grow(
 def test_set_seen_stores_the_client_hashing_or_allocating_as_local_processing(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     tracked_download_store.set_seen(
         [_status(_A, done=0, waiting=WaitingReason.LOCAL_PROCESSING)], seen_at=_T0
     )
@@ -272,9 +252,7 @@ def test_set_seen_stores_the_client_hashing_or_allocating_as_local_processing(
 def test_a_download_migrated_without_bytes_does_not_invent_progress(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     connection.execute("UPDATE downloads SET bytes_done = NULL")  # a row from before local 0008
     tracked_download_store.set_seen([_status(_A, done=40)], seen_at=_T0)
     assert _lifecycle(connection, file=_A) == _lifecycle_row(
@@ -285,9 +263,7 @@ def test_a_download_migrated_without_bytes_does_not_invent_progress(
 def test_set_state_records_a_failure_reason_and_any_other_state_clears_it(
     *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
 ) -> None:
-    tracked_download_store.record_queued(
-        _A, target_id=TargetId("062A"), size_bytes=100, queued_at=_T0
-    )
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
     tracked_download_store.set_state(
         _A, state=DownloadState.FAILED, failure_reason=FailureReason.ERROR
     )

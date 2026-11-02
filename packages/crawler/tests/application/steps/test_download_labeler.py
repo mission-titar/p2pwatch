@@ -69,7 +69,7 @@ def test_the_titles_are_every_download_target_of_the_file() -> None:
 def test_a_file_without_a_download_decision_has_the_target_it_was_queued_for() -> None:
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
-        key(HASH_A), target_id=TargetId("062B"), size_bytes=100, queued_at=FakeTime().wall.now()
+        key(HASH_A), target_id=TargetId("062B"), queued_at=FakeTime().wall.now()
     )
     labeler = _labeler(tracked_download_store=tracked_download_store)
     assert labeler.target_titles(key(HASH_A)) == (

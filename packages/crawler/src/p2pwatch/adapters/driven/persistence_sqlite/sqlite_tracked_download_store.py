@@ -31,9 +31,9 @@ from p2pwatch.domain.file_key import FileKey, Network
 
 _INSERT_QUEUED = """
 INSERT INTO downloads
-    (file_id, network, native_id, target_id, state, queued_at_micros, size_bytes,
-     latest_seen_at_micros, bytes_done)
-VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, 0)
+    (file_id, network, native_id, target_id, state, queued_at_micros, latest_seen_at_micros,
+     bytes_done)
+VALUES (?, ?, ?, ?, 'queued', ?, ?, 0)
 ON CONFLICT (file_id) DO NOTHING
 """
 
@@ -74,9 +74,7 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def record_queued(
-        self, file: FileKey, *, target_id: TargetId, size_bytes: int, queued_at: datetime
-    ) -> None:
+    def record_queued(self, file: FileKey, *, target_id: TargetId, queued_at: datetime) -> None:
         """INSERT of a ``queued`` download (dedup-safe: a duplicate is ignored)."""
         queued_at_micros = instant_to_micros(queued_at)
         with wrap_sqlite_errors():
@@ -90,7 +88,6 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
                         file.native_id,
                         target_id,
                         queued_at_micros,
-                        size_bytes,
                         queued_at_micros,
                     ),
                 )

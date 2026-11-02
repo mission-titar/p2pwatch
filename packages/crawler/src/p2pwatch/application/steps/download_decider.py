@@ -108,7 +108,6 @@ class DownloadDecider:
             self._tracked_download_writer.record_queued(
                 candidate.file,
                 target_id=candidate.target_id,
-                size_bytes=size_bytes,
                 queued_at=self._wall_clock.now(),
             )
             self._download_tracker.reset_loss_deadline(candidate.file)

@@ -26,7 +26,6 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     ) -> None:
         self.states: dict[str, DownloadState] = {}
         self.failures: dict[str, FailureReason | None] = {}
-        self.sizes: dict[str, int] = {}
         self.queued_at: dict[str, datetime] = {}
         self.completed_at: dict[str, datetime] = {}
         self.seen: list[set[str]] = []
@@ -42,16 +41,13 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def read_queued_target_id(self, file: FileKey) -> TargetId | None:
         return self._target_ids.get(file.native_id)
 
-    def record_queued(
-        self, file: FileKey, *, target_id: TargetId, size_bytes: int, queued_at: datetime
-    ) -> None:
+    def record_queued(self, file: FileKey, *, target_id: TargetId, queued_at: datetime) -> None:
         if self._fail_record:
             raise StoreError("downloads write failed")
         if file.native_id in self.states:
             return
         self.states[file.native_id] = DownloadState.QUEUED
         self._target_ids[file.native_id] = target_id
-        self.sizes[file.native_id] = size_bytes
         self.queued_at[file.native_id] = queued_at
         self.latest_seen_at[file.native_id] = queued_at
 

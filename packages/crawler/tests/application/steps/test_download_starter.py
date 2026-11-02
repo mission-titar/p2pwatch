@@ -28,7 +28,6 @@ async def test_queued_download_without_observation_emits_no_link() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.QUEUED
-    tracked_download_store.sizes[HASH_A] = 100
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,

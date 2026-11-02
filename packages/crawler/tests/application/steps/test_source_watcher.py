@@ -338,7 +338,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
     sources = FakeSourcePointStore(history=history)
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
-        key(HASH_B), target_id=TargetId("063A"), size_bytes=100, queued_at=start
+        key(HASH_B), target_id=TargetId("063A"), queued_at=start
     )  # queued for it, no decision left
     tracked_download_store.states.update(
         {HASH_A: DownloadState.DOWNLOADING, HASH_B: DownloadState.DOWNLOADING}

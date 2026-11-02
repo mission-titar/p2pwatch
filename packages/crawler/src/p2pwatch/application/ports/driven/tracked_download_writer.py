@@ -15,9 +15,7 @@ class TrackedDownloadWriter(ABC):
     """Writes the tracked downloads' lifecycle."""
 
     @abstractmethod
-    def record_queued(
-        self, file: FileKey, *, target_id: TargetId, size_bytes: int, queued_at: datetime
-    ) -> None:
+    def record_queued(self, file: FileKey, *, target_id: TargetId, queued_at: datetime) -> None:
         """Tracks ``file`` as queued; a file already tracked keeps its row."""
 
     @abstractmethod
