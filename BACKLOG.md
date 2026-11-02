@@ -47,6 +47,9 @@ An agent adds an entry only after the operator has agreed to it.
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
 
+- **A file's size stored once**: the catalog holds it twice, `files.size_bytes` (the first recorded, which the files list,
+  its size sort and a file's history read) and `observation_variants.size_bytes` (each report's, in the variant's hash), though an eD2k file has one size, the two differing only where a peer reports a wrong one; keep one. Section 7 of `agents/specs/2026-11-01-round-trip-contracts.md`.
+
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
 

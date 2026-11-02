@@ -12,9 +12,10 @@ holistic review by `round-trip-holistic-review`. Corrected after approval, each 
 D4 (plain random draws, 2026-11-01, after blocks 20 and 30 first built the distinctness by construction, `5b9f2591`;
 texts drawn plainly, block 30), acceptance 5 with it, the deletions' exemption (the holistic review checks every
 mapping, no mutation proof) and block 40 split into 40 and 45 (`70cee85c`); then, by the closing blocks, D5 (the
-matcher's `fold`, operator, 2026-11-02), D6 and Appendix B (a file has one size, operator, 2026-11-02), C1 (a second fixture of one port), acceptance 4 and 5, block 10's
-subclass modules, block 110's `catalog_seeds.py`, block 135 inserted, Appendix A (the draws' modules, the fold's
-module and registration), Appendix B (the legacy retraction's equivalent mutant), Appendix C, Appendix D (the counts).
+matcher's `fold`, operator, 2026-11-02), D6 and Appendix B (a file has one size, operator, 2026-11-02), C1 (a second
+fixture of one port), acceptance 4 and 5, block 10's subclass modules, block 110's `catalog_seeds.py`, block 135
+inserted, Appendix A (the draws' modules, the fold's module and registration), Appendix B (the legacy retraction's
+equivalent mutant), Appendix C, Appendix D (the counts), section 7 (the backlog entry it adds).
 
 Cut from `main` at `49ddd7fe`, sixteen blocks, the closing one included, all open:
 
@@ -91,7 +92,7 @@ tests, under the spec's exemption, the rest given after the slash): 10, 570 and 
 30); 20, 599/396 and 14 (629); 30, 615/387 and 8 (553); 40, 245 and 6 (about 340); 45, 440 and 5 (about 410); 50,
 550/428 and 9 (449); 60, 638/482 and 11 (554); 70, 653/426 and 6 (546); 80, 428 and 4 (355); 90, 451 and 5 (356);
 100, 512/296 and 7 (452); 110, 691/455 and 4 (733); 120, 319 and 11 (315); 130, 409 and 5 (457); 135, 329 and 19 (none,
-inserted after the holistic review); 140, 69 and 13 (12, 2).
+inserted after the holistic review); 140, 72 and 13 (12, 2).
 
 Acceptance:
 
@@ -104,8 +105,9 @@ Acceptance:
   exemption naming its double.
 - 2: every swap of Appendix E fails at least one contract test (first lines in each block's report: 20, 30, 40, 45, 50,
   60, 70, 80, 90, 100, 110, 120, 130). The files list's `duration_seconds` and `bitrate_kbps` swap fails
-  `test_an_entry_holds_its_first_size_...` (since block 135 `..._its_size_...`) and `test_an_entry_s_latest_observation_...`: `E       assert
-  CatalogEntry(...'download'>))) == CatalogEntry(...'download'>)))` (block 60). A swap of an instant with a
+  `test_an_entry_holds_its_first_size_...` (since block 135 `..._its_size_...`) and
+  `test_an_entry_s_latest_observation_...`: `E       assert CatalogEntry(...'download'>))) ==
+  CatalogEntry(...'download'>)))` (block 60). A swap of an instant with a
   quantity shows as `E       OverflowError: date value out of range`.
 - 3: the table below, line numbers at block 140's tip.
 - 4: blocks 60 and 90, the `%`, `_`, `ÉCOLE` and `ecole` cases failing first against `main`'s `LIKE`, the `\` and
@@ -202,7 +204,7 @@ spec's corrections against the diff, the layering, the exemptions and the TDD ev
 | MINOR 5 | The known filenames' sort untold from the recording order | Fixed (135): recorded `larger, smaller, larger`; `GROUP BY filename ORDER BY min(variant_id)` fails |
 | MINOR 6 | `SourceReaderContract` partial losses | Fixed (135): a known source's latest reading from a variant's second point (`MIN` per variant fails), a searched source of two matching variants (the search as a join fails, count 2), the name history's `best_filename_by_file` asserted in the kept adapter test. Refused: a `standby` period and a missing contact point in a history, since the histories map their rows through `_sharing_period`, whose every role and missing fields `read_sharing_periods`' contract reads, so no mutant tells them apart |
 | MINOR 7 | `CatalogFileReaderContract` partial losses | Fixed (135): the latest entry drawn without media (`COALESCE(obs.duration_seconds, 0)` fails); a never-observed file sorted on its size by a new adapter test (`CatalogEntrySort.SIZE` on `obs.size_bytes` fails it), the operator leaving the case to the adapter (MINOR 8's answer). Refused: 1 µs margins (45, 70), the backoff started at the epoch (130), the `catalog` key type (80), no plausible mutant behind them: the `>=`/`<` mutants fail the tests at the exact instants |
-| MINOR 8 | "The size first observed with" untold from "first recorded"; a never-observed file's size | Class 2, answered by the operator (2026-11-02), neither option offered: an eD2k hash names one content, so a file has one size, two coming only from a peer reporting a wrong one. Fixed (135) as the lead then proposed and the operator accepted: the promise says "the file's size", the draws give every report of a file one size, no contract asserts which of two sizes wins (SQLite's first recorded size keeps its adapter test, `test_sqlite_observation_store.py`), D6 and Appendix B corrected |
+| MINOR 8 | "The size first observed with" untold from "first recorded"; a never-observed file's size | Class 2, answered by the operator (2026-11-02), neither option offered: an eD2k hash names one content, so a file has one size, two coming only from a peer reporting a wrong one. Fixed (135) as the lead then proposed and the operator accepted: the promise says "the file's size", the draws give every report of a file one size, no contract asserts which of two sizes wins (SQLite's first recorded size keeps its adapter test, `test_sqlite_observation_store.py`), D6 and Appendix B corrected. The size the catalog keeps twice (`files.size_bytes`, a copy of `observation_variants.size_bytes`) went to `BACKLOG.md` as "A file's size stored once", agreed by the operator (140) |
 | MINOR 9 | `fold_for_search` a second fold beside the matcher's `fold` | Class 2, answered "1" by the operator (2026-11-02): fixed (135), the search reuses `fold`, D5 corrected |
 | MINOR 10 | The sources search's cost untimed on the node | Not validated (below): the node's catalog holds no source (`SELECT count(*) FROM sources` gives 0, v4 schema, `mode=ro`, 2026-11-02) |
 | MINOR 11 | Nine docstrings past two lines | Fixed (135, 140): each at two lines, the long promises moved into field comments (`SharingPeriod`, the histories) or `SortDirection`'s docstring (the sort's null placement and tie-break), `open_reader`'s `temp_store` reason beside its pragma |
@@ -230,7 +232,10 @@ spec's corrections against the diff, the layering, the exemptions and the TDD ev
 
 - Blocks 10 to 130: none.
 - Block 140, before its first commit: the fixes passed the 20-file bound (a blocker, answered by inserting block 135);
-  MINOR 9, the search reusing the matcher's `fold`, answered "1" (the fold reused); MINOR 8, neither option: "La question elle même me semble étrange, on ne verra pas le même fichier avec deux tailles", then "ok" to the lead's proposal (the promise says "the file's size", the draws give a file one size, no contract asserts which size wins, MINOR 7b an adapter matter).
+  MINOR 9, the search reusing the matcher's `fold`, answered "1" (the fold reused); MINOR 8, neither option: "La
+  question elle même me semble étrange, on ne verra pas le même fichier avec deux tailles", then "ok" to the lead's
+  proposal (the promise says "the file's size", the draws give a file one size, no contract asserts which size wins,
+  MINOR 7b an adapter matter).
 
 ## Pitfalls
 
@@ -272,6 +277,8 @@ spec's corrections against the diff, the layering, the exemptions and the TDD ev
 ## Next
 
 The operator reads and merges the stack (`gh stack merge --rebase`), after the lead rebases it onto the current `main`.
+`BACKLOG.md` loses "Round-trip contracts" and gains "A file's size stored once" (spec section 7, corrected): the
+catalog keeps a file's size in `files` and in each variant, though an eD2k file has one.
 Then, per `BACKLOG.md`, the v5 tag still waits for "aMule 3.2.0 pinned" and "The Grype scan back on p2pwatch"; "Test
 quality" decides how a contract's tests count under its unique-coverage rule (Appendix E: 1 of 22 contract tests of
 the four existing SQLite subclasses covers an arc no other covers).
