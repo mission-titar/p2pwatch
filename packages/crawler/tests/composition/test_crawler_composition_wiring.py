@@ -295,7 +295,6 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     SqliteTrackedDownloadStore(local).record_queued(
         FileKey(network=Network.ED2K, native_id=_HASH),
         target_id=TargetId("062A"),
-        size_bytes=10,
         queued_at=SystemWallClock().now(),
     )
     local.close()

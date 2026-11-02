@@ -274,7 +274,7 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     logger = FakeLogger()
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
-        key(HASH_A), target_id=TargetId("062A"), size_bytes=1, queued_at=fake_time.wall.now()
+        key(HASH_A), target_id=TargetId("062A"), queued_at=fake_time.wall.now()
     )
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, filename="a", size_bytes=1)}
@@ -355,7 +355,7 @@ async def test_waiting_for_sources_is_not_failing_for_a_simulated_year(tmp_path:
     connection = open_local(tmp_path / "local.db")
     tracked_download_store = SqliteTrackedDownloadStore(connection)
     tracked_download_store.record_queued(
-        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+        key(HASH_A), target_id=TargetId("062A"), queued_at=fake_time.wall.now()
     )
     waiting = status(HASH_A, total=10, waiting=WaitingReason.NO_SOURCE)
     client = FakeDownloadClient(listed=[(waiting,)] * 12)
@@ -387,7 +387,7 @@ async def test_a_wall_clock_step_forward_fails_no_download_absent_from_one_poll(
 ) -> None:
     fake_time = FakeTime()
     real_tracked_download_store.record_queued(
-        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+        key(HASH_A), target_id=TargetId("062A"), queued_at=fake_time.wall.now()
     )
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A, total=10),), ()]),
@@ -412,7 +412,6 @@ async def test_a_latest_seen_at_in_the_future_waits_lost_after_no_more(
     real_tracked_download_store.record_queued(
         key(HASH_A),
         target_id=TargetId("062A"),
-        size_bytes=10,
         queued_at=fake_time.wall.now() + timedelta(hours=1),
     )
     cycle = build_cycle(
@@ -438,7 +437,6 @@ async def test_a_download_last_seen_two_days_ago_fails_at_the_first_cycle(
     real_tracked_download_store.record_queued(
         key(HASH_A),
         target_id=TargetId("062A"),
-        size_bytes=10,
         queued_at=fake_time.wall.now() - timedelta(days=2),
     )
     cycle = build_cycle(
@@ -482,7 +480,7 @@ async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_ane
     fake_time = FakeTime()
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.record_queued(
-        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+        key(HASH_A), target_id=TargetId("062A"), queued_at=fake_time.wall.now()
     )
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
@@ -494,7 +492,7 @@ async def test_a_row_the_operator_deleted_then_queued_again_waits_lost_after_ane
     await cycle.run(NODE_ID)
     fake_time.advance(timedelta(hours=12))
     tracked_download_store.record_queued(
-        key(HASH_A), target_id=TargetId("062A"), size_bytes=10, queued_at=fake_time.wall.now()
+        key(HASH_A), target_id=TargetId("062A"), queued_at=fake_time.wall.now()
     )
     fake_time.advance(timedelta(hours=12))
     await cycle.run(NODE_ID)

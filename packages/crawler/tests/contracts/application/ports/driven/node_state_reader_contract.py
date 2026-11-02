@@ -23,7 +23,6 @@ from tests.support.draws import (
     draw_instant,
     draw_instants,
     draw_quantities,
-    draw_quantity,
     draw_text,
 )
 
@@ -33,9 +32,7 @@ def _queue(
 ) -> TrackedDownload:
     """``file`` queued at ``queued_at`` for a drawn target, as it is read before any listing."""
     target_id = draw_target_id(randomness)
-    writer.record_queued(
-        file, target_id=target_id, size_bytes=draw_quantity(randomness), queued_at=queued_at
-    )
+    writer.record_queued(file, target_id=target_id, queued_at=queued_at)
     return TrackedDownload(
         file=file,
         target_id=target_id,

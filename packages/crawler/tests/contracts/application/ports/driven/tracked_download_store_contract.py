@@ -13,7 +13,7 @@ from p2pwatch.domain.file_key import FileKey
 from tests.support.domain.download.status import draw_download_status
 from tests.support.domain.file_target_decision import draw_target_id
 from tests.support.domain.observation import draw_file
-from tests.support.draws import draw_instant, draw_instants, draw_quantity
+from tests.support.draws import draw_instant, draw_instants
 
 
 def _queue_drawn_file(
@@ -24,7 +24,6 @@ def _queue_drawn_file(
     writer.record_queued(
         file,
         target_id=draw_target_id(randomness),
-        size_bytes=draw_quantity(randomness),
         queued_at=queued_at,
     )
     return file
@@ -61,7 +60,6 @@ class TrackedDownloadStoreContract(ABC):
             writer.record_queued(
                 file,
                 target_id=target_id,
-                size_bytes=draw_quantity(randomness),
                 queued_at=draw_instant(randomness),
             )
         assert all(reader.is_tracked(file) for file in target_id_by_file)
@@ -84,14 +82,11 @@ class TrackedDownloadStoreContract(ABC):
     ) -> None:
         queued_at, queued_again_at = draw_instants(randomness, count=2)
         file, target_id = draw_file(randomness), draw_target_id(randomness)
-        writer.record_queued(
-            file, target_id=target_id, size_bytes=draw_quantity(randomness), queued_at=queued_at
-        )
+        writer.record_queued(file, target_id=target_id, queued_at=queued_at)
         writer.set_state(file, state=DownloadState.DOWNLOADING)
         writer.record_queued(
             file,
             target_id=draw_target_id(randomness),
-            size_bytes=draw_quantity(randomness),
             queued_at=queued_again_at,
         )
         assert (
