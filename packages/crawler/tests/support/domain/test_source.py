@@ -55,5 +55,19 @@ def test_a_point_read_again_is_its_variant_at_its_instant_with_drawn_received_by
     )
 
 
+def test_a_point_read_again_keeps_the_received_bytes_it_is_given() -> None:
+    randomness = Random(0)
+    point = _drawn(1)
+    observed_at = draw_instant(randomness)
+    again = draw_point_read_again(
+        randomness, point=point, observed_at=observed_at, session_received_bytes=7
+    )
+    assert again == replace(
+        point,
+        reading=replace(point.reading, session_received_bytes=7),
+        observed_at=observed_at,
+    )
+
+
 def test_the_same_seed_draws_the_same_point() -> None:
     assert _drawn(7) == _drawn(7)
