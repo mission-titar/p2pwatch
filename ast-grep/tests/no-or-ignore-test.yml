@@ -1,0 +1,23 @@
+id: no-or-ignore
+valid:
+  - '_INSERT = "INSERT INTO files (file_id) VALUES (?) ON CONFLICT DO NOTHING"'
+  - '_INSERT = "INSERT INTO files (file_id) VALUES (?) ON CONFLICT (file_id) DO NOTHING"'
+  - "# Never OR IGNORE, which also drops a row a CHECK refuses."
+  - 'raise ValueError("a color or ignored row")'
+invalid:
+  - '_INSERT = "INSERT OR IGNORE INTO files (file_id) VALUES (?)"'
+  - '_INSERT = "insert or ignore into files (file_id) values (?)"'
+  - '_INSERT = f"INSERT OR IGNORE INTO {table} (file_id) VALUES (?)"'
+  - |
+    _INSERT = """
+    INSERT
+    OR IGNORE
+    INTO files (file_id) VALUES (?)
+    """
+  - |
+    """A docstring that says ``INSERT OR IGNORE`` is how the store writes."""
+  - |
+    _INSERT = """
+    INSERT OR
+    IGNORE INTO files (file_id) VALUES (?)
+    """
