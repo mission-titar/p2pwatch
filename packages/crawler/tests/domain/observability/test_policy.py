@@ -376,9 +376,9 @@ def test_a_file_with_risen_targets_is_one_rise_naming_the_file_and_targets() -> 
     assert plan.notification == TierRise(
         tier=DecisionTier.DOWNLOAD,
         target_titles=_062A_062B,
+        file=FileKey(network=Network.ED2K, native_id=_HASH),
         filename="Keroro 062.avi",
         size_bytes=367_185_920,
-        ed2k_link=f"ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/",
         node_id=_NODE_ID,
     )
     assert plan.node_metrics == (
@@ -463,9 +463,9 @@ def test_a_completed_download_without_a_target_logs_unknown() -> None:
             TierRise(
                 tier=DecisionTier.NOTIFY,
                 target_titles=_062A,
+                file=_FILE,
                 filename="Keroro 062.avi",
                 size_bytes=1,
-                ed2k_link="ed2k://",
                 node_id=_NODE_ID,
             ),
             "community",

@@ -7,6 +7,7 @@ from datetime import timedelta
 from enum import StrEnum
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.severity import Severity
@@ -15,13 +16,13 @@ from p2pwatch.domain.source import SourceKey
 
 @dataclass(kw_only=True, frozen=True)
 class TierRise:
-    """A file's targets risen to ``tier``, the highest of them, ``ed2k_link`` fetching it."""
+    """A file's targets risen to ``tier``, the highest of them."""
 
     tier: DecisionTier
     target_titles: tuple[TargetTitle, ...]
+    file: FileKey
     filename: str
     size_bytes: int
-    ed2k_link: str
     node_id: NodeId
 
 

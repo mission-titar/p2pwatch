@@ -24,7 +24,9 @@ from typing import Protocol, assert_never
 import apprise
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.ed2k_link import build_ed2k_link
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import (
@@ -68,10 +70,17 @@ def _code_name(filename: str) -> str:
 
 
 def _rise_body(rise: TierRise) -> str:
+    match rise.file.network:
+        case Network.ED2K:
+            link = build_ed2k_link(
+                rise.filename, size_bytes=rise.size_bytes, native_id=rise.file.native_id
+            )
+        case _:  # pragma: no cover
+            assert_never(rise.file.network)
     return (
         _targets_section(rise.target_titles)
         + f"\n\n**File**\n{rise.size_bytes / 2**20:.1f} MiB - {_code_name(rise.filename)}"
-        + f"\n\n**ed2k**\n`{rise.ed2k_link}`"
+        + f"\n\n**ed2k**\n`{link}`"
     )
 
 

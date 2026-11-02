@@ -11,7 +11,7 @@ from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
-from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import (
@@ -60,13 +60,12 @@ async def _sent_to_the_bare_group(notification: Notification) -> dict[str, objec
 
 
 def _rise(tier: DecisionTier, *, filename: str = "Keroro 062.avi") -> TierRise:
-    link = f"ed2k://|file|Keroro%20062.avi|367185920|{_HASH}|/"
     return TierRise(
         tier=tier,
         target_titles=(_062A, _062B),
+        file=FileKey(network=Network.ED2K, native_id=_HASH),
         filename=filename,
         size_bytes=367_185_920,
-        ed2k_link=link,
         node_id=_NODE_ID,
     )
 
