@@ -1,0 +1,217 @@
+# Handoff: a file's size stored once
+
+Drafted by block 70's teammate from the block reports of #615, #616, #618, #619, #620 and #621 and its own, for the
+closing block's teammate to correct and complete.
+
+## State
+
+Tier Spec lot. Spec `agents/specs/2026-11-02-file-size-stored-once.md`, D1 to D7 decided by the operator on 2026-11-02,
+from `BACKLOG.md`'s "A file's size stored once", which block 10's first commit moved under "Must be done before the
+next release". Survey by `size-once-survey`, estimates by `size-once-estimates` (Sonnet), spec reviewed by
+`size-once-spec-review`, holistic review to come (below). No claim corrected after approval: the spec holds no
+`(Corrected: ...)` at block 70's tip.
+
+Cut from `main` at `ac1c5aae`, eight blocks, the closing one included:
+
+| Block | Pull request | Branch |
+|---|---|---|
+| 10 | #615 | `fix/insert-on-conflict` |
+| 20 | #616 | `refactor/variant-without-size` |
+| 30 | #618 | `refactor/file-size-from-latest-observation` |
+| 40 | #619 | `refactor/source-pages-best-filename` |
+| 50 | #620 | `refactor/queued-download-without-size` |
+| 60 | #621 | `refactor/downloads-table-without-size` |
+| 70 | to open | `refactor/tier-rise-link-in-notifier` |
+| 80 | to open | `docs/wrap-file-size-stored-once` |
+
+What the operator sees (spec section 2): the file page's timeline has no size column, the page giving the size above
+it (30); in the SQL console, `observation_variants` (20) and `downloads` (60) have no `size_bytes`, a file's size being
+`files.size_bytes`; a tier rise notification reads as before, its body unchanged (70); the upgrade to v5 adds no
+migration and no pre-migration copy (acceptance 16); a catalog a pre-lot v5 build took past 0008 fails the crawler's
+first observation write instead of losing every observation silently (10).
+
+## What was built
+
+- **`ON CONFLICT` everywhere** (block 10, D7): the observation store's three inserts and migration 0007's two end in
+  `ON CONFLICT (<key>) DO NOTHING`, `WHERE true` before it where the `SELECT` would otherwise read the `ON` as a join's.
+  The gate keeps `OR IGNORE` out: sqlfluff's `CV09` (`blocked_words = "ignore"`) in the `.sql` files, the ast-grep rule
+  `no-or-ignore` (`(?i)\bOR\s+IGNORE\b`) in every Python string, and an `AGENTS.md` Hard rule.
+- **A variant without the size** (block 20, D1, D2): catalog migrations 0007 and 0008 edited in place, the variants'
+  `content_hash` on seven columns (Python, its SQL registration, the merge copier's check), every observation reading
+  its size from `files`; v4 variants that differed by size alone fold into one under 0007.
+- **A listed file always observed** (blocks 30 and 40, D3, D4): `CatalogEntry` and `FileHistory` lose `size_bytes`,
+  their `latest_observation` mandatory; the latest-observation query inner-joins, so a `files` row without an
+  observation leaves the files list, `read_file_history` gives `None` (a 404), and the source pages leave out its
+  periods, `best_filename_by_file` holding every period's file and the webui's short-hash fallback gone.
+  `FileJudge.rejudge` raises a `RuntimeError` naming the file in place of its fallback. The file page's timeline rows
+  hold four cells.
+- **local.db without the size** (blocks 50 and 60, D5, D2): `TrackedDownloadWriter.record_queued` loses `size_bytes`,
+  the fake store its `sizes`; local migration 0014 rebuilds `downloads` without the column.
+- **The link built by the notifier** (block 70, D6): `TierRise` carries its `file: FileKey` in place of `ed2k_link`,
+  the policy no longer imports `build_ed2k_link`, and `AppriseNotifier`'s `_rise_body` builds the link from the rise's
+  file, filename and size (the `match` on the network moved with it).
+
+## Evidence
+
+`uv run poe check` exit 0 at every block's tip, each report's first line; crawler passed (15 deselected each): 2071
+(10), 2073 (20), 2067 (30, 40, 50), 2068 (60, 70).
+
+Budget against each block's parent (lines, files; the spec's estimate in parentheses): 10, 97 and 11, `BACKLOG.md`
+included (about 110, 10); 20, 165 and 16 (170, 16); 30, 248 and 19, the two files past the estimate being the class 1
+fix (about 190, 17); 40, 55 and 6 (about 85, 8); 50, 83 and 13 (about 85, 13); 60, 40 and 5 (about 20, 4); 70, 35 and 6
+(50, 6).
+
+Acceptance, each new behaviour watched failing before its implementation:
+
+- 1 (20): `test_open_catalog_keeps_a_file_s_size_in_files_alone`, `Left contains one more item: {'table_name':
+  'observation_variants'}`.
+- 2 (20): `test_content_hash_sql_function_matches_the_python_one` with seven arguments, `sqlite3.OperationalError:
+  wrong number of arguments to function content_hash()`.
+- 3 (20): `test_a_version_5_file_reported_at_two_sizes_migrates_into_one_variant_read_at_its_size`,
+  `{'variant_count': 2} != {'variant_count': 1}`; 0007 alone,
+  `test_old_rows_differing_by_size_alone_become_one_variant`, `{'variant_count': 2, 'observation_count': 2} !=
+  {'variant_count': 1, 'observation_count': 2}`.
+- 4 (20): `test_two_reports_differing_by_size_alone_are_one_variant_read_at_the_first_size`, `assert 2 == 1` on the
+  variant count.
+- 5 (10): `test_a_variant_breaking_a_not_null_fails_the_write_and_writes_no_row`, `Failed: DID NOT RAISE
+  PersistenceError`.
+- 6 (10): `sql-lint` with `CV09` before 0007 changed, `L: 37 | P: 11 | CV09 | Use of blocked word 'IGNORE'.` and the
+  same on line 67, nothing else; `ast-grep scan` with the rule on `main`'s store, four errors (its docstring, line 1,
+  and its statements, lines 35, 38, 45) plus `tests/support/catalog_rows.py:54`.
+- 7 (10): the rule's tests, proved by mutating the rule since `ast-grep test` passes a test naming no rule: without
+  `(?i)`, `FAIL no-or-ignore` on `insert or ignore`; a space for `\s+`, `Error: test failed. 16 passed; 1 failed;`,
+  exit 4.
+- 8 (30): the contract's two value tests built without `size_bytes`, `TypeError: CatalogEntry.__init__() missing 1
+  required keyword-only argument: 'size_bytes'`, the same for `FileHistory`.
+- 9 (30, 40): `test_read_catalog_entries_leaves_out_a_file_never_observed`, `Left contains one more item:
+  'dddddddddddddddddddddddddddddddd'`; `test_file_history_of_a_file_never_observed_is_none`, `assert FileHistory(...,
+  size_bytes=42, observations=(), latest_observation=None, ...) is None`;
+  `test_a_page_leaves_out_the_periods_on_a_file_never_observed` (both histories), `Left contains one more item:
+  FileKey(network=<Network.ED2K: 'ed2k'>, native_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`.
+- 10 (40): mypy, `Argument "best_filename" to "_file_sharing_period_display" has incompatible type "str | None";
+  expected "str"`, at both callers.
+- 11 (30): `test_a_file_never_observed_raises_naming_it_and_dispatches_nothing`, `Failed: DID NOT RAISE RuntimeError`.
+- 12 (30): `test_file_page_timeline_shows_each_observation_as_one_plain_line` and
+  `test_file_page_says_when_no_observation_falls_in_the_interval` against the old template, the four-cell row and
+  `<td colspan="4">` absent; the `Size` `<dd>` asserted in
+  `test_file_page_shows_the_network_the_native_id_the_size_and_the_ed2k_link`.
+- 13 (60): `test_a_created_local_db_has_no_size_bytes_on_its_downloads` and
+  `test_a_v4_local_db_migrated_keeps_its_downloads_without_their_size`, `AssertionError: assert 'size_bytes' not in
+  {'bytes_done', 'completed_at_micros', ...}`; `test_0014_converts_each_download_stamp_to_micros_and_keeps_a_null` on
+  its `SELECT *` comparison.
+- 14 (50): every `record_queued` call without `size_bytes` against the old port, 44 failed with `TypeError:
+  SqliteTrackedDownloadStore.record_queued() missing 1 required keyword-only argument: 'size_bytes'`; mypy `Missing
+  named argument "size_bytes" for "record_queued" of "TrackedDownloadWriter"  [call-arg]` at each call.
+- 15 (70): the tests building `TierRise` with `file=` and no `ed2k_link`, against the old value, `TypeError:
+  TierRise.__init__() got an unexpected keyword argument 'file'` at the collection of `test_apprise_notifier.py` and
+  `test_policy.py`. `test_a_rise_names_its_tier_its_targets_its_file_and_its_link` keeps its expected body, link
+  included, now that the rise carries no link: the notifier builds it.
+- 16 (60, 70): at each tip, 15 catalog and 15 local migration files under `origin/main`'s names, `copy-before` on the
+  same ones (catalog 0005, 0006, 0007, 0008, 0011, 0015; local 0004, 0005, 0006, 0007, 0010, 0011, 0014, 0015);
+  block 70 by `diff` of `git ls-tree --name-only` and of `git grep -l copy-before` between `origin/main` and `HEAD`,
+  both empty.
+- 17: the gate above; CI's `validate / gate` passed on #615 to #620 (`gh pr checks --required`, 2026-11-02), #621's run
+  under way when this was drafted, block 70's to come.
+
+## Departures from the spec
+
+- **Block 10**: `AGENTS.md` and the rule's message say `ON CONFLICT ... DO NOTHING`, not `ON CONFLICT (<key>) DO
+  NOTHING`, since the merge copier's six inserts are keyless; the store and 0007 name their keys, as D7 says. In
+  `test_sqlite_catalog_copier.py` the `OR IGNORE` was a comment and a test name:
+  `test_t2_merge_overlapping_identity_files_or_ignore` became `..._keeps_one`.
+- **Block 20**: acceptance 1 checks every catalog table, only `files` having a `size_bytes`; acceptances 3 and 4 read
+  both observations back through `observation_read.observations_between`, the store's reader giving only the latest
+  and the best; a test of 0007 alone beside acceptance 3.
+- **Block 30**: `read_file_history` reads the file from its latest observation's row (`SELECT_LATEST_OBSERVATION` by
+  `file_id`), one query fewer, `_SQL_FILE` gone. `test_read_matched_and_total_file_counts_counts_file_with_no_observation`
+  stays, pinning section 7's accepted limit. Deleted with the state: the two never-seen sort tests and the search
+  filter's exclusion test. The webui's never-seen display test became
+  `test_catalog_entry_displays_shows_the_latest_filename_and_source_count`. The port says "the observed files"; no
+  contract test states the absence, which no Writer can produce.
+- **Block 40**: the adapter's absence test seeds an observed file beside the one never observed, so a reader dropping
+  every period fails it too; `source_reader_contract.py` unchanged, its history tests already comparing the whole
+  `best_filename_by_file`; the webui tests' `_UNSEEN` became `_OTHER_FILE`. The promise sits in the field comment of
+  `best_filename_by_file` on both histories, not in the port's docstrings as Appendix A has it, a docstring holding two
+  lines at most (the fix-back, `4e0fdd31`).
+- **Block 50**: none; the contracts lose the `draw_quantity` the size took, which shifts their later draws (seeded per
+  test).
+- **Block 60**: a test from a version-5 local.db holding a download, for acceptance 13's "v4 local.db migrated", the
+  existing 0014 test starting from version 13; `test_migration_0002.py` keeps `test_user_version_is_at_least_two`.
+- **Block 70**: none.
+
+## Holistic review
+
+To come: the holistic review runs once block 70's pull request is open, over
+`git diff origin/main...origin/refactor/tier-rise-link-in-notifier`. The closing block fills this section, each finding
+with its exit.
+
+## Class 1 fixes
+
+- Block 10: the hash guard's comment in `test_sqlite_observation_store.py` gave `OR IGNORE` as its reason; it now says
+  the guard's error names the hash, where the `CHECK`'s names its expression.
+- Block 30: `short_timestamp`'s empty-input branch, its docstring paragraph and its test (`6d06e1cd`): both callers
+  pass a `datetime.isoformat()`, so only tests reached it.
+- Block 60: `tests_without_unit` described `test_migration_0002.py` as a catalog migration's test; it opens a local.db.
+
+## Class 2 questions
+
+None, blocks 10 to 70.
+
+## Pitfalls
+
+- **`ast-grep test` passes a test file naming no rule** (10): prove a rule's tests by mutating the rule (`BACKLOG.md`'s
+  "A rule test naming no rule fails the gate").
+- **`ALTER TABLE` adds no `NOT NULL` column without a default** (10): acceptance 5's test rebuilds the empty variants
+  table from its own `sqlite_schema` text, so a later column change does not touch it.
+- **An upsert after a `SELECT` with no `WHERE`** needs `WHERE true`, or SQLite reads its `ON` as a join's; 0007's
+  observations insert ends on `ORDER BY` and needs none (10).
+- **`ruff format` drops the parentheses around a lone string** even when the line then passes 100 columns, and `E501`
+  fails: a long SQL constant stays in two parts (20).
+- **Serena's `replace_symbol_body` on a dataclass** (pyrefly 1.4.0) drops the `@dataclass` line and duplicates the last
+  field's trailing comment: edit a class's fields with `replace_content` (30).
+- **The list's join to the latest observation must be inner** like the CTE's: a `LEFT JOIN` hands
+  `observation_from_row` a row of `NULL`s (30).
+- **`uv run poe fix` exits 1 on its first run** when `ruff check --fix` meets a line the formatter folds afterwards; the
+  second run is green (40).
+- **A red run's open SQLite connection** shows as a `PytestUnraisableExceptionWarning` `ERROR` in a later test, gone
+  with the red state (50).
+- **Removing one keyword from many calls**: `replace_in_files` over
+  `(\.record_queued\((?:[^()]|\([^()]*\))*?)size_bytes=[^,]+,\s*`, dry run first, left the other `size_bytes=` alone
+  (50).
+
+## Not validated
+
+- The integration suites, the compose smoke's seeded download row included (60), run only in CI's `validate / gate`.
+- Migrations 0007 and 0008 at the scale of the operator's catalog (15.8 million observations): their `SELECT`s are
+  unchanged but for one column fewer in 0007's `DISTINCT`, and the upsert takes the uniqueness check `OR IGNORE` took;
+  not timed (10, 20).
+- A merge whose source a pre-lot v5 build wrote: section 7 expects the copier's seven-column hash check to refuse it;
+  not tested (20).
+- The query plans on the operator's catalog: the plan test passes on the test catalog, and the spec review's
+  `EXPLAIN QUERY PLAN` covered the inner joins on a current-schema catalog (30).
+- A rise sent to a real service: its body is unit-tested against `FakeApprise`, unchanged from `main` (70).
+
+## Next
+
+The closing block (80) fixes the holistic findings, writes section 6's documents (`docs/migration-4x.md`, the SQL
+console's schema; `docs/contributing/architecture.md`, the inserts, the variant and the domain's reason to validate
+first), deletes "A file's size stored once" from `BACKLOG.md` and corrects this handoff. Then the lead rebases the
+stack onto the current `main` and the operator reads and merges it (`gh stack merge --rebase`). The v5 tag still waits
+for "aMule 3.2.0 pinned" (#614 open) and "The Grype scan back on p2pwatch".
+
+## Counts
+
+From the lead's record:
+
+- Fix-backs: 1, block 40 (`4e0fdd31`): a port docstring past two lines, its promise moved into
+  `best_filename_by_file`'s field comments.
+- Cascaded rebases: none.
+- Runs re-triggered: 1, #619's first run, cancelled by the fix-back's push. Fewer runs re-triggered than blocks (8).
+- Bodies the operator called unreadable: none so far.
+- Splits: none.
+
+## Friction
+
+For the lead's report, to complete:
+
+- Block 30 came to 19 files, one below the bound, its class 1 fix taking the two past the estimate.
