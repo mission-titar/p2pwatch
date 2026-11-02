@@ -23,9 +23,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **aMule 3.2.0 pinned**: `ARG AMULE_VERSION` and `ARG AMULE_COMMIT` moved from 3.1.0 to 3.2.0, which fixes 15
   advisories, by the weekly bump or by hand. `packages/amule/Dockerfile`, `.github/workflows/amule-bump.yml`.
 
-- **A file's size stored once**: on `files` alone, out of the observation variants, local.db's downloads and the values
-  that repeat it, an eD2k hash fixing its file's size; before v5, under the v4 upgrade's one copy. Section 7 of `agents/specs/2026-11-01-round-trip-contracts.md`.
-
 ## Features
 
 - **Multi network**: a generic core driving one container per P2P client, renamed p2pwatch.
