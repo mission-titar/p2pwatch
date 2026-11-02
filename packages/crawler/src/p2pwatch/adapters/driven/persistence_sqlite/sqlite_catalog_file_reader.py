@@ -3,7 +3,7 @@
 ``SqliteCatalogFileReader`` reads the files page: its entries (files ⨝ latest observation ⨝
 current decisions, optional filters + LIMIT/OFFSET), their ``(matched, total)`` counts and their
 tier facet; and a file's history: its observations in an interval, its latest one, its known names
-and its current decisions, ``None`` if the file is unknown.
+and its current decisions, ``None`` if the file is unknown or never observed.
 
 All SQL lives in module constants, parameterized (no value interpolation).
 """
@@ -17,8 +17,8 @@ from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
+    SELECT_LATEST_OBSERVATION,
     known_filenames,
-    latest_observation,
     observation_from_row,
     observations_between,
 )
@@ -67,8 +67,8 @@ _IDENTIFYING_TIERS = ", ".join(f"'{tier}'" for tier in DecisionTier if tier.iden
 #
 # ``latest_observation`` (from ``observation_read``) seeks each file's newest observation by key
 # instead of numbering the whole table with a window (11.6M rows on the node). It holds one row
-# per catalogued file, all NULL for a file never seen; every consumer LEFT JOINs it onto ``files``,
-# the counters only for a name filter, since the default page needs no name.
+# per observed file; the list joins it onto ``files``, the counters only for a name filter, since
+# the default page needs no name.
 #
 # ``latest_dec`` keeps the latest decision per (file_id, target_id), dropping the legacy
 # ``target_id == ''`` sentinel and any target whose latest row is a ``retracted`` marker;
@@ -108,7 +108,7 @@ dec_agg AS (
 
 # The shared source, files ⨝ latest observation ⨝ current decisions (aggregated), all pre-folded
 # by the CTEs above, so it is a plain star-join driven by ``files``.
-_JOIN_LATEST_OBSERVATION = "LEFT JOIN latest_observation AS obs ON obs.file_id = f.file_id\n"
+_JOIN_LATEST_OBSERVATION = "JOIN latest_observation AS obs ON obs.file_id = f.file_id\n"
 _JOIN_DECISIONS = "LEFT JOIN dec_agg AS dec ON dec.file_id = f.file_id\n"
 
 # Explorer: files + latest joins, driven by files; read_catalog_entries() adds the filters.
@@ -128,7 +128,6 @@ SELECT
     obs.raw_metadata,
     obs.observed_at_micros,
     obs.node_id,
-    f.size_bytes AS file_size_bytes,
     dec.target_ids,
     dec.rule_names,
     dec.tiers
@@ -188,13 +187,6 @@ WHERE rn = 1
 AND target_id != ''
 AND tier IN ({_DECISION_TIERS})
 ORDER BY target_id
-"""
-
-# Basic lookup on files (for read_file_history).
-_SQL_FILE = """\
-SELECT network, native_id, size_bytes
-FROM files
-WHERE file_id = ?
 """
 
 
@@ -304,8 +296,8 @@ class SqliteCatalogFileReader(CatalogFileReader):
         limit: int,
         offset: int,
     ) -> tuple[CatalogEntry, ...]:
-        """``tier`` sorts on the strongest tier; a file never seen sorts first in ASC (NULLs
-        first), and the ``file_id`` tiebreak keeps paging stable."""
+        """``tier`` sorts on the strongest tier, a file without a decision first in ASC (NULLs
+        first); the ``file_id`` tiebreak keeps paging stable."""
         clauses, str_params = _filter_clauses(target_id, tier=tier, search_text=search_text)
         if matched_only:
             # A file is matched iff it has at least one current (non-retracted) decision;
@@ -327,9 +319,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         return tuple(
             CatalogEntry(
                 file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
-                size_bytes=row["file_size_bytes"],
-                # A file with no observation LEFT JOINs to NULLs.
-                latest_observation=None if row["filename"] is None else observation_from_row(row),
+                latest_observation=observation_from_row(row),
                 decisions=tuple(
                     DecisionRecord(target_id=TargetId(t), rule_name=r, tier=DecisionTier(ti))
                     for t, r, ti in zip(
@@ -347,11 +337,12 @@ class SqliteCatalogFileReader(CatalogFileReader):
         self, file_id: FileId, *, since: datetime, until: datetime
     ) -> FileHistory | None:
         connection = self._thread_read_connections.connection()
-        file_row = connection.execute(_SQL_FILE, (file_id,)).fetchone()
-        if file_row is None:
+        latest_row = connection.execute(SELECT_LATEST_OBSERVATION, (file_id,)).fetchone()
+        if latest_row is None:
             return None
 
-        file = FileKey(network=Network(file_row["network"]), native_id=file_row["native_id"])
+        latest_observation = observation_from_row(latest_row)
+        file = latest_observation.reported_file.file
         dec_rows = connection.execute(_SQL_FILE_DECISIONS, (file_id,)).fetchall()
 
         decisions = tuple(
@@ -370,14 +361,13 @@ class SqliteCatalogFileReader(CatalogFileReader):
 
         return FileHistory(
             file=file,
-            size_bytes=file_row["size_bytes"],
             observations=observations_between(
                 connection,
                 file=file,
                 since=instant_to_micros(since),
                 until=instant_to_micros(until),
             ),
-            latest_observation=latest_observation(connection, file=file),
+            latest_observation=latest_observation,
             decisions=decisions,
             known_filenames=known_filenames(connection, file=file),
         )

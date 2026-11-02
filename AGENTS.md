@@ -194,7 +194,7 @@ a function does.
 | `dated decision` | `DatedDecision`, a file's `FileTargetDecision` with its `decided_at` and its `node_id`, what `record_decision` writes; apart since the anti-redundancy compares the decision alone | `decision view` |
 | `interval` | `Interval`, the stretch of wall-clock time a page reads, at most 7 days, resolved from the ends a request asks for | `range`, `period` |
 | `sharing period` | `SharingPeriod`, one source's consecutive readings on one file by one node: its first and last reading, the bytes received; a page reads them in a `PeriodWindow` | `source range` |
-| `catalog entry` | `CatalogEntry`, a file as a listing shows it: its size, its latest observation, its current decisions | `file row` |
+| `catalog entry` | `CatalogEntry`, a file as a listing shows it: its latest observation, its current decisions | `file row` |
 | `known source` | `KnownSource`, a source with a user hash as the sources list shows it: its latest `source_name`, its latest reading, its file count | `source row` |
 | `source naming` | `SourceNaming`, a source under one `source_name` it carried: its latest reading and its file count under that name | `source row` |
 | `source history` | `SourceHistory`, a source as its page shows it: a page of its source namings, its sharing periods over every file, their files' best filenames | `source detail` |

@@ -29,10 +29,9 @@ class SortDirection(StrEnum):
 
 @dataclass(kw_only=True, frozen=True)
 class CatalogEntry:
-    """A file, its size, its latest observation and its current decisions, the legacy retraction
-    of no target left out."""
+    """A file, its latest observation and its current decisions, the legacy retraction of no
+    target left out."""
 
     file: FileKey
-    size_bytes: int
-    latest_observation: FileObservation | None  # None before its first
+    latest_observation: FileObservation
     decisions: tuple[DecisionRecord, ...]  # one per target in target order, none retracted

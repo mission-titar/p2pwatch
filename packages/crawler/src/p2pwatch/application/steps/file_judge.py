@@ -60,7 +60,7 @@ class FileJudge:
         (``base_candidate`` gives the fields other than the filename).
 
         Returns the number of rows written (0..N). May propagate ``StoreError`` (pure
-        orchestration; the caller absorbs it)."""
+        orchestration; the caller absorbs it); raises ``RuntimeError`` on a file never observed."""
         filenames = self._observation_reader.read_known_filenames(file)
         fresh = self._engine.evaluate_file(
             replace(base_candidate, filename=filename) for filename in filenames
@@ -94,17 +94,14 @@ class FileJudge:
                 )
             )
         if changes:
-            # No filename left means only retractions were written, which are never notified.
             best = self._observation_reader.read_best_observation(file)
             if best is None:
-                filename, size_bytes = base_candidate.filename, 0
-            else:
-                filename, size_bytes = best.reported_file.filename, best.reported_file.size_bytes
+                raise RuntimeError(f"file {file.native_id} judged without an observation")
             await self._observability_dispatcher.dispatch(
                 DecisionsRecorded(
                     file=file,
-                    filename=filename,
-                    size_bytes=size_bytes,
+                    filename=best.reported_file.filename,
+                    size_bytes=best.reported_file.size_bytes,
                     changes=tuple(changes),
                     node_id=node_id,
                 )

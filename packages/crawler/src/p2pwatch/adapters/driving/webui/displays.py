@@ -69,7 +69,6 @@ class ObservationDisplay:
     """One observation of a file's timeline, precomputed."""
 
     filename: str
-    size_bytes: int
     sources: str
     keyword: str
     observed_at: str
@@ -166,7 +165,7 @@ class CatalogEntryDisplay:
     file_id_hex: str  # 32 lowercase hex, the detail page's path
     short_hash: str  # of the native id
     filename: str
-    sources_display: str  # the count, or "unknown" for a file never seen
+    sources_display: str  # the latest observation's source count
     decisions_display: tuple[
         DecisionCellDisplay, ...
     ]  # one per current decision, 0..N; () when none

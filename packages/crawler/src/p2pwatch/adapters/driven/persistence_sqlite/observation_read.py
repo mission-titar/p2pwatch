@@ -12,7 +12,7 @@ from p2pwatch.domain.observation import FileObservation, ReportedFile
 
 # Each file's latest observation: its variant with the newest observation, then that variant's
 # newest one, each a seek on observations' key. Ties go to the higher variant_id, then the higher
-# source_count (stage 1, D4). One row per catalogued file, all NULL for a file never seen.
+# source_count (stage 1, D4). One row per observed file.
 LATEST_OBSERVATION_CTE = """latest_observation AS (
     SELECT
         f.file_id AS file_id,
@@ -28,7 +28,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
         o.observed_at_micros AS observed_at_micros,
         v.node_id AS node_id
     FROM files AS f
-    LEFT JOIN observation_variants AS v ON v.variant_id = (
+    JOIN observation_variants AS v ON v.variant_id = (
         SELECT v2.variant_id FROM observation_variants AS v2
         WHERE v2.file_id = f.file_id
         ORDER BY (
@@ -37,7 +37,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
         ) DESC, v2.variant_id DESC
         LIMIT 1
     )
-    LEFT JOIN observations AS o ON (o.variant_id, o.observed_at_micros, o.source_count) = (
+    JOIN observations AS o ON (o.variant_id, o.observed_at_micros, o.source_count) = (
         SELECT o3.variant_id, o3.observed_at_micros, o3.source_count FROM observations AS o3
         WHERE o3.variant_id = v.variant_id
         ORDER BY o3.observed_at_micros DESC, o3.source_count DESC
@@ -52,11 +52,11 @@ _COLUMNS = (
 )
 
 SELECT_LATEST_OBSERVATION = f"""WITH {LATEST_OBSERVATION_CTE}
-SELECT {_COLUMNS} FROM latest_observation WHERE file_id = ? AND filename IS NOT NULL
+SELECT {_COLUMNS} FROM latest_observation WHERE file_id = ?
 """
 
 SELECT_LATEST_OBSERVATIONS = f"""WITH {LATEST_OBSERVATION_CTE}
-SELECT {_COLUMNS} FROM latest_observation WHERE filename IS NOT NULL ORDER BY network, native_id
+SELECT {_COLUMNS} FROM latest_observation ORDER BY network, native_id
 """
 
 _FROM_OBSERVATIONS = """

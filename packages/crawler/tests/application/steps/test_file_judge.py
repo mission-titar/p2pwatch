@@ -625,7 +625,7 @@ async def test_a_target_gone_from_the_targets_is_retracted(
 
 
 @pytest.mark.asyncio
-async def test_a_file_with_no_name_left_is_named_by_the_candidate(
+async def test_a_file_never_observed_raises_naming_it_and_dispatches_nothing(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -633,7 +633,7 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    # Only a retraction can be written then, and it is never notified: the size is unknown.
+    # Only a forged merge source brings such a file, and the judge runs on observed files only.
     insert_file(catalog_connection, native_id=_HASH_CAT, size_bytes=1)
     _seed_decision(
         decision_store, native_id=_HASH_CAT, target_id=TargetId("062A"), decided_at=wall_clock.now()
@@ -647,14 +647,13 @@ async def test_a_file_with_no_name_left_is_named_by_the_candidate(
         observability=observability,
         wall_clock=wall_clock,
     )
-    await judge.rejudge(
-        _key(_HASH_CAT),
-        base_candidate=_reported_file(_HASH_CAT, filename=_DISCARD_NAME).to_candidate(),
-        node_id=_NODE_ID,
-    )
-    assert observability.logger.lines == [
-        _decisions_line(_HASH_CAT, filename=_DISCARD_NAME, changes="062A notify → retracted")
-    ]
+    with pytest.raises(RuntimeError, match=_HASH_CAT):
+        await judge.rejudge(
+            _key(_HASH_CAT),
+            base_candidate=_reported_file(_HASH_CAT, filename=_DISCARD_NAME).to_candidate(),
+            node_id=_NODE_ID,
+        )
+    assert observability.logger.lines == []
 
 
 @pytest.mark.asyncio

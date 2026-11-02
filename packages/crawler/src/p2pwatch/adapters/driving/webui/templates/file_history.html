@@ -77,7 +77,6 @@
     <thead>
       <tr>
         <th>Name</th>
-        <th>Size</th>
         <th>Sources</th>
         <th>Keyword</th>
         <th>Observed at</th>
@@ -87,13 +86,12 @@
       {% for row in file.observations %}
       <tr>
         <td>{{ row.filename }}</td>
-        <td>{{ row.size_bytes }}</td>
         <td>{{ row.sources }}</td>
         <td>{{ row.keyword }}</td>
         <td>{{ row.observed_at }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="5">No observation in this interval.</td></tr>
+      <tr><td colspan="4">No observation in this interval.</td></tr>
       {% endfor %}
     </tbody>
   </table>

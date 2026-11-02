@@ -1,5 +1,7 @@
 """``ListFiles``: a page of the catalog's files and their counts, in one read."""
 
+from datetime import UTC, datetime
+
 from catalog_matching.domain.decision_tier import DecisionTier
 from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.identifiers import TargetId
@@ -9,12 +11,24 @@ from p2pwatch.application.use_cases.list_files import ListFiles
 from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.fakes.adapters.driven.fake_catalog_file_reader import FakeCatalogFileReader
 
+_FILE = FileKey(network=Network.ED2K, native_id="a" * 32)
 _ENTRY = CatalogEntry(
-    file=FileKey(network=Network.ED2K, native_id="a" * 32),
-    size_bytes=100,
-    latest_observation=None,
+    file=_FILE,
+    latest_observation=FileObservation(
+        reported_file=ReportedFile(
+            file=_FILE,
+            filename="keroro_062a.avi",
+            size_bytes=100,
+            source_count=5,
+            keyword=Keyword("keroro"),
+        ),
+        observed_at=datetime(2026, 10, 14, tzinfo=UTC),
+        node_id=NodeId("n1"),
+    ),
     decisions=(
         DecisionRecord(target_id=TargetId("062A"), rule_name="rule", tier=DecisionTier.DOWNLOAD),
     ),

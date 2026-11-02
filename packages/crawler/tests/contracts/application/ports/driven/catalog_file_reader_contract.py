@@ -181,7 +181,7 @@ class CatalogFileReaderContract(ABC):
     def reader(self) -> CatalogFileReader:
         """The reader of the writers' catalog."""
 
-    def test_an_entry_holds_its_size_its_latest_observation_and_its_decisions_by_target(
+    def test_an_entry_holds_its_latest_observation_and_its_decisions_by_target(
         self,
         *,
         randomness: Random,
@@ -210,7 +210,6 @@ class CatalogFileReaderContract(ABC):
         [entry] = _entries(reader)
         assert entry == CatalogEntry(
             file=file,
-            size_bytes=first.reported_file.size_bytes,
             latest_observation=latest,
             decisions=records,
         )
@@ -516,8 +515,8 @@ class CatalogFileReaderContract(ABC):
                 for file, (_, latest) in observations_by_file.items()
             },
             CatalogEntrySort.SIZE: {
-                file: first.reported_file.size_bytes
-                for file, (first, _) in observations_by_file.items()
+                file: latest.reported_file.size_bytes
+                for file, (_, latest) in observations_by_file.items()
             },
             CatalogEntrySort.SOURCES: {
                 file: latest.reported_file.source_count
@@ -757,7 +756,7 @@ class CatalogFileReaderContract(ABC):
             {DecisionTier.DOWNLOAD: 1, DecisionTier.CATALOG: 1},
         )
 
-    def test_a_history_holds_the_size_the_interval_s_observations_and_the_latest_of_all(
+    def test_a_history_holds_the_interval_s_observations_and_the_latest_of_all(
         self,
         *,
         randomness: Random,
@@ -791,7 +790,6 @@ class CatalogFileReaderContract(ABC):
         }
         assert reader.read_file_history(file.file_id, since=since, until=until) == FileHistory(
             file=file,
-            size_bytes=first.reported_file.size_bytes,
             observations=(at_since, inside),
             latest_observation=latest,
             decisions=(),
