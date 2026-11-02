@@ -11,7 +11,7 @@ from p2pwatch.application.ports.driven.observation_writer import ObservationWrit
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.source import LatestPoint, SourcePoint, SourceRole
-from tests.support.domain.observation import draw_observed_file
+from tests.support.domain.observation import record_drawn_observation
 from tests.support.domain.source import (
     draw_point_read_again,
     draw_source_key,
@@ -60,7 +60,7 @@ class SourcePointStoreContract(ABC):
         reader: SourcePointReader,
         role: SourceRole,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         since, observed_at, before = draw_instants(randomness, count=3)
         point = draw_source_point(
@@ -83,7 +83,7 @@ class SourcePointStoreContract(ABC):
         writer: SourcePointWriter,
         reader: SourcePointReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         since, observed_at, before = draw_instants(randomness, count=3)
         point = draw_source_point(
@@ -103,7 +103,7 @@ class SourcePointStoreContract(ABC):
         writer: SourcePointWriter,
         reader: SourcePointReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         earliest_at, earlier_at, later_at, before = draw_instants(randomness, count=4)
         first = draw_source_point(
@@ -122,7 +122,7 @@ class SourcePointStoreContract(ABC):
             observed_at=earlier_at,
             node_id=first.node_id,
         )
-        writer.record_points([latest, other_variant, first])
+        writer.record_points([other_variant, latest, first])
         reading = draw_source_reading(randomness, source=source, role=None)
         assert reader.read_latest_point(
             file, reading=reading, since=earliest_at, before=before, node_id=first.node_id
@@ -136,7 +136,7 @@ class SourcePointStoreContract(ABC):
         writer: SourcePointWriter,
         reader: SourcePointReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         earlier_at, between_at, later_at = draw_instants(randomness, count=3)
         earlier = draw_source_point(
@@ -155,7 +155,7 @@ class SourcePointStoreContract(ABC):
             is None
         )
 
-    def test_a_source_without_identity_is_its_name_among_those_without_one(
+    def test_a_source_without_a_user_hash_is_its_name_among_those_without_one(
         self,
         *,
         randomness: Random,
@@ -163,7 +163,7 @@ class SourcePointStoreContract(ABC):
         writer: SourcePointWriter,
         reader: SourcePointReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         named_at, identified_at, other_named_at, before = draw_instants(randomness, count=4)
         named = draw_source_point(
@@ -209,7 +209,8 @@ class SourcePointStoreContract(ABC):
         reader: SourcePointReader,
     ) -> None:
         file, other_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         source = draw_source_key(randomness)
         since, on_other_file_at, of_other_source_at, by_other_node_at, before = draw_instants(
@@ -255,7 +256,7 @@ class SourcePointStoreContract(ABC):
         writer: SourcePointWriter,
         reader: SourcePointReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         earliest_at, earlier_at, later_at, before, latest_at = draw_instants(randomness, count=5)
         first = draw_source_point(
@@ -304,7 +305,8 @@ class SourcePointStoreContract(ABC):
         reader: SourcePointReader,
     ) -> None:
         file, other_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         source = draw_source_key(randomness)
         on_file_at, on_other_file_at, of_other_source_at, by_other_node_at, before = draw_instants(
@@ -352,7 +354,7 @@ class SourcePointStoreContract(ABC):
         writer: SourcePointWriter,
         reader: SourcePointReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         earlier_at, observed_at, later_at = draw_instants(randomness, count=3)
         by_other_node = draw_source_point(

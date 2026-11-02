@@ -19,7 +19,7 @@ from tests.support.domain.file_target_decision import (
     draw_target_id,
     draw_target_ids,
 )
-from tests.support.domain.observation import draw_observed_file
+from tests.support.domain.observation import record_drawn_observation
 from tests.support.draws import draw_instants
 
 
@@ -49,7 +49,7 @@ class CoverageReaderContract(ABC):
     def test_a_catalog_without_decisions_covers_no_target(
         self, *, randomness: Random, observation_writer: ObservationWriter, reader: CoverageReader
     ) -> None:
-        draw_observed_file(randomness, observation_writer=observation_writer)
+        record_drawn_observation(randomness, observation_writer=observation_writer)
         assert reader.read_target_coverage() == {}
 
     @pytest.mark.parametrize("tier", list(DecisionTier), ids=str)
@@ -62,7 +62,7 @@ class CoverageReaderContract(ABC):
         reader: CoverageReader,
         tier: DecisionTier,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=tier)
         decision_writer.record_decision(draw_dated_decision(randomness, file=file, decision=record))
         coverage = reader.read_target_coverage()
@@ -81,7 +81,7 @@ class CoverageReaderContract(ABC):
         target_id = draw_target_id(randomness)
         tiers = [DecisionTier.DOWNLOAD, DecisionTier.CATALOG, DecisionTier.DOWNLOAD]
         for tier in tiers:
-            file = draw_observed_file(randomness, observation_writer=observation_writer)
+            file = record_drawn_observation(randomness, observation_writer=observation_writer)
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
             decision_writer.record_decision(
                 draw_dated_decision(randomness, file=file, decision=record)
@@ -96,7 +96,7 @@ class CoverageReaderContract(ABC):
         decision_writer: DecisionWriter,
         reader: CoverageReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         target_id, other_target_id = draw_target_ids(randomness, count=2)
         for decided_target_id, tier in (
             (target_id, DecisionTier.DOWNLOAD),
@@ -120,7 +120,8 @@ class CoverageReaderContract(ABC):
         reader: CoverageReader,
     ) -> None:
         file, other_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         target_id = draw_target_id(randomness)
         earlier_at, later_at, latest_at = draw_instants(randomness, count=3)
@@ -147,7 +148,7 @@ class CoverageReaderContract(ABC):
         decision_writer: DecisionWriter,
         reader: CoverageReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         retracted_target_id, kept_target_id = draw_target_ids(randomness, count=2)
         earlier_at, later_at = draw_instants(randomness, count=2)
         decisions: tuple[tuple[FileTargetDecision, datetime], ...] = (
@@ -179,7 +180,7 @@ class CoverageReaderContract(ABC):
         decision_writer: DecisionWriter,
         reader: CoverageReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         earlier_at, later_at = draw_instants(randomness, count=2)
         record = draw_decision_record(randomness, tier=DecisionTier.NOTIFY)
         decisions: tuple[tuple[FileTargetDecision, datetime], ...] = (

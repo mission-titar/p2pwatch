@@ -61,12 +61,13 @@ class CatalogScanReaderContract(ABC):
         reader: CatalogScanReader,
     ) -> None:
         file = draw_file(randomness)
-        earlier_at, later_at = draw_instants(randomness, count=2)
-        latest = draw_file_observation(randomness, file=file, has_media=True, observed_at=later_at)
-        observation_writer.record_observation(latest)
-        observation_writer.record_observation(
-            draw_file_observation(randomness, file=file, has_media=True, observed_at=earlier_at)
+        earliest, earlier, latest = (
+            draw_file_observation(randomness, file=file, has_media=True, observed_at=observed_at)
+            for observed_at in draw_instants(randomness, count=3)
         )
+        # Recorded between the two others: neither the first nor the last recorded is the latest.
+        for observation in (earliest, latest, earlier):
+            observation_writer.record_observation(observation)
         assert list(reader.iter_latest_observations()) == [latest]
 
     def test_a_report_seen_again_with_fewer_sources_is_read_at_its_latest_sighting(

@@ -9,7 +9,7 @@ import pytest
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from tests.support.domain.observation import draw_file, draw_file_observation
-from tests.support.draws import draw_instants, draw_quantities
+from tests.support.draws import draw_instants, draw_quantities, draw_quantity, draw_text
 
 
 class ObservationStoreContract(ABC):
@@ -56,12 +56,13 @@ class ObservationStoreContract(ABC):
         self, *, randomness: Random, writer: ObservationWriter, reader: ObservationReader
     ) -> None:
         file = draw_file(randomness)
-        earlier_at, later_at = draw_instants(randomness, count=2)
-        latest = draw_file_observation(randomness, file=file, has_media=True, observed_at=later_at)
-        writer.record_observation(latest)
-        writer.record_observation(
-            draw_file_observation(randomness, file=file, has_media=True, observed_at=earlier_at)
+        earliest, earlier, latest = (
+            draw_file_observation(randomness, file=file, has_media=True, observed_at=observed_at)
+            for observed_at in draw_instants(randomness, count=3)
         )
+        # Recorded between the two others: neither the first nor the last recorded is the latest.
+        for observation in (earliest, latest, earlier):
+            writer.record_observation(observation)
         assert reader.read_latest_observation(file) == latest
 
     def test_a_report_seen_again_with_fewer_sources_is_read_at_its_latest_sighting(
@@ -107,36 +108,33 @@ class ObservationStoreContract(ABC):
         self, *, randomness: Random, writer: ObservationWriter, reader: ObservationReader
     ) -> None:
         file = draw_file(randomness)
-        earlier_at, later_at = draw_instants(randomness, count=2)
-        earlier = draw_file_observation(
-            randomness, file=file, has_media=True, observed_at=earlier_at
+        source_count = draw_quantity(randomness)
+        earliest, earlier, latest = (
+            draw_file_observation(
+                randomness,
+                file=file,
+                has_media=True,
+                observed_at=observed_at,
+                source_count=source_count,
+            )
+            for observed_at in draw_instants(randomness, count=3)
         )
-        latest = draw_file_observation(
-            randomness,
-            file=file,
-            has_media=True,
-            observed_at=later_at,
-            source_count=earlier.reported_file.source_count,
-        )
-        writer.record_observation(latest)
-        writer.record_observation(earlier)
+        # Recorded between the two others: neither the first nor the last recorded is the latest.
+        for observation in (earliest, latest, earlier):
+            writer.record_observation(observation)
         assert reader.read_best_observation(file) == latest
 
     def test_the_known_filenames_are_the_file_s_distinct_filenames_sorted(
         self, *, randomness: Random, writer: ObservationWriter, reader: ObservationReader
     ) -> None:
         file = draw_file(randomness)
-        first = draw_file_observation(randomness, file=file, has_media=True)
-        second = draw_file_observation(randomness, file=file, has_media=True)
-        writer.record_observation(first)
-        writer.record_observation(second)
-        writer.record_observation(
-            draw_file_observation(
-                randomness, file=file, has_media=True, filename=first.reported_file.filename
+        smaller, larger = sorted(draw_text(randomness) for _ in range(2))
+        # Recorded against their sorted order, so that the order of recording fails it.
+        for filename in (larger, smaller, larger):
+            writer.record_observation(
+                draw_file_observation(randomness, file=file, has_media=True, filename=filename)
             )
-        )
         writer.record_observation(
             draw_file_observation(randomness, file=draw_file(randomness), has_media=True)
         )
-        filenames = {first.reported_file.filename, second.reported_file.filename}
-        assert reader.read_known_filenames(file) == tuple(sorted(filenames))
+        assert reader.read_known_filenames(file) == (smaller, larger)

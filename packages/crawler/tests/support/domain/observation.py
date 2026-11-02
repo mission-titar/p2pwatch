@@ -62,7 +62,7 @@ def draw_file_observation(
     )
 
 
-def draw_observed_file(
+def record_drawn_observation(
     randomness: Random, *, observation_writer: ObservationWriter, filename: str | None = None
 ) -> FileKey:
     """A drawn file, once ``observation_writer`` has recorded a drawn observation of it, of

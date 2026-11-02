@@ -6,6 +6,7 @@ from random import Random
 import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
+from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
@@ -18,7 +19,7 @@ from tests.support.domain.file_target_decision import (
     draw_target_id,
     draw_target_ids,
 )
-from tests.support.domain.observation import draw_file, draw_observed_file
+from tests.support.domain.observation import draw_file, record_drawn_observation
 from tests.support.draws import draw_instants
 
 
@@ -41,7 +42,7 @@ class DecisionStoreContract(ABC):
     def test_a_file_never_decided_has_no_decision_and_no_candidate(
         self, *, randomness: Random, observation_writer: ObservationWriter, reader: DecisionReader
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         assert reader.read_latest_decisions(file) == {}
         assert reader.read_latest_decisions(draw_file(randomness)) == {}
         assert reader.read_download_candidates() == ()
@@ -56,10 +57,16 @@ class DecisionStoreContract(ABC):
         reader: DecisionReader,
         tier: DecisionTier,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=tier)
         writer.record_decision(draw_dated_decision(randomness, file=file, decision=record))
-        assert reader.read_latest_decisions(file) == {record.target_id: record}
+        latest_decisions = reader.read_latest_decisions(file)
+        assert latest_decisions == {record.target_id: record}
+        # A `StrEnum` member equals its text: only `is` tells the tier from a bare string.
+        assert all(
+            isinstance(decision, DecisionRecord) and decision.tier is tier
+            for decision in latest_decisions.values()
+        )
 
     def test_a_target_s_latest_decision_is_the_most_recent_of_its_file_not_the_last_recorded(
         self,
@@ -70,16 +77,20 @@ class DecisionStoreContract(ABC):
         reader: DecisionReader,
     ) -> None:
         file, other_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         target_id, other_target_id = draw_target_ids(randomness, count=2)
-        earlier_at, later_at, latest_at = draw_instants(randomness, count=3)
+        earliest_at, earlier_at, later_at, latest_at = draw_instants(randomness, count=4)
+        earliest = draw_decision_record(randomness, tier=DecisionTier.NOTIFY, target_id=target_id)
         latest = draw_decision_record(randomness, tier=DecisionTier.DOWNLOAD, target_id=target_id)
         earlier = draw_decision_record(randomness, tier=DecisionTier.CATALOG, target_id=target_id)
         other_target = draw_decision_record(
             randomness, tier=DecisionTier.NOTIFY, target_id=other_target_id
         )
+        # The latest recorded between two others: neither the first nor the last recorded is it.
         for decided_file, decision, decided_at in (
+            (file, earliest, earliest_at),
             (file, latest, later_at),
             (file, earlier, earlier_at),
             (file, other_target, earlier_at),
@@ -103,7 +114,7 @@ class DecisionStoreContract(ABC):
         writer: DecisionWriter,
         reader: DecisionReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         earlier_at, later_at = draw_instants(randomness, count=2)
         record = draw_decision_record(randomness, tier=DecisionTier.DOWNLOAD)
         retraction = Retraction(target_id=record.target_id)
@@ -124,7 +135,7 @@ class DecisionStoreContract(ABC):
         writer: DecisionWriter,
         reader: DecisionReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=DecisionTier.NOTIFY)
         writer.record_decision(draw_dated_decision(randomness, file=file, decision=record))
         writer.record_decision(
@@ -140,10 +151,12 @@ class DecisionStoreContract(ABC):
         writer: DecisionWriter,
         reader: DecisionReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         target_id = draw_target_id(randomness)
-        earlier_at, later_at = draw_instants(randomness, count=2)
+        earliest_at, earlier_at, later_at = draw_instants(randomness, count=3)
+        # The latest recorded between two others: neither the first nor the last recorded is it.
         for tier, decided_at in (
+            (DecisionTier.CATALOG, earliest_at),
             (DecisionTier.DOWNLOAD, later_at),
             (DecisionTier.CATALOG, earlier_at),
         ):
@@ -165,7 +178,7 @@ class DecisionStoreContract(ABC):
         reader: DecisionReader,
         latest_tier: DecisionTier,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         target_id = draw_target_id(randomness)
         earlier_at, later_at = draw_instants(randomness, count=2)
         for tier, decided_at in ((latest_tier, later_at), (DecisionTier.DOWNLOAD, earlier_at)):
@@ -184,7 +197,8 @@ class DecisionStoreContract(ABC):
         reader: DecisionReader,
     ) -> None:
         candidate_file, other_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         target_id = draw_target_id(randomness)
         earliest_at, earlier_at, latest_at = draw_instants(randomness, count=3)
@@ -209,7 +223,7 @@ class DecisionStoreContract(ABC):
         writer: DecisionWriter,
         reader: DecisionReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         first_target_id, dropped_target_id, last_target_id = draw_target_ids(randomness, count=3)
         earlier_at, later_at = draw_instants(randomness, count=2)
         for target_id, tier, decided_at in (

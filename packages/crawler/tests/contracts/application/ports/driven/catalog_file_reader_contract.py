@@ -26,7 +26,11 @@ from tests.support.domain.file_target_decision import (
     draw_target_id,
     draw_target_ids,
 )
-from tests.support.domain.observation import draw_file, draw_file_observation, draw_observed_file
+from tests.support.domain.observation import (
+    draw_file,
+    draw_file_observation,
+    record_drawn_observation,
+)
 from tests.support.draws import draw_instants, draw_text
 
 _EVERY_ENTRY = 100  # past the files any test records
@@ -224,14 +228,20 @@ class CatalogFileReaderContract(ABC):
         reader: CatalogFileReader,
     ) -> None:
         file = draw_file(randomness)
-        earlier, later = (
-            draw_file_observation(randomness, file=file, has_media=True, observed_at=observed_at)
-            for observed_at in draw_instants(randomness, count=2)
+        # The latest without media, so that an entry is also read back without its media.
+        earliest, earlier, latest = (
+            draw_file_observation(
+                randomness, file=file, has_media=has_media, observed_at=observed_at
+            )
+            for observed_at, has_media in zip(
+                draw_instants(randomness, count=3), (True, True, False), strict=True
+            )
         )
-        for observation in (later, earlier):
+        # Recorded between the two others: neither the first nor the last recorded is the latest.
+        for observation in (earliest, latest, earlier):
             observation_writer.record_observation(observation)
         [entry] = _entries(reader)
-        assert entry.latest_observation == later
+        assert entry.latest_observation == latest
 
     @pytest.mark.parametrize(
         "tier", [tier for tier in DecisionTier if tier.identifies_target], ids=str
@@ -247,7 +257,8 @@ class CatalogFileReaderContract(ABC):
     ) -> None:
         target_id, other_target_id = draw_target_ids(randomness, count=2)
         both, other, catalogued, retracted, undecided = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(5)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(5)
         )
         on_target, on_other, only_other, catalog, withdrawn = (
             draw_decision_record(randomness, tier=decided_tier, target_id=decided_target_id)
@@ -293,7 +304,8 @@ class CatalogFileReaderContract(ABC):
         other_tier = next(each for each in DecisionTier if each is not tier)
         target_id, other_target_id = draw_target_ids(randomness, count=2)
         holding, superseded, retracted = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(3)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(3)
         )
         held, also_held, outdated, superseding, withdrawn = (
             draw_decision_record(randomness, tier=decided_tier, target_id=decided_target_id)
@@ -343,7 +355,9 @@ class CatalogFileReaderContract(ABC):
         missed_filename: str,
     ) -> None:
         found, missed = (
-            draw_observed_file(randomness, observation_writer=observation_writer, filename=filename)
+            record_drawn_observation(
+                randomness, observation_writer=observation_writer, filename=filename
+            )
             for filename in (found_filename, missed_filename)
         )
         assert {entry.file for entry in _entries(reader, search_text=search_text)} == {found}
@@ -384,7 +398,9 @@ class CatalogFileReaderContract(ABC):
         search_text = draw_text(randomness)
         holding = _holding(randomness, search_text=search_text)
         passing, unnamed, notified, elsewhere = (
-            draw_observed_file(randomness, observation_writer=observation_writer, filename=filename)
+            record_drawn_observation(
+                randomness, observation_writer=observation_writer, filename=filename
+            )
             for filename in (holding, draw_text(randomness), holding, holding)
         )
         for decided_file, tier, decided_target_id in (
@@ -411,7 +427,8 @@ class CatalogFileReaderContract(ABC):
         reader: CatalogFileReader,
     ) -> None:
         matched, retracted, undecided = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(3)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(3)
         )
         target_id = draw_target_id(randomness)
         record, withdrawn = (
@@ -443,7 +460,7 @@ class CatalogFileReaderContract(ABC):
         decision_writer: DecisionWriter,
         reader: CatalogFileReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=DecisionTier.NOTIFY)
         earlier_at, later_at = draw_instants(randomness, count=2)
         _record_decisions(
@@ -576,7 +593,7 @@ class CatalogFileReaderContract(ABC):
         reader: CatalogFileReader,
     ) -> None:
         for _ in range(7):
-            draw_observed_file(randomness, observation_writer=observation_writer)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
         every_entry, *pages = (
             _page(
                 reader,
@@ -604,7 +621,8 @@ class CatalogFileReaderContract(ABC):
         reader: CatalogFileReader,
     ) -> None:
         whole_episode, catalogued, legacy, retracted, undecided = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(5)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(5)
         )
         target_id, other_target_id = draw_target_ids(randomness, count=2)
         downloaded, notified, catalog, still_notified, withdrawn = (
@@ -642,7 +660,8 @@ class CatalogFileReaderContract(ABC):
         reader: CatalogFileReader,
     ) -> None:
         both_tiers, downloaded_twice, superseded, retracted, legacy, undecided = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(6)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(6)
         )
         target_id, other_target_id = draw_target_ids(randomness, count=2)
         notified, downloaded, downloaded_first, downloaded_second, outdated, superseding = (
@@ -694,7 +713,9 @@ class CatalogFileReaderContract(ABC):
         search_text = draw_text(randomness)
         holding = _holding(randomness, search_text=search_text)
         passing, undecided, catalogued, unnamed, elsewhere = (
-            draw_observed_file(randomness, observation_writer=observation_writer, filename=filename)
+            record_drawn_observation(
+                randomness, observation_writer=observation_writer, filename=filename
+            )
             for filename in (holding, holding, holding, draw_text(randomness), holding)
         )
         for decided_file, tier, decided_target_id in (
@@ -776,22 +797,28 @@ class CatalogFileReaderContract(ABC):
         decision_writer: DecisionWriter,
         reader: CatalogFileReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
-        superseded_target_id, notified_target_id, catalogued_target_id, retracted_target_id = (
-            draw_target_ids(randomness, count=4)
-        )
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
+        # Two targets of one tier, and the tiers out of rank order against the target ids.
+        (
+            catalogued_target_id,
+            superseded_target_id,
+            notified_target_id,
+            downloaded_target_id,
+            retracted_target_id,
+        ) = draw_target_ids(randomness, count=5)
         earlier_at, later_at = draw_instants(randomness, count=2)
         records = tuple(
             draw_decision_record(randomness, tier=tier, target_id=target_id)
             for tier, target_id in (
+                (DecisionTier.CATALOG, catalogued_target_id),
                 (DecisionTier.DOWNLOAD, superseded_target_id),
                 (DecisionTier.NOTIFY, notified_target_id),
-                (DecisionTier.CATALOG, catalogued_target_id),
+                (DecisionTier.DOWNLOAD, downloaded_target_id),
             )
         )
         current = tuple(
             draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)
-            for record, decided_at in zip(records, (later_at, None, None), strict=True)
+            for record, decided_at in zip(records, (None, later_at, None, None), strict=True)
         )
         outdated, withdrawn, retraction = (
             draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)
@@ -831,7 +858,7 @@ class CatalogFileReaderContract(ABC):
         decision_writer: DecisionWriter,
         reader: CatalogFileReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         earlier_at, later_at = draw_instants(randomness, count=2)
         record = draw_decision_record(randomness, tier=DecisionTier.NOTIFY)
         decided, legacy = (
@@ -854,7 +881,7 @@ class CatalogFileReaderContract(ABC):
         observation_writer: ObservationWriter,
         reader: CatalogFileReader,
     ) -> None:
-        held = draw_observed_file(randomness, observation_writer=observation_writer)
+        held = record_drawn_observation(randomness, observation_writer=observation_writer)
         since, until = draw_instants(randomness, count=2)
         # A file is read by its id: the bytes of a held file's native id are no file's.
         for file_id in (draw_file(randomness).file_id, FileId(bytes.fromhex(held.native_id))):
