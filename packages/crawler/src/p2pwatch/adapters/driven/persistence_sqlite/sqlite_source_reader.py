@@ -126,10 +126,11 @@ JOIN (
 ) AS seen ON seen.source_id = s.source_id
 """
 
-# A hash prefix, or a substring of any name the source carried; LIKE ignores ASCII case.
+# A hash prefix, or a substring of any name the source carried; instr, not LIKE: no wildcard.
 _SQL_SOURCES_SEARCH = """\
-WHERE s.native_id LIKE ? OR EXISTS (
-    SELECT 1 FROM source_variants AS nv WHERE nv.source_id = s.source_id AND nv.name LIKE ?
+WHERE instr(fold_for_search(s.native_id), fold_for_search(?)) = 1 OR EXISTS (
+    SELECT 1 FROM source_variants AS nv
+    WHERE nv.source_id = s.source_id AND instr(fold_for_search(nv.name), fold_for_search(?)) > 0
 )
 """
 
@@ -183,7 +184,7 @@ def _sources_search(search_text: str | None) -> tuple[str, list[str]]:
     """The sources list's search clause and its parameters; none without a search text."""
     if search_text is None:
         return "", []
-    return _SQL_SOURCES_SEARCH, [f"{search_text}%", f"%{search_text}%"]
+    return _SQL_SOURCES_SEARCH, [search_text, search_text]
 
 
 def _sharing_period(row: NamedRow) -> SharingPeriod:
