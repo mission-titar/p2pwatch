@@ -15,7 +15,7 @@ class DecisionReader(ABC):
     @abstractmethod
     def read_latest_decisions(self, file: FileKey) -> dict[TargetId, FileTargetDecision]:
         """The latest decision per target (spec §7), a :class:`Retraction` included, the legacy
-        ``target_id=""`` sentinel excluded."""
+        retraction of no target left out."""
 
     @abstractmethod
     def read_download_candidates(self) -> tuple[DownloadCandidate, ...]:

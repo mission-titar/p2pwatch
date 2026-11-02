@@ -13,4 +13,4 @@ class CoverageReader(ABC):
     @abstractmethod
     def read_target_coverage(self) -> Mapping[TargetId, tuple[DecisionTier, ...]]:
         """By ``target_id``, the tier of each file's latest decision for it, none retracted, the
-        legacy ``target_id=""`` sentinel excluded."""
+        legacy retraction of no target left out."""

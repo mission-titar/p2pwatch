@@ -1,4 +1,4 @@
-"""D4's and D5's reads of a source's history on a real catalog (source points spec, section 7)."""
+"""The SQLite source point store's contract, and the seeks its reads cost."""
 
 import sqlite3
 from collections.abc import Iterator

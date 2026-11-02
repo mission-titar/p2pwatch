@@ -22,23 +22,21 @@ class SourceNaming:
 
 @dataclass(kw_only=True, frozen=True)
 class SourceHistory:
-    """A source, the names read of it, last seen first, then on ``source_name`` ascending, its
-    sharing periods over every file, the latest started first, and their files' best filenames,
-    of the most sourced observation, then the latest, none for a file never observed."""
+    """A source, the names read of it, its sharing periods over every file, their files' best
+    filenames, of the most sourced observation, then the latest."""
 
     source: SourceKey
-    source_namings: tuple[SourceNaming, ...]
-    sharing_periods: tuple[SharingPeriod, ...]
-    best_filename_by_file: Mapping[FileKey, str]
+    source_namings: tuple[SourceNaming, ...]  # last seen first, then on source_name ascending
+    sharing_periods: tuple[SharingPeriod, ...]  # the latest started first
+    best_filename_by_file: Mapping[FileKey, str]  # none for a file never observed
 
 
 @dataclass(kw_only=True, frozen=True)
 class SourceNameHistory:
-    """A name, the sources read under it, last seen first, then on ``source_id`` ascending, its
-    sharing periods without a user hash, the latest started first, and their files' best
-    filenames, of the most sourced observation, then the latest, none for a file never observed."""
+    """A name, the sources read under it, its sharing periods without a user hash, their files'
+    best filenames, of the most sourced observation, then the latest."""
 
     source_name: str
-    source_namings: tuple[SourceNaming, ...]
-    sharing_periods: tuple[SharingPeriod, ...]
-    best_filename_by_file: Mapping[FileKey, str]
+    source_namings: tuple[SourceNaming, ...]  # last seen first, then on source_id ascending
+    sharing_periods: tuple[SharingPeriod, ...]  # the latest started first
+    best_filename_by_file: Mapping[FileKey, str]  # none for a file never observed

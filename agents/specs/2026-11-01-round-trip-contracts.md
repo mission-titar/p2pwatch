@@ -55,7 +55,8 @@ text or a catalog file, so no other implementation can exist.
   "one abstract fixture per port it uses" of 2026-10-29.*
 - **D4. The wide values are drawn, the narrow ones written by the test.** A draw fills every text, integer and instant
   of a value at random over a wide range, a text at least 8 characters long, and draws without replacement the values of
-  one field a test needs distinct (two instants in order); the test writes only what would pick a Python branch (a value
+  one field a test needs distinct (two instants in order) (Corrected: its quantities and instants; texts a test needs
+  distinct are drawn plainly, since texts have no finite range to sample from, block 30); the test writes only what would pick a Python branch (a value
   present or absent, a tier, a role, a state). One `random.Random` per test, seeded from its node id, so a test's values
   are the same on every run whatever the order or the selection. *Catching a swap needs two columns with distinct
   values, which a draw gives all but surely and a hand-picked pair may not; Hypothesis's hundred examples and shrinking
@@ -110,7 +111,9 @@ by the block that first applies them.
 
 - **C1** (D3, block 10): a contract receives each port it uses through an abstract fixture of its own, `writer` and
   `reader` for a pair's ports, `reader` for a reader-only port, each Writer it seeds through named after its port in
-  snake case, each test's parameters typed by the ports. It replaces `AGENTS.md`'s `<Thing>Ports` sentence.
+  snake case, each test's parameters typed by the ports. It replaces `AGENTS.md`'s `<Thing>Ports` sentence. (Corrected:
+  a second fixture of one port is named after what sets its store apart, block 10's `unreadable_reader`; written into
+  `AGENTS.md` by block 140, the holistic review.)
 - **C2** (D4, block 20): a contract over a database draws its wide values at random from a `randomness` fixture, a
   `random.Random` seeded from the test's node id, through a `draw_<value>` per value a Writer takes, in
   `tests/support/`; the test writes only the narrow values.
@@ -137,7 +140,9 @@ by the block that first applies them.
    same value (Corrected: "the same-type fields of each drawn value differ over 1000 seeds" dropped with the
    distinctness by construction, D4). `git grep -nE 'datetime\(|timedelta\(|" \* 32|TargetId\("[^"]|_bytes=[0-9]'` over
    the twelve contract modules over a database prints nothing; on `main` it prints the constants of the four existing
-   ones.
+   ones. (Corrected: from block 135 it prints the two `timedelta(0)` of the tracked downloads' and the backoffs' "aware
+   in UTC" checks, an offset and no hand-picked value, which block 120 had written `UTC.utcoffset(None)` to dodge the
+   grep; the holistic review.)
 6. Each block's report maps every adapter test it deletes to the contract test that restates it.
 7. No `<Thing>Ports` is left: `git grep -nE 'class [A-Z][A-Za-z]*Ports\b' -- packages` prints nothing, where on
    `main` it prints the nine pair contracts' dataclasses (9 lines; with `-- 'packages/*/tests'` and `-E`, git grep
@@ -165,10 +170,11 @@ restate, its report mapping each to its contract test (acceptance 6).
 | 80 | `test/file-count-contract` | `CatalogFileReaderContract`: the counts, the tests it restates | 355 (195), 3 |
 | 90 | `fix/source-search` | `SourceReaderContract`: the sources lists, D5 for sources, the tests it restates | 356 (272), 5 |
 | 100 | `test/sharing-period-contract` | `SourceReaderContract`: the sharing periods, the tests it restates | 452 (250), 3 |
-| 110 | `test/source-history-contract` | `SourceReaderContract`: the source and name histories, the tests it restates, `catalog_seeds.py` | 733 (375), 3 |
+| 110 | `test/source-history-contract` | `SourceReaderContract`: the source and name histories, the tests it restates, `catalog_seeds.py` (Corrected: deleted by block 100, which held its last user) | 733 (375), 3 |
 | 120 | `test/drawn-values-in-local-contracts` | the draws of `local.db`'s values, the four existing contracts on them | 315, about 10 |
 | 130 | `test/node-state-reader-contract` | `NodeStateReaderContract`, the tests it restates | 457 (277), 6 |
-| 140 | `docs/wrap-round-trip-contracts` | closing, section 8's documents | 12, 2 |
+| 135 | `test/holistic-review-fixes` | (Corrected: inserted on 2026-11-02, the closing block's fixes coming to about 30 files) the holistic review's fixes to the tests, the fold (D5) and the size (D6) corrected | 329, 19, measured |
+| 140 | `docs/wrap-round-trip-contracts` | closing, section 8's documents (Corrected: and the review's other docstrings) | 12, 2 (Corrected: 69, 13, measured) |
 
 Two size exemptions, granted by the operator on 2026-11-01:
 
@@ -177,7 +183,7 @@ Two size exemptions, granted by the operator on 2026-11-01:
   contract on `main` between its halves. Its size, in place of a Sonnet agent's estimate, is that of the commit it
   reverts, `c9f3fd4a` (487 changed lines over 29 files, by `agents/workflow.md`'s command; the spec review): 9 contract
   modules and 19 subclass modules in the crawler, `amule` and `amule_bump`, plus `AGENTS.md` and
-  `docs/contributing/testing.md`.
+  `docs/contributing/testing.md` (Corrected: 18 subclass modules, those `c9f3fd4a` touched, block 10's report).
 - **A block may pass 500 lines when the lines past it are adapter tests deleted**, each mapped to the contract test
   that restates it (acceptance 6), which the review reads in place of every deleted line; the rest of the block stays
   under 500 lines and 20 files. The holistic review checks every row of every mapping, that the contract test checks
@@ -230,6 +236,8 @@ The closing block deletes "Round-trip contracts". No entry is added.
 - `docs/contributing/testing.md`, the contracts: the ports they receive as fixtures (block 10), their drawn values
   (block 20).
 - `docs/migration-4x.md`: the literal search (block 140), as it lists what v5 changes for the operator.
+- (Corrected: block 140 also words both contracts bullets after the code, the draws of a value's parts beside it and a
+  second fixture of one port, from the holistic review, and `docs/migration-4x.md` names the ligatures, D5.)
 - The closing block's handoff, with acceptance 3's table.
 
 ## Appendix A. The contracts
@@ -252,7 +260,9 @@ Paths under `packages/crawler/`. Contracts in `tests/contracts/application/ports
   seed through `ObservationWriter` too.
 - **The draws**: a `draw_<value>` per value a Writer takes, at the mirror of the module defining its type
   (`tests/support/domain/observation.py` for `ReportedFile` and `FileObservation`, `.../file_target_decision.py` for
-  `DatedDecision`, `.../source.py` for `SourcePoint`), the draws of a text, a quantity and an instant in
+  `DatedDecision`, `.../source.py` for `SourcePoint`) (Corrected: at the mirror of the module of the value a Writer
+  records, with the draws of its parts, `draw_file` in `observation.py` and `draw_target_id` in
+  `file_target_decision.py`, blocks 20, 30 and 120; `AGENTS.md` worded so by block 140, the holistic review), the draws of a text, a quantity and an instant in
   `tests/support/draws.py`; keyword arguments for the narrow values and for what a test relates (the same file, a later
   instant). No retry loop: a branch that only a colliding seed takes would fail the 100 % of `tests/support`. The
   `randomness` fixture lives in `tests/conftest.py`: `random.Random(request.node.nodeid)`, a `str` seed hashed by
@@ -261,7 +271,10 @@ Paths under `packages/crawler/`. Contracts in `tests/contracts/application/ports
   substring and `= 1` for a hash prefix, so no character of the text is a wildcard and nothing needs escaping.
   `fold_for_search` is a Python function of the adapter, the text casefolded, decomposed (NFD) and stripped of its
   combining marks (`None` for `None`), registered with `deterministic=True` by `register_sql_functions`, which
-  `SqliteDatabaseOpener` runs on every connection it opens, the readers' included. Each block checks with
+  `SqliteDatabaseOpener` runs on every connection it opens, the readers' included (Corrected: in a module of its own,
+  `search_fold.py`, the matcher's `fold` since block 135 (D5), registered by `SqliteDatabaseOpener.open_reader` alone: only the readers search, and
+  `register_sql_functions` would give the SQL console's reader the memoized `content_hash` and `fold_raw_meta`, whose
+  cache a query grows without bound, and `iso_to_micros`, which only migrations may call; block 60). Each block checks with
   `EXPLAIN QUERY PLAN` that its search keeps its plan (a scan today, since the default `LIKE` uses no index on a
   `BINARY` column).
 - **What a contract cannot seed** stays in an adapter test: a `files` row without an observation (behind
@@ -281,7 +294,7 @@ From `round-trip-survey` (2026-11-01); each consumer is a production path that r
 | `DecisionReader.read_download_candidates` | a file's candidates in target id order (the decider's queueing order, by file, is arbitrary and stays unstated) | `application/steps/download_labeler.py:36` lists a file's targets in this order | `target_id DESC` |
 | `CatalogFileReader.read_file_count_by_tier` | a tier no file holds is absent, not 0 | `adapters/driving/webui/app.py:541` | every tier counted, 0 included |
 | `CatalogFileReader`, `CatalogEntry.size_bytes`, `FileHistory.size_bytes` | the size the file was first observed with (Corrected: the file's size, D6) | `app.py:218`, `app.py:1111`, the size sort | the latest observation's size (Corrected: none, a file having one size, D6) |
-| `CatalogFileReader`, `CoverageReader` | the old retraction with an empty target id, which v4 catalogs hold, left out | the webui's file and targets pages | the `target_id <> ''` filter dropped |
+| `CatalogFileReader`, `CoverageReader` | the old retraction with an empty target id, which v4 catalogs hold, left out | the webui's file and targets pages | the `target_id <> ''` filter dropped (Corrected: an equivalent mutant in both, since v4 wrote that row only as a retraction, which their tier filter already leaves out; blocks 50 to 80 test the promise by the retraction taking effect on the file's every target, `PARTITION BY md.file_id`) |
 | `CatalogFileReader`, `SourceReader` | D5's search, literal, case and accents ignored; for sources, a substring of any name the source carried | `app.py:844`, `app.py:934` | the `LIKE` of `main`; the fold without its accents stripped |
 | `NodeStateReader` | its stated orders whole: a client's whole-client backoff before its channels; downloads of the same `queued_at` by native id | `app.py:697`, `app.py:681` | `channel DESC`; `native_id DESC` |
 | `SourceReader` | a sharing period is cut on a gap past `window.gap`, a drop of the session's received bytes or a change of variant; its `received_bytes` is the growth of the session counter while sending | `application/use_cases/describe_file.py:63` and the webui's source pages | each rule dropped alone (four mutations); the growth read as the latest count |
@@ -299,7 +312,8 @@ Adjacent, class 1, in block 130: `SqliteTrackedDownloadStore.set_state`'s docstr
 - An empty target id: no production path writes one (a target id is always `models.py:46`'s `"062A"` form), and the
   readers read it three ways (`round-trip-survey`, 1.2); the old retraction that holds one is seeded explicitly
   (Appendix B).
-- A search text drawn to miss that matches a name once both are casefolded and stripped of their accents (D5).
+- A search text drawn to miss that matches a name once both are casefolded and stripped of their accents (D5)
+  (Corrected: once both are folded, D5's correction).
 - A delay of 10\*\*9 seconds or more, a margin below 2\*\*33 s, from which a delay round-tripped through `REAL` seconds
   loses its microseconds (the spec review: 0 of 5000 lose them in [10\*\*9, 2 \* 10\*\*9) and 0 of 5000 in
   [2 \* 10\*\*9, 2\*\*33), 2352 of 5000 in [2\*\*33, 10\*\*10)).
@@ -309,13 +323,14 @@ Adjacent, class 1, in block 130: `SqliteTrackedDownloadStore.set_state`'s docstr
 ## Appendix D. Size (`round-trip-survey`, 2026-11-01)
 
 Of the 155 test functions of the twelve SQLite test files the eight ports' adapters own, 106 are restated by a contract
-and 49 stay. Re-counted by each block on its tree.
+and 49 stay. Re-counted by each block on its tree. (Corrected: 107 restated and 48 stay, by `git show` of each file at
+`49ddd7fe` and at block 130's tip; four adapter tests were added beside them, blocks 30, 70, 100 and 110.)
 
 | SQLite test file (`tests/adapters/driven/persistence_sqlite/`) | functions | restated | stay |
 |---|---:|---:|---:|
 | `test_sqlite_observation_store.py` | 10 | 0 | 10 |
 | `test_sqlite_observation_store_reads.py` | 7 | 7 | 0 |
-| `test_observation_read.py` | 14 | 7 | 7 |
+| `test_observation_read.py` | 14 | 7 (Corrected: 6, block 50 keeping the scan's order by native id) | 7 (Corrected: 8) |
 | `test_sqlite_decision_store.py` | 15 | 8 | 7 |
 | `test_sqlite_decision_store_latest_decisions.py` | 6 | 6 | 0 |
 | `test_sqlite_source_point_store.py` | 9 | 6 | 3 |
@@ -324,7 +339,7 @@ and 49 stay. Re-counted by each block on its tree.
 | `test_sqlite_catalog_scan_reader.py` | 5 | 3 | 2 |
 | `test_sqlite_coverage_reader.py` | 9 | 8 | 1 |
 | `test_sqlite_node_state_reader.py` | 5 | 5 | 0 |
-| `test_sqlite_source_reader.py` | 20 | 18 | 2 |
+| `test_sqlite_source_reader.py` | 20 | 18 (Corrected: 20, blocks 90 to 110) | 2 (Corrected: 0, two rewritten tests added, blocks 100 and 110) |
 
 ## Appendix E. Facts, 2026-11-01, on `main` at `49ddd7fe`
 

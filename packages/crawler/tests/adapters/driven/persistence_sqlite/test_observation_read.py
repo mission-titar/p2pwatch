@@ -1,4 +1,4 @@
-"""Every observation read, through one module (spec 2026-10-05)."""
+"""``observation_read``'s own tests: the ties, files never seen, order and seeks."""
 
 import re
 import sqlite3

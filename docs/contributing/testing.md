@@ -52,36 +52,37 @@ Le projet a **deux niveaux** :
    lui a écrit, une horloge qui avance), a un **contrat** : sa promesse, écrite une fois comme une
    suite pytest abstraite, `<Port>Contract` (ou `<Chose>StoreContract` pour une paire
    `Writer`/`Reader`), dans `tests/contracts/` au miroir du port. Ses tests énoncent les docstrings
-   du port : le port fait
-   référence, jamais l'adaptateur réel. Le contrat reçoit chaque port dont il se sert par une
-   fixture abstraite à lui : `writer` et `reader` pour les ports d'une paire, `reader` pour un
-   `Reader` sans paire, tout autre port nommé d'après lui en snake case (`wall_clock`, ou
-   `observation_writer` pour un `Writer` qui prépare l'état lu). Les paramètres de chaque test sont
-   typés par les ports : mypy vérifie ainsi chaque appel qu'un test fait à un port, `pytest.fixture`
-   effaçant le type d'une fixture mais pas celui d'un paramètre.
+   du port : le port fait référence, jamais l'adaptateur réel. Le contrat reçoit chaque port dont il
+   se sert par une fixture abstraite à lui : `writer` et `reader` pour les ports d'une paire,
+   `reader` pour un `Reader` sans paire, tout autre port nommé d'après lui en snake case
+   (`wall_clock`, ou `observation_writer` pour un `Writer` qui prépare l'état lu), une deuxième
+   fixture d'un même port d'après ce qui distingue son store (`unreadable_reader`). Les paramètres
+   de chaque test sont typés par les ports : mypy vérifie ainsi chaque appel qu'un test fait à un
+   port, `pytest.fixture` effaçant le type d'une fixture mais pas celui d'un paramètre.
    Un contrat sur une base de données tire au hasard, sur de larges plages, ses valeurs larges
    (textes, quantités, instants), de la fixture `randomness`, un `random.Random` semé par
    l'identifiant du test, donc les mêmes à chaque exécution quels que soient l'ordre et la
    sélection, par un `draw_<valeur>` par valeur qu'un `Writer` prend, dans `tests/support/` au
-   miroir du module de la valeur (`draw_file_observation` dans `tests/support/domain/observation.py`).
-   Deux colonnes reçoivent ainsi presque sûrement deux valeurs différentes, si bien qu'une colonne
-   échangée dans une requête fait échouer le contrat ; les valeurs d'un champ que le test veut
-   distinctes sont tirées sans remise (`draw_instants`). Le test n'écrit que les valeurs étroites,
-   celles qui choisissent une branche (une valeur présente ou absente, un palier, un état), et ce
-   qu'il relie (le même fichier, un instant plus tard).
+   miroir du module de la valeur qu'un `Writer` enregistre, avec les tirages de ses parties
+   (`draw_file_observation` et `draw_file` dans `tests/support/domain/observation.py`). Deux
+   colonnes reçoivent ainsi presque sûrement deux valeurs différentes, si bien qu'une colonne
+   échangée dans une requête fait échouer le contrat ; les quantités et les instants d'un champ que
+   le test veut distincts sont tirés sans remise (`draw_instants`), ses textes simplement tirés,
+   deux textes de 8 caractères ou plus coïncidant avec une chance inférieure à 10⁻¹⁵. Le test
+   n'écrit que les valeurs étroites, celles qui choisissent une branche (une valeur présente ou
+   absente, un palier, un état), et ce qu'il relie (le même fichier, un instant plus tard).
    Chaque implémentation lance le contrat par une sous-classe `Test<Implémentation>` qui définit
    ces fixtures (le `writer` et le `reader` d'une paire rendent le même store), dans son propre
-   module de test (celui de l'adaptateur, ou le
-   `test_<module du fake>.py` à côté du fake). `packages/crawler/tests/test_contract_subclasses.py`
-   refuse un contrat qui ne nomme aucun port de son paquet, une implémentation d'un port sous
-   contrat sans sa sous-classe, une sous-classe hors du module de test de son implémentation, une
-   sous-classe restée abstraite (pytest l'ignorerait sans rien dire) et une exemption périmée : une
-   doublure qui ne peut pas passer son contrat (un stub, qui rend ce que son test lui donne, un spy,
-   ou une doublure qui casse son port exprès) en est exemptée par son nom, avec sa raison. Comme
-   `tests/fakes` et
-   `tests/support`, `tests/contracts` est mesuré à 100 % et ne contient aucun `test_*.py` ; le
-   `conftest.py` du paquet l'inscrit à la réécriture des assertions de pytest, sans quoi un `assert`
-   de contrat en échec n'afficherait qu'un `AssertionError` nu.
+   module de test (celui de l'adaptateur, ou le `test_<module du fake>.py` à côté du fake).
+   `packages/crawler/tests/test_contract_subclasses.py` refuse un contrat qui ne nomme aucun port de
+   son paquet, une implémentation d'un port sous contrat sans sa sous-classe, une sous-classe hors
+   du module de test de son implémentation, une sous-classe restée abstraite (pytest l'ignorerait
+   sans rien dire) et une exemption périmée : une doublure qui ne peut pas passer son contrat (un
+   stub, qui rend ce que son test lui donne, un spy, ou une doublure qui casse son port exprès) en
+   est exemptée par son nom, avec sa raison. Comme `tests/fakes` et `tests/support`,
+   `tests/contracts` est mesuré à 100 % et ne contient aucun `test_*.py` ; le `conftest.py` du
+   paquet l'inscrit à la réécriture des assertions de pytest, sans quoi un `assert` de contrat en
+   échec n'afficherait qu'un `AssertionError` nu.
 
    Après les suites, `test` lance `_unit-coverage-check` : dans chaque paquet, chaque module doit
    être couvert, instructions et branches, par **ses propres tests**, les fichiers qui portent son
