@@ -1,7 +1,8 @@
 """The promise of ``CatalogFileReader``."""
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from datetime import datetime
 from random import Random
 
@@ -14,8 +15,11 @@ from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileRea
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
+from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
+from p2pwatch.domain.identifiers import FileId
+from p2pwatch.domain.observation import FileObservation
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,
     draw_decision_record,
@@ -73,6 +77,70 @@ def _record_decisions(
 def _holding(randomness: Random, *, search_text: str) -> str:
     """A drawn filename holding ``search_text``."""
     return f"{draw_text(randomness)}{search_text}{draw_text(randomness)}"
+
+
+def _sorted_files(
+    reader: CatalogFileReader, *, sort: CatalogEntrySort, direction: SortDirection
+) -> list[FileKey]:
+    """Every entry's file, in the listing's order."""
+    entries = _page(reader, sort=sort, direction=direction, limit=_EVERY_ENTRY, offset=0)
+    return [entry.file for entry in entries]
+
+
+def _page(
+    reader: CatalogFileReader,
+    *,
+    sort: CatalogEntrySort,
+    direction: SortDirection,
+    limit: int,
+    offset: int,
+) -> tuple[CatalogEntry, ...]:
+    return reader.read_catalog_entries(
+        target_id=None,
+        tier=None,
+        search_text=None,
+        matched_only=False,
+        sort=sort,
+        direction=direction,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _in_order(
+    value_by_file: Mapping[FileKey, str | int | datetime], *, direction: SortDirection
+) -> list[FileKey]:
+    """The files by their value in ``direction``, then by ascending ``file_id``."""
+    by_file_id = sorted(value_by_file, key=lambda file: file.file_id)
+    return sorted(
+        by_file_id, key=value_by_file.__getitem__, reverse=direction is SortDirection.DESC
+    )
+
+
+def _record_by_descending_file_id(
+    observation_writer: ObservationWriter, *, observations: Iterable[FileObservation]
+) -> None:
+    """Records ``observations`` against ``file_id`` order, so that an order of insertion fails the
+    tie-break, and those of one file in their order."""
+    for observation in sorted(
+        observations, key=lambda observation: observation.reported_file.file.file_id, reverse=True
+    ):
+        observation_writer.record_observation(observation)
+
+
+def _draw_first_and_latest(
+    randomness: Random, *, file: FileKey
+) -> tuple[FileObservation, FileObservation]:
+    first, latest = (
+        draw_file_observation(randomness, file=file, has_media=True, observed_at=observed_at)
+        for observed_at in draw_instants(randomness, count=2)
+    )
+    return first, latest
+
+
+def _of_file(observation: FileObservation, *, file: FileKey) -> FileObservation:
+    """``observation`` made of ``file``: the two files then tie on every value a sort reads."""
+    return replace(observation, reported_file=replace(observation.reported_file, file=file))
 
 
 class CatalogFileReaderContract(ABC):
@@ -369,3 +437,270 @@ class CatalogFileReaderContract(ABC):
             ),
         )
         assert _decisions_by_file(_entries(reader, matched_only=True)) == {file: (record,)}
+
+    @pytest.mark.parametrize("direction", list(SortDirection), ids=str)
+    @pytest.mark.parametrize(
+        "sort", [sort for sort in CatalogEntrySort if sort is not CatalogEntrySort.TIER], ids=str
+    )
+    def test_a_sort_on_the_observations_orders_on_its_value_then_on_file_id(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        reader: CatalogFileReader,
+        sort: CatalogEntrySort,
+        direction: SortDirection,
+    ) -> None:
+        files = [draw_file(randomness) for _ in range(10)]
+        drawn = [_draw_first_and_latest(randomness, file=file) for file in files[:8]]
+        twins = [
+            (_of_file(first, file=twin), _of_file(latest, file=twin))
+            for (first, latest), twin in zip(drawn[:2], files[8:], strict=True)
+        ]
+        observations_by_file = {
+            first.reported_file.file: (first, latest) for first, latest in (*drawn, *twins)
+        }
+        _record_by_descending_file_id(
+            observation_writer,
+            observations=(
+                observation for pair in observations_by_file.values() for observation in pair
+            ),
+        )
+        value_by_file_by_sort: dict[CatalogEntrySort, dict[FileKey, str | int | datetime]] = {
+            CatalogEntrySort.NAME: {
+                file: latest.reported_file.filename
+                for file, (_, latest) in observations_by_file.items()
+            },
+            CatalogEntrySort.SIZE: {
+                file: first.reported_file.size_bytes
+                for file, (first, _) in observations_by_file.items()
+            },
+            CatalogEntrySort.SOURCES: {
+                file: latest.reported_file.source_count
+                for file, (_, latest) in observations_by_file.items()
+            },
+            CatalogEntrySort.LATEST_SEEN: {
+                file: latest.observed_at for file, (_, latest) in observations_by_file.items()
+            },
+        }
+        assert _sorted_files(reader, sort=sort, direction=direction) == _in_order(
+            value_by_file_by_sort[sort], direction=direction
+        )
+
+    @pytest.mark.parametrize("direction", list(SortDirection), ids=str)
+    def test_the_tier_sort_orders_on_the_strongest_current_tier_then_on_file_id(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        decision_writer: DecisionWriter,
+        reader: CatalogFileReader,
+        direction: SortDirection,
+    ) -> None:
+        files = [draw_file(randomness) for _ in range(7)]
+        _record_by_descending_file_id(
+            observation_writer,
+            observations=(
+                draw_file_observation(randomness, file=file, has_media=True) for file in files
+            ),
+        )
+        undecided, also_undecided, catalogued, retracted, notified, superseded, downloaded = files
+        target_id, other_target_id = draw_target_ids(randomness, count=2)
+        earlier_at, later_at = draw_instants(randomness, count=2)
+        decided = (
+            (catalogued, DecisionTier.CATALOG, target_id, None),
+            (retracted, DecisionTier.CATALOG, target_id, None),
+            (retracted, DecisionTier.DOWNLOAD, other_target_id, earlier_at),
+            (notified, DecisionTier.CATALOG, target_id, None),
+            (notified, DecisionTier.NOTIFY, other_target_id, None),
+            (superseded, DecisionTier.DOWNLOAD, target_id, earlier_at),
+            (superseded, DecisionTier.NOTIFY, target_id, later_at),
+            (downloaded, DecisionTier.NOTIFY, target_id, None),
+            (downloaded, DecisionTier.DOWNLOAD, other_target_id, None),
+        )
+        _record_decisions(
+            randomness,
+            decision_writer=decision_writer,
+            decisions=(
+                *(
+                    (
+                        file,
+                        draw_decision_record(randomness, tier=tier, target_id=decided_target_id),
+                        decided_at,
+                    )
+                    for file, tier, decided_target_id, decided_at in decided
+                ),
+                (retracted, Retraction(target_id=other_target_id), later_at),
+            ),
+        )
+        strongest_by_file = {
+            undecided: None,
+            also_undecided: None,
+            catalogued: DecisionTier.CATALOG,
+            retracted: DecisionTier.CATALOG,
+            notified: DecisionTier.NOTIFY,
+            superseded: DecisionTier.NOTIFY,
+            downloaded: DecisionTier.DOWNLOAD,
+        }
+        # A file without a current decision sorts below every rank.
+        rank_by_file = {
+            file: -1 if tier is None else tier.rank for file, tier in strongest_by_file.items()
+        }
+        assert _sorted_files(reader, sort=CatalogEntrySort.TIER, direction=direction) == _in_order(
+            rank_by_file, direction=direction
+        )
+
+    def test_a_page_reads_at_most_its_limit_of_the_sorted_entries_from_its_offset(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        for _ in range(7):
+            draw_observed_file(randomness, observation_writer=observation_writer)
+        every_entry, *pages = (
+            _page(
+                reader,
+                sort=CatalogEntrySort.LATEST_SEEN,
+                direction=SortDirection.DESC,
+                limit=limit,
+                offset=offset,
+            )
+            for limit, offset in ((_EVERY_ENTRY, 0), (3, 0), (3, 3), (3, 6), (3, 7))
+        )
+        assert len(every_entry) == 7
+        assert pages == [every_entry[:3], every_entry[3:6], every_entry[6:], ()]
+
+    def test_a_history_holds_the_first_size_the_interval_s_observations_and_the_latest_of_all(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        file = draw_file(randomness)
+        before_at, since, inside_at, until, after_at = draw_instants(randomness, count=5)
+        shared_filename = draw_text(randomness)
+        first, at_since, inside, at_until, latest = (
+            draw_file_observation(
+                randomness,
+                file=file,
+                has_media=has_media,
+                observed_at=observed_at,
+                filename=filename,
+            )
+            for has_media, observed_at, filename in (
+                (True, before_at, None),
+                (False, since, None),
+                (True, inside_at, shared_filename),
+                (True, until, shared_filename),
+                (True, after_at, None),
+            )
+        )
+        for observation in (first, latest, inside, at_until, at_since):
+            observation_writer.record_observation(observation)
+        filenames = {
+            observation.reported_file.filename
+            for observation in (first, at_since, inside, at_until, latest)
+        }
+        assert reader.read_file_history(file.file_id, since=since, until=until) == FileHistory(
+            file=file,
+            size_bytes=first.reported_file.size_bytes,
+            observations=(at_since, inside),
+            latest_observation=latest,
+            decisions=(),
+            known_filenames=tuple(sorted(filenames)),
+        )
+
+    def test_a_history_holds_the_current_decision_of_each_target_in_target_order(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        decision_writer: DecisionWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        superseded_target_id, notified_target_id, catalogued_target_id, retracted_target_id = (
+            draw_target_ids(randomness, count=4)
+        )
+        earlier_at, later_at = draw_instants(randomness, count=2)
+        records = tuple(
+            draw_decision_record(randomness, tier=tier, target_id=target_id)
+            for tier, target_id in (
+                (DecisionTier.DOWNLOAD, superseded_target_id),
+                (DecisionTier.NOTIFY, notified_target_id),
+                (DecisionTier.CATALOG, catalogued_target_id),
+            )
+        )
+        current = tuple(
+            draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)
+            for record, decided_at in zip(records, (later_at, None, None), strict=True)
+        )
+        outdated, withdrawn, retraction = (
+            draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)
+            for decision, decided_at in (
+                (
+                    draw_decision_record(
+                        randomness, tier=DecisionTier.NOTIFY, target_id=superseded_target_id
+                    ),
+                    earlier_at,
+                ),
+                (
+                    draw_decision_record(
+                        randomness, tier=DecisionTier.DOWNLOAD, target_id=retracted_target_id
+                    ),
+                    earlier_at,
+                ),
+                (Retraction(target_id=retracted_target_id), later_at),
+            )
+        )
+        for dated_decision in (retraction, withdrawn, *reversed(current), outdated):
+            decision_writer.record_decision(dated_decision)
+        since, until = draw_instants(randomness, count=2)
+        file_history = reader.read_file_history(file.file_id, since=since, until=until)
+        assert file_history is not None
+        assert file_history.decisions == current
+        # A `StrEnum` member equals its text: only `is` tells the tier from a bare string.
+        assert all(
+            dated_decision.decision.tier is record.tier
+            for dated_decision, record in zip(file_history.decisions, records, strict=True)
+        )
+
+    def test_a_history_leaves_out_the_legacy_retraction_of_no_target(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        decision_writer: DecisionWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        earlier_at, later_at = draw_instants(randomness, count=2)
+        record = draw_decision_record(randomness, tier=DecisionTier.NOTIFY)
+        decided, legacy = (
+            draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)
+            for decision, decided_at in (
+                (record, earlier_at),
+                (Retraction(target_id=TargetId("")), later_at),
+            )
+        )
+        for dated_decision in (decided, legacy):
+            decision_writer.record_decision(dated_decision)
+        file_history = reader.read_file_history(file.file_id, since=earlier_at, until=later_at)
+        assert file_history is not None
+        assert file_history.decisions == (decided,)
+
+    def test_the_history_of_a_file_the_catalog_does_not_hold_is_none(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        held = draw_observed_file(randomness, observation_writer=observation_writer)
+        since, until = draw_instants(randomness, count=2)
+        # A file is read by its id: the bytes of a held file's native id are no file's.
+        for file_id in (draw_file(randomness).file_id, FileId(bytes.fromhex(held.native_id))):
+            assert reader.read_file_history(file_id, since=since, until=until) is None

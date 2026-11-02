@@ -29,8 +29,9 @@ class CatalogFileReader(ABC):
         limit: int,
         offset: int,
     ) -> tuple[CatalogEntry, ...]:
-        """The files passing the filters, ``matched_only`` keeping those with a current
-        decision, sorted then by ``file_id``."""
+        """The files passing the filters, ``matched_only`` keeping those with a current decision,
+        sorted on ``sort`` in ``direction``, a file without its value first ascending and last
+        descending, then on ``file_id`` ascending: at most ``limit`` of them from ``offset``."""
 
     @abstractmethod
     def read_matched_and_total_file_counts(
