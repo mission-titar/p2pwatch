@@ -3,8 +3,8 @@
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS amule
 
 # The aMule pin: amule-bump rewrites these two lines; never write the version elsewhere.
-ARG AMULE_VERSION=3.1.0
-ARG AMULE_COMMIT=909d304d993ee07df6c6f6acf501a6d791d53666
+ARG AMULE_VERSION=3.2.0
+ARG AMULE_COMMIT=0db738ed62ae660de2970db494976ca592bd878b
 
 # No wxbase dev package in trixie, so wxgtk (which needs glib); git gives CMake the version.
 RUN apt-get update \
