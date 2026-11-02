@@ -93,8 +93,8 @@ Each criterion fails on `main` but the last two, which state what must not chang
 |---|---|---|---|
 | 1 | `observation_variants`'s columns, on a catalog the opener creates (`pragma_table_info`) | no `size_bytes` | `size_bytes` |
 | 2 | The SQL function `content_hash` | seven arguments | eight |
-| 3 | A v4 catalog migrated: a file of size 100 observed twice under one name, once reported at 100, once at 101 | one variant; both observations read back 100 | two variants; one reads back 101 |
-| 4 | `record_observation` twice for one file, the two reports differing by size alone | one variant; both read back the first size | two variants |
+| 3 | A v4 catalog migrated: a file of size 100 observed twice under one name, once reported at 100, once at 101 | one variant; both observations read back 100 (Corrected: through the timeline's `observations_between`, the reader port giving only the latest and the best) | two variants; one reads back 101 |
+| 4 | `record_observation` twice for one file, the two reports differing by size alone | one variant; both read back the first size (Corrected: as in 3) | two variants |
 | 5 | `record_observation` on a catalog whose variants carry an extra `NOT NULL` column the store does not write | raises `NOT NULL constraint failed`, writes no row | returns, commits the `files` row alone |
 | 6 | `uv run poe sql-lint` and `uv run poe code-pattern-check`, with block 10's checks | pass | fail, naming 0007's two inserts, the store's three and its docstring |
 | 7 | The new ast-grep rule's tests | refuse `INSERT OR IGNORE`, `insert or ignore` and `OR IGNORE` alone on a line; accept `ON CONFLICT DO NOTHING` | no rule |
@@ -155,7 +155,8 @@ drops it.
   gone (block 80). The console's schema is documented nowhere else.
 - `docs/contributing/architecture.md`: the inserts idempotent by `ON CONFLICT DO NOTHING` alone (`:476-477`), a variant
   without the size (catalog 0007, `:492-494`), and no more `INSERT OR IGNORE` as the reason the domain validates first
-  (`:603-604`) (block 80).
+  (`:603-604`) (block 80). (Corrected: at the stack's top the lines were 477-478, 492-494 and 604; block 80 located
+  them by content.)
 - `AGENTS.md`, Hard rules: inserts by `ON CONFLICT ... DO NOTHING`, never `OR IGNORE` (block 10).
 - `AGENTS.md`, the glossary's `catalog entry`: "its latest observation, its current decisions", the size dropped
   (block 30).
@@ -214,8 +215,11 @@ Paths: `c:` is `packages/crawler/src/p2pwatch/`, `p:` its persistence adapter `c
     `pyproject.toml`'s `code-pattern-check` help names it.
 - Tests: acceptance 5 (the variants gain a `NOT NULL` column by a table rebuild, then a write). The test strings holding
   `OR IGNORE` move to `ON CONFLICT`: `t:support/catalog_rows.py`, `test_sqlite_catalog_copier.py`,
-  `test_sqlite_observation_store.py`.
+  `test_sqlite_observation_store.py`. (Corrected: in `test_sqlite_catalog_copier.py` it was a comment and a test name,
+  `test_t2_merge_overlapping_identity_files_or_ignore`, now `..._keeps_one`.)
 - `AGENTS.md`, Hard rules: an insert ignores a duplicate by `ON CONFLICT (<key>) DO NOTHING`, never by `OR IGNORE`.
+  (Corrected: written `ON CONFLICT ... DO NOTHING`, as section 6 has it, since the merge copier's six inserts are
+  keyless; the store and 0007 name their keys.)
 
 ### Block 20: the variants without the size (D1, D2)
 
@@ -245,7 +249,8 @@ Paths: `c:` is `packages/crawler/src/p2pwatch/`, `p:` its persistence adapter `c
   go (`colspan` 4).
 - `c:application/steps/file_judge.py`: raises in place of its fallback.
 - Tests: the never-observed tests of `test_sqlite_catalog_file_reader.py`, `test_app.py` and `test_describe_file.py`
-  go with the state, `_seed_file_without_observation` staying for acceptance 9; `catalog_file_reader_contract.py`
+  go with the state, `_seed_file_without_observation` staying for acceptance 9 (Corrected:
+  `test_read_matched_and_total_file_counts_counts_file_with_no_observation` stays, pinning section 7's second limit); `catalog_file_reader_contract.py`
   reads the size from the latest observation; `test_file_judge.py`'s
   `test_a_file_with_no_name_left_is_named_by_the_candidate` becomes the raise's test (acceptance 11).
 - `AGENTS.md`, the glossary's `catalog entry`: the size dropped.
@@ -255,12 +260,14 @@ Paths: `c:` is `packages/crawler/src/p2pwatch/`, `p:` its persistence adapter `c
 - `p:sqlite_source_reader.py`: `_best_filename_by_file`; both histories leave out the periods on a file it does not
   hold.
 - `c:application/ports/driven/source_reader.py`: the two histories' docstrings say every period's file has its best
-  filename.
+  filename. (Corrected: unchanged, a docstring holding two lines at most; the promise sits in the
+  `best_filename_by_file` field comments of `SourceHistory` and `SourceNameHistory`, fix-back `4e0fdd31`.)
 - `c:domain/source_history.py`: its two field comments.
 - Webui: `app.py`'s `_file_sharing_period_display` loses its `short_hash` fallback, while `_sharing_period_display`
   keeps its "unknown" for a source without a user hash; `displays.py`'s comments on a file never seen.
 - Tests: `source_reader_contract.py` states only that every period's file has its best filename, since no Writer can
-  produce the absence; the adapter's `test_a_page_s_file_never_observed_has_no_best_filename` becomes the absence test.
+  produce the absence (Corrected: unchanged, its two history tests already comparing the whole
+  `best_filename_by_file`); the adapter's `test_a_page_s_file_never_observed_has_no_best_filename` becomes the absence test.
 
 ### Block 50: `record_queued` without the size (D5)
 
