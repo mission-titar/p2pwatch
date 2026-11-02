@@ -28,15 +28,16 @@ class SourceReader(ABC):
     def read_source_history(
         self, source_id: SourceId, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceHistory | None:
-        """The source's names from ``offset``, at most ``limit``, and its periods in ``window``;
-        ``None`` for a source never recorded."""
+        """The source's names whenever read, at most ``limit`` from ``offset``, and its periods
+        over its points in ``window`` alone; ``None`` for a source never recorded."""
 
     @abstractmethod
     def read_source_name_history(
         self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceNameHistory | None:
-        """The sources that carried the name from ``offset``, at most ``limit``, and its periods
-        without a user hash in ``window``; ``None`` for a name never recorded."""
+        """The sources that carried the name whenever read, at most ``limit`` from ``offset``, and
+        its periods without a user hash over their points in ``window`` alone; ``None`` for a name
+        no reading carried, with a user hash or without."""
 
     @abstractmethod
     def read_sharing_periods(
