@@ -16,7 +16,11 @@ from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourcePoint, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
-from tests.support.domain.observation import draw_file, draw_file_observation, draw_observed_file
+from tests.support.domain.observation import (
+    draw_file,
+    draw_file_observation,
+    record_drawn_observation,
+)
 from tests.support.domain.source import draw_point_read_again, draw_source_key, draw_source_point
 from tests.support.draws import draw_instant, draw_instants, draw_quantities, draw_text
 
@@ -153,16 +157,21 @@ class SourceReaderContract(ABC):
         reader: SourceReader,
     ) -> None:
         file, other_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         source = draw_source_key(randomness)
-        earliest_at, earlier_at, later_at, latest_at = draw_instants(randomness, count=4)
+        earliest_at, earlier_at, later_at, unnamed_at, latest_at = draw_instants(
+            randomness, count=5
+        )
         latest_named = _point(randomness, file=file, source=source, observed_at=earliest_at)
         earlier_named = _point(randomness, file=other_file, source=source, observed_at=earlier_at)
-        unnamed = _unnamed(_point(randomness, file=file, source=source, observed_at=latest_at))
+        unnamed = _unnamed(_point(randomness, file=file, source=source, observed_at=unnamed_at))
+        # The latest reading is a variant's second point, the latest name another's.
         source_point_writer.record_points(
             [
                 unnamed,
+                draw_point_read_again(randomness, point=unnamed, observed_at=latest_at),
                 draw_point_read_again(randomness, point=latest_named, observed_at=later_at),
                 earlier_named,
                 latest_named,
@@ -185,7 +194,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         point = _unnamed(
             _point(randomness, file=file, source=source, observed_at=draw_instant(randomness))
@@ -205,7 +214,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         sources = [draw_source_key(randomness) for _ in range(4)]
         earlier_at, later_at = draw_instants(randomness, count=2)
         seen_at_by_source = dict(
@@ -236,7 +245,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source_point_writer.record_points(
             [
                 _point(randomness, file=file, source=draw_source_key(randomness), observed_at=at)
@@ -273,9 +282,10 @@ class SourceReaderContract(ABC):
         found_name: str,
         missed_name: str,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         found, missed = draw_source_key(randomness), draw_source_key(randomness)
         observed_at = draw_instant(randomness)
+        # Two variants of the found source hold the name: it is still one source found.
         source_point_writer.record_points(
             [
                 _point(
@@ -285,7 +295,11 @@ class SourceReaderContract(ABC):
                     observed_at=observed_at,
                     source_name=source_name,
                 )
-                for source, source_name in ((found, found_name), (missed, missed_name))
+                for source, source_name in (
+                    (found, found_name),
+                    (found, found_name),
+                    (missed, missed_name),
+                )
             ]
         )
         assert _search(reader, search_text=search_text) == ({found}, 1)
@@ -298,7 +312,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         search_text = draw_text(randomness)
         holding = f"{draw_text(randomness)}{search_text}{draw_text(randomness)}"
         renamed_away, still_named, other = (draw_source_key(randomness) for _ in range(3))
@@ -371,7 +385,7 @@ class SourceReaderContract(ABC):
         search_text: str,
         is_found: bool,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = SourceKey(network=Network.ED2K, native_id="1f2e" * 8)
         observed_at = draw_instant(randomness)
         source_point_writer.record_points(
@@ -391,7 +405,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         (
             since,
             first_at,
@@ -434,13 +448,16 @@ class SourceReaderContract(ABC):
         source_point_writer.record_points(
             [hashless, first, unnamed, other_source, elsewhere, latest, hashless_again]
         )
-        assert reader.read_sharing_periods(file, window=_window(since, until=until)) == (
+        periods = reader.read_sharing_periods(file, window=_window(since, until=until))
+        assert periods == (
             _period(unnamed, last=unnamed),
             _period(hashless, last=hashless_again),
             _period(elsewhere, last=elsewhere),
             _period(other_source, last=other_source),
             _period(first, last=latest),
         )
+        # A `StrEnum` member equals its text: only `is` tells the role from a bare string.
+        assert all(period.role is SourceRole.QUEUED for period in periods)
 
     def test_a_file_no_source_was_read_on_has_no_period(
         self,
@@ -451,7 +468,8 @@ class SourceReaderContract(ABC):
         reader: SourceReader,
     ) -> None:
         file, read_file = (
-            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+            record_drawn_observation(randomness, observation_writer=observation_writer)
+            for _ in range(2)
         )
         since, observed_at, until = draw_instants(randomness, count=3)
         source_point_writer.record_points(
@@ -474,7 +492,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         instants = draw_instants(randomness, count=5)
         before_at, since, inside_at, until, after_at = instants
         point = _point(
@@ -495,7 +513,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         since, first_at, joined_at = draw_instants(randomness, count=3)
         gap = joined_at - first_at
         cut_at = joined_at + gap + timedelta.resolution
@@ -521,7 +539,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         since, *instants, until = draw_instants(randomness, count=6)
         lowest, low, high, highest = draw_quantities(randomness, count=4)
         sending = draw_source_point(
@@ -551,7 +569,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         since, *instants, until = draw_instants(randomness, count=7)
         source = draw_source_key(randomness)
         sending = draw_source_point(
@@ -597,7 +615,7 @@ class SourceReaderContract(ABC):
         reader: SourceReader,
         role: SourceRole,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         since, *instants, until = draw_instants(randomness, count=5)
         point = draw_source_point(
             randomness, file=file, source=draw_source_key(randomness), role=role, observed_at=since
@@ -707,7 +725,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         since, earlier_at, later_at, until = draw_instants(randomness, count=4)
         names = [draw_text(randomness) for _ in range(4)]
@@ -739,7 +757,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         since, *instants, until = draw_instants(randomness, count=9)
         points = [_point(randomness, file=file, source=source, observed_at=at) for at in instants]
@@ -829,7 +847,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         name = draw_text(randomness)
         sources = [draw_source_key(randomness) for _ in range(4)]
         since, earlier_at, later_at, until = draw_instants(randomness, count=4)
@@ -862,7 +880,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         name = draw_text(randomness)
         since, *instants, until = draw_instants(randomness, count=9)
         hashless = [
@@ -908,7 +926,7 @@ class SourceReaderContract(ABC):
         reader: SourceReader,
     ) -> None:
         file, filename = _observed_file(randomness, observation_writer=observation_writer)
-        other_file = draw_observed_file(randomness, observation_writer=observation_writer)
+        other_file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source, other_source = draw_source_key(randomness), draw_source_key(randomness)
         name, earlier_name, later_name = (draw_text(randomness) for _ in range(3))
         before_at, since, inside_at, until, after_at = draw_instants(randomness, count=5)
@@ -974,7 +992,7 @@ class SourceReaderContract(ABC):
         source_point_writer: SourcePointWriter,
         reader: SourceReader,
     ) -> None:
-        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
         source = draw_source_key(randomness)
         name, hashless_name = draw_text(randomness), draw_text(randomness)
         observed_at, since, until = draw_instants(randomness, count=3)

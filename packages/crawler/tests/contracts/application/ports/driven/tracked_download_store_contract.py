@@ -1,7 +1,7 @@
 """The promise of the ``TrackedDownloadReader`` and ``TrackedDownloadWriter`` pair."""
 
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
+from datetime import datetime, timedelta
 from random import Random
 
 import pytest
@@ -16,7 +16,7 @@ from tests.support.domain.observation import draw_file
 from tests.support.draws import draw_instant, draw_instants, draw_quantity
 
 
-def _draw_queued_file(
+def _queue_drawn_file(
     randomness: Random, *, writer: TrackedDownloadWriter, queued_at: datetime
 ) -> FileKey:
     """A drawn file, once ``writer`` has queued it at ``queued_at`` for a drawn target."""
@@ -48,7 +48,7 @@ class TrackedDownloadStoreContract(ABC):
     def test_a_file_never_queued_is_not_tracked_and_has_no_target(
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
-        _draw_queued_file(randomness, writer=writer, queued_at=draw_instant(randomness))
+        _queue_drawn_file(randomness, writer=writer, queued_at=draw_instant(randomness))
         file = draw_file(randomness)
         assert reader.is_tracked(file) is False
         assert reader.read_queued_target_id(file) is None
@@ -76,7 +76,7 @@ class TrackedDownloadStoreContract(ABC):
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         queued_at = draw_instant(randomness)
-        file = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
+        file = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
         assert reader.read_latest_seen_at_by_file() == {file: queued_at}
 
     def test_a_file_queued_again_keeps_its_row(
@@ -104,8 +104,8 @@ class TrackedDownloadStoreContract(ABC):
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         queued_at = draw_instant(randomness)
-        downloading = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
-        failed = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
+        downloading = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
+        failed = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
         writer.set_state(downloading, state=DownloadState.DOWNLOADING)
         writer.set_state(failed, state=DownloadState.FAILED, failure_reason=FailureReason.LOST)
         assert reader.read_tracked_states() == {
@@ -117,7 +117,7 @@ class TrackedDownloadStoreContract(ABC):
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         queued_at, completed_at = draw_instants(randomness, count=2)
-        file = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
+        file = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
         writer.set_completed(file, completed_at=completed_at)
         assert reader.is_tracked(file) is True
         assert reader.read_tracked_states() == {file: DownloadState.COMPLETED}
@@ -126,8 +126,8 @@ class TrackedDownloadStoreContract(ABC):
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         queued_at, listed_at, listed_again_at = draw_instants(randomness, count=3)
-        never_listed = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
-        listed = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
+        never_listed = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
+        listed = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
         writer.set_state(listed, state=DownloadState.DOWNLOADING)
         for seen_at in (listed_at, listed_again_at):
             status = draw_download_status(randomness, file=listed, waiting_reason=None)
@@ -141,9 +141,9 @@ class TrackedDownloadStoreContract(ABC):
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         queued_at, completed_at = draw_instants(randomness, count=2)
-        queued = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
-        completed = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
-        failed = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
+        queued = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
+        completed = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
+        failed = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
         writer.set_completed(completed, completed_at=completed_at)
         writer.set_state(failed, state=DownloadState.FAILED, failure_reason=FailureReason.LOST)
         assert reader.read_latest_seen_at_by_file() == {queued: queued_at}
@@ -162,9 +162,9 @@ class TrackedDownloadStoreContract(ABC):
         self, *, randomness: Random, writer: TrackedDownloadWriter, reader: TrackedDownloadReader
     ) -> None:
         queued_at, listed_at = draw_instants(randomness, count=2)
-        _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
-        listed = _draw_queued_file(randomness, writer=writer, queued_at=queued_at)
+        _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
+        listed = _queue_drawn_file(randomness, writer=writer, queued_at=queued_at)
         status = draw_download_status(randomness, file=listed, waiting_reason=None)
         writer.set_seen([status], seen_at=listed_at)
         latest_seen_ats = reader.read_latest_seen_at_by_file().values()
-        assert [seen_at.utcoffset() for seen_at in latest_seen_ats] == [UTC.utcoffset(None)] * 2
+        assert [seen_at.utcoffset() for seen_at in latest_seen_ats] == [timedelta(0)] * 2

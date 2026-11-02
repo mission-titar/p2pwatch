@@ -1,7 +1,7 @@
 """The promise of the ``BackoffStateReader`` and ``BackoffStateWriter`` pair."""
 
 from abc import ABC, abstractmethod
-from datetime import UTC
+from datetime import timedelta
 from random import Random
 
 import pytest
@@ -70,4 +70,4 @@ class BackoffStateStoreContract(ABC):
         whole_client = draw_backoff_key(randomness, has_channel=False)
         writer.set_backoff_states(_draw_client_backoff(randomness, whole_client=whole_client))
         starts = [state.started_at for state in reader.read_backoff_states().values()]
-        assert [started_at.utcoffset() for started_at in starts] == [UTC.utcoffset(None)] * 2
+        assert [started_at.utcoffset() for started_at in starts] == [timedelta(0)] * 2

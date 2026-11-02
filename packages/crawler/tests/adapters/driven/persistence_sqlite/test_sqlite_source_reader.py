@@ -1,4 +1,4 @@
-"""TDD tests for the catalog's source reader: sharing periods, sources, pages."""
+"""The SQLite source reader's contract, and what no Writer seeds: a tie, a file never observed."""
 
 import sqlite3
 from collections.abc import Iterator
@@ -69,6 +69,7 @@ class TestSqliteSourceReader(SourceReaderContract):
 # ---------------------------------------------------------------------------
 
 _USER = "1f2e" * 8
+_NAME = "AnimuseeFMR"
 _S = 1_000_000  # a second in microseconds
 
 
@@ -82,7 +83,7 @@ _WINDOW = PeriodWindow(since=_EPOCH, until=_at(100_000 * _S), gap=timedelta(seco
 def test_the_periods_started_by_one_reading_come_the_latest_recorded_variant_first(
     catalog_db: Path,
 ) -> None:
-    # A tie the port leaves unstated (round-trip contracts spec, D6): no page cuts through it.
+    # A tie the port leaves unstated: no page cuts through it.
     roles = ("queued", "sending", "standby")
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         insert_file(connection, native_id="a" * 32)
@@ -105,16 +106,26 @@ def test_the_periods_started_by_one_reading_come_the_latest_recorded_variant_fir
 
 
 def test_a_page_s_file_never_observed_has_no_best_filename(catalog_db: Path) -> None:
-    # No Writer records a point on a file never observed (round-trip contracts spec, Appendix A).
+    # No Writer records a point on a file never observed.
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
         insert_file(connection, native_id="a" * 32)
         insert_source(connection, user_hash=_USER)
-        variant = insert_source_variant(connection, native_id="a" * 32, user_hash=_USER)
-        insert_source_point(connection, variant_id=variant, observed_at_micros=0)
+        for user_hash in (_USER, None):
+            variant = insert_source_variant(
+                connection, native_id="a" * 32, user_hash=user_hash, name=_NAME
+            )
+            insert_source_point(connection, variant_id=variant, observed_at_micros=0)
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
-        source_history = SqliteSourceReader(thread_read_connections).read_source_history(
+        reader = SqliteSourceReader(thread_read_connections)
+        source_history = reader.read_source_history(
             source_id(_USER), limit=_LIMIT, offset=0, window=_WINDOW
+        )
+        name_history = reader.read_source_name_history(
+            _NAME, limit=_LIMIT, offset=0, window=_WINDOW
         )
     assert source_history is not None
     assert len(source_history.sharing_periods) == 1
     assert source_history.best_filename_by_file == {}
+    assert name_history is not None
+    assert len(name_history.sharing_periods) == 1
+    assert name_history.best_filename_by_file == {}

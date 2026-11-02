@@ -182,6 +182,27 @@ def test_read_catalog_entries_sorts_a_file_never_seen_first_ascending_last_desce
     assert (ascending[0].file.native_id, descending[-1].file.native_id) == (never_seen, never_seen)
 
 
+def test_read_catalog_entries_sorts_a_file_never_seen_on_its_size(catalog_db: Path) -> None:
+    # A file has its size, observed or not, and the size sort reads it.
+    never_seen = _seed_file_without_observation(catalog_db)
+    _seed_unmatched(catalog_db)
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, native_id="c" * 32, size_bytes=10)
+        insert_observation(
+            connection,
+            native_id="c" * 32,
+            filename="petit.avi",
+            observed_at="2026-06-22T09:00:00.000000+00:00",
+            size_bytes=10,
+        )
+    entries = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
+    assert [(entry.file.native_id, entry.size_bytes) for entry in entries] == [
+        ("c" * 32, 10),
+        (never_seen, 42),
+        ("b" * 32, 200),
+    ]
+
+
 def test_read_matched_and_total_file_counts_counts_file_with_no_observation(
     catalog_db: Path,
 ) -> None:
