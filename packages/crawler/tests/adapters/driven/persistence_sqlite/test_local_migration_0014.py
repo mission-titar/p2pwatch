@@ -1,6 +1,7 @@
-"""Local 0014 rebuilds ``downloads`` STRICT, its four stamps as micros (micros spec)."""
+"""Local 0014 rebuilds ``downloads`` STRICT, its four stamps as micros, without ``size_bytes``."""
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_local_at
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
 
 _A = FileKey(network=Network.ED2K, native_id="a" * 32)
 _B = FileKey(network=Network.ED2K, native_id="b" * 32)
@@ -57,7 +59,6 @@ def test_0014_converts_each_download_stamp_to_micros_and_keeps_a_null(tmp_path: 
             "state": "completed",
             "queued_at_micros": 1_781_179_200_123_456,
             "completed_at_micros": 1_781_265_600_000_000,
-            "size_bytes": 100,
             "latest_seen_at_micros": 1_781_182_800_000_001,
             "bytes_done": 40,
             "latest_progress_at_micros": 1_781_173_800_000_000,
@@ -112,3 +113,27 @@ def test_0014_rebuilds_downloads_strict_with_its_stamps_typed(tmp_path: Path) ->
             )
     finally:
         connection.close()
+
+
+def _download_columns(connection: sqlite3.Connection) -> set[str]:
+    return {column["name"] for column in rows(connection, sql="PRAGMA table_info(downloads)")}
+
+
+def test_a_created_local_db_has_no_size_bytes_on_its_downloads(tmp_path: Path) -> None:
+    with closing(open_local(tmp_path / "local.db")) as connection:
+        assert "size_bytes" not in _download_columns(connection)
+
+
+def test_a_v4_local_db_migrated_keeps_its_downloads_without_their_size(tmp_path: Path) -> None:
+    path = tmp_path / "local.db"
+    with closing(open_local_at(path, version=5)) as connection:
+        connection.execute(
+            "INSERT INTO downloads (ed2k_hash, target_id, state, queued_at, size_bytes)"
+            " VALUES (?, '062A', 'queued', '2026-06-11T12:00:00+00:00', 100)",
+            (_A.native_id,),
+        )
+    with closing(open_local(path)) as connection:
+        assert "size_bytes" not in _download_columns(connection)
+        assert rows(connection, sql="SELECT native_id FROM downloads") == [
+            {"native_id": _A.native_id}
+        ]

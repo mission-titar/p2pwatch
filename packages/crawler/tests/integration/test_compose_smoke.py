@@ -584,8 +584,8 @@ file = FileKey(network=Network.ED2K, native_id=sys.argv[1])
 connection = sqlite3.connect("/data/local.db", timeout=30)
 connection.execute(
     "INSERT INTO downloads (file_id, network, native_id, target_id, state, queued_at_micros,"
-    " size_bytes, latest_seen_at_micros)"
-    " VALUES (?, ?, ?, {_SEEDED_TARGET!r}, 'downloading', ?, {_SEEDED_SIZE}, ?)",
+    " latest_seen_at_micros)"
+    " VALUES (?, ?, ?, {_SEEDED_TARGET!r}, 'downloading', ?, ?)",
     (file.file_id, file.network, file.native_id, now_micros, now_micros),
 )
 connection.commit()
