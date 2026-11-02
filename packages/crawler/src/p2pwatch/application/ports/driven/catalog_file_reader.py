@@ -12,9 +12,9 @@ from p2pwatch.domain.identifiers import FileId
 
 
 class CatalogFileReader(ABC):
-    """Reads the catalog from any thread. A file passes ``target_id`` when it holds a current
-    decision of that target and a tier other than ``catalog``, ``tier`` when it holds one of that
-    tier, ``search_text`` when its latest filename holds it as typed, case and accents ignored."""
+    """Reads the files from any thread: one passes ``target_id`` when it holds a current decision
+    of that target, its tier not ``catalog``, ``tier`` when one is of that tier, ``search_text``
+    when its latest filename holds it as typed, case, accents and ligatures ignored."""
 
     @abstractmethod
     def read_catalog_entries(

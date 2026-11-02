@@ -341,8 +341,17 @@ class CatalogFileReaderContract(ABC):
             ("ÉCOLE", "école.avi", "écolier.avi"),
             ("ecole", "école.avi", "écolier.avi"),
             ("KERORO", "Keroro 062A.avi", "Kero 062A.avi"),
+            ("coeur", "Cœur.avi", "Cœu.avi"),
         ],
-        ids=["percent", "underscore", "backslash", "capitals", "no accents", "ascii capitals"],
+        ids=[
+            "percent",
+            "underscore",
+            "backslash",
+            "capitals",
+            "no accents",
+            "ascii capitals",
+            "ligature",
+        ],
     )
     def test_the_search_finds_a_filename_holding_the_text_as_typed_case_and_accents_ignored(
         self,

@@ -68,7 +68,11 @@ text or a catalog file, so no other implementation can exist.
   (operator, 2026-11-01).* The values a draw avoids: Appendix C.
 - **D5. The search is literal, and ignores case and accents**: `CatalogFileReader` and `SourceReader` find a text as
   typed, `%`, `_` and every other character included, as a substring of a filename or a name, or the start of a user
-  hash, both sides compared casefolded and stripped of their accents. *`CatalogFileReader` promises a filename that
+  hash, both sides compared casefolded and stripped of their accents (Corrected: both sides through the matcher's
+  `catalog_matching.domain.normalization.fold`, which also splits the ligatures `œ` and `æ`, so that `coeur` finds
+  `cœur`: an AZERTY keyboard has no `œ` key, and one fold serves the project, where `fold_for_search` first made a
+  second one, NFD without the ligatures; operator, 2026-11-02, from the holistic review, block 135).
+  *`CatalogFileReader` promises a filename that
   "contains" the text, and `SourceReader`'s "matches" leaves wildcards unstated: neither port promises `LIKE`'s
   wildcards, which every implementation would otherwise have to imitate, and one rule serves the webui's two search
   boxes. Case and accents ignored because the names sought are French and a visitor often types without accents: on
@@ -121,7 +125,8 @@ by the block that first applies them.
    mutated as the row names (an `ORDER BY` dropped, a tier counted 0), its contract test fails. The closing block's
    handoff holds one row per promise: the port line, the contract test, the failing line.
 4. Through each search of `CatalogFileReader` and `SourceReader` (filename, name, hash prefix): a text holding `%`, `_`
-   or `\` finds only a name holding it as typed; `ÉCOLE` and `ecole` find `école`; `KERORO` finds `Keroro`. The `%`,
+   or `\` finds only a name holding it as typed; `ÉCOLE` and `ecole` find `école`; `KERORO` finds `Keroro` (Corrected:
+   and `coeur` finds `cœur`, D5's correction, block 135). The `%`,
    `_`, `ÉCOLE` and `ecole` cases fail first on `main`; the ASCII case and the `\` one pass there (`LIKE` without
    `ESCAPE` takes `\` as typed), the latter guarding against a fix built on `ESCAPE`.
 5. The draws' own test: a drawn text is at least 8 characters long, and two `random.Random` of the same seed give the

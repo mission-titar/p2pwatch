@@ -10,11 +10,19 @@ from p2pwatch.adapters.driven.persistence_sqlite.search_fold import fold_for_sea
         ("Ça Keroro", "ca keroro"),
         ("e\N{COMBINING ACUTE ACCENT}cole", "ecole"),
         ("Straße", "strasse"),
+        ("Cœur Æon", "coeur aeon"),
         ("50% a_b a\\b", "50% a_b a\\b"),
     ],
-    ids=["capitals with accents", "cedilla", "accent already split", "casefold", "symbols kept"],
+    ids=[
+        "capitals with accents",
+        "cedilla",
+        "accent already split",
+        "casefold",
+        "ligatures",
+        "symbols kept",
+    ],
 )
-def test_a_text_is_folded_to_its_case_folded_letters_without_their_accents(
+def test_a_text_is_folded_to_its_case_folded_letters_without_accents_or_ligatures(
     *, text: str, folded: str
 ) -> None:
     assert fold_for_search(text) == folded
