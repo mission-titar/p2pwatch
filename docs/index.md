@@ -98,5 +98,5 @@ Le code est en Python, en architecture hexagonale, avec des tests stricts. Voyez
 [Architecture du code](contributing/architecture.md) pour comprendre comment le crawler fonctionne,
 et [Lancer les tests](contributing/testing.md) pour les suites de tests et leurs prérequis. Les
 conventions du projet, les specs et l'historique des décisions vivent dans le dépôt, sous
-[`AGENTS.md`](https://github.com/mission-titar/p2pwatch/blob/main/AGENTS.md) et
+[`.claude/CLAUDE.md`](https://github.com/mission-titar/p2pwatch/blob/main/.claude/CLAUDE.md) et
 [`agents/`](https://github.com/mission-titar/p2pwatch/tree/main/agents).

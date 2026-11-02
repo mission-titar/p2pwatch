@@ -12,6 +12,8 @@ An agent adds an entry only after the operator has agreed to it.
 
 ## Debt
 
+- **Measure which rules of `.claude/CLAUDE.md` change an agent's result**, to cut the ones Sonnet and Opus follow anyway:
+  method and costs in `agents/handoffs/2026-11-03 - handoff - instruction file trim.md`.
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
@@ -34,7 +36,7 @@ An agent adds an entry only after the operator has agreed to it.
   inside the container. Sort allowlist: `agents/specs/2026-06-22-webui-catalogue-design.md` §3.1.
 
 - **The webui in the visitor's time zone**: UTC rendered, the browser converts each date with JavaScript; needs
-  `AGENTS.md`'s "Python only" amended and a JS test chain. Section 6's "Adjacent backlog items" of `agents/specs/2026-10-13-append-only-source-points.md`.
+  `.claude/CLAUDE.md`'s "Python only" amended and a JS test chain. Section 6's "Adjacent backlog items" of `agents/specs/2026-10-13-append-only-source-points.md`.
 
 ## Technical improvements
 

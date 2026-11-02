@@ -21,5 +21,5 @@ faire tourner, le dépanner, et ce qu'il faut savoir côté légalité et vie pr
 uv run poe check         # le gate complet : lint, types, SQL, tests
 ```
 
-Les conventions et invariants du projet sont dans [`AGENTS.md`](AGENTS.md) ; les specs, plans et
+Les conventions et invariants du projet sont dans [`.claude/CLAUDE.md`](.claude/CLAUDE.md) ; les specs, plans et
 handoffs dans [`agents/`](agents/).

@@ -50,7 +50,7 @@ services:
     volumes:
       - ./tests/smoke/crawler.yml:/app/config/crawler.yml:ro
       - ./tests/smoke/targets.yml:/app/config/targets.yml:ro
-      # The matcher policy has exactly ONE copy in the repo (AGENTS.md): the operator's.
+      # The matcher policy has exactly ONE copy in the repo (.claude/CLAUDE.md): the operator's.
       - ./deploy/matcher.yml:/app/config/matcher.yml:ro
       - ${SMOKE_STATE:-/tmp/p2pwatch-smoke}/data:/data
       # Measured with statvfs for the disk floor, never written.

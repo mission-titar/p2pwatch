@@ -1,0 +1,21 @@
+---
+paths:
+  - "packages/crawler/src/p2pwatch/adapters/driven/amule_api/**"
+  - "packages/crawler/tests/adapters/driven/amule_api/**"
+  - "packages/crawler/tests/fakes/fake_amule_api_server.py"
+  - "packages/amule/**"
+  - "agents/reference/**"
+---
+
+# amuleapi and amuled
+
+Facts established by hardware probes and source reading (`agents/reference/`). amuleapi is the daemon aMule (the version pinned by `ARG AMULE_VERSION` in `packages/amule/Dockerfile`) ships to expose amuled over `/api/v1/*` REST plus SSE, and to serve aMule's web UI. amuled starts it itself (`[AmuleApi] Enabled=1`) and hands it a one-off EC token; EC is now an internal link between the two, not something we speak. The live API reference is aMule's own `docs/api/REFERENCE.md`, in the source tree the image builds from.
+
+- **Every list endpoint silently returns only the first 100 rows.** `limit` defaults to 100 on `/downloads`, `/shared`, `/search/{id}/results` and every other list route, so omitting it returns the first hundred items, not the collection. For `downloads()` that is a silent completion failure on any node with more than a hundred queued or shared files. The adapter keyset-pages on the route's identity column (`sort=hash` + `after=<last hash>` for downloads and shared files, `sort=ecid` + `after=<last ecid>` for a download's clients), never `offset`, because `offset` is a position and a row deleted below the cursor slides one row past the window for good.
+- **A `401` is terminal for the session.** amuleapi counts every rejected token per IP (30 in 60 s → a 300 s lockout), so a client that retries a `401` locks itself out. The adapter re-logs in exactly ONCE per request and never loops. Restarting amuleapi, or any password change, invalidates every issued token.
+- **`media` on a search result is what the responding server advertised**, never a local probe: it can contradict the file (a `.pdf` reporting a runtime and a video codec is a real observed result), and it is `null` on most global and Kad hits. The key is always present, so test for `null`, not for the key.
+- **amuleapi writes valid UTF-8 and unsigned integers only**: `CJsonWriter` recombines a surrogate pair and writes a lone surrogate as U+FFFD, and every integer the mapper stores is a signed 64-bit cast of an unsigned field, a search result's or a link's size bounded by 256 GiB (amuled drops or refuses the others). The mapper checks anyway, since the domain values refuse both: a surrogate becomes U+FFFD, an integer out of [0, 2\*\*63) reads as malformed, and a result whose size is dropped counts in `p2pwatch_search_results_skipped`. Detail: Appendix C of `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
+- **amuled folds the same file's alternative filenames** into `alternate_names[]` under the most-sourced parent; only parents appear at the top level. The mapper unfolds them into one observation per name, because dropping them loses the descriptive name on a third of the catalog's multi-name hashes.
+- amuled moves a finished file to its IncomingDir and flips status to complete **after** the move (no race), so by the time the completion is observable the file is already at its final on-disk path. Completion is the client's **positive signal**, never a byte count: a queue entry with `status == "completed"` (moved, awaiting clear), or a file in `GET /shared` and absent from the queue (completed then cleared). A queued file listed in `/shared` is not complete, since amuled shares partfiles too. Detail: `2026-06-17-amuled-completion-behavior.md`.
+- **Two listen ports**: TCP `[eMule] Port` (4662) and UDP `[eMule] UDPPort` (4672, Kad's). The direct variant publishes `4672/udp`, never `4662/udp`; port-sync writes both to the one port a tunnel forwards. amuled reads them only at start, and flushes its whole config when it exits, so `amule.conf` is written only while amuled is down.
+- **Neither password has a length minimum** in aMule at the pinned commit (no 12-character rule exists); the boot step refuses only control characters in them.

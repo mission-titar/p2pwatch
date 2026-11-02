@@ -113,9 +113,9 @@ Tier Direct is not drawn: it skips Discuss, Spec and both reviews.
   the lead, who asks the operator: cut the lot, or accept the larger stack.
 - **One teammate per block, one working at a time.** The next block starts once the previous one is green locally and
   its pull request open, not once it has merged.
-- **The brief points at the block's row in the spec, the spec, `AGENTS.md`, this document's Act, Verify, Integrate
+- **The brief points at the block's row in the spec, the spec, `.claude/CLAUDE.md`, this document's Act, Verify, Integrate
   (the pull request's body included) and Defect classes, and the branch, and restates nothing.**
-- **Strict TDD**, as `AGENTS.md` states it.
+- **Strict TDD**, as `.claude/CLAUDE.md` states it.
 - **An adjacent defect takes its class** (Defect classes). A defect class 2 question stops the teammate.
 - **The teammate speaks only when it stops**: a defect class 2 question, a blocker (a denied permission included), or
   continuous integration has started. The lead forwards the operator's answers verbatim and never answers a class 2
@@ -202,7 +202,7 @@ Tier Direct is not drawn: it skips Discuss, Spec and both reviews.
   than pull requests in series.
 - **(e) The lead reports what was done and the friction met.**
 - **(f) After the stack, or tier Direct's pull request, merges, the lead proposes a release if the lot changed what the
-  image ships**, announcing the version number first. The operator decides; the tag is then pushed as `AGENTS.md`
+  image ships**, announcing the version number first. The operator decides; the tag is then pushed as `.claude/CLAUDE.md`
   describes (`git tag`). A lot that changes only documents or process ships nothing.
 - **The closing block splits like any other** when it passes a bound.
 
