@@ -107,12 +107,8 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         state: Literal[DownloadState.DOWNLOADING, DownloadState.FAILED],
         failure_reason: FailureReason | None = None,
     ) -> None:
-        """UPDATE the state and its ``failure_reason``, which another ``set_state`` or
-        ``set_completed`` clears (``set_seen`` leaves it).
-
-        Requires an existing download (an unknown file → ``PersistenceError``: caller-code bug).
-        ``failed`` does not overwrite the ``completed_at_micros``.
-        """
+        """Sets the state and ``failure_reason``, cleared only by another ``set_state`` or
+        ``set_completed``; ``failed`` keeps ``completed_at_micros``; the file must be tracked."""
         with wrap_sqlite_errors():
             cursor = self._connection.execute(
                 _SET_STATE, (state.value, failure_reason, file.file_id)

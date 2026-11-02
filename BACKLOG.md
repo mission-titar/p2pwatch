@@ -23,9 +23,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **aMule 3.2.0 pinned**: `ARG AMULE_VERSION` and `ARG AMULE_COMMIT` moved from 3.1.0 to 3.2.0, which fixes 15
   advisories, by the weekly bump or by hand. `packages/amule/Dockerfile`, `.github/workflows/amule-bump.yml`.
 
-- **Round-trip contracts**: a contract for each Writer/Reader pair and reader-only port of `persistence_sqlite` without
-  one, seeded through the Writers with drawn values, so each port's promise holds for any implementation. Appendix D of `agents/specs/2026-10-30-values-checked-at-the-boundary.md`.
-
 ## Features
 
 - **Multi network**: a generic core driving one container per P2P client, renamed p2pwatch.

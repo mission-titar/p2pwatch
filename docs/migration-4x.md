@@ -202,6 +202,11 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   montre tous les fichiers au lieu de n'en montrer aucun.
   Après un redémarrage depuis le tableau de bord, l'adresse se termine par `?done=restarted` au lieu
   de `?done=restart`.
+- **La recherche de `/files` et de `/sources` est littérale, et ignore la casse, les accents et les
+  ligatures** : `%` et `_` ne désignent plus qu'eux-mêmes, là où ils servaient de jokers (`a_b`
+  trouvait `axb.avi`), et `ecole` comme `ÉCOLE` trouvent `école`, `coeur` trouve `cœur`, là où
+  seule la casse des lettres ASCII était ignorée. Un nom mal encodé (`Ã©cole` pour `école`) ne se
+  trouve que tel qu'il est écrit.
 - **Le crawler se lance par sa sous-commande**, `python -m p2pwatch crawl`, que l'image lance
   d'elle-même. Sans sous-commande, `python -m p2pwatch --config …` sort en erreur (code 2) :
   adaptez le `command:` que vous auriez donné au service `p2pwatch`.
