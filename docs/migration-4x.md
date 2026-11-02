@@ -172,6 +172,9 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   niveau, et sous `unmapped`, toujours présent, ce que le réseau a envoyé sans qu'aucun champ ne le
   reprenne, `media` compris (`media.title` devient `unmapped.media.title`). Adaptez vos requêtes de
   la console SQL : `json_extract(raw_metadata, '$.unmapped.media.title')`.
+- **La taille d'un fichier n'est plus que dans `files.size_bytes`** : `observation_variants` n'a
+  pas de colonne `size_bytes`, et `downloads` de `local.db` perd la sienne. Adaptez vos requêtes de
+  la console SQL : la taille d'une observation se lit par `JOIN files USING (file_id)`.
 - **Un instant stocké en entier de microsecondes depuis l'epoch porte son unité dans son nom** :
   `observed_at` devient `observed_at_micros` dans `observations` et `source_observations` du
   catalogue, et `started_at` devient `started_at_micros` dans `backoff_states` de `local.db`.

@@ -474,8 +474,9 @@ flowchart LR
 
 - **`catalog.db`** (version de schéma 15) : la connaissance accumulée, **append-only**, chaque table
   (triggers `BEFORE UPDATE/DELETE -> ABORT`), pour que N nœuds fusionnent en un seul catalogue
-  (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`INSERT OR IGNORE` /
-  `ON CONFLICT DO NOTHING`), donc sans danger en cas de redémarrage en pleine écriture.
+  (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`ON CONFLICT DO NOTHING`),
+  donc sans danger en cas de redémarrage en pleine écriture ; jamais `INSERT OR IGNORE`, qui
+  avalerait aussi une violation de `NOT NULL` ou de `CHECK`.
 - **`local.db`** (version de schéma 15) : l'état d'exécution du nœud (identité, suivi des
   téléchargements et de leur progression, backoff des recherches, empreinte de la politique
   réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
@@ -490,8 +491,9 @@ niveau ne soit condamnée au premier démarrage. `catalog/0006` a supprimé `sou
 pas des observations.
 
 `catalog/0007` stocke les observations en variantes plus horodatages : une variante
-(`observation_variants`) porte ce qui se répète d'une observation à l'autre (nom, taille, durée,
-débit, `raw_meta`, mot-clé, nœud), et `observations` ne garde par ligne que l'instant, en
+(`observation_variants`) porte ce qui se répète d'une observation à l'autre (nom, durée, débit,
+`raw_meta`, mot-clé, nœud ; la taille reste dans `files`, une seule par fichier, un hash eD2k
+nommant un seul contenu), et `observations` ne garde par ligne que l'instant, en
 microsecondes, et le nombre de sources. `raw_meta` devient un objet JSON : `codec`, `file_type`
 et `complete_source_count` à son premier niveau, le reste sous `unmapped`.
 `catalog/0008` identifie un fichier par `(network, native_id)`, avec pour
@@ -601,7 +603,8 @@ colonne reçoit donc un `CHECK` seulement si les trois conditions tiennent :
    d'un client ni un détail d'adaptateur.
 
 Sinon, le domaine la valide, et lui seul. Le `CHECK` n'est jamais la seule défense : le domaine
-valide d'abord, car `INSERT OR IGNORE` avale une violation de `CHECK` sans rien dire. Le `CHECK`
+valide d'abord, car son erreur nomme la valeur fautive, là où celle du `CHECK` ne nomme que son
+expression. Le `CHECK`
 arrête les écrivains qui contournent le domaine : `merge`, une migration. Par exemple,
 `sources.native_id` en 32 caractères hexadécimaux minuscules sur eD2k en a un (une majuscule ferait
 une seconde identité de la même source), mais pas `source_variants.contact_point`, dont le format
