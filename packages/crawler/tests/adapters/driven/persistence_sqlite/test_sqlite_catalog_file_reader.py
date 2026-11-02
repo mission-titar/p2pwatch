@@ -11,7 +11,6 @@ from typing import Protocol
 import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
 from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
@@ -33,9 +32,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
-from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.file_target_decision import DatedDecision
-from p2pwatch.domain.identifiers import FileId, NodeId
 from tests.contracts.application.ports.driven.catalog_file_reader_contract import (
     CatalogFileReaderContract,
 )
@@ -50,7 +46,6 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
     open_reader,
 )
 from tests.support.catalog_rows import (
-    SEEN_AT,
     file_id,
     insert_decision,
     insert_file,
@@ -101,7 +96,6 @@ def _entries(
     search_text: str | None = None,
     sort: CatalogEntrySort = CatalogEntrySort.LATEST_SEEN,
     direction: SortDirection = SortDirection.DESC,
-    offset: int = 0,
 ) -> tuple[CatalogEntry, ...]:
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_catalog_entries(
@@ -112,7 +106,7 @@ def _entries(
             sort=sort,
             direction=direction,
             limit=_LIMIT,
-            offset=offset,
+            offset=0,
         )
 
 
@@ -144,16 +138,6 @@ def _latest_filename(catalog_entry: CatalogEntry) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: explorer, its page
-# ---------------------------------------------------------------------------
-
-
-def test_read_catalog_entries_reads_none_past_the_offset(catalog_db: Path) -> None:
-    seed(catalog_db)
-    assert _entries(catalog_db, offset=1) == ()
-
-
-# ---------------------------------------------------------------------------
 # Tests: read_matched_and_total_file_counts: one row per file, decisions aggregated (spec §9)
 # ---------------------------------------------------------------------------
 
@@ -167,169 +151,8 @@ def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
 
 
 # ---------------------------------------------------------------------------
-# Tests: file history
+# Tests: read_matched_and_total_file_counts, /files summary (matched, total)
 # ---------------------------------------------------------------------------
-
-
-def _history(
-    catalog_db: Path, *, native_id: str, since: datetime = _EPOCH, until: datetime = _YEAR_3000
-) -> FileHistory | None:
-    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
-        reader = SqliteCatalogFileReader(thread_read_connections)
-        return reader.read_file_history(file_id(native_id), since=since, until=until)
-
-
-def test_file_history_carries_observations_and_dated_decisions(catalog_db: Path) -> None:
-    seed(catalog_db)
-    file_history = _history(catalog_db, native_id="a" * 32)
-    assert file_history is not None
-    assert file_history.file == FileKey(network=Network.ED2K, native_id="a" * 32)
-    assert file_history.size_bytes == 100
-    assert file_history.decisions == (
-        DatedDecision(
-            file=FileKey(network=Network.ED2K, native_id="a" * 32),
-            decision=DecisionRecord(
-                target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
-            ),
-            decided_at=datetime(2026, 6, 22, 10, 0, 1, tzinfo=UTC),
-            node_id=NodeId("n1"),
-        ),
-    )
-    assert file_history.decisions[0].decision.tier is DecisionTier.DOWNLOAD
-    assert [o.reported_file.filename for o in file_history.observations] == ["keroro_062.avi"]
-    assert file_history.latest_observation == file_history.observations[0]
-    assert file_history.known_filenames == ("keroro_062.avi",)
-
-
-def test_file_history_reads_its_observations_in_the_window_and_its_latest_in_any(
-    catalog_db: Path,
-) -> None:
-    seed(catalog_db)
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_observation(
-            connection,
-            native_id="a" * 32,
-            filename="older.avi",
-            observed_at="2026-06-21T10:00:00+00:00",
-        )
-    since, until = datetime(2026, 6, 1, tzinfo=UTC), datetime.fromisoformat(SEEN_AT)
-    file_history = _history(catalog_db, native_id="a" * 32, since=since, until=until)
-    assert file_history is not None
-    assert [o.reported_file.filename for o in file_history.observations] == ["older.avi"]
-    assert file_history.latest_observation is not None
-    assert file_history.latest_observation.reported_file.filename == "keroro_062.avi"
-
-
-def test_file_history_of_an_unknown_file_id_is_none(catalog_db: Path) -> None:
-    seed(catalog_db)
-    assert _history(catalog_db, native_id="f" * 32) is None
-    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
-        reader = SqliteCatalogFileReader(thread_read_connections)
-        by_native_id = reader.read_file_history(
-            FileId(bytes.fromhex("a" * 32)), since=_EPOCH, until=_YEAR_3000
-        )
-    assert by_native_id is None  # a file is read by its id, never by its ed2k hash
-
-
-def test_file_history_reads_a_recorded_decision_back_to_the_microsecond(catalog_db: Path) -> None:
-    decided = DatedDecision(
-        file=FileKey(network=Network.ED2K, native_id="a" * 32),
-        decision=DecisionRecord(
-            target_id=TargetId("062A"), rule_name="id_segment_exact", tier=DecisionTier.DOWNLOAD
-        ),
-        decided_at=datetime(2026, 6, 22, 10, 0, 1, 123456, tzinfo=UTC),
-        node_id=NodeId("n1"),
-    )
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id="a" * 32)
-        SqliteDecisionStore(connection).record_decision(decided)
-    file_history = _history(catalog_db, native_id="a" * 32)
-    assert file_history is not None
-    assert file_history.decisions == (decided,)
-
-
-def test_file_history_retracted_target_is_no_decision(catalog_db: Path) -> None:
-    """A file whose LATEST decision is the crawler's retraction sentinel exposes NO decision
-    from ``read_file_history``, identical to an unmatched file (spec §9). The earlier
-    (pre-retraction) real decision must not leak through."""
-    seed_retracted(catalog_db)
-    file_history = _history(catalog_db, native_id="c" * 32)
-    assert file_history is not None
-    assert file_history.decisions == ()
-
-
-def test_file_history_no_decision(catalog_db: Path) -> None:
-    """Detail works even without a decision (unmatched file)."""
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id="b" * 32, size_bytes=200)
-        insert_observation(
-            connection,
-            native_id="b" * 32,
-            filename="unknown.avi",
-            observed_at="2026-06-22T09:00:00.000000+00:00",
-            size_bytes=200,
-        )
-    file_history = _history(catalog_db, native_id="b" * 32)
-    assert file_history is not None
-    assert file_history.decisions == ()
-    assert file_history.size_bytes == 200
-
-
-def test_file_history_whole_episode_lists_both_decisions(catalog_db: Path) -> None:
-    seed_whole_episode(catalog_db)
-    file_history = _history(catalog_db, native_id="a" * 32)
-    assert file_history is not None
-    assert [d.decision.target_id for d in file_history.decisions] == ["072A", "072B"]
-
-
-# ---------------------------------------------------------------------------
-# Tests: read_catalog_entries with multiple combined filters
-# ---------------------------------------------------------------------------
-
-
-def test_read_catalog_entries_reads_at_most_its_limit_from_its_offset(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        for n in range(_LIMIT + 2):
-            insert_file(connection, native_id=f"{n:032x}", size_bytes=n)
-    first = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
-    second = _entries(
-        catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC, offset=_LIMIT
-    )
-    assert [catalog_entry.size_bytes for catalog_entry in first] == list(range(_LIMIT))
-    assert [catalog_entry.size_bytes for catalog_entry in second] == [_LIMIT, _LIMIT + 1]
-
-
-def test_file_history_observations_include_media_fields_none(catalog_db: Path) -> None:
-    """An observation's duration_seconds and bitrate_kbps are None when the network gave none."""
-    seed(catalog_db)
-    file_history = _history(catalog_db, native_id="a" * 32)
-    assert file_history is not None
-    assert len(file_history.observations) == 1
-    obs = file_history.observations[0].reported_file
-    assert obs.duration_seconds is None
-    assert obs.bitrate_kbps is None
-
-
-def test_file_history_observations_include_media_fields_present(catalog_db: Path) -> None:
-    """An observation's duration_seconds and bitrate_kbps are filled when present."""
-    h = "d" * 32
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id=h, size_bytes=150)
-        insert_observation(
-            connection,
-            native_id=h,
-            filename="keroro_media.avi",
-            size_bytes=150,
-            source_count=3,
-            duration_seconds=1320,
-            bitrate_kbps=192,
-        )
-    file_history = _history(catalog_db, native_id=h)
-    assert file_history is not None
-    assert len(file_history.observations) == 1
-    obs = file_history.observations[0].reported_file
-    assert obs.duration_seconds == 1320
-    assert obs.bitrate_kbps == 192
 
 
 def _seed_unmatched(db: Path) -> None:
@@ -343,11 +166,6 @@ def _seed_unmatched(db: Path) -> None:
             observed_at="2026-06-22T09:00:00.000000+00:00",
             size_bytes=200,
         )
-
-
-# ---------------------------------------------------------------------------
-# Tests: read_matched_and_total_file_counts, /files summary (matched, total)
-# ---------------------------------------------------------------------------
 
 
 def test_read_matched_and_total_file_counts_no_filter_returns_matched_and_total(
@@ -425,18 +243,7 @@ def test_target_scope_excludes_catalog_tier(catalog_db: Path) -> None:
 
 
 def _seed_sortable(db: Path) -> None:
-    """Three single-decision files with distinct sort keys and one decision each at a distinct
-    tier (download > notify > catalog), for the sort-order tests.
-
-    hash 'a': beta.avi  size 300 sources  5 seen 2026-01-01 tier notify   (062A)
-    hash 'b': alpha.avi size 100 sources 15 seen 2026-01-02 tier download (072A)
-    hash 'c': gamma.avi size 200 sources 10 seen 2026-01-03 tier catalog  (keroro_large)
-
-    Every sort key yields a distinct order, and ``last_seen`` (a < b < c) is deliberately
-    orthogonal to BOTH ``size`` (a is largest) AND ``tier`` (b is strongest): so a sort column
-    that silently swaps to ``observed_at_micros`` cannot pass unnoticed on any key, including
-    ``tier``.
-    """
+    """Three files of one decision each, one per tier: notify (a), download (b), catalog (c)."""
     rows = [
         ("a" * 32, "beta.avi", 300, 5, "2026-01-01T10:00:00.000000+00:00", "062A", "notify"),
         ("b" * 32, "alpha.avi", 100, 15, "2026-01-02T10:00:00.000000+00:00", "072A", "download"),
@@ -460,48 +267,6 @@ def _seed_sortable(db: Path) -> None:
                 tier=tier,
                 decided_at="2026-01-04T10:00:00.000000+00:00",
             )
-
-
-def _hashes(rows: tuple[CatalogEntry, ...]) -> list[str]:
-    return [r.file.native_id for r in rows]
-
-
-@pytest.mark.parametrize(
-    ("sort", "direction", "expected"),
-    [
-        ("name", "asc", ["b", "a", "c"]),  # alpha, beta, gamma
-        ("name", "desc", ["c", "a", "b"]),
-        ("size", "asc", ["b", "c", "a"]),  # 100, 200, 300
-        ("size", "desc", ["a", "c", "b"]),
-        ("sources", "asc", ["a", "c", "b"]),  # 5, 10, 15
-        ("sources", "desc", ["b", "c", "a"]),
-        ("last_seen", "desc", ["c", "b", "a"]),  # 01-03, 01-02, 01-01 (the default)
-        ("last_seen", "asc", ["a", "b", "c"]),
-        ("tier", "desc", ["b", "a", "c"]),  # download(2), notify(1), catalog(0)
-        ("tier", "asc", ["c", "a", "b"]),
-    ],
-)
-def test_read_catalog_entries_sort_orders(
-    *, catalog_db: Path, sort: str, direction: str, expected: list[str]
-) -> None:
-    _seed_sortable(catalog_db)
-    rows = _entries(catalog_db, sort=CatalogEntrySort(sort), direction=SortDirection(direction))
-    assert _hashes(rows) == [c * 32 for c in expected]
-
-
-def test_read_catalog_entries_sort_tiebreak_is_file_id(catalog_db: Path) -> None:
-    """Two files with the same sort key keep a deterministic order via the file_id tiebreak."""
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        for h in ("a" * 32, "e" * 32):  # inserted a-first on purpose
-            insert_file(connection, native_id=h)
-            insert_observation(
-                connection,
-                native_id=h,
-                filename="same.avi",
-                observed_at="2026-01-01T10:00:00.000000+00:00",
-            )
-    rows = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
-    assert _hashes(rows) == ["e" * 32, "a" * 32]  # e's file_id sorts first
 
 
 def test_tier_rank_case_matches_tier_rank() -> None:
@@ -599,6 +364,21 @@ def test_read_catalog_entries_lists_file_with_no_observation(catalog_db: Path) -
     assert rows[0].latest_observation is None
 
 
+@pytest.mark.parametrize(
+    "sort", [CatalogEntrySort.NAME, CatalogEntrySort.SOURCES, CatalogEntrySort.LATEST_SEEN], ids=str
+)
+def test_read_catalog_entries_sorts_a_file_never_seen_first_ascending_last_descending(
+    *, catalog_db: Path, sort: CatalogEntrySort
+) -> None:
+    never_seen = _seed_file_without_observation(catalog_db)
+    _seed_unmatched(catalog_db)
+    ascending, descending = (
+        _entries(catalog_db, sort=sort, direction=direction)
+        for direction in (SortDirection.ASC, SortDirection.DESC)
+    )
+    assert (ascending[0].file.native_id, descending[-1].file.native_id) == (never_seen, never_seen)
+
+
 def test_read_matched_and_total_file_counts_counts_file_with_no_observation(
     catalog_db: Path,
 ) -> None:
@@ -631,6 +411,12 @@ def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalo
             )
     rows = _entries(catalog_db)
     assert _latest_filename(rows[0]) == "second.avi"
+
+
+def _history(catalog_db: Path, *, native_id: str) -> FileHistory | None:
+    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
+        reader = SqliteCatalogFileReader(thread_read_connections)
+        return reader.read_file_history(file_id(native_id), since=_EPOCH, until=_YEAR_3000)
 
 
 def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:

@@ -9,11 +9,14 @@ from p2pwatch.domain.observation import FileObservation
 
 
 class CatalogEntrySort(StrEnum):
+    """What a listing sorts on: the latest observation's filename, source count or instant, the
+    size the file was first observed with, or the strongest tier of its current decisions."""
+
     NAME = "name"
     SIZE = "size"
     SOURCES = "sources"
     LATEST_SEEN = "last_seen"  # the value keeps its old name: it is the URL's, in bookmarks
-    TIER = "tier"  # the strongest tier of the file's current decisions
+    TIER = "tier"
 
 
 class SortDirection(StrEnum):
