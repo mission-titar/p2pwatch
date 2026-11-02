@@ -23,6 +23,9 @@ An agent adds an entry only after the operator has agreed to it.
 - **aMule 3.2.0 pinned**: `ARG AMULE_VERSION` and `ARG AMULE_COMMIT` moved from 3.1.0 to 3.2.0, which fixes 15
   advisories, by the weekly bump or by hand. `packages/amule/Dockerfile`, `.github/workflows/amule-bump.yml`.
 
+- **A file's size stored once**: on `files` alone, out of the observation variants, local.db's downloads and the values
+  that repeat it, an eD2k hash fixing its file's size; before v5, under the v4 upgrade's one copy. Section 7 of `agents/specs/2026-11-01-round-trip-contracts.md`.
+
 ## Features
 
 - **Multi network**: a generic core driving one container per P2P client, renamed p2pwatch.
@@ -46,9 +49,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **Contract tests for the fakes of outside systems**: each suite run against the real system (amuled, apprise, GitHub,
   Gluetun) under the integration markers, never against a fake server. Section "Backlog" of `agents/specs/2026-10-25-fake-contract-tests.md`.
-
-- **A file's size stored once**: `files.size_bytes` copies the size every observation variant carries, an eD2k file
-  having one size; keep one. Section 7 of `agents/specs/2026-11-01-round-trip-contracts.md`.
 
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
