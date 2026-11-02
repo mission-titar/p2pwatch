@@ -19,7 +19,7 @@ LATEST_OBSERVATION_CTE = """latest_observation AS (
         f.network AS network,
         f.native_id AS native_id,
         v.filename AS filename,
-        v.size_bytes AS size_bytes,
+        f.size_bytes AS size_bytes,
         o.source_count AS source_count,
         v.keyword AS keyword,
         v.duration_seconds AS duration_seconds,
@@ -60,7 +60,7 @@ SELECT {_COLUMNS} FROM latest_observation WHERE filename IS NOT NULL ORDER BY ne
 """
 
 _FROM_OBSERVATIONS = """
-SELECT f.network, f.native_id, v.filename, v.size_bytes, o.source_count, v.keyword,
+SELECT f.network, f.native_id, v.filename, f.size_bytes, o.source_count, v.keyword,
     v.duration_seconds, v.bitrate_kbps, v.raw_metadata, o.observed_at_micros, v.node_id
 FROM files AS f
 JOIN observation_variants AS v ON v.file_id = f.file_id

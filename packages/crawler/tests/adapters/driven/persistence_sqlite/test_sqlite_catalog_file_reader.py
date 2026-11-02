@@ -140,7 +140,6 @@ def _seed_unmatched(db: Path) -> None:
             native_id="b" * 32,
             filename="gallego_ep021.ogm",
             observed_at="2026-06-22T09:00:00.000000+00:00",
-            size_bytes=200,
         )
 
 
@@ -193,7 +192,6 @@ def test_read_catalog_entries_sorts_a_file_never_seen_on_its_size(catalog_db: Pa
             native_id="c" * 32,
             filename="petit.avi",
             observed_at="2026-06-22T09:00:00.000000+00:00",
-            size_bytes=10,
         )
     entries = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
     assert [(entry.file.native_id, entry.size_bytes) for entry in entries] == [

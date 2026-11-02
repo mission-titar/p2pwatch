@@ -15,7 +15,6 @@ CREATE TABLE observation_variants (
     variant_id INTEGER PRIMARY KEY,
     ed2k_hash TEXT NOT NULL REFERENCES files (ed2k_hash),
     filename TEXT NOT NULL,
-    size_bytes INTEGER NOT NULL,
     media_length_sec INTEGER,
     bitrate_kbps INTEGER,
     raw_meta TEXT NOT NULL,
@@ -34,28 +33,26 @@ CREATE TABLE observations (
 ) WITHOUT ROWID;
 
 -- DISTINCT keeps one entry per raw key (~13k), so each is folded and hashed once.
+-- No size: a file's stays in files, so the rows differing by size alone fold into one variant.
 -- WHERE true parts the SELECT from the upsert, which SQLite would otherwise read as a join's ON.
 INSERT INTO observation_variants (
-    ed2k_hash, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id,
-    content_hash
+    ed2k_hash, filename, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id, content_hash
 )
 SELECT
     ed2k_hash,
     filename,
-    size_bytes,
     media_length_sec,
     bitrate_kbps,
     folded,
     keyword,
     node_id,
     content_hash(
-        ed2k_hash, filename, size_bytes, media_length_sec, bitrate_kbps, folded, keyword, node_id
+        ed2k_hash, filename, media_length_sec, bitrate_kbps, folded, keyword, node_id
     ) AS content_hash
 FROM (
     SELECT DISTINCT
         ed2k_hash,
         filename,
-        size_bytes,
         media_length_sec,
         bitrate_kbps,
         fold_raw_meta(raw_meta, codec, file_type, complete_source_count) AS folded,
@@ -76,7 +73,7 @@ FROM file_observations AS o
 CROSS JOIN observation_variants AS v
 WHERE
     v.content_hash = content_hash(
-        o.ed2k_hash, o.filename, o.size_bytes, o.media_length_sec, o.bitrate_kbps,
+        o.ed2k_hash, o.filename, o.media_length_sec, o.bitrate_kbps,
         fold_raw_meta(o.raw_meta, o.codec, o.file_type, o.complete_source_count),
         o.keyword, o.node_id
     )

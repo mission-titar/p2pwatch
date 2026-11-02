@@ -35,12 +35,12 @@ _NAME = "Kéroro 062A.avi"
 _RAW_META = '[["0x0308", "0"], ["0x0999", "mystère"]]'
 _FULL = (_A, _NAME, 100, 5, 2, 1474, 1200, "xvid", "Video", _RAW_META, "keroro", _T1, "n1")
 _BARE = (_B, "b.avi", 200, 1, 0, None, None, None, None, "[]", "titar", _T1, "n2")
-_FULL_VARIANT = (_A, _NAME, 100, 1474, 1200)
-_BARE_VARIANT = (_B, "b.avi", 200, None, None)
+_FULL_VARIANT = (_A, _NAME, 1474, 1200)
+_BARE_VARIANT = (_B, "b.avi", None, None)
 _BARE_META = '{"codec": null, "complete_source_count": 0, "file_type": null, "unmapped": {}}'
 # The variants as the readers rebuild them, observations as (observed_at, source_count).
 _REBUILT = """
-SELECT v.ed2k_hash, v.filename, v.size_bytes, v.media_length_sec, v.bitrate_kbps, v.raw_meta,
+SELECT v.ed2k_hash, v.filename, v.media_length_sec, v.bitrate_kbps, v.raw_meta,
     v.keyword, v.node_id, o.observed_at, o.source_count
 FROM observation_variants AS v JOIN observations AS o ON o.variant_id = v.variant_id
 ORDER BY v.ed2k_hash, o.observed_at
@@ -48,7 +48,6 @@ ORDER BY v.ed2k_hash, o.observed_at
 _REBUILT_COLUMNS = (
     "ed2k_hash",
     "filename",
-    "size_bytes",
     "media_length_sec",
     "bitrate_kbps",
     "raw_meta",
@@ -125,6 +124,20 @@ def test_identical_old_rows_become_one_observation(tmp_path: Path) -> None:
         assert rows(connection, sql="SELECT count(*) AS observation_count FROM observations") == [
             {"observation_count": 1}
         ]
+    finally:
+        connection.close()
+
+
+def test_old_rows_differing_by_size_alone_become_one_variant(tmp_path: Path) -> None:
+    path = tmp_path / "catalog.db"
+    _old_catalog(path, _BARE, _with(_BARE, size_bytes=201, observed_at=_T2))
+    connection = open_catalog_at(path, version=7)
+    try:
+        assert rows(
+            connection,
+            sql="SELECT (SELECT count(*) FROM observation_variants) AS variant_count,"
+            " (SELECT count(*) FROM observations) AS observation_count",
+        ) == [{"variant_count": 1, "observation_count": 2}]
     finally:
         connection.close()
 

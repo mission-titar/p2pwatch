@@ -3,15 +3,19 @@ import sqlite3
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import read_only_uri
+from p2pwatch.domain.file_key import FileKey, Network
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -73,6 +77,17 @@ def test_open_catalog_creates_the_tables_and_versions_the_schema(tmp_path: Path)
 def test_open_catalog_makes_every_table_strict(tmp_path: Path) -> None:
     with closing(database_opener().open_catalog(tmp_path / "catalog.db")) as connection:
         assert _strict_by_table(connection) == dict.fromkeys(_CATALOG_TABLES, 1)
+
+
+def test_open_catalog_keeps_a_file_s_size_in_files_alone(tmp_path: Path) -> None:
+    with closing(database_opener().open_catalog(tmp_path / "catalog.db")) as connection:
+        sized = rows(
+            connection,
+            sql="SELECT t.name AS table_name"
+            " FROM sqlite_schema AS t, pragma_table_info(t.name) AS c"
+            " WHERE t.type = 'table' AND c.name = 'size_bytes'",
+        )
+    assert sized == [{"table_name": "files"}]
 
 
 def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -> None:
@@ -330,6 +345,32 @@ def test_a_version_5_catalog_migrates_into_strict_tables_its_quick_check_ok(
             sql="SELECT (SELECT count(*) FROM observations) AS observation_count,"
             " (SELECT count(*) FROM match_decisions) AS decision_count",
         ) == [{"observation_count": 2, "decision_count": 4}]
+
+
+def test_a_version_5_file_reported_at_two_sizes_migrates_into_one_variant_read_at_its_size(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "catalog.db"
+    with closing(open_catalog_at(path, version=5)) as connection:
+        connection.execute(f"INSERT INTO files (ed2k_hash, size_bytes) VALUES ('{_HASH}', 100)")
+        connection.executemany(
+            "INSERT INTO file_observations (ed2k_hash, filename, size_bytes, source_count,"
+            " complete_source_count, raw_meta, keyword, observed_at, node_id)"
+            f" VALUES ('{_HASH}', 'Keroro 062A.avi', ?, 1, 0, '[]', 'keroro', ?, 'n1')",
+            [(100, _INSTANT), (101, _LATEST_V4_INSTANT)],
+        )
+
+    with closing(database_opener().open_catalog(path)) as connection:
+        assert rows(
+            connection, sql="SELECT count(*) AS variant_count FROM observation_variants"
+        ) == [{"variant_count": 1}]
+        timeline = observation_read.observations_between(
+            connection,
+            file=FileKey(network=Network.ED2K, native_id=_HASH),
+            since=0,
+            until=instant_to_micros(datetime.fromisoformat(_LATEST_V4_INSTANT)) + 1,
+        )
+    assert [observation.reported_file.size_bytes for observation in timeline] == [100, 100]
 
 
 def test_a_migrated_catalog_opened_again_adds_no_file(tmp_path: Path) -> None:

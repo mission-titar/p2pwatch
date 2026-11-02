@@ -31,7 +31,6 @@ def _hash(keyword: str = "keroro", *, node_id: str = "node-1", bitrate: int | No
     return content_hash(
         file_ref=_HASH,
         filename="Kéroro 062A.avi",
-        size_bytes=123,
         duration_seconds=None,
         bitrate_kbps=bitrate,
         raw_metadata="{}",
@@ -41,7 +40,7 @@ def _hash(keyword: str = "keroro", *, node_id: str = "node-1", bitrate: int | No
 
 
 def test_content_hash_is_blake2b_128_of_the_compact_json_of_the_columns() -> None:
-    canonical = f'["{_HASH}","Kéroro 062A.avi",123,null,1100,"{{}}","keroro","node-1"]'
+    canonical = f'["{_HASH}","Kéroro 062A.avi",null,1100,"{{}}","keroro","node-1"]'
     assert _hash() == hashlib.blake2b(canonical.encode(), digest_size=16).digest()
 
 
@@ -49,7 +48,6 @@ def test_content_hash_writes_a_blob_as_lowercase_hex() -> None:
     blob = content_hash(
         file_ref=bytes.fromhex(_HASH),
         filename="Kéroro 062A.avi",
-        size_bytes=123,
         duration_seconds=None,
         bitrate_kbps=1100,
         raw_metadata="{}",
@@ -70,7 +68,7 @@ def test_content_hash_keeps_the_boundary_between_columns() -> None:
 def test_content_hash_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
     [row] = rows(
         connection,
-        sql="SELECT content_hash(?, 'Kéroro 062A.avi', 123, NULL, 1100, '{}', 'keroro', 'node-1')"
+        sql="SELECT content_hash(?, 'Kéroro 062A.avi', NULL, 1100, '{}', 'keroro', 'node-1')"
         " AS content_hash",
         parameters=(_HASH,),
     )

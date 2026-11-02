@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
@@ -101,7 +102,6 @@ def test_record_observation_round_trip(
     variant: dict[str, Any] = {
         "file_id": _KEY.file_id,
         "filename": "Keroro 062A.avi",
-        "size_bytes": 234567890,
         "duration_seconds": None,
         "bitrate_kbps": None,
         "raw_metadata": '{"codec": null, "complete_source_count": 2, "file_type": null,'
@@ -112,8 +112,8 @@ def test_record_observation_round_trip(
     columns = {name: value for name, value in variant.items() if name != "file_id"}
     assert rows(
         connection,
-        sql="SELECT file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
-        " keyword, node_id, content_hash FROM observation_variants",
+        sql="SELECT file_id, filename, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
+        " node_id, content_hash FROM observation_variants",
     ) == [{**variant, "content_hash": content_hash(file_ref=_KEY.file_id, **columns)}]
     assert rows(connection, sql="SELECT observed_at_micros, source_count FROM observations") == [
         {"observed_at_micros": instant_to_micros(_T0), "source_count": 5}
@@ -126,7 +126,7 @@ def test_record_observation_twice_first_seen_wins_in_files(
     observation_store.record_observation(
         FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
     )
-    # Same hash, DIFFERENT size and name (hostile input, deviation 1 spec §5).
+    # Same hash, DIFFERENT size and name: a hostile or mistaken announcement.
     observation_store.record_observation(
         FileObservation(
             reported_file=_reported_file(filename="leurre.avi", size_bytes=999),
@@ -135,11 +135,24 @@ def test_record_observation_twice_first_seen_wins_in_files(
         )
     )
     assert rows(connection, sql="SELECT size_bytes FROM files") == [{"size_bytes": 234567890}]
-    observed_sizes = rows(
-        connection, sql="SELECT size_bytes FROM observation_variants ORDER BY variant_id"
+
+
+def test_two_reports_differing_by_size_alone_are_one_variant_read_at_the_first_size(
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
+) -> None:
+    for observed_at, size_bytes in ((_T0, 234567890), (_T0 + timedelta(minutes=1), 999)):
+        observation_store.record_observation(
+            FileObservation(
+                reported_file=_reported_file(size_bytes=size_bytes),
+                observed_at=observed_at,
+                node_id=_NODE_ID,
+            )
+        )
+    assert _variant_count(connection) == 1
+    timeline = observation_read.observations_between(
+        connection, file=_KEY, since=0, until=instant_to_micros(_T0 + timedelta(hours=1))
     )
-    # The anomaly stays VISIBLE.
-    assert observed_sizes == [{"size_bytes": 234567890}, {"size_bytes": 999}]
+    assert [observation.reported_file.size_bytes for observation in timeline] == [234567890] * 2
 
 
 def test_a_variant_seen_again_is_stored_once_with_both_timestamps(
