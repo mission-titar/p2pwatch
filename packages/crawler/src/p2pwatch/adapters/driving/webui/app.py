@@ -338,11 +338,11 @@ def _source_naming_display(source_naming: SourceNaming) -> SourceDisplay:
 
 
 def _file_sharing_period_display(
-    period: SharingPeriod, *, best_filename: str | None
+    period: SharingPeriod, *, best_filename: str
 ) -> FileSharingPeriodDisplay:
     """A period of a source's or a name's page, with the file it was read on."""
     return FileSharingPeriodDisplay(
-        filename=best_filename or short_hash(period.file.native_id),
+        filename=best_filename,
         file_link=f"/files/{period.file.file_id.hex()}",
         sharing_period=_sharing_period_display(period),
     )
@@ -980,7 +980,7 @@ def build_app(
                 "names": tuple(map(_source_naming_display, source_history.source_namings)),
                 "periods": tuple(
                     _file_sharing_period_display(
-                        period, best_filename=best_filename_by_file.get(period.file)
+                        period, best_filename=best_filename_by_file[period.file]
                     )
                     for period in source_history.sharing_periods
                 ),
@@ -1027,7 +1027,7 @@ def build_app(
                 "sources": tuple(map(_source_naming_display, source_name_history.source_namings)),
                 "periods": tuple(
                     _file_sharing_period_display(
-                        period, best_filename=best_filename_by_file.get(period.file)
+                        period, best_filename=best_filename_by_file[period.file]
                     )
                     for period in source_name_history.sharing_periods
                 ),

@@ -237,7 +237,8 @@ def _source_namings(
 def _best_filename_by_file(
     connection: sqlite3.Connection, *, sharing_periods: tuple[SharingPeriod, ...]
 ) -> dict[FileKey, str]:
-    """The best filename of each file of ``sharing_periods`` ever seen."""
+    """The best filename of each file of ``sharing_periods`` observed: a history leaves out the
+    periods on any other, which only a forged merge source brings."""
     best_filename_by_file = {}
     for file in {period.file for period in sharing_periods}:
         best = best_observation(connection, file=file)
@@ -292,15 +293,16 @@ class SqliteSourceReader(SourceReader):
                 _period_rows(connection, where=_WHERE_SOURCE, key=source_id, window=window),
             )
         )
+        best_filename_by_file = _best_filename_by_file(connection, sharing_periods=sharing_periods)
         return SourceHistory(
             source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
             source_namings=_source_namings(
                 connection, where=_WHERE_SOURCE_NAMED, key=source_id, limit=limit, offset=offset
             ),
-            sharing_periods=sharing_periods,
-            best_filename_by_file=_best_filename_by_file(
-                connection, sharing_periods=sharing_periods
+            sharing_periods=tuple(
+                period for period in sharing_periods if period.file in best_filename_by_file
             ),
+            best_filename_by_file=best_filename_by_file,
         )
 
     def read_source_name_history(
@@ -317,15 +319,16 @@ class SqliteSourceReader(SourceReader):
                 ),
             )
         )
+        best_filename_by_file = _best_filename_by_file(connection, sharing_periods=sharing_periods)
         return SourceNameHistory(
             source_name=source_name,
             source_namings=_source_namings(
                 connection, where=_WHERE_NAME, key=source_name, limit=limit, offset=offset
             ),
-            sharing_periods=sharing_periods,
-            best_filename_by_file=_best_filename_by_file(
-                connection, sharing_periods=sharing_periods
+            sharing_periods=tuple(
+                period for period in sharing_periods if period.file in best_filename_by_file
             ),
+            best_filename_by_file=best_filename_by_file,
         )
 
     def read_sharing_periods(

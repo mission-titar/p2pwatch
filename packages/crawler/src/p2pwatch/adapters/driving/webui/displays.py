@@ -368,7 +368,7 @@ class SourceDisplay:
 class FileSharingPeriodDisplay:
     """One period of a source's or a name's page (D13): the file it was read on, then the period."""
 
-    filename: str  # the file's best name, its short hash when never seen
+    filename: str  # the file's best filename
     file_link: str
     sharing_period: SharingPeriodDisplay
 
