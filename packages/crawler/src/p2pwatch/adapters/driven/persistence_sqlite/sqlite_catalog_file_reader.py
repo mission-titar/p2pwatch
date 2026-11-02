@@ -141,7 +141,8 @@ FROM files AS f
 # matched-only clause is deliberately absent). ``matched`` = files with at least one current
 # decision (``dec.target_ids`` is non-NULL). COUNT(DISTINCT …) keeps both counts file-based
 # and yields 0 (not NULL) on an empty catalogue. read_matched_and_total_file_counts() appends
-# the joins.
+# the joins. Without a ``search_text`` it joins no observation, so it also counts a file never
+# observed, which the list leaves out (spec file-size-stored-once §7).
 _SQL_COUNT_FILES_BASE = (
     _SQL_CTES
     + """\

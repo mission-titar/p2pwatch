@@ -24,6 +24,6 @@ class SqliteCatalogScanReader(CatalogScanReader):
         return int(row["file_count"])
 
     def iter_latest_observations(self) -> Iterator[FileObservation]:
-        """Every seen file's latest observation, streamed (spec re-evaluation §6)."""
+        """Every observed file's latest observation, streamed (spec re-evaluation §6)."""
         with wrap_sqlite_errors():
             yield from observation_read.iter_latest_observations(self._connection)

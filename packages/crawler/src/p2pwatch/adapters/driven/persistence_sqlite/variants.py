@@ -128,8 +128,7 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
     create_memoized_function(
         connection, name="content_hash", argument_count=7, function=content_hash_by_position
     )
-    # The SQL name keeps its old spelling: migration catalog/0007's script, which never changes,
-    # calls it.
+    # The SQL name keeps the spelling migration catalog/0007 calls.
     create_memoized_function(
         connection, name="fold_raw_meta", argument_count=4, function=fold_stored
     )
