@@ -1,0 +1,9 @@
+id: no-or-ignore
+language: python
+severity: error
+message: An insert ignores a duplicate by `ON CONFLICT ... DO NOTHING`, never by `OR IGNORE`, which also drops a row a `NOT NULL` or a `CHECK` refuses, without an error.
+note: "`ON CONFLICT ... DO NOTHING` ignores the duplicate key alone and raises on any other refusal. sqlfluff's `CV09` refuses `IGNORE` in the `.sql` files."
+rule:
+  # Any string, a docstring and a formatted one included; `\s+` spans a line break.
+  kind: string
+  regex: '(?i)\bOR\s+IGNORE\b'

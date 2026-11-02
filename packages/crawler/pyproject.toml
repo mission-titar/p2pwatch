@@ -136,6 +136,10 @@ max_line_length = 100
 [tool.sqlfluff.rules.references.keywords]
 ignore_words = "key,value"
 
+# CV09 refuses `OR IGNORE`, which also drops a row a NOT NULL or a CHECK refuses.
+[tool.sqlfluff.rules.convention.blocked_words]
+blocked_words = "ignore"
+
 [tool.deptry]
 # Replaces the default list, whose `tests` pattern silently drops the tests root.
 exclude = ["\\.venv"]
