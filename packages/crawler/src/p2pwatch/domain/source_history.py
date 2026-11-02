@@ -28,7 +28,7 @@ class SourceHistory:
     source: SourceKey
     source_namings: tuple[SourceNaming, ...]  # last seen first, then on source_name ascending
     sharing_periods: tuple[SharingPeriod, ...]  # the latest started first
-    best_filename_by_file: Mapping[FileKey, str]  # every period's file
+    best_filename_by_file: Mapping[FileKey, str]  # every period's file has its best filename
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -39,4 +39,4 @@ class SourceNameHistory:
     source_name: str
     source_namings: tuple[SourceNaming, ...]  # last seen first, then on source_id ascending
     sharing_periods: tuple[SharingPeriod, ...]  # the latest started first
-    best_filename_by_file: Mapping[FileKey, str]  # every period's file
+    best_filename_by_file: Mapping[FileKey, str]  # every period's file has its best filename
