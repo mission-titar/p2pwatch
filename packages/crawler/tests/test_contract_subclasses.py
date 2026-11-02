@@ -36,6 +36,8 @@ _EXEMPTIONS: dict[str, str] = {
     "::FakeCatalogFileReader": "a stub and a spy: its reads return what its test gives it",
     "crawler/tests/fakes/adapters/driven/fake_source_reader.py"
     "::FakeSourceReader": "a stub and a spy: its reads return what its test gives it",
+    "crawler/tests/fakes/adapters/driven/fake_node_state_reader.py"
+    "::FakeNodeStateReader": "a stub: its state is what its test gives it",
 }
 
 
