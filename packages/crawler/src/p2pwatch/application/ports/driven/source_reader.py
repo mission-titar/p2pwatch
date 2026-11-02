@@ -10,14 +10,15 @@ from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
 
 
 class SourceReader(ABC):
-    """Reads the catalog's sources from any thread."""
+    """Reads the catalog's sources from any thread. A source passes ``search_text`` when its user
+    hash starts with it or a name it carried holds it, as typed, case and accents ignored."""
 
     @abstractmethod
     def read_known_sources(
         self, *, search_text: str | None, limit: int, offset: int
     ) -> tuple[KnownSource, ...]:
-        """The sources with a user hash, last seen first; ``search_text`` matches a hash prefix or
-        any name a source carried."""
+        """The sources with a user hash passing ``search_text``, last seen first, then on
+        ``source_id`` ascending: at most ``limit`` of them from ``offset``."""
 
     @abstractmethod
     def read_source_count(self, *, search_text: str | None) -> int:

@@ -1,25 +1,34 @@
 """TDD tests for the catalog's source reader: sharing periods, sources, pages."""
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
+    SqliteObservationStore,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
+    SqliteSourcePointStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_reader import SqliteSourceReader
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
-from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
+from tests.contracts.application.ports.driven.source_reader_contract import SourceReaderContract
 from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import seed
-from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_reader
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    open_catalog,
+    open_reader,
+)
 from tests.support.catalog_rows import (
     insert_file,
     insert_observation,
@@ -31,6 +40,33 @@ from tests.support.catalog_rows import (
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _LIMIT = 50
+
+
+@pytest.fixture
+def connection(catalog_db: Path) -> Iterator[sqlite3.Connection]:
+    catalog = open_catalog(catalog_db)
+    yield catalog
+    catalog.close()
+
+
+@pytest.fixture
+def thread_read_connections(catalog_db: Path) -> Iterator[ThreadReadConnections]:
+    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
+        yield thread_read_connections
+
+
+class TestSqliteSourceReader(SourceReaderContract):
+    @pytest.fixture
+    def observation_writer(self, connection: sqlite3.Connection) -> SqliteObservationStore:
+        return SqliteObservationStore(connection)
+
+    @pytest.fixture
+    def source_point_writer(self, connection: sqlite3.Connection) -> SqliteSourcePointStore:
+        return SqliteSourcePointStore(connection)
+
+    @pytest.fixture
+    def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteSourceReader:
+        return SqliteSourceReader(thread_read_connections)
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +284,7 @@ def test_sharing_periods_of_a_file_never_read_are_empty(catalog_db: Path) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Tests: the sources list (stage 4 spec, D13; source points spec, D6)
+# Tests: the page of a source and the page of a name (stage 4 spec, D13)
 # ---------------------------------------------------------------------------
 
 _OTHER = "9c0d" * 8
@@ -274,93 +310,6 @@ def _seed_sources(db: Path) -> None:
             for at in seconds:
                 insert_source_point(connection, variant_id=variant, observed_at_micros=at)
 
-
-def _known_sources(db: Path, *, search_text: str | None, offset: int) -> tuple[KnownSource, ...]:
-    with ThreadReadConnections(db, open_reader=open_reader) as thread_read_connections:
-        reader = SqliteSourceReader(thread_read_connections)
-        return reader.read_known_sources(search_text=search_text, limit=_LIMIT, offset=offset)
-
-
-def test_known_sources_are_each_source_once_by_latest_seen_with_its_latest_name(
-    catalog_db: Path,
-) -> None:
-    _seed_sources(catalog_db)
-    assert _known_sources(catalog_db, search_text=None, offset=0) == (
-        KnownSource(
-            source=SourceKey(network=Network.ED2K, native_id=_USER),
-            source_name="AnimuseeFMR",
-            latest_seen_at=_at(60),
-            file_count=2,
-        ),
-        KnownSource(
-            source=SourceKey(network=Network.ED2K, native_id=_OTHER),
-            source_name="AnimuseeFMR",
-            latest_seen_at=_at(5),
-            file_count=1,
-        ),
-    )
-
-
-def test_a_source_never_named_is_known_without_a_source_name(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id="a" * 32)
-        insert_source(connection, user_hash=_USER)
-        insert_source_point(
-            connection,
-            variant_id=insert_source_variant(
-                connection, native_id="a" * 32, user_hash=_USER, name=None
-            ),
-            observed_at_micros=7,
-        )
-    assert _known_sources(catalog_db, search_text=None, offset=0) == (
-        KnownSource(
-            source=SourceKey(network=Network.ED2K, native_id=_USER),
-            source_name=None,
-            latest_seen_at=_at(7),
-            file_count=1,
-        ),
-    )
-
-
-@pytest.mark.parametrize(
-    ("search_text", "expected"),
-    [("1F2E1F", [_USER]), ("shinob", [_USER]), ("FMR", [_USER, _OTHER]), ("2e1f", [])],
-)
-def test_known_sources_match_a_hash_prefix_or_any_name_the_source_carried(
-    *, catalog_db: Path, search_text: str, expected: list[str]
-) -> None:
-    _seed_sources(catalog_db)
-    known_sources = _known_sources(catalog_db, search_text=search_text, offset=0)
-    assert [known.source.native_id for known in known_sources] == expected
-    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
-        reader = SqliteSourceReader(thread_read_connections)
-        assert reader.read_source_count(search_text=search_text) == len(expected)
-
-
-def test_known_sources_read_at_most_their_limit_from_their_offset(catalog_db: Path) -> None:
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id="a" * 32)
-        for n in range(_LIMIT + 1):
-            insert_source(connection, user_hash=f"{n:032x}")
-            insert_source_point(
-                connection,
-                variant_id=insert_source_variant(
-                    connection, native_id="a" * 32, user_hash=f"{n:032x}"
-                ),
-                observed_at_micros=n,
-            )
-    first = _known_sources(catalog_db, search_text=None, offset=0)
-    second = _known_sources(catalog_db, search_text=None, offset=_LIMIT)
-    assert (len(first), first[0].latest_seen_at) == (_LIMIT, _at(_LIMIT))
-    assert [known.latest_seen_at for known in second] == [_at(0)]
-    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
-        reader = SqliteSourceReader(thread_read_connections)
-        assert reader.read_source_count(search_text=None) == _LIMIT + 1
-
-
-# ---------------------------------------------------------------------------
-# Tests: the page of a source and the page of a name (stage 4 spec, D13)
-# ---------------------------------------------------------------------------
 
 _THIRD = "5a6b" * 8
 
