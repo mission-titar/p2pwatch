@@ -1,5 +1,6 @@
 -- migration: copy-before
 -- local.db, migration 0014: the downloads' stamps as micros, in a STRICT table (micros spec, D1).
+-- size_bytes is left behind: no code reads it, a file's size is the catalog's (file size spec, D5).
 -- iso_to_micros fails on a NULL, hence the CASE on each nullable stamp.
 
 -- 1. Renamed away; downloads has no trigger, no named index, and no table references it.
@@ -14,7 +15,6 @@ CREATE TABLE downloads (
     state TEXT NOT NULL,
     queued_at_micros INTEGER NOT NULL,
     completed_at_micros INTEGER,
-    size_bytes INTEGER NOT NULL DEFAULT 0,
     latest_seen_at_micros INTEGER,
     bytes_done INTEGER,
     latest_progress_at_micros INTEGER,
@@ -34,7 +34,6 @@ INSERT INTO downloads (
     state,
     queued_at_micros,
     completed_at_micros,
-    size_bytes,
     latest_seen_at_micros,
     bytes_done,
     latest_progress_at_micros,
@@ -51,7 +50,6 @@ SELECT
     CASE
         WHEN completed_at IS NULL THEN NULL ELSE ISO_TO_MICROS(completed_at)
     END AS completed_at_micros,
-    size_bytes,
     CASE
         WHEN latest_seen_at IS NULL THEN NULL ELSE ISO_TO_MICROS(latest_seen_at)
     END AS latest_seen_at_micros,

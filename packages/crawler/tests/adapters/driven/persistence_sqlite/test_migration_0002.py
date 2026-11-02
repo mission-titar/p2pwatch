@@ -15,10 +15,5 @@ def connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     local.close()
 
 
-def test_downloads_has_size_bytes_column(connection: sqlite3.Connection) -> None:
-    columns = {column["name"] for column in rows(connection, sql="PRAGMA table_info(downloads)")}
-    assert "size_bytes" in columns
-
-
 def test_user_version_is_at_least_two(connection: sqlite3.Connection) -> None:
     assert rows(connection, sql="PRAGMA user_version")[0]["user_version"] >= 2
