@@ -63,13 +63,7 @@ def short_timestamp(iso: str) -> str:
     characters after ``T`` (``HH:MM``) are kept; everything after that (seconds,
     microseconds, offset) is dropped, not parsed. Input is assumed UTC (as stored by the
     persistence adapter).
-
-    An empty input formats to an empty string: "no timestamp" must render as nothing, since
-    partitioning it would otherwise leave just the ``Z`` marker on the page. A file with no
-    observation yet reaches here with ``latest_seen_display == ""``.
     """
-    if not iso:
-        return ""
     date_part, _, time_part = iso.partition("T")
     return f"{date_part} {time_part[:5]}Z"
 
