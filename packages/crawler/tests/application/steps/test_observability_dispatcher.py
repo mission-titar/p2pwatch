@@ -146,9 +146,9 @@ async def test_logs_the_message_but_notifies_the_plans_notification() -> None:
                         target_id=TargetId("062A"), title="Les demoiselles cambrioleuses"
                     ),
                 ),
+                file=FileKey(network=Network.ED2K, native_id="a" * 32),
                 filename="Keroro 062.avi",
                 size_bytes=1024,
-                ed2k_link=f"ed2k://|file|Keroro%20062.avi|1024|{'a' * 32}|/",
                 node_id=_NODE_ID,
             ),
         )

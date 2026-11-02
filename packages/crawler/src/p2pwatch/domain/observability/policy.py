@@ -14,9 +14,7 @@ from enum import Enum
 from typing import assert_never
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.ed2k_link import build_ed2k_link
 from catalog_matching.domain.engine import DecisionRecord
-from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import (
@@ -193,22 +191,15 @@ def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
     if not risen:
         return plan
     top = max((tier for _, tier in risen), key=lambda tier: tier.rank)
-    match event.file.network:
-        case Network.ED2K:
-            link = build_ed2k_link(
-                event.filename, size_bytes=event.size_bytes, native_id=event.file.native_id
-            )
-        case _:  # pragma: no cover
-            assert_never(event.file.network)
     target_titles = tuple(TargetTitle(target_id=c.target_id, title=c.title) for c, _ in risen)
     return replace(
         plan,
         notification=TierRise(
             tier=top,
             target_titles=target_titles,
+            file=event.file,
             filename=event.filename,
             size_bytes=event.size_bytes,
-            ed2k_link=link,
             node_id=event.node_id,
         ),
     )
