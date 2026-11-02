@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,7 +11,6 @@ from typing import Protocol
 import pytest
 
 from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_OBSERVATION,
@@ -35,22 +34,12 @@ from p2pwatch.domain.file_history import FileHistory
 from tests.contracts.application.ports.driven.catalog_file_reader_contract import (
     CatalogFileReaderContract,
 )
-from tests.support.adapters.driven.persistence_sqlite.catalog_seeds import (
-    seed,
-    seed_retracted,
-    seed_whole_episode,
-)
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
     open_reader,
 )
-from tests.support.catalog_rows import (
-    file_id,
-    insert_decision,
-    insert_file,
-    insert_observation,
-)
+from tests.support.catalog_rows import file_id, insert_file, insert_observation
 
 # Selects the CTE under test on its own: SQLite drops the CTEs a query does not reference, so
 # the resulting plan is exactly how ``latest_observation`` is resolved.
@@ -92,14 +81,13 @@ class TestSqliteCatalogFileReader(CatalogFileReaderContract):
 def _entries(
     catalog_db: Path,
     *,
-    target_id: TargetId | None = None,
     search_text: str | None = None,
     sort: CatalogEntrySort = CatalogEntrySort.LATEST_SEEN,
     direction: SortDirection = SortDirection.DESC,
 ) -> tuple[CatalogEntry, ...]:
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_catalog_entries(
-            target_id=target_id,
+            target_id=None,
             tier=None,
             search_text=search_text,
             matched_only=False,
@@ -110,25 +98,10 @@ def _entries(
         )
 
 
-def _counts(
-    catalog_db: Path,
-    *,
-    target_id: TargetId | None = None,
-    tier: DecisionTier | None = None,
-    search_text: str | None = None,
-) -> tuple[int, int]:
+def _counts(catalog_db: Path) -> tuple[int, int]:
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         return SqliteCatalogFileReader(thread_read_connections).read_matched_and_total_file_counts(
-            target_id=target_id, tier=tier, search_text=search_text
-        )
-
-
-def _read_file_count_by_tier(
-    catalog_db: Path, *, search_text: str | None = None
-) -> Mapping[DecisionTier, int]:
-    with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
-        return SqliteCatalogFileReader(thread_read_connections).read_file_count_by_tier(
-            target_id=None, search_text=search_text
+            target_id=None, tier=None, search_text=None
         )
 
 
@@ -138,135 +111,8 @@ def _latest_filename(catalog_entry: CatalogEntry) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: read_matched_and_total_file_counts: one row per file, decisions aggregated (spec §9)
-# ---------------------------------------------------------------------------
-
-
-def test_read_matched_and_total_file_counts_whole_episode_counts_as_one_file(
-    catalog_db: Path,
-) -> None:
-    seed_whole_episode(catalog_db)
-    matched, total = _counts(catalog_db)
-    assert (matched, total) == (1, 1)
-
-
-# ---------------------------------------------------------------------------
-# Tests: read_matched_and_total_file_counts, /files summary (matched, total)
-# ---------------------------------------------------------------------------
-
-
-def _seed_unmatched(db: Path) -> None:
-    """Add a second file (b*32) with an observation but NO match decision."""
-    with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, native_id="b" * 32, size_bytes=200)
-        insert_observation(
-            connection,
-            native_id="b" * 32,
-            filename="gallego_ep021.ogm",
-            observed_at="2026-06-22T09:00:00.000000+00:00",
-            size_bytes=200,
-        )
-
-
-def test_read_matched_and_total_file_counts_no_filter_returns_matched_and_total(
-    catalog_db: Path,
-) -> None:
-    seed(catalog_db)  # 1 matched file
-    _seed_unmatched(catalog_db)  # 1 unmatched file
-    matched, total = _counts(catalog_db)
-    assert (matched, total) == (1, 2)
-
-
-def test_read_matched_and_total_file_counts_respects_search_text(catalog_db: Path) -> None:
-    seed(catalog_db)  # filename keroro_062.avi (matched)
-    _seed_unmatched(catalog_db)  # filename gallego_ep021.ogm (unmatched)
-    matched, total = _counts(catalog_db, search_text="gallego")
-    assert (matched, total) == (0, 1)  # only the unmatched file matches the search text
-
-
-def test_read_matched_and_total_file_counts_counts_retracted_as_unmatched(catalog_db: Path) -> None:
-    """A retracted file counts toward ``total`` but not ``matched`` (the matched count is
-    unchanged by its presence, even though its ``target_id`` column is non-NULL)."""
-    seed(catalog_db)  # 1 matched file
-    seed_retracted(catalog_db)  # 1 retracted (== unmatched) file
-    matched, total = _counts(catalog_db)
-    assert (matched, total) == (1, 2)
-
-
-def test_read_matched_and_total_file_counts_empty_catalogue_matched_is_zero_not_none(
-    catalog_db: Path,
-) -> None:
-    """Regression guard for the COUNT → SUM(CASE ...) rewrite: SUM over zero rows is NULL in
-    SQL, unlike COUNT which is 0. An empty catalogue must still report ``matched == 0``."""
-    matched, total = _counts(catalog_db)
-    assert (matched, total) == (0, 0)
-
-
-# ---------------------------------------------------------------------------
-# Tests: target-scoped read excludes catalog-tier (catch-all pinned to 001A)
-# ---------------------------------------------------------------------------
-
-
-def _seed_catalog_tier_on_001a(db: Path) -> None:
-    """A keroro_large catch-all file: its only decision is tier 'catalog' pinned to 001A."""
-    with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, native_id="b" * 32, size_bytes=50)
-        insert_observation(
-            connection,
-            native_id="b" * 32,
-            filename="keroro manga.zip",
-            observed_at="2026-07-01T10:00:00.000000+00:00",
-            size_bytes=50,
-        )
-        insert_decision(
-            connection,
-            native_id="b" * 32,
-            target_id="001A",
-            tier="catalog",
-            rule_name="keroro_large",
-            decided_at="2026-07-01T10:00:01.000000+00:00",
-        )
-
-
-def test_target_scope_excludes_catalog_tier(catalog_db: Path) -> None:
-    """A catalog-tier decision pinned to 001A must NOT surface under target='001A'."""
-    _seed_catalog_tier_on_001a(catalog_db)
-    rows = _entries(catalog_db, target_id=TargetId("001A"))
-    assert rows == ()
-    matched, _total = _counts(catalog_db, target_id=TargetId("001A"))
-    assert matched == 0
-
-
-# ---------------------------------------------------------------------------
 # Tests: sortable read_catalog_entries via the fixed column allowlist + best_tier_rank
 # ---------------------------------------------------------------------------
-
-
-def _seed_sortable(db: Path) -> None:
-    """Three files of one decision each, one per tier: notify (a), download (b), catalog (c)."""
-    rows = [
-        ("a" * 32, "beta.avi", 300, 5, "2026-01-01T10:00:00.000000+00:00", "062A", "notify"),
-        ("b" * 32, "alpha.avi", 100, 15, "2026-01-02T10:00:00.000000+00:00", "072A", "download"),
-        ("c" * 32, "gamma.avi", 200, 10, "2026-01-03T10:00:00.000000+00:00", "001A", "catalog"),
-    ]
-    with closing(sqlite3.connect(db)) as connection, connection:
-        for h, name, size, sources, seen, tid, tier in rows:
-            insert_file(connection, native_id=h, size_bytes=size)
-            insert_observation(
-                connection,
-                native_id=h,
-                filename=name,
-                observed_at=seen,
-                size_bytes=size,
-                source_count=sources,
-            )
-            insert_decision(
-                connection,
-                native_id=h,
-                target_id=tid,
-                tier=tier,
-                decided_at="2026-01-04T10:00:00.000000+00:00",
-            )
 
 
 def test_tier_rank_case_matches_tier_rank() -> None:
@@ -281,64 +127,21 @@ def test_every_sort_has_its_column() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: read_file_count_by_tier, the tier facet's live counts (spec §3.3)
-# ---------------------------------------------------------------------------
-
-
-def _seed_mixed_tier_file(db: Path) -> None:
-    """One file with TWO current decisions in DIFFERENT tiers (download + notify): it must count
-    under both facets."""
-    h = "d" * 32
-    with closing(sqlite3.connect(db)) as connection, connection:
-        insert_file(connection, native_id=h)
-        insert_observation(
-            connection,
-            native_id=h,
-            filename="mixed.avi",
-            observed_at="2026-01-01T10:00:00.000000+00:00",
-        )
-        for tid, tier in (("062A", "download"), ("062B", "notify")):
-            insert_decision(
-                connection,
-                native_id=h,
-                target_id=tid,
-                tier=tier,
-                decided_at="2026-01-02T10:00:00.000000+00:00",
-            )
-
-
-def test_read_file_count_by_tier_groups_by_tier(catalog_db: Path) -> None:
-    _seed_sortable(catalog_db)  # one file per tier
-    counts = _read_file_count_by_tier(catalog_db)
-    assert counts == {DecisionTier.DOWNLOAD: 1, DecisionTier.NOTIFY: 1, DecisionTier.CATALOG: 1}
-
-
-def test_read_file_count_by_tier_keys_each_count_by_the_type(catalog_db: Path) -> None:
-    _seed_sortable(catalog_db)
-    assert {type(tier) for tier in _read_file_count_by_tier(catalog_db)} == {DecisionTier}
-
-
-def test_read_file_count_by_tier_empty_catalogue_is_empty(catalog_db: Path) -> None:
-    counts = _read_file_count_by_tier(catalog_db)
-    assert counts == {}
-
-
-def test_read_file_count_by_tier_multi_tier_file_counts_in_both(catalog_db: Path) -> None:
-    _seed_mixed_tier_file(catalog_db)
-    counts = _read_file_count_by_tier(catalog_db)
-    assert counts == {DecisionTier.DOWNLOAD: 1, DecisionTier.NOTIFY: 1}
-
-
-def test_read_file_count_by_tier_respects_search_text(catalog_db: Path) -> None:
-    """The facet honours the OTHER filters (here ``search_text``): only alpha.avi matches."""
-    _seed_sortable(catalog_db)
-    counts = _read_file_count_by_tier(catalog_db, search_text="alpha")
-    assert counts == {DecisionTier.DOWNLOAD: 1}
-
-
-# ---------------------------------------------------------------------------
 # Files with no observation / tied observations
 # ---------------------------------------------------------------------------
+
+
+def _seed_unmatched(db: Path) -> None:
+    """Add a file (b*32) with an observation but NO match decision."""
+    with closing(sqlite3.connect(db)) as connection, connection:
+        insert_file(connection, native_id="b" * 32, size_bytes=200)
+        insert_observation(
+            connection,
+            native_id="b" * 32,
+            filename="gallego_ep021.ogm",
+            observed_at="2026-06-22T09:00:00.000000+00:00",
+            size_bytes=200,
+        )
 
 
 def _seed_file_without_observation(db: Path) -> str:

@@ -53,6 +53,24 @@ def _entries(
     )
 
 
+def _counts(
+    reader: CatalogFileReader,
+    *,
+    target_id: TargetId | None = None,
+    tier: DecisionTier | None = None,
+    search_text: str | None = None,
+) -> tuple[int, int]:
+    return reader.read_matched_and_total_file_counts(
+        target_id=target_id, tier=tier, search_text=search_text
+    )
+
+
+def _file_count_by_tier(
+    reader: CatalogFileReader, *, target_id: TargetId | None = None, search_text: str | None = None
+) -> Mapping[DecisionTier, int]:
+    return reader.read_file_count_by_tier(target_id=target_id, search_text=search_text)
+
+
 def _decisions_by_file(
     entries: tuple[CatalogEntry, ...],
 ) -> dict[FileKey, tuple[DecisionRecord, ...]]:
@@ -571,6 +589,143 @@ class CatalogFileReaderContract(ABC):
         )
         assert len(every_entry) == 7
         assert pages == [every_entry[:3], every_entry[3:6], every_entry[6:], ()]
+
+    def test_an_empty_catalog_counts_no_file_and_no_tier(
+        self, *, reader: CatalogFileReader
+    ) -> None:
+        assert (_counts(reader), _file_count_by_tier(reader)) == ((0, 0), {})
+
+    def test_the_counts_count_each_file_once_matched_when_it_holds_a_current_decision(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        decision_writer: DecisionWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        whole_episode, catalogued, legacy, retracted, undecided = (
+            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(5)
+        )
+        target_id, other_target_id = draw_target_ids(randomness, count=2)
+        downloaded, notified, catalog, still_notified, withdrawn = (
+            draw_decision_record(randomness, tier=tier, target_id=decided_target_id)
+            for tier, decided_target_id in (
+                (DecisionTier.DOWNLOAD, target_id),
+                (DecisionTier.NOTIFY, other_target_id),
+                (DecisionTier.CATALOG, target_id),
+                (DecisionTier.NOTIFY, target_id),
+                (DecisionTier.DOWNLOAD, target_id),
+            )
+        )
+        earlier_at, later_at = draw_instants(randomness, count=2)
+        _record_decisions(
+            randomness,
+            decision_writer=decision_writer,
+            decisions=(
+                (whole_episode, downloaded, None),
+                (whole_episode, notified, None),
+                (catalogued, catalog, None),
+                (legacy, still_notified, earlier_at),
+                (legacy, Retraction(target_id=TargetId("")), later_at),
+                (retracted, withdrawn, earlier_at),
+                (retracted, Retraction(target_id=target_id), later_at),
+            ),
+        )
+        assert _counts(reader) == (3, 5)
+
+    def test_a_tier_counts_each_file_holding_a_current_decision_of_it_once_or_is_absent(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        decision_writer: DecisionWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        both_tiers, downloaded_twice, superseded, retracted, legacy, undecided = (
+            draw_observed_file(randomness, observation_writer=observation_writer) for _ in range(6)
+        )
+        target_id, other_target_id = draw_target_ids(randomness, count=2)
+        notified, downloaded, downloaded_first, downloaded_second, outdated, superseding = (
+            draw_decision_record(randomness, tier=tier, target_id=decided_target_id)
+            for tier, decided_target_id in (
+                (DecisionTier.NOTIFY, target_id),
+                (DecisionTier.DOWNLOAD, other_target_id),
+                (DecisionTier.DOWNLOAD, target_id),
+                (DecisionTier.DOWNLOAD, other_target_id),
+                (DecisionTier.CATALOG, target_id),
+                (DecisionTier.DOWNLOAD, target_id),
+            )
+        )
+        withdrawn, still_notified = (
+            draw_decision_record(randomness, tier=tier, target_id=target_id)
+            for tier in (DecisionTier.CATALOG, DecisionTier.NOTIFY)
+        )
+        earlier_at, later_at = draw_instants(randomness, count=2)
+        _record_decisions(
+            randomness,
+            decision_writer=decision_writer,
+            decisions=(
+                (both_tiers, notified, None),
+                (both_tiers, downloaded, None),
+                (downloaded_twice, downloaded_first, None),
+                (downloaded_twice, downloaded_second, None),
+                (superseded, outdated, earlier_at),
+                (superseded, superseding, later_at),
+                (retracted, withdrawn, earlier_at),
+                (retracted, Retraction(target_id=target_id), later_at),
+                (legacy, still_notified, earlier_at),
+                (legacy, Retraction(target_id=TargetId("")), later_at),
+            ),
+        )
+        file_count_by_tier = _file_count_by_tier(reader)
+        assert file_count_by_tier == {DecisionTier.DOWNLOAD: 3, DecisionTier.NOTIFY: 2}
+        # A `StrEnum` member equals its text: only its type tells the tier from a bare string.
+        assert all(type(tier) is DecisionTier for tier in file_count_by_tier)
+
+    def test_the_counts_read_the_files_passing_the_filters(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        decision_writer: DecisionWriter,
+        reader: CatalogFileReader,
+    ) -> None:
+        target_id, other_target_id = draw_target_ids(randomness, count=2)
+        search_text = draw_text(randomness)
+        holding = _holding(randomness, search_text=search_text)
+        passing, undecided, catalogued, unnamed, elsewhere = (
+            draw_observed_file(randomness, observation_writer=observation_writer, filename=filename)
+            for filename in (holding, holding, holding, draw_text(randomness), holding)
+        )
+        for decided_file, tier, decided_target_id in (
+            (passing, DecisionTier.DOWNLOAD, target_id),
+            (passing, DecisionTier.CATALOG, other_target_id),
+            (catalogued, DecisionTier.CATALOG, target_id),
+            (unnamed, DecisionTier.NOTIFY, target_id),
+            (elsewhere, DecisionTier.DOWNLOAD, other_target_id),
+        ):
+            record = draw_decision_record(randomness, tier=tier, target_id=decided_target_id)
+            decision_writer.record_decision(
+                draw_dated_decision(randomness, file=decided_file, decision=record)
+            )
+        assert (
+            _counts(reader, target_id=target_id),
+            _counts(reader, tier=DecisionTier.DOWNLOAD),
+            _counts(reader, search_text=search_text),
+            _counts(
+                reader, target_id=target_id, tier=DecisionTier.DOWNLOAD, search_text=search_text
+            ),
+        ) == ((2, 2), (2, 2), (3, 4), (1, 1))
+        assert (
+            _file_count_by_tier(reader, target_id=target_id),
+            _file_count_by_tier(reader, search_text=search_text),
+            _file_count_by_tier(reader, target_id=target_id, search_text=search_text),
+        ) == (
+            # A file passing the target counts under the tiers of its other targets too.
+            {DecisionTier.DOWNLOAD: 1, DecisionTier.CATALOG: 1, DecisionTier.NOTIFY: 1},
+            {DecisionTier.DOWNLOAD: 2, DecisionTier.CATALOG: 2},
+            {DecisionTier.DOWNLOAD: 1, DecisionTier.CATALOG: 1},
+        )
 
     def test_a_history_holds_the_first_size_the_interval_s_observations_and_the_latest_of_all(
         self,
