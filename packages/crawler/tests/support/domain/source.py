@@ -65,8 +65,18 @@ def draw_source_point(
 
 
 def draw_point_read_again(
-    randomness: Random, *, point: SourcePoint, observed_at: datetime
+    randomness: Random,
+    *,
+    point: SourcePoint,
+    observed_at: datetime,
+    session_received_bytes: int | None = None,
 ) -> SourcePoint:
-    """``point``'s variant read again at ``observed_at``, its session's received bytes drawn."""
-    reading = replace(point.reading, session_received_bytes=draw_quantity(randomness))
+    """``point``'s variant read again at ``observed_at``, its session's received bytes drawn
+    unless given."""
+    reading = replace(
+        point.reading,
+        session_received_bytes=draw_quantity(randomness)
+        if session_received_bytes is None
+        else session_received_bytes,
+    )
     return replace(point, reading=reading, observed_at=observed_at)
