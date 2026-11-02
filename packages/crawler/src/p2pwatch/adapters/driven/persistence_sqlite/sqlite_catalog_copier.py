@@ -73,7 +73,7 @@ _COPY_FILES = (
 
 
 _VARIANT_COLUMNS = (
-    "file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,"
+    "file_id, filename, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,"
     " content_hash"
 )
 
@@ -174,8 +174,8 @@ _NOT_DERIVED_WHERE = (
 )
 _KNOWN_NETWORKS = ", ".join(f"'{network}'" for network in Network)
 _OBSERVATION_VARIANT_HASH = (
-    "content_hash(file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata,"
-    " keyword, node_id)"
+    "content_hash(file_id, filename, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
+    " node_id)"
 )
 _SOURCE_VARIANT_HASH = (
     "source_content_hash(file_id, source_id, name, software, role, contact_point, connectable,"
@@ -337,7 +337,7 @@ def _check_catalogs(
     expected_version = database_opener.catalog_version()
     connection = database_opener.open_in_memory()
     # Unmemoized: a check calls each once per row, so a memo would hold every row of the merge.
-    connection.create_function("content_hash", 8, content_hash_by_position, deterministic=True)
+    connection.create_function("content_hash", 7, content_hash_by_position, deterministic=True)
     connection.create_function(
         "source_content_hash", 9, source_content_hash_by_position, deterministic=True
     )

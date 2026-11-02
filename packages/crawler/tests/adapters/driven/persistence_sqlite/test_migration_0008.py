@@ -27,9 +27,9 @@ _ID_A, _ID_B = (
     FileKey(network=Network.ED2K, native_id=_B).file_id,
 )
 _VARIANTS = (
-    (_A, "a.avi", 100, 1474, 1200, '{"codec": "xvid"}', "keroro", "n1"),
-    (_A, "a [VF].avi", 100, None, None, "{}", "titar", "n2"),
-    (_B, "b.avi", 200, None, None, "{}", "keroro", "n1"),
+    (_A, "a.avi", 1474, 1200, '{"codec": "xvid"}', "keroro", "n1"),
+    (_A, "a [VF].avi", None, None, "{}", "titar", "n2"),
+    (_B, "b.avi", None, None, "{}", "keroro", "n1"),
 )
 _OBSERVATIONS = ((1, 10, 5), (1, 20, 6), (2, 10, 1), (3, 30, 2))
 _DECISIONS = (
@@ -46,7 +46,6 @@ _VARIANT_COLUMNS = (
     "variant_id",
     "file_id",
     "filename",
-    "size_bytes",
     "media_length_sec",
     "bitrate_kbps",
     "raw_meta",
@@ -59,16 +58,13 @@ _DECISION_COLUMNS = ("id", "file_id", "target_id", "rule_name", "tier", "decided
 
 
 def _content_hash(
-    variant: tuple[str, str, int, int | None, int | None, str, str, str], *, file_ref: str | bytes
+    variant: tuple[str, str, int | None, int | None, str, str, str], *, file_ref: str | bytes
 ) -> bytes:
     """``variant``'s hash, its file referenced by ``file_ref``."""
-    _, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id = (
-        variant
-    )
+    _, filename, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id = variant
     return content_hash(
         file_ref=file_ref,
         filename=filename,
-        size_bytes=size_bytes,
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
         raw_metadata=raw_metadata,
@@ -85,9 +81,8 @@ def _catalog_at_7(path: Path) -> None:
         )
     for variant in _VARIANTS:
         connection.execute(
-            "INSERT INTO observation_variants (ed2k_hash, filename, size_bytes, media_length_sec,"
-            " bitrate_kbps, raw_meta, keyword, node_id, content_hash)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO observation_variants (ed2k_hash, filename, media_length_sec, bitrate_kbps,"
+            " raw_meta, keyword, node_id, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (*variant, _content_hash(variant, file_ref=variant[0])),
         )
     connection.executemany("INSERT INTO observations VALUES (?, ?, ?)", _OBSERVATIONS)

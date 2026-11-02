@@ -33,7 +33,6 @@ def insert_observation(
     native_id: str,
     filename: str,
     observed_at: str = SEEN_AT,
-    size_bytes: int = 100,
     source_count: int = 1,
     duration_seconds: int | None = None,
     bitrate_kbps: int | None = None,
@@ -43,7 +42,6 @@ def insert_observation(
     key = content_hash(
         file_ref=variant_file_id,
         filename=filename,
-        size_bytes=size_bytes,
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
         raw_metadata="{}",
@@ -52,10 +50,10 @@ def insert_observation(
     )
     connection.execute(
         "INSERT INTO observation_variants"
-        " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
-        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, '{}', 'keroro', ?, ?)"
+        " (file_id, filename, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,"
+        " content_hash) VALUES (?, ?, ?, ?, '{}', 'keroro', ?, ?)"
         " ON CONFLICT (content_hash) DO NOTHING",
-        (variant_file_id, filename, size_bytes, duration_seconds, bitrate_kbps, node_id, key),
+        (variant_file_id, filename, duration_seconds, bitrate_kbps, node_id, key),
     )
     connection.execute(
         "INSERT INTO observations (variant_id, observed_at_micros, source_count)"

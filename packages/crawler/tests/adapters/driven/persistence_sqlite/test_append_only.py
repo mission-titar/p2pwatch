@@ -97,10 +97,10 @@ def test_a_negative_session_received_bytes_is_refused_by_the_database(
 _MIN_MICROS = instant_to_micros(datetime.min.replace(tzinfo=UTC))
 _MAX_MICROS = instant_to_micros(datetime.max.replace(tzinfo=UTC))
 _VARIANT = (
-    "INSERT INTO observation_variants (file_id, filename, size_bytes, duration_seconds,"
-    " bitrate_kbps, raw_metadata, keyword, node_id, content_hash)"
-    " SELECT file_id, 'f', {size_bytes}, {duration_seconds}, {bitrate_kbps}, '{{}}', 'k', 'n',"
-    " randomblob(16) FROM files"
+    "INSERT INTO observation_variants (file_id, filename, duration_seconds, bitrate_kbps,"
+    " raw_metadata, keyword, node_id, content_hash)"
+    " SELECT file_id, 'f', {duration_seconds}, {bitrate_kbps}, '{{}}', 'k', 'n', randomblob(16)"
+    " FROM files"
 )
 _DECISION = (
     "INSERT INTO match_decisions (file_id, target_id, rule_name, tier, decided_at_micros, node_id)"
@@ -109,15 +109,12 @@ _DECISION = (
 
 
 def _variant_holding(column: str) -> str:
-    return _VARIANT.format_map(
-        {"size_bytes": "1", "duration_seconds": "NULL", "bitrate_kbps": "NULL", column: "?1"}
-    )
+    return _VARIANT.format_map({"duration_seconds": "NULL", "bitrate_kbps": "NULL", column: "?1"})
 
 
 # An INSERT per column of a CHECK, its value bound to ?1.
 _INSERT_BY_COLUMN = {
     "files.size_bytes": f"INSERT INTO files VALUES (randomblob(16), 'ed2k', '{'b' * 32}', ?1)",
-    "observation_variants.size_bytes": _variant_holding("size_bytes"),
     "observation_variants.duration_seconds": _variant_holding("duration_seconds"),
     "observation_variants.bitrate_kbps": _variant_holding("bitrate_kbps"),
     "observations.source_count": "INSERT INTO observations VALUES (1, 0, ?1)",
@@ -134,7 +131,6 @@ _INSERT_BY_COLUMN = {
 }
 _SIGN_COLUMNS = (
     "files.size_bytes",
-    "observation_variants.size_bytes",
     "observation_variants.duration_seconds",
     "observation_variants.bitrate_kbps",
     "observations.source_count",

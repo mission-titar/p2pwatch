@@ -54,14 +54,12 @@ CREATE TABLE observation_variants (
     variant_id INTEGER PRIMARY KEY,
     file_id BLOB NOT NULL REFERENCES files (file_id),
     filename TEXT NOT NULL,
-    size_bytes INTEGER NOT NULL,
     media_length_sec INTEGER,
     bitrate_kbps INTEGER,
     raw_meta TEXT NOT NULL,
     keyword TEXT NOT NULL,
     node_id TEXT NOT NULL,
     content_hash BLOB NOT NULL UNIQUE,
-    CHECK (size_bytes >= 0),
     CHECK (media_length_sec >= 0),
     CHECK (bitrate_kbps >= 0)
 ) STRICT;
@@ -100,28 +98,26 @@ FROM match_decisions_old
 ORDER BY id;
 
 INSERT INTO observation_variants (
-    variant_id, file_id, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword,
-    node_id, content_hash
+    variant_id, file_id, filename, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id,
+    content_hash
 )
 SELECT
     variant_id,
     file_id,
     filename,
-    size_bytes,
     media_length_sec,
     bitrate_kbps,
     raw_meta,
     keyword,
     node_id,
     CONTENT_HASH(
-        file_id, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id
+        file_id, filename, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id
     ) AS content_hash
 FROM (
     SELECT
         variant_id,
         FILE_ID('ed2k', ed2k_hash) AS file_id,
         filename,
-        size_bytes,
         media_length_sec,
         bitrate_kbps,
         raw_meta,

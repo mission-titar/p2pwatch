@@ -2,11 +2,10 @@
 
 The adapter stores what the domain ignores (data-model spec §3): ``node_id``, given at each write.
 ``raw_metadata`` is stored as its ``JsonObjectText``'s canonical text. ``record_observation`` makes
-ONE transaction (spec §4): it inserts into ``files`` (first sight wins), into
-``observation_variants`` (found by its ``content_hash``) and into ``observations``, each
-``ON CONFLICT (<key>) DO NOTHING``, which ignores a duplicate key and raises on any other refusal:
-the OBSERVED size is ALWAYS written into the variant (deviation 1, spec §5: a size anomaly must
-not become invisible).
+ONE transaction (spec §4): it inserts into ``files`` (first sight wins, and with it the file's
+size, which no variant holds), into ``observation_variants`` (found by its ``content_hash``) and
+into ``observations``, each ``ON CONFLICT (<key>) DO NOTHING``, which ignores a duplicate key and
+raises on any other refusal.
 
 The hash canon (32 lowercase hex, v0.5.0 canon) is validated IN PYTHON before the
 transaction, so that its error names the hash. The rollback catches ``BaseException``
@@ -36,9 +35,8 @@ _INSERT_FILE = (
 
 _INSERT_VARIANT = """
 INSERT INTO observation_variants (
-    file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,
-    content_hash
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    file_id, filename, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id, content_hash
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT (content_hash) DO NOTHING
 """
 
@@ -64,7 +62,6 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
         variant = (
             file.file_id,
             reported_file.filename,
-            reported_file.size_bytes,
             reported_file.duration_seconds,
             reported_file.bitrate_kbps,
             raw_metadata,
@@ -74,7 +71,6 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
         variant_content_hash = content_hash(
             file_ref=file.file_id,
             filename=reported_file.filename,
-            size_bytes=reported_file.size_bytes,
             duration_seconds=reported_file.duration_seconds,
             bitrate_kbps=reported_file.bitrate_kbps,
             raw_metadata=raw_metadata,

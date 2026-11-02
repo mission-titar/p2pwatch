@@ -22,7 +22,6 @@ def content_hash(
     *,
     file_ref: str | bytes,
     filename: str,
-    size_bytes: int,
     duration_seconds: int | None,
     bitrate_kbps: int | None,
     raw_metadata: str,
@@ -33,7 +32,6 @@ def content_hash(
     columns = (
         file_ref.hex() if isinstance(file_ref, bytes) else file_ref,
         filename,
-        size_bytes,
         duration_seconds,
         bitrate_kbps,
         raw_metadata,
@@ -64,7 +62,6 @@ def source_id(network: str, native_id: str) -> SourceId:  # noqa: PLR0917
 def content_hash_by_position(  # noqa: PLR0917
     file_ref: str | bytes,
     filename: str,
-    size_bytes: int,
     duration_seconds: int | None,
     bitrate_kbps: int | None,
     raw_metadata: str,
@@ -75,7 +72,6 @@ def content_hash_by_position(  # noqa: PLR0917
     return content_hash(
         file_ref=file_ref,
         filename=filename,
-        size_bytes=size_bytes,
         duration_seconds=duration_seconds,
         bitrate_kbps=bitrate_kbps,
         raw_metadata=raw_metadata,
@@ -130,7 +126,7 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
 
     # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
     create_memoized_function(
-        connection, name="content_hash", argument_count=8, function=content_hash_by_position
+        connection, name="content_hash", argument_count=7, function=content_hash_by_position
     )
     # The SQL name keeps its old spelling: migration catalog/0007's script, which never changes,
     # calls it.

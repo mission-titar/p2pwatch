@@ -25,7 +25,7 @@ from tests.support.catalog_rows import (
 _ROWS_BY_TABLE: Mapping[str, str] = {
     "files": "SELECT native_id, size_bytes FROM files",
     "observations": (
-        "SELECT f.native_id, v.filename, v.size_bytes, v.duration_seconds, v.bitrate_kbps,"
+        "SELECT f.native_id, v.filename, v.duration_seconds, v.bitrate_kbps,"
         " v.raw_metadata, v.keyword, v.node_id, o.observed_at_micros, o.source_count"
         " FROM files AS f JOIN observation_variants AS v USING (file_id)"
         " JOIN observations AS o USING (variant_id)"
