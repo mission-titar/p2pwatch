@@ -174,7 +174,7 @@ restate, its report mapping each to its contract test (acceptance 6).
 | 120 | `test/drawn-values-in-local-contracts` | the draws of `local.db`'s values, the four existing contracts on them | 315, about 10 |
 | 130 | `test/node-state-reader-contract` | `NodeStateReaderContract`, the tests it restates | 457 (277), 6 |
 | 135 | `test/holistic-review-fixes` | (Corrected: inserted on 2026-11-02, the closing block's fixes coming to about 30 files) the holistic review's fixes to the tests, the fold (D5) and the size (D6) corrected | 329, 19, measured |
-| 140 | `docs/wrap-round-trip-contracts` | closing, section 8's documents (Corrected: and the review's other docstrings) | 12, 2 (Corrected: 69, 13, measured) |
+| 140 | `docs/wrap-round-trip-contracts` | closing, section 8's documents (Corrected: and the review's other docstrings) | 12, 2 (Corrected: 72, 13, measured) |
 
 Two size exemptions, granted by the operator on 2026-11-01:
 
@@ -214,7 +214,12 @@ Two size exemptions, granted by the operator on 2026-11-01:
 
 ### Backlog
 
-The closing block deletes "Round-trip contracts". No entry is added.
+The closing block deletes "Round-trip contracts". No entry is added. (Corrected: the closing block adds "A file's size
+stored once", agreed by the operator on 2026-11-02. D6's correction showed that the catalog keeps a file's size twice:
+`files.size_bytes`, written at the first recorded observation and read by the files list, its size sort and a file's
+history, is a convenience copy of `observation_variants.size_bytes`, each report's size as the network sent it, part of
+the variant's hash. An eD2k file has one size, so the two differ only where a peer reports a wrong one. Keeping one is
+a change to the catalog's schema, which this lot leaves alone, section 2.)
 
 ### Adjacent backlog items
 
