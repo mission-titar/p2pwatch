@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
-from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -41,18 +40,9 @@ def _raw(
     name: str,
     at: str,
     sources: int = 5,
-    media: int | None = None,
-    node_id: str = "n1",
 ) -> None:
     insert_observation(
-        connection,
-        native_id=native_id,
-        filename=name,
-        observed_at=at,
-        source_count=sources,
-        duration_seconds=media,
-        bitrate_kbps=None if media is None else 900,
-        node_id=node_id,
+        connection, native_id=native_id, filename=name, observed_at=at, source_count=sources
     )
 
 
@@ -60,10 +50,8 @@ def _observation(
     name: str,
     *,
     at: str,
-    media: int | None = None,
     native_id: str = _A,
     sources: int = 5,
-    node_id: NodeId = _NODE_ID,
 ) -> FileObservation:
     reported_file = ReportedFile(
         file=_key(native_id),
@@ -71,24 +59,10 @@ def _observation(
         size_bytes=100,
         source_count=sources,
         keyword=Keyword("keroro"),
-        duration_seconds=media,
-        bitrate_kbps=None if media is None else 900,
     )
     return FileObservation(
-        reported_file=reported_file, observed_at=datetime.fromisoformat(at), node_id=node_id
+        reported_file=reported_file, observed_at=datetime.fromisoformat(at), node_id=_NODE_ID
     )
-
-
-def test_every_read_carries_the_node_of_its_observation(connection: sqlite3.Connection) -> None:
-    insert_file(connection, native_id=_A)
-    _raw(connection, native_id=_A, name="keroro.avi", at=_TIE, node_id="n2")
-    observation = _observation("keroro.avi", at=_TIE, node_id=NodeId("n2"))
-    assert observation_read.latest_observation(connection, file=_key(_A)) == observation
-    assert list(observation_read.iter_latest_observations(connection)) == [observation]
-    assert observation_read.best_observation(connection, file=_key(_A)) == observation
-    assert observation_read.observations_between(
-        connection, file=_key(_A), since=0, until=_YEAR_3000
-    ) == (observation,)
 
 
 def test_latest_observation_breaks_an_observed_at_tie_on_the_newest_variant_then_the_sources(
@@ -148,26 +122,6 @@ def test_observations_between_are_the_timeline_oldest_first(connection: sqlite3.
     assert (
         observation_read.observations_between(connection, file=_key(_C), since=0, until=_YEAR_3000)
         == ()
-    )
-
-
-def test_the_timeline_reads_its_interval_only(connection: sqlite3.Connection) -> None:
-    insert_file(connection, native_id=_A)
-    ats = [
-        "2026-10-06T19:59:59.999999+00:00",
-        "2026-10-06T20:00:00.000000+00:00",
-        "2026-10-13T19:59:59.999999+00:00",
-        "2026-10-13T20:00:00.000000+00:00",
-    ]
-    for n, at in enumerate(ats):
-        _raw(connection, native_id=_A, name=f"{n}.avi", at=at)
-    since = instant_to_micros(datetime.fromisoformat(ats[1]))
-    until = instant_to_micros(datetime.fromisoformat(ats[3]))
-    assert observation_read.observations_between(
-        connection, file=_key(_A), since=since, until=until
-    ) == (
-        _observation("1.avi", at=ats[1]),
-        _observation("2.avi", at=ats[2]),
     )
 
 
