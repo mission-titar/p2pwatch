@@ -1,17 +1,19 @@
 # Handoff: a file's size stored once
 
-Drafted by block 70's teammate from the block reports of #615, #616, #618, #619, #620 and #621 and its own, for the
-closing block's teammate to correct and complete.
+Drafted by block 70's teammate from the block reports of #615, #616, #618, #619, #620 and #621 and its own, corrected
+and completed by the closing block's teammate (block 80).
 
 ## State
 
 Tier Spec lot. Spec `agents/specs/2026-11-02-file-size-stored-once.md`, D1 to D7 decided by the operator on 2026-11-02,
 from `BACKLOG.md`'s "A file's size stored once", which block 10's first commit moved under "Must be done before the
 next release". Survey by `size-once-survey`, estimates by `size-once-estimates` (Sonnet), spec reviewed by
-`size-once-spec-review`, holistic review to come (below). No claim corrected after approval: the spec holds no
-`(Corrected: ...)` at block 70's tip.
+`size-once-spec-review`, holistic review by `size-once-holistic-review`. Corrected after approval by the closing
+block, each marked `(Corrected: ...)` in the spec: acceptance 3 and 4 (read through the timeline), section 6's line
+references, Appendix A's block 10 (the rule's keyless wording, the copier's comment and test name), block 30 (the
+counts test kept) and block 40 (the port's docstrings and the contract unchanged).
 
-Cut from `main` at `ac1c5aae`, eight blocks, the closing one included:
+Cut from `main` at `ac1c5aae`, eight blocks, the closing one included, all open:
 
 | Block | Pull request | Branch |
 |---|---|---|
@@ -21,8 +23,8 @@ Cut from `main` at `ac1c5aae`, eight blocks, the closing one included:
 | 40 | #619 | `refactor/source-pages-best-filename` |
 | 50 | #620 | `refactor/queued-download-without-size` |
 | 60 | #621 | `refactor/downloads-table-without-size` |
-| 70 | to open | `refactor/tier-rise-link-in-notifier` |
-| 80 | to open | `docs/wrap-file-size-stored-once` |
+| 70 | #622 | `refactor/tier-rise-link-in-notifier` |
+| 80 | #623 | `docs/wrap-file-size-stored-once` |
 
 What the operator sees (spec section 2): the file page's timeline has no size column, the page giving the size above
 it (30); in the SQL console, `observation_variants` (20) and `downloads` (60) have no `size_bytes`, a file's size being
@@ -50,16 +52,21 @@ first observation write instead of losing every observation silently (10).
 - **The link built by the notifier** (block 70, D6): `TierRise` carries its `file: FileKey` in place of `ed2k_link`,
   the policy no longer imports `build_ed2k_link`, and `AppriseNotifier`'s `_rise_body` builds the link from the rise's
   file, filename and size (the `match` on the network moved with it).
+- **The closing block** (80): the holistic findings fixed (below), `FileJudge.rejudge` raising before any write and
+  `ObservationReader` promising the size its file was first recorded at, with its contract test;
+  `docs/contributing/architecture.md` and `docs/migration-4x.md` written after the lot; "A file's size stored once"
+  deleted from `BACKLOG.md`.
 
 ## Evidence
 
 `uv run poe check` exit 0 at every block's tip, each report's first line; crawler passed (15 deselected each): 2071
-(10), 2073 (20), 2067 (30, 40, 50), 2068 (60, 70).
+(10), 2073 (20), 2067 (30, 40, 50), 2068 (60, 70, 80: one contract test added, the 0002 test deleted).
+`uv run poe docs-build` at block 80's tip: `No issues found`.
 
 Budget against each block's parent (lines, files; the spec's estimate in parentheses): 10, 97 and 11, `BACKLOG.md`
 included (about 110, 10); 20, 165 and 16 (170, 16); 30, 248 and 19, the two files past the estimate being the class 1
 fix (about 190, 17); 40, 55 and 6 (about 85, 8); 50, 83 and 13 (about 85, 13); 60, 40 and 5 (about 20, 4); 70, 35 and 6
-(50, 6).
+(50, 6); 80, 91 and 14 (25, 3: the estimate left no room for the review's nine findings).
 
 Acceptance, each new behaviour watched failing before its implementation:
 
@@ -90,7 +97,9 @@ Acceptance, each new behaviour watched failing before its implementation:
   FileKey(network=<Network.ED2K: 'ed2k'>, native_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`.
 - 10 (40): mypy, `Argument "best_filename" to "_file_sharing_period_display" has incompatible type "str | None";
   expected "str"`, at both callers.
-- 11 (30): `test_a_file_never_observed_raises_naming_it_and_dispatches_nothing`, `Failed: DID NOT RAISE RuntimeError`.
+- 11 (30): `test_a_file_never_observed_raises_naming_it_and_dispatches_nothing`, `Failed: DID NOT RAISE RuntimeError`;
+  renamed `..._before_any_write` by block 80, its added `count_decisions(catalog_connection) == 1` failing `assert 2 ==
+  1` against block 70's judge, which committed the retraction before raising.
 - 12 (30): `test_file_page_timeline_shows_each_observation_as_one_plain_line` and
   `test_file_page_says_when_no_observation_falls_in_the_interval` against the old template, the four-cell row and
   `<td colspan="4">` absent; the `Size` `<dd>` asserted in
@@ -110,8 +119,11 @@ Acceptance, each new behaviour watched failing before its implementation:
   same ones (catalog 0005, 0006, 0007, 0008, 0011, 0015; local 0004, 0005, 0006, 0007, 0010, 0011, 0014, 0015);
   block 70 by `diff` of `git ls-tree --name-only` and of `git grep -l copy-before` between `origin/main` and `HEAD`,
   both empty.
-- 17: the gate above; CI's `validate / gate` passed on #615 to #620 (`gh pr checks --required`, 2026-11-02), #621's run
-  under way when this was drafted, block 70's to come.
+- 17: the gate above; CI's `validate / gate` passed on #615 to #622 (`gh pr checks <n> --required`, 2026-11-02, each
+  `validate / gate pass`), #623's run started when block 80 stopped.
+- Block 80's contract test, `test_a_later_report_at_another_size_is_read_at_the_file_s_first_size`, run against block
+  10's store, whose variants still carried their size, in a detached worktree removed after: `Differing attributes:
+  ['reported_file']`, the report being the size alone; green at block 80's tip.
 
 ## Departures from the spec
 
@@ -138,12 +150,45 @@ Acceptance, each new behaviour watched failing before its implementation:
 - **Block 60**: a test from a version-5 local.db holding a download, for acceptance 13's "v4 local.db migrated", the
   existing 0014 test starting from version 13; `test_migration_0002.py` keeps `test_user_version_is_at_least_two`.
 - **Block 70**: none.
+- **Block 80**: the judge's guard is not the review's `if not filenames` after `read_known_filenames`: the decisions
+  to write are computed first and, when there are any, the best observation is read before the first write. The
+  review's form would have kept the `best is None` guard for the type, reachable only by a variant without an
+  observation and raising after the writes again; this one keeps D3's and acceptance 11's wording ("when it finds no
+  best observation") and adds no read when nothing changed. The contract test the review called optional is written,
+  `AGENTS.md`'s "the port is the reference" asking a contract test of every promise.
 
 ## Holistic review
 
-To come: the holistic review runs once block 70's pull request is open, over
-`git diff origin/main...origin/refactor/tier-rise-link-in-notifier`. The closing block fills this section, each finding
-with its exit.
+`size-once-holistic-review` over `git diff origin/main...origin/refactor/tier-rise-link-in-notifier` (`ac1c5aae` to
+`2143605d`, 12 commits, 67 files, +1019 -500), report `.reviews/size-once-holistic.md`: CRITICAL 0, MAJOR 0, MINOR 9.
+It read the spec, this draft, the full diff and the seven block reports, re-ran acceptance 16 (the same 15 files and
+`copy-before` list on `origin/main` and the top) and ran three probes (below). Each finding and its exit, all fixed in
+block 80:
+
+| # | Finding | Exit |
+|---|---|---|
+| MINOR 1 | `FileJudge.rejudge` raised only after `record_decision` had written the changed decisions, so on its bug path a retraction was committed and never notified; its docstring said it raised on any file never observed | Fixed: the guard before the first write (Departures, block 80), the test asserting no decision row added, the docstring at two lines saying a change on a file never observed raises |
+| MINOR 2 | The port and the glossary's `observation` promised a read "whole", a report at another size reading back at its file's first | Fixed: `ObservationReader`'s docstring and the glossary row add "at the size its file was first recorded at", with the contract test above |
+| MINOR 3 | `test_migration_0002.py`'s one test, `user_version >= 2`, tested nothing of local 0002 | Fixed: the module and its `tests_without_unit` entry deleted; `test_open_local_creates_the_tables_and_versions_the_schema` asserts `user_version == 15` |
+| MINOR 4 | The files counter's comment hid that it counts a file never observed | Fixed: "Without a `search_text` it joins no observation, so it also counts a file never observed, which the list leaves out" |
+| MINOR 5 | "never seen" and "seen file" beside the lot's "never observed" | Fixed: three docstrings of `observation_read.py` and one of `sqlite_catalog_scan_reader.py` |
+| MINOR 6 | `variants.py` kept `fold_raw_meta`'s spelling because 0007 "never changes", which the lot edited twice | Fixed: "The SQL name keeps the spelling migration catalog/0007 calls." |
+| MINOR 7 | `architecture.md` and `migration-4x.md` not yet written after the lot (section 6, deferred to block 80) | Fixed: the inserts by `ON CONFLICT DO NOTHING`, never `INSERT OR IGNORE`; a variant without the size; the domain validating first because its error names the value; `migration-4x.md`'s console bullet, the size by `JOIN files USING (file_id)` |
+| MINOR 8 | Spec claims the departures made false, no `(Corrected: ...)` | Fixed: the corrections listed under State |
+| MINOR 9 | This handoff stale | Fixed: State, Evidence, Not validated and this section |
+
+The review's probes, in detached worktrees of `origin/main` and the top under the scratchpad (removed after), each
+worktree's `src` first on `sys.path`, which settle section 2's last point and section 7's merge limits:
+
+1. `main`'s store writes one observation into a new catalog; the top's store then records another file:
+   `PersistenceError NOT NULL constraint failed: observation_variants.size_bytes`, `files 1 variants 1 observations 1`
+   after. The write fails and leaves no `files` row (section 2, D7).
+2. The top's `python -m p2pwatch merge --output out.db prelot.db`: `Merge failed: source catalog .../prelot.db refused:
+   observation_variants.content_hash is not the hash of its variant's values, first at variant_id 1`, no `out.db`
+   written (section 7, "a pre-lot catalog as a source is already refused").
+3. The top's `merge --into prelot.db prelot.db fresh.db`: `copy of .../fresh.db failed at observation_variants: NOT
+   NULL constraint failed: observation_variants.size_bytes`, the destination unchanged (section 7, "`merge --into` it
+   fails on its variants' size").
 
 ## Class 1 fixes
 
@@ -155,7 +200,7 @@ with its exit.
 
 ## Class 2 questions
 
-None, blocks 10 to 70.
+None, blocks 10 to 80.
 
 ## Pitfalls
 
@@ -185,19 +230,16 @@ None, blocks 10 to 70.
 - Migrations 0007 and 0008 at the scale of the operator's catalog (15.8 million observations): their `SELECT`s are
   unchanged but for one column fewer in 0007's `DISTINCT`, and the upsert takes the uniqueness check `OR IGNORE` took;
   not timed (10, 20).
-- A merge whose source a pre-lot v5 build wrote: section 7 expects the copier's seven-column hash check to refuse it;
-  not tested (20).
+- 0008 at exactly version 7 on two variants differing by size alone, which section 7 expects to fail: not probed.
 - The query plans on the operator's catalog: the plan test passes on the test catalog, and the spec review's
   `EXPLAIN QUERY PLAN` covered the inner joins on a current-schema catalog (30).
 - A rise sent to a real service: its body is unit-tested against `FakeApprise`, unchanged from `main` (70).
 
 ## Next
 
-The closing block (80) fixes the holistic findings, writes section 6's documents (`docs/migration-4x.md`, the SQL
-console's schema; `docs/contributing/architecture.md`, the inserts, the variant and the domain's reason to validate
-first), deletes "A file's size stored once" from `BACKLOG.md` and corrects this handoff. Then the lead rebases the
-stack onto the current `main` and the operator reads and merges it (`gh stack merge --rebase`). The v5 tag still waits
-for "aMule 3.2.0 pinned" (#614 open) and "The Grype scan back on p2pwatch".
+The lead rebases the stack onto the current `main` and the operator reads and merges it (`gh stack merge --rebase`).
+The lot changes what the image ships, but the v5 tag still waits for "aMule 3.2.0 pinned" (#614 open) and "The Grype
+scan back on p2pwatch".
 
 ## Counts
 
@@ -212,6 +254,12 @@ From the lead's record:
 
 ## Friction
 
-For the lead's report, to complete:
+For the lead's report:
 
+- The lead's spec wrote `AGENTS.md`'s rule with a key (`ON CONFLICT (<key>) DO NOTHING`) the merge copier's six
+  keyless inserts could not follow, which section 6 already worded without one.
+- The spec made acceptance 3 and 4 read both observations back through a port read that does not exist: the reader
+  gives only the latest and the best, so block 20 read the timeline.
+- The spec asked block 40 for port docstrings that could not hold in two lines: the fix-back.
 - Block 30 came to 19 files, one below the bound, its class 1 fix taking the two past the estimate.
+- The closing block's estimate (25 lines, 3 files) left no room for the review's findings: 91 lines, 14 files.
