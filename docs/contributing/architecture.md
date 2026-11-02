@@ -9,9 +9,6 @@ description: "Vue d'ensemble du crawler : sous-systèmes, interactions et cycles
 > **exploiter** un nœud, voir [Faire tourner un nœud](../operate.md) ; pour l'**état courant et la prochaine étape**, voir
 > `agents/handoffs/` (le plus récent). Ce document décrit *comment ça marche*, pas *comment le
 > déployer*.
->
-> Ancre de code : le tableau « Where the code lives » d'`AGENTS.md` donne le fichier de chaque
-> sous-système.
 
 ## 1. En une phrase
 
