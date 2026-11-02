@@ -10,4 +10,5 @@ class NodeStateReader(ABC):
 
     @abstractmethod
     def read_node_state(self) -> NodeState:
-        """Its downloads by when they were queued, its backoffs by client then channel."""
+        """Its downloads by when they were queued, then by native id; its backoffs by client, each
+        client's whole-client backoff before its channels, then by channel."""
