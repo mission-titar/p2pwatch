@@ -625,7 +625,7 @@ async def test_a_target_gone_from_the_targets_is_retracted(
 
 
 @pytest.mark.asyncio
-async def test_a_file_never_observed_raises_naming_it_and_dispatches_nothing(
+async def test_a_file_never_observed_raises_naming_it_before_any_write(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -653,6 +653,7 @@ async def test_a_file_never_observed_raises_naming_it_and_dispatches_nothing(
             base_candidate=_reported_file(_HASH_CAT, filename=_DISCARD_NAME).to_candidate(),
             node_id=_NODE_ID,
         )
+    assert count_decisions(catalog_connection) == 1
     assert observability.logger.lines == []
 
 
