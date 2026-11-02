@@ -34,7 +34,8 @@ CREATE TABLE observations (
 ) WITHOUT ROWID;
 
 -- DISTINCT keeps one entry per raw key (~13k), so each is folded and hashed once.
-INSERT OR IGNORE INTO observation_variants (
+-- WHERE true parts the SELECT from the upsert, which SQLite would otherwise read as a join's ON.
+INSERT INTO observation_variants (
     ed2k_hash, filename, size_bytes, media_length_sec, bitrate_kbps, raw_meta, keyword, node_id,
     content_hash
 )
@@ -61,10 +62,12 @@ FROM (
         keyword,
         node_id
     FROM file_observations
-) AS raw_keys;
+) AS raw_keys
+WHERE true
+ON CONFLICT (content_hash) DO NOTHING;
 
 -- CROSS JOIN pins the scan on file_observations; content_hash is memoized per distinct key.
-INSERT OR IGNORE INTO observations (variant_id, observed_at, source_count)
+INSERT INTO observations (variant_id, observed_at, source_count)
 SELECT
     v.variant_id,
     iso_to_micros(o.observed_at) AS observed_at,
@@ -77,7 +80,8 @@ WHERE
         fold_raw_meta(o.raw_meta, o.codec, o.file_type, o.complete_source_count),
         o.keyword, o.node_id
     )
-ORDER BY o.id;
+ORDER BY o.id
+ON CONFLICT (variant_id, observed_at, source_count) DO NOTHING;
 
 DROP TABLE file_observations;
 

@@ -215,10 +215,7 @@ def test_record_observation_is_one_transaction(
 def test_record_observation_rejects_non_canonical_hash(
     *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
 ) -> None:
-    # INSERT OR IGNORE SILENTLY swallows a CHECK violation (documented SQLite
-    # behavior): without Python validation BEFORE the transaction, a non-canonical hash
-    # would only survive thanks to the foreign_keys pragma (opaque diagnostic), and a connection
-    # without that pragma would commit an ORPHAN observation.
+    # Refused before the transaction, its error naming the hash, where the CHECK's would not.
     upper = dataclasses.replace(
         _reported_file(), file=FileKey(network=Network.ED2K, native_id=_HASH.upper())
     )
@@ -227,6 +224,28 @@ def test_record_observation_rejects_non_canonical_hash(
             FileObservation(reported_file=upper, observed_at=_T0, node_id=_NODE_ID)
         )
     assert _file_count(connection) == 0
+    assert count_observations(connection) == 0
+
+
+def _add_a_not_null_column_to_the_variants(connection: sqlite3.Connection) -> None:
+    # Rebuilt, since ALTER TABLE adds no NOT NULL column without a default.
+    [table] = rows(
+        connection, sql="SELECT sql FROM sqlite_schema WHERE name = 'observation_variants'"
+    )
+    connection.execute("DROP TABLE observation_variants")
+    connection.execute(table["sql"].replace("(", "(unwritten INTEGER NOT NULL, ", 1))
+
+
+def test_a_variant_breaking_a_not_null_fails_the_write_and_writes_no_row(
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
+) -> None:
+    _add_a_not_null_column_to_the_variants(connection)
+    with pytest.raises(PersistenceError, match="NOT NULL constraint failed"):
+        observation_store.record_observation(
+            FileObservation(reported_file=_reported_file(), observed_at=_T0, node_id=_NODE_ID)
+        )
+    assert _file_count(connection) == 0
+    assert _variant_count(connection) == 0
     assert count_observations(connection) == 0
 
 
