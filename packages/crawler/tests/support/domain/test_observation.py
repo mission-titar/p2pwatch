@@ -1,7 +1,11 @@
 from random import Random
 
 from p2pwatch.domain.observation import FileObservation
-from tests.support.domain.observation import draw_file, draw_file_observation
+from tests.support.domain.observation import (
+    draw_file,
+    draw_file_observation,
+    draw_reported_file,
+)
 from tests.support.draws import draw_instant, draw_quantity
 
 
@@ -36,6 +40,16 @@ def test_a_drawn_observation_keeps_what_its_test_relates() -> None:
     reported_file = observation.reported_file
     assert (reported_file.file, observation.observed_at) == (file, observed_at)
     assert (reported_file.filename, reported_file.source_count) == ("Keroro 062A.avi", source_count)
+
+
+def test_every_drawn_report_of_one_file_has_the_file_s_size() -> None:
+    randomness = Random(0)
+    file, other_file = draw_file(randomness), draw_file(randomness)
+    sizes = [
+        draw_reported_file(randomness, file=each, has_media=True).size_bytes
+        for each in (file, file, other_file)
+    ]
+    assert sizes[0] == sizes[1] != sizes[2]
 
 
 def test_the_same_seed_draws_the_same_observation() -> None:

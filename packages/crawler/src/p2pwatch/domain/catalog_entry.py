@@ -10,7 +10,7 @@ from p2pwatch.domain.observation import FileObservation
 
 class CatalogEntrySort(StrEnum):
     """What a listing sorts on: the latest observation's filename, source count or instant, the
-    size the file was first observed with, or the strongest tier of its current decisions."""
+    file's size, or the strongest tier of its current decisions."""
 
     NAME = "name"
     SIZE = "size"
@@ -20,17 +20,19 @@ class CatalogEntrySort(StrEnum):
 
 
 class SortDirection(StrEnum):
+    """A file without the sort's value comes first ascending and last descending; ties go on
+    ``file_id`` ascending either way."""
+
     ASC = "asc"
     DESC = "desc"
 
 
 @dataclass(kw_only=True, frozen=True)
 class CatalogEntry:
-    """A file, the size it was first observed with, its latest observation (``None`` before its
-    first) and its current decisions, one per target, in target order; a retracted target has
-    none, the legacy ``target_id=""`` sentinel is none."""
+    """A file, its size, its latest observation and its current decisions, the legacy retraction
+    of no target left out."""
 
     file: FileKey
     size_bytes: int
-    latest_observation: FileObservation | None
-    decisions: tuple[DecisionRecord, ...]
+    latest_observation: FileObservation | None  # None before its first
+    decisions: tuple[DecisionRecord, ...]  # one per target in target order, none retracted

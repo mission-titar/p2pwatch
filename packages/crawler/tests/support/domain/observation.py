@@ -16,6 +16,11 @@ def draw_file(randomness: Random) -> FileKey:
     return FileKey(network=Network.ED2K, native_id=f"{randomness.getrandbits(128):032x}")
 
 
+def _size_of(file: FileKey) -> int:
+    """A size below 2**62 that ``file``'s native id fixes: a hash names one content, one size."""
+    return int(file.native_id, 16) >> 66
+
+
 def draw_reported_file(
     randomness: Random,
     *,
@@ -24,12 +29,12 @@ def draw_reported_file(
     filename: str | None = None,
     source_count: int | None = None,
 ) -> ReportedFile:
-    """A report of ``file``, ``filename`` and ``source_count`` drawn unless given, both media
-    fields drawn or both ``None``."""
+    """A report of ``file`` at its size, ``filename`` and ``source_count`` drawn unless given, both
+    media fields drawn or both ``None``."""
     return ReportedFile(
         file=file,
         filename=draw_text(randomness) if filename is None else filename,
-        size_bytes=draw_quantity(randomness),
+        size_bytes=_size_of(file),
         source_count=draw_quantity(randomness) if source_count is None else source_count,
         keyword=Keyword(draw_text(randomness)),
         duration_seconds=draw_quantity(randomness) if has_media else None,
