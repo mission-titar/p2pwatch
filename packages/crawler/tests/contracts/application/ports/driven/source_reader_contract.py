@@ -15,11 +15,12 @@ from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourcePoint, SourceRole
-from tests.support.domain.observation import draw_observed_file
+from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
+from tests.support.domain.observation import draw_file, draw_file_observation, draw_observed_file
 from tests.support.domain.source import draw_point_read_again, draw_source_key, draw_source_point
 from tests.support.draws import draw_instant, draw_instants, draw_quantities, draw_text
 
-_EVERY_SOURCE = 100  # past the sources any test records
+_EVERY_SOURCE = 100  # past the sources and the names any test records
 
 
 def _known_sources(
@@ -81,6 +82,50 @@ def _period(first: SourcePoint, *, last: SourcePoint, received_bytes: int = 0) -
         received_bytes=received_bytes,
         node_id=first.node_id,
     )
+
+
+def _observed_file(
+    randomness: Random, *, observation_writer: ObservationWriter
+) -> tuple[FileKey, str]:
+    """A drawn file and its best filename, the later of its two most sourced observations, once
+    ``observation_writer`` has recorded them and a later one of fewer sources."""
+    file = draw_file(randomness)
+    fewer_sources, more_sources = draw_quantities(randomness, count=2)
+    earlier, best, latest = (
+        draw_file_observation(
+            randomness, file=file, has_media=True, observed_at=at, source_count=source_count
+        )
+        for at, source_count in zip(
+            draw_instants(randomness, count=3),
+            (more_sources, more_sources, fewer_sources),
+            strict=True,
+        )
+    )
+    for observation in (latest, best, earlier):
+        observation_writer.record_observation(observation)
+    return file, best.reported_file.filename
+
+
+def _source_history(
+    reader: SourceReader,
+    *,
+    source: SourceKey,
+    window: PeriodWindow,
+    limit: int = _EVERY_SOURCE,
+    offset: int = 0,
+) -> SourceHistory | None:
+    return reader.read_source_history(source.source_id, limit=limit, offset=offset, window=window)
+
+
+def _name_history(
+    reader: SourceReader,
+    *,
+    source_name: str,
+    window: PeriodWindow,
+    limit: int = _EVERY_SOURCE,
+    offset: int = 0,
+) -> SourceNameHistory | None:
+    return reader.read_source_name_history(source_name, limit=limit, offset=offset, window=window)
 
 
 class SourceReaderContract(ABC):
@@ -570,3 +615,400 @@ class SourceReaderContract(ABC):
         assert reader.read_sharing_periods(file, window=_window(since, until=until)) == (
             _period(first, last=last, received_bytes=growth if role is SourceRole.SENDING else 0),
         )
+
+    def test_a_source_history_holds_its_names_its_periods_over_every_file_and_their_filenames(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        (file, filename), (other_file, other_filename) = (
+            _observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+        )
+        source = draw_source_key(randomness)
+        name, other_name = draw_text(randomness), draw_text(randomness)
+        since, queued_at, queued_again_at, sending_at, renamed_at, unnamed_at, until = (
+            draw_instants(randomness, count=7)
+        )
+        queued = _point(
+            randomness, file=file, source=source, observed_at=queued_at, source_name=name
+        )
+        sending = draw_source_point(
+            randomness,
+            file=file,
+            source=source,
+            role=SourceRole.SENDING,
+            observed_at=sending_at,
+            source_name=name,
+        )
+        renamed = _point(
+            randomness,
+            file=other_file,
+            source=source,
+            observed_at=renamed_at,
+            source_name=other_name,
+        )
+        unnamed = _unnamed(
+            _point(randomness, file=other_file, source=source, observed_at=unnamed_at)
+        )
+        queued_again = replace(queued, observed_at=queued_again_at)
+        # Against the listed orders; another source and a reading without a user hash under the
+        # source's name are none of its history.
+        source_point_writer.record_points(
+            [
+                queued,
+                queued_again,
+                *(
+                    _point(
+                        randomness,
+                        file=file,
+                        source=other,
+                        observed_at=sending_at,
+                        source_name=name,
+                    )
+                    for other in (draw_source_key(randomness), None)
+                ),
+                sending,
+                renamed,
+                unnamed,
+            ]
+        )
+        assert _source_history(reader, source=source, window=_window(since, until=until)) == (
+            SourceHistory(
+                source=source,
+                source_namings=(
+                    SourceNaming(
+                        source=source,
+                        source_name=other_name,
+                        latest_seen_at=renamed_at,
+                        file_count=1,
+                    ),
+                    SourceNaming(
+                        source=source, source_name=name, latest_seen_at=sending_at, file_count=1
+                    ),
+                ),
+                sharing_periods=(
+                    _period(unnamed, last=unnamed),
+                    _period(renamed, last=renamed),
+                    _period(sending, last=sending),
+                    _period(queued, last=queued_again),
+                ),
+                best_filename_by_file={file: filename, other_file: other_filename},
+            )
+        )
+
+    def test_a_source_s_names_are_listed_last_seen_first_then_on_their_name(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        source = draw_source_key(randomness)
+        since, earlier_at, later_at, until = draw_instants(randomness, count=4)
+        names = [draw_text(randomness) for _ in range(4)]
+        seen_at_by_name = dict(
+            zip(names, (earlier_at, later_at, earlier_at, later_at), strict=True)
+        )
+        listed = sorted(sorted(names), key=seen_at_by_name.__getitem__, reverse=True)
+        source_point_writer.record_points(
+            [
+                _point(
+                    randomness,
+                    file=file,
+                    source=source,
+                    observed_at=seen_at_by_name[name],
+                    source_name=name,
+                )
+                for name in reversed(listed)
+            ]
+        )
+        source_history = _source_history(reader, source=source, window=_window(since, until=until))
+        assert source_history is not None
+        assert [naming.source_name for naming in source_history.source_namings] == listed
+
+    def test_a_page_of_a_source_history_reads_at_most_its_limit_of_names_and_every_period(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        source = draw_source_key(randomness)
+        since, *instants, until = draw_instants(randomness, count=9)
+        points = [_point(randomness, file=file, source=source, observed_at=at) for at in instants]
+        source_point_writer.record_points(points)
+        window = _window(since, until=until)
+        every_name, *pages = (
+            _source_history(reader, source=source, window=window, limit=limit, offset=offset)
+            for limit, offset in ((_EVERY_SOURCE, 0), (3, 0), (3, 3), (3, 6), (3, 7))
+        )
+        assert every_name is not None
+        assert len(every_name.source_namings) == 7
+        assert every_name.sharing_periods == tuple(
+            _period(point, last=point) for point in reversed(points)
+        )
+        assert pages == [
+            replace(every_name, source_namings=every_name.source_namings[start:end])
+            for start, end in ((0, 3), (3, 6), (6, 7), (7, 7))
+        ]
+
+    def test_a_name_history_holds_its_sources_its_periods_without_a_user_hash_and_their_filenames(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        (file, filename), (other_file, other_filename) = (
+            _observed_file(randomness, observation_writer=observation_writer) for _ in range(2)
+        )
+        source, other_source = draw_source_key(randomness), draw_source_key(randomness)
+        name = draw_text(randomness)
+        since, other_at, hashless_at, named_at, hashless_again_at, renamed_at, until = (
+            draw_instants(randomness, count=7)
+        )
+        hashless, hashless_again = (
+            _point(randomness, file=each, source=None, observed_at=at, source_name=name)
+            for each, at in ((file, hashless_at), (other_file, hashless_again_at))
+        )
+        # Against the listed orders; the source's other name, later and on another file, and
+        # another name without a user hash are none of this name's history.
+        source_point_writer.record_points(
+            [
+                _point(
+                    randomness,
+                    file=other_file,
+                    source=other_source,
+                    observed_at=other_at,
+                    source_name=name,
+                ),
+                hashless,
+                _point(
+                    randomness, file=file, source=source, observed_at=named_at, source_name=name
+                ),
+                hashless_again,
+                _point(randomness, file=other_file, source=source, observed_at=renamed_at),
+                _point(randomness, file=file, source=None, observed_at=renamed_at),
+            ]
+        )
+        assert _name_history(reader, source_name=name, window=_window(since, until=until)) == (
+            SourceNameHistory(
+                source_name=name,
+                source_namings=(
+                    SourceNaming(
+                        source=source, source_name=name, latest_seen_at=named_at, file_count=1
+                    ),
+                    SourceNaming(
+                        source=other_source,
+                        source_name=name,
+                        latest_seen_at=other_at,
+                        file_count=1,
+                    ),
+                ),
+                sharing_periods=(
+                    _period(hashless_again, last=hashless_again),
+                    _period(hashless, last=hashless),
+                ),
+                best_filename_by_file={file: filename, other_file: other_filename},
+            )
+        )
+
+    def test_a_name_s_sources_are_listed_last_seen_first_then_on_source_id(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        name = draw_text(randomness)
+        sources = [draw_source_key(randomness) for _ in range(4)]
+        since, earlier_at, later_at, until = draw_instants(randomness, count=4)
+        seen_at_by_source = dict(
+            zip(sources, (earlier_at, later_at, earlier_at, later_at), strict=True)
+        )
+        by_source_id = sorted(sources, key=lambda source: source.source_id)
+        listed = sorted(by_source_id, key=seen_at_by_source.__getitem__, reverse=True)
+        source_point_writer.record_points(
+            [
+                _point(
+                    randomness,
+                    file=file,
+                    source=source,
+                    observed_at=seen_at_by_source[source],
+                    source_name=name,
+                )
+                for source in reversed(listed)
+            ]
+        )
+        name_history = _name_history(reader, source_name=name, window=_window(since, until=until))
+        assert name_history is not None
+        assert [naming.source for naming in name_history.source_namings] == listed
+
+    def test_a_page_of_a_name_history_reads_at_most_its_limit_of_sources_and_every_period(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        name = draw_text(randomness)
+        since, *instants, until = draw_instants(randomness, count=9)
+        hashless = [
+            _point(randomness, file=file, source=None, observed_at=at, source_name=name)
+            for at in instants[:2]
+        ]
+        source_point_writer.record_points(
+            [
+                *(
+                    _point(
+                        randomness,
+                        file=file,
+                        source=draw_source_key(randomness),
+                        observed_at=at,
+                        source_name=name,
+                    )
+                    for at in instants
+                ),
+                *hashless,
+            ]
+        )
+        window = _window(since, until=until)
+        every_source, *pages = (
+            _name_history(reader, source_name=name, window=window, limit=limit, offset=offset)
+            for limit, offset in ((_EVERY_SOURCE, 0), (3, 0), (3, 3), (3, 6), (3, 7))
+        )
+        assert every_source is not None
+        assert len(every_source.source_namings) == 7
+        assert every_source.sharing_periods == tuple(
+            _period(point, last=point) for point in reversed(hashless)
+        )
+        assert pages == [
+            replace(every_source, source_namings=every_source.source_namings[start:end])
+            for start, end in ((0, 3), (3, 6), (6, 7), (7, 7))
+        ]
+
+    def test_a_history_reads_names_whenever_read_and_periods_over_the_window_s_points_alone(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        file, filename = _observed_file(randomness, observation_writer=observation_writer)
+        other_file = draw_observed_file(randomness, observation_writer=observation_writer)
+        source, other_source = draw_source_key(randomness), draw_source_key(randomness)
+        name, earlier_name, later_name = (draw_text(randomness) for _ in range(3))
+        before_at, since, inside_at, until, after_at = draw_instants(randomness, count=5)
+        named, hashless = (
+            _point(randomness, file=file, source=each, observed_at=inside_at, source_name=name)
+            for each in (source, None)
+        )
+        source_point_writer.record_points(
+            [
+                replace(named, observed_at=before_at),
+                replace(hashless, observed_at=before_at),
+                *(
+                    _point(
+                        randomness,
+                        file=other_file,
+                        source=each,
+                        observed_at=before_at,
+                        source_name=each_name,
+                    )
+                    for each, each_name in ((source, earlier_name), (other_source, name))
+                ),
+                named,
+                hashless,
+                _point(
+                    randomness,
+                    file=other_file,
+                    source=source,
+                    observed_at=after_at,
+                    source_name=later_name,
+                ),
+                replace(hashless, observed_at=after_at),
+            ]
+        )
+        window = _window(since, until=until)
+        assert _source_history(reader, source=source, window=window) == SourceHistory(
+            source=source,
+            source_namings=tuple(
+                SourceNaming(source=source, source_name=each_name, latest_seen_at=at, file_count=1)
+                for each_name, at in (
+                    (later_name, after_at),
+                    (name, inside_at),
+                    (earlier_name, before_at),
+                )
+            ),
+            sharing_periods=(_period(named, last=named),),
+            best_filename_by_file={file: filename},
+        )
+        assert _name_history(reader, source_name=name, window=window) == SourceNameHistory(
+            source_name=name,
+            source_namings=tuple(
+                SourceNaming(source=each, source_name=name, latest_seen_at=at, file_count=1)
+                for each, at in ((source, inside_at), (other_source, before_at))
+            ),
+            sharing_periods=(_period(hashless, last=hashless),),
+            best_filename_by_file={file: filename},
+        )
+
+    def test_a_history_is_none_only_for_a_source_or_a_name_never_recorded(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        source_point_writer: SourcePointWriter,
+        reader: SourceReader,
+    ) -> None:
+        file = draw_observed_file(randomness, observation_writer=observation_writer)
+        source = draw_source_key(randomness)
+        name, hashless_name = draw_text(randomness), draw_text(randomness)
+        observed_at, since, until = draw_instants(randomness, count=3)
+        source_point_writer.record_points(
+            [
+                _point(
+                    randomness,
+                    file=file,
+                    source=each,
+                    observed_at=observed_at,
+                    source_name=each_name,
+                )
+                for each, each_name in ((source, name), (None, hashless_name))
+            ]
+        )
+        # Every point before the window: a source or a name recorded has a history all the same.
+        window = _window(since, until=until)
+        naming = SourceNaming(
+            source=source, source_name=name, latest_seen_at=observed_at, file_count=1
+        )
+        assert _source_history(reader, source=source, window=window) == SourceHistory(
+            source=source, source_namings=(naming,), sharing_periods=(), best_filename_by_file={}
+        )
+        assert _name_history(reader, source_name=name, window=window) == SourceNameHistory(
+            source_name=name,
+            source_namings=(naming,),
+            sharing_periods=(),
+            best_filename_by_file={},
+        )
+        assert _name_history(reader, source_name=hashless_name, window=window) == SourceNameHistory(
+            source_name=hashless_name,
+            source_namings=(),
+            sharing_periods=(),
+            best_filename_by_file={},
+        )
+        assert _source_history(reader, source=draw_source_key(randomness), window=window) is None
+        assert _name_history(reader, source_name=draw_text(randomness), window=window) is None
