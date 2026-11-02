@@ -27,6 +27,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
 )
 from tests.support.catalog_rows import (
     insert_file,
+    insert_observation,
     insert_source,
     insert_source_point,
     insert_source_variant,
@@ -105,16 +106,20 @@ def test_the_periods_started_by_one_reading_come_the_latest_recorded_variant_fir
 # ---------------------------------------------------------------------------
 
 
-def test_a_page_s_file_never_observed_has_no_best_filename(catalog_db: Path) -> None:
-    # No Writer records a point on a file never observed.
+def test_a_page_leaves_out_the_periods_on_a_file_never_observed(catalog_db: Path) -> None:
+    # No Writer records a point on a file never observed: only a forged merge source brings one.
+    never_observed, observed = "a" * 32, "b" * 32
     with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id="a" * 32)
+        insert_file(connection, native_id=never_observed)
+        insert_file(connection, native_id=observed)
+        insert_observation(connection, native_id=observed, filename="keroro_s2e62a_vf.avi")
         insert_source(connection, user_hash=_USER)
-        for user_hash in (_USER, None):
-            variant = insert_source_variant(
-                connection, native_id="a" * 32, user_hash=user_hash, name=_NAME
-            )
-            insert_source_point(connection, variant_id=variant, observed_at_micros=0)
+        for native_id in (never_observed, observed):
+            for user_hash in (_USER, None):
+                variant = insert_source_variant(
+                    connection, native_id=native_id, user_hash=user_hash, name=_NAME
+                )
+                insert_source_point(connection, variant_id=variant, observed_at_micros=0)
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:
         reader = SqliteSourceReader(thread_read_connections)
         source_history = reader.read_source_history(
@@ -123,9 +128,8 @@ def test_a_page_s_file_never_observed_has_no_best_filename(catalog_db: Path) -> 
         name_history = reader.read_source_name_history(
             _NAME, limit=_LIMIT, offset=0, window=_WINDOW
         )
-    assert source_history is not None
-    assert len(source_history.sharing_periods) == 1
-    assert source_history.best_filename_by_file == {}
-    assert name_history is not None
-    assert len(name_history.sharing_periods) == 1
-    assert name_history.best_filename_by_file == {}
+    file = FileKey(network=Network.ED2K, native_id=observed)
+    for history in (source_history, name_history):
+        assert history is not None
+        assert [period.file for period in history.sharing_periods] == [file]
+        assert history.best_filename_by_file == {file: "keroro_s2e62a_vf.avi"}

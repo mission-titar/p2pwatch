@@ -781,14 +781,14 @@ _USER_PAGE = f"/sources/{_SOURCE.source_id.hex()}"
 _NAME_PAGE = "/sources/name?source_name=AnimuseeFMR"
 _NAME_LINK = '<a href="/sources/name?source_name=AnimuseeFMR">AnimuseeFMR</a>'
 _OTHER_SOURCE = SourceKey(network=Network.ED2K, native_id=_OTHER)
-_UNSEEN = FileKey(network=Network.ED2K, native_id="c" * 32)
-_UNSEEN_LINK = f'<a href="/files/{_UNSEEN.file_id.hex()}">cccccccc…</a>'
+_OTHER_FILE = FileKey(network=Network.ED2K, native_id="c" * 32)
+_OTHER_FILE_LINK = f'<a href="/files/{_OTHER_FILE.file_id.hex()}">keroro_s2e62b_vf.avi</a>'
 _8PM = datetime(2026, 10, 13, 20, tzinfo=UTC)
 _8PM_30 = _8PM + timedelta(seconds=30)
 _NAMING = SourceNaming(
     source=_SOURCE, source_name="AnimuseeFMR", latest_seen_at=_8PM_30, file_count=2
 )
-# _USER as AnimuseeFMR, on a file seen under a filename, then on a file never seen.
+# _USER as AnimuseeFMR, on _FILE, then on _OTHER_FILE.
 _SOURCE_DESCRIPTION = SourceDescription(
     source_history=SourceHistory(
         source=_SOURCE,
@@ -807,7 +807,7 @@ _SOURCE_DESCRIPTION = SourceDescription(
                 node_id=NodeId("n1"),
             ),
             SharingPeriod(
-                file=_UNSEEN,
+                file=_OTHER_FILE,
                 source=_SOURCE,
                 source_name="AnimuseeFMR",
                 role=SourceRole.STANDBY,
@@ -819,13 +819,16 @@ _SOURCE_DESCRIPTION = SourceDescription(
                 node_id=NodeId("n1"),
             ),
         ),
-        best_filename_by_file={_FILE: "keroro_s2e62a_vf.avi"},
+        best_filename_by_file={
+            _FILE: "keroro_s2e62a_vf.avi",
+            _OTHER_FILE: "keroro_s2e62b_vf.avi",
+        },
     ),
     has_next_page=False,
     interval=_WEEK,
     now=_WALL_CLOCK.now(),
 )
-# AnimuseeFMR on _USER and on _OTHER, and once without a user hash on a file never seen.
+# AnimuseeFMR on _USER and on _OTHER, and once without a user hash on _OTHER_FILE.
 _SOURCE_NAME_DESCRIPTION = SourceNameDescription(
     source_name_history=SourceNameHistory(
         source_name="AnimuseeFMR",
@@ -837,7 +840,7 @@ _SOURCE_NAME_DESCRIPTION = SourceNameDescription(
         ),
         sharing_periods=(
             SharingPeriod(
-                file=_UNSEEN,
+                file=_OTHER_FILE,
                 source=None,
                 source_name="AnimuseeFMR",
                 role=SourceRole.STANDBY,
@@ -849,7 +852,7 @@ _SOURCE_NAME_DESCRIPTION = SourceNameDescription(
                 node_id=NodeId("n1"),
             ),
         ),
-        best_filename_by_file={},
+        best_filename_by_file={_OTHER_FILE: "keroro_s2e62b_vf.avi"},
     ),
     has_next_page=False,
     interval=_WEEK,
@@ -1036,10 +1039,10 @@ async def test_source_page_shows_its_hash_its_names_and_its_periods() -> None:
     assert "<th>Connectable</th>" in page
     assert _row(_NAME_LINK, last, "2") in page
     assert _row(file, _NAME_LINK, "queued", "unknown", "unknown", first, last, "", "", "n1") in page
-    unseen = _row(
-        _UNSEEN_LINK, _NAME_LINK, "standby", "unknown", "unknown", first, first, "", "", "n1"
+    other_file = _row(
+        _OTHER_FILE_LINK, _NAME_LINK, "standby", "unknown", "unknown", first, first, "", "", "n1"
     )
-    assert 0 < page.index(file) < page.index(unseen)
+    assert 0 < page.index(file) < page.index(other_file)
     assert "Next →" not in page
 
 
@@ -1077,7 +1080,9 @@ async def test_name_page_lists_the_hashes_that_carried_it_and_its_periods_withou
     assert "<th>Connectable</th>" in page
     assert _row(_hash_link(_SOURCE), "2026-10-13 20:00:30Z", "2") in page
     assert _row(_hash_link(_OTHER_SOURCE), stamp, "1") in page
-    assert _row(_UNSEEN_LINK, "standby", "unknown", "unknown", stamp, stamp, "", "", "n1") in page
+    assert (
+        _row(_OTHER_FILE_LINK, "standby", "unknown", "unknown", stamp, stamp, "", "", "n1") in page
+    )
     assert "Next →" not in page
 
 
