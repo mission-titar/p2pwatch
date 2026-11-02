@@ -51,9 +51,10 @@ def insert_observation(
         node_id=node_id,
     )
     connection.execute(
-        "INSERT OR IGNORE INTO observation_variants"
+        "INSERT INTO observation_variants"
         " (file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword,"
-        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, '{}', 'keroro', ?, ?)",
+        " node_id, content_hash) VALUES (?, ?, ?, ?, ?, '{}', 'keroro', ?, ?)"
+        " ON CONFLICT (content_hash) DO NOTHING",
         (variant_file_id, filename, size_bytes, duration_seconds, bitrate_kbps, node_id, key),
     )
     connection.execute(

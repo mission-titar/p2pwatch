@@ -2,16 +2,14 @@
 
 The adapter stores what the domain ignores (data-model spec §3): ``node_id``, given at each write.
 ``raw_metadata`` is stored as its ``JsonObjectText``'s canonical text. ``record_observation`` makes
-ONE transaction (spec §4): ``INSERT OR IGNORE`` into ``files`` (first sight wins), into
-``observation_variants`` (found by its ``content_hash``) and into ``observations``: the
-OBSERVED size is ALWAYS written into the variant (deviation 1, spec §5: a size anomaly must
+ONE transaction (spec §4): it inserts into ``files`` (first sight wins), into
+``observation_variants`` (found by its ``content_hash``) and into ``observations``, each
+``ON CONFLICT (<key>) DO NOTHING``, which ignores a duplicate key and raises on any other refusal:
+the OBSERVED size is ALWAYS written into the variant (deviation 1, spec §5: a size anomaly must
 not become invisible).
 
 The hash canon (32 lowercase hex, v0.5.0 canon) is validated IN PYTHON before the
-transaction: ``INSERT OR IGNORE`` silently swallows a CHECK violation (documented
-SQLite behavior): without this guard, a non-canonical hash would only be stopped
-by the ``foreign_keys`` pragma (opaque diagnostic), and a connection without that
-pragma would commit an ORPHAN observation. The rollback catches ``BaseException``
+transaction, so that its error names the hash. The rollback catches ``BaseException``
 (same discipline as ``connection._open``): a NON-sqlite failure at binding must not
 leave the connection ``in_transaction``, otherwise the store would be permanently broken.
 """
@@ -32,19 +30,22 @@ from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.observation import FileObservation
 
 _INSERT_FILE = (
-    "INSERT OR IGNORE INTO files (file_id, network, native_id, size_bytes) VALUES (?, ?, ?, ?)"
+    "INSERT INTO files (file_id, network, native_id, size_bytes) VALUES (?, ?, ?, ?)"
+    " ON CONFLICT (file_id) DO NOTHING"
 )
 
 _INSERT_VARIANT = """
-INSERT OR IGNORE INTO observation_variants (
+INSERT INTO observation_variants (
     file_id, filename, size_bytes, duration_seconds, bitrate_kbps, raw_metadata, keyword, node_id,
     content_hash
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (content_hash) DO NOTHING
 """
 
 _INSERT_OBSERVATION = """
-INSERT OR IGNORE INTO observations (variant_id, observed_at_micros, source_count)
+INSERT INTO observations (variant_id, observed_at_micros, source_count)
 SELECT variant_id, ?, ? FROM observation_variants WHERE content_hash = ?
+ON CONFLICT (variant_id, observed_at_micros, source_count) DO NOTHING
 """
 
 

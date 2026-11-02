@@ -132,7 +132,7 @@ def test_t1_merge_two_distinct_catalogs(tmp_path: Path) -> None:
         assert rows_without_id(destination, table=table) == expected
 
 
-def test_t2_merge_overlapping_identity_files_or_ignore(tmp_path: Path) -> None:
+def test_t2_merge_overlapping_identity_files_keeps_one(tmp_path: Path) -> None:
     # Both sources share the SAME native_id (content-identity).
     src_a = make_catalog(
         tmp_path / "a.db", content={"files": [{"native_id": HASH_A, "size_bytes": 100}]}
@@ -144,7 +144,7 @@ def test_t2_merge_overlapping_identity_files_or_ignore(tmp_path: Path) -> None:
 
     _copy_catalogs(destination, source_catalogs=[src_a, src_b])
 
-    # INSERT OR IGNORE: the already-present PK is ignored → a single row.
+    # ON CONFLICT DO NOTHING: the already-present PK is ignored → a single row.
     assert count(destination, table="files") == 1
 
 
