@@ -268,8 +268,17 @@ class SourceReaderContract(ABC):
             ("ÉCOLE", "école", "écolier"),
             ("ecole", "école", "écolier"),
             ("KERORO", "Keroro", "Kero"),
+            ("coeur", "Cœur", "Cœu"),
         ],
-        ids=["percent", "underscore", "backslash", "capitals", "no accents", "ascii capitals"],
+        ids=[
+            "percent",
+            "underscore",
+            "backslash",
+            "capitals",
+            "no accents",
+            "ascii capitals",
+            "ligature",
+        ],
     )
     def test_the_search_finds_a_name_holding_the_text_as_typed_case_and_accents_ignored(
         self,
