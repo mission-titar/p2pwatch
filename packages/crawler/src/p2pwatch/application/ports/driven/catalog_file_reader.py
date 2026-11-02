@@ -29,8 +29,8 @@ class CatalogFileReader(ABC):
         limit: int,
         offset: int,
     ) -> tuple[CatalogEntry, ...]:
-        """The files passing the filters, ``matched_only`` keeping those with a current decision,
-        sorted on ``sort`` in ``direction``: at most ``limit`` of them from ``offset``."""
+        """The observed files passing the filters, ``matched_only`` keeping those with a current
+        decision, sorted on ``sort`` in ``direction``: at most ``limit`` of them from ``offset``."""
 
     @abstractmethod
     def read_matched_and_total_file_counts(
@@ -51,4 +51,4 @@ class CatalogFileReader(ABC):
         self, file_id: FileId, *, since: datetime, until: datetime
     ) -> FileHistory | None:
         """The file's history, its observations from ``since`` included to ``until`` excluded;
-        ``None`` for a file the catalog does not hold."""
+        ``None`` for a file the catalog does not hold or never observed."""

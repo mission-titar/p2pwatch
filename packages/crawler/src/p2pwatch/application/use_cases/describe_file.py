@@ -47,10 +47,9 @@ class DescribeFile(FileDescriber):
             since=interval.since, until=interval.until, gap=self._source_period_gap
         )
         explanation = None
-        latest = file_history.latest_observation
-        if file_history.decisions and latest is not None:
+        if file_history.decisions:
             # Every known name with the latest fields, as the crawler judges.
-            reported_file = latest.reported_file
+            reported_file = file_history.latest_observation.reported_file
             explanation = self._explainer.explain(
                 filenames=file_history.known_filenames,
                 size_bytes=reported_file.size_bytes,

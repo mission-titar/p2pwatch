@@ -186,7 +186,6 @@ _WEEK = Interval(since=_WALL_CLOCK.now() - timedelta(days=7), until=_WALL_CLOCK.
 _FILE_DESCRIPTION = FileDescription(
     file_history=FileHistory(
         file=_FILE,
-        size_bytes=100_000_000,
         observations=(_OBSERVATION,),
         latest_observation=_OBSERVATION,
         decisions=(_DECISION,),
@@ -454,11 +453,12 @@ async def _file_page(file_description: FileDescription = _FILE_DESCRIPTION) -> s
 
 
 @pytest.mark.asyncio
-async def test_file_page_shows_the_network_the_native_id_and_the_ed2k_link() -> None:
+async def test_file_page_shows_the_network_the_native_id_the_size_and_the_ed2k_link() -> None:
     page = await _file_page()
     link = f"ed2k://|file|keroro_s2e62a_vf.avi|100000000|{TEST_HASH}|/"
     assert "<dt>Network</dt><dd>ed2k</dd>" in page
     assert f"<dt>Native ID</dt><dd>{TEST_HASH}</dd>" in page
+    assert "<dt>Size</dt><dd>100000000</dd>" in page
     assert f'<dt>eD2k link</dt><dd><a href="{link}">{link}</a></dd>' in page
     assert "eD2k hash" not in page
     assert "AICH" not in page
@@ -581,7 +581,7 @@ async def test_file_page_shows_the_explanation_its_use_case_gives() -> None:
 @pytest.mark.asyncio
 async def test_file_page_timeline_shows_each_observation_as_one_plain_line() -> None:
     page = await _file_page()
-    assert _row("keroro_s2e62a_vf.avi", "100000000", "5", "keroro", SEEN_AT) in page
+    assert _row("keroro_s2e62a_vf.avi", "5", "keroro", SEEN_AT) in page
     assert "Times seen" not in page
 
 
@@ -1159,11 +1159,9 @@ async def test_files_non_numeric_page_defaults_to_1() -> None:
 
 
 @pytest.mark.asyncio
-async def test_file_page_of_a_file_never_seen_has_no_ed2k_link() -> None:
-    never_seen = _history(observations=(), latest_observation=None)
-    page = await _file_page(replace(_FILE_DESCRIPTION, file_history=never_seen))
-    assert "ed2k://" not in page
-    assert '<td colspan="5">No observation in this interval.</td>' in page
+async def test_file_page_says_when_no_observation_falls_in_the_interval() -> None:
+    page = await _file_page(replace(_FILE_DESCRIPTION, file_history=_history(observations=())))
+    assert '<td colspan="4">No observation in this interval.</td>' in page
 
 
 @pytest.mark.asyncio
@@ -1451,7 +1449,6 @@ def _catalog_entry(
     )
     return CatalogEntry(
         file=reported_file.file,
-        size_bytes=1024,
         latest_observation=FileObservation(
             reported_file=reported_file, observed_at=observed_at, node_id=NodeId("n1")
         ),
@@ -1546,14 +1543,9 @@ def test_catalog_entry_displays_computes_size_and_latest_seen_display() -> None:
     assert display.latest_seen_display == "2026-07-03 23:45Z"
 
 
-def test_catalog_entry_displays_shows_a_file_never_seen_with_unknown_sources() -> None:
-    catalog_entry = replace(_catalog_entry(decisions=()), latest_observation=None)
-    [display] = _catalog_entry_displays([catalog_entry], segment_by_id=_SEGMENTS_AB)
-    assert (display.filename, display.sources_display, display.latest_seen_display) == (
-        "",
-        "unknown",
-        "",
-    )
+def test_catalog_entry_displays_shows_the_latest_filename_and_source_count() -> None:
+    [display] = _catalog_entry_displays([_catalog_entry(decisions=())], segment_by_id=_SEGMENTS_AB)
+    assert (display.filename, display.sources_display) == ("f.avi", "1")
 
 
 # ---------------------------------------------------------------------------

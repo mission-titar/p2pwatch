@@ -210,15 +210,11 @@ def _catalog_entry_displays(
             CatalogEntryDisplay(
                 file_id_hex=catalog_entry.file.file_id.hex(),
                 short_hash=short_hash(catalog_entry.file.native_id),
-                filename="" if latest is None else latest.reported_file.filename,
-                sources_display=(
-                    "unknown" if latest is None else str(latest.reported_file.source_count)
-                ),
+                filename=latest.reported_file.filename,
+                sources_display=str(latest.reported_file.source_count),
                 decisions_display=decisions_display,
-                size_display=human_size(catalog_entry.size_bytes),
-                latest_seen_display=(
-                    "" if latest is None else short_timestamp(latest.observed_at.isoformat())
-                ),
+                size_display=human_size(latest.reported_file.size_bytes),
+                latest_seen_display=short_timestamp(latest.observed_at.isoformat()),
                 tier_display=tier_display,
             )
         )
@@ -230,7 +226,6 @@ def _observation_display(observation: FileObservation) -> ObservationDisplay:
     reported_file = observation.reported_file
     return ObservationDisplay(
         filename=reported_file.filename,
-        size_bytes=reported_file.size_bytes,
         sources=str(reported_file.source_count),
         keyword=reported_file.keyword,
         observed_at=observation.observed_at.isoformat(timespec="microseconds"),
@@ -1069,22 +1064,16 @@ def build_app(
             return templates.TemplateResponse(request, "404.html", {}, status_code=404)
         file_history, explanation = description.file_history, description.explanation
 
-        latest = (
-            None
-            if file_history.latest_observation is None
-            else file_history.latest_observation.reported_file
-        )
-        ed2k_link = ""
-        if latest is not None:
-            match file_history.file.network:
-                case Network.ED2K:
-                    ed2k_link = build_ed2k_link(
-                        latest.filename,
-                        size_bytes=latest.size_bytes,
-                        native_id=file_history.file.native_id,
-                    )
-                case _:  # pragma: no cover
-                    assert_never(file_history.file.network)
+        latest = file_history.latest_observation.reported_file
+        match file_history.file.network:
+            case Network.ED2K:
+                ed2k_link = build_ed2k_link(
+                    latest.filename,
+                    size_bytes=latest.size_bytes,
+                    native_id=file_history.file.native_id,
+                )
+            case _:  # pragma: no cover
+                assert_never(file_history.file.network)
 
         # Explanation from the current config
         explanation_target_id: str | None = None
@@ -1108,7 +1097,7 @@ def build_app(
         display = FileHistoryDisplay(
             network=file_history.file.network,
             native_id=file_history.file.native_id,
-            size_bytes=file_history.size_bytes,
+            size_bytes=latest.size_bytes,
             observations=tuple(
                 _observation_display(observation) for observation in file_history.observations
             ),

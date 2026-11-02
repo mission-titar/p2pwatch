@@ -105,11 +105,6 @@ def _counts(catalog_db: Path) -> tuple[int, int]:
         )
 
 
-def _latest_filename(catalog_entry: CatalogEntry) -> str | None:
-    observation = catalog_entry.latest_observation
-    return None if observation is None else observation.reported_file.filename
-
-
 # ---------------------------------------------------------------------------
 # Tests: sortable read_catalog_entries via the fixed column allowlist + best_tier_rank
 # ---------------------------------------------------------------------------
@@ -144,61 +139,17 @@ def _seed_unmatched(db: Path) -> None:
 
 
 def _seed_file_without_observation(db: Path) -> str:
-    """A file with NO observation at all (a file row is written before its first observation is
-    recorded). Returns its hash."""
+    """A file with no observation, which only a forged merge source brings. Returns its hash."""
     h = "d" * 32
     with closing(sqlite3.connect(db)) as connection, connection:
         insert_file(connection, native_id=h, size_bytes=42)
     return h
 
 
-def test_read_catalog_entries_lists_file_with_no_observation(catalog_db: Path) -> None:
-    """A file with no observation is still listed, with none.
-
-    This is THE case where the two shapes of ``latest_obs`` differ internally: the seek form
-    yields a row of NULLs for such a file, the older window form yielded no row at all. Both
-    reach the same result only because every consumer LEFT JOINs it onto ``files``, so
-    this pins that the difference stays absorbed.
-    """
-    h = _seed_file_without_observation(catalog_db)
-    rows = _entries(catalog_db)
-    assert [row.file.native_id for row in rows] == [h]
-    assert rows[0].latest_observation is None
-
-
-@pytest.mark.parametrize(
-    "sort", [CatalogEntrySort.NAME, CatalogEntrySort.SOURCES, CatalogEntrySort.LATEST_SEEN], ids=str
-)
-def test_read_catalog_entries_sorts_a_file_never_seen_first_ascending_last_descending(
-    *, catalog_db: Path, sort: CatalogEntrySort
-) -> None:
-    never_seen = _seed_file_without_observation(catalog_db)
+def test_read_catalog_entries_leaves_out_a_file_never_observed(catalog_db: Path) -> None:
+    _seed_file_without_observation(catalog_db)
     _seed_unmatched(catalog_db)
-    ascending, descending = (
-        _entries(catalog_db, sort=sort, direction=direction)
-        for direction in (SortDirection.ASC, SortDirection.DESC)
-    )
-    assert (ascending[0].file.native_id, descending[-1].file.native_id) == (never_seen, never_seen)
-
-
-def test_read_catalog_entries_sorts_a_file_never_seen_on_its_size(catalog_db: Path) -> None:
-    # A file has its size, observed or not, and the size sort reads it.
-    never_seen = _seed_file_without_observation(catalog_db)
-    _seed_unmatched(catalog_db)
-    with closing(sqlite3.connect(catalog_db)) as connection, connection:
-        insert_file(connection, native_id="c" * 32, size_bytes=10)
-        insert_observation(
-            connection,
-            native_id="c" * 32,
-            filename="petit.avi",
-            observed_at="2026-06-22T09:00:00.000000+00:00",
-        )
-    entries = _entries(catalog_db, sort=CatalogEntrySort.SIZE, direction=SortDirection.ASC)
-    assert [(entry.file.native_id, entry.size_bytes) for entry in entries] == [
-        ("c" * 32, 10),
-        (never_seen, 42),
-        ("b" * 32, 200),
-    ]
+    assert [entry.file.native_id for entry in _entries(catalog_db)] == ["b" * 32]
 
 
 def test_read_matched_and_total_file_counts_counts_file_with_no_observation(
@@ -208,15 +159,6 @@ def test_read_matched_and_total_file_counts_counts_file_with_no_observation(
     _seed_file_without_observation(catalog_db)
     matched, total = _counts(catalog_db)
     assert (matched, total) == (0, 1)
-
-
-def test_read_catalog_entries_search_text_filter_excludes_file_with_no_observation(
-    catalog_db: Path,
-) -> None:
-    """No observation means no filename to match: its fold is NULL, so the row drops."""
-    _seed_file_without_observation(catalog_db)
-    rows = _entries(catalog_db, search_text="keroro")
-    assert rows == ()
 
 
 def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalog_db: Path) -> None:
@@ -231,8 +173,8 @@ def test_read_catalog_entries_observation_tie_break_on_the_newest_variant(catalo
                 filename=name,
                 observed_at="2026-07-03T10:00:00.000000+00:00",
             )
-    rows = _entries(catalog_db)
-    assert _latest_filename(rows[0]) == "second.avi"
+    [entry] = _entries(catalog_db)
+    assert entry.latest_observation.reported_file.filename == "second.avi"
 
 
 def _history(catalog_db: Path, *, native_id: str) -> FileHistory | None:
@@ -241,19 +183,9 @@ def _history(catalog_db: Path, *, native_id: str) -> FileHistory | None:
         return reader.read_file_history(file_id(native_id), since=_EPOCH, until=_YEAR_3000)
 
 
-def test_file_history_of_a_file_never_seen_has_no_observation(catalog_db: Path) -> None:
+def test_file_history_of_a_file_never_observed_is_none(catalog_db: Path) -> None:
     h = _seed_file_without_observation(catalog_db)
-    file_history = _history(catalog_db, native_id=h)
-    assert file_history is not None
-    assert (
-        file_history.observations,
-        file_history.latest_observation,
-        file_history.known_filenames,
-    ) == (
-        (),
-        None,
-        (),
-    )
+    assert _history(catalog_db, native_id=h) is None
 
 
 # ---------------------------------------------------------------------------

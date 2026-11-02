@@ -56,7 +56,6 @@ _DECISION = DatedDecision(
 )
 _HISTORY = FileHistory(
     file=_FILE,
-    size_bytes=100,
     observations=(_OBSERVATION,),
     latest_observation=_OBSERVATION,
     decisions=(_DECISION,),
@@ -243,25 +242,14 @@ def test_the_explanation_judges_the_latest_observations_duration_and_bitrate() -
     assert description.explanation.tokens_matched == ("dense", "keroro", "long")
 
 
-def test_a_file_without_a_decision_or_never_seen_has_no_explanation() -> None:
-    for file_history in (
-        FileHistory(
-            file=_FILE,
-            size_bytes=100,
-            observations=(_OBSERVATION,),
-            latest_observation=_OBSERVATION,
-            decisions=(),
-            known_filenames=("keroro.avi",),
-        ),
-        FileHistory(
-            file=_FILE,
-            size_bytes=100,
-            observations=(),
-            latest_observation=None,
-            decisions=(_DECISION,),
-            known_filenames=(),
-        ),
-    ):
-        description = _describe(FakeCatalogFileReader(file_history=file_history))
-        assert description is not None
-        assert description.explanation is None
+def test_a_file_without_a_decision_has_no_explanation() -> None:
+    file_history = FileHistory(
+        file=_FILE,
+        observations=(_OBSERVATION,),
+        latest_observation=_OBSERVATION,
+        decisions=(),
+        known_filenames=("keroro.avi",),
+    )
+    description = _describe(FakeCatalogFileReader(file_history=file_history))
+    assert description is not None
+    assert description.explanation is None
