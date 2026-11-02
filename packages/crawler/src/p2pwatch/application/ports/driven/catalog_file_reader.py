@@ -44,7 +44,8 @@ class CatalogFileReader(ABC):
     def read_file_count_by_tier(
         self, *, target_id: TargetId | None, search_text: str | None
     ) -> Mapping[DecisionTier, int]:
-        """By tier, how many files passing the filters hold a current decision of that tier."""
+        """By tier, how many files passing the filters hold a current decision of that tier; a
+        tier no file holds is absent, not 0."""
 
     @abstractmethod
     def read_file_history(
