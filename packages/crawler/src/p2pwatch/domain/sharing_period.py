@@ -20,8 +20,10 @@ class PeriodWindow:
 
 @dataclass(kw_only=True, frozen=True)
 class SharingPeriod:
-    """One source's consecutive readings on one file by one node; only a sending period received
-    bytes."""
+    """One source's consecutive readings on one file by one node, a source without a user hash
+    known by its name, cut where its role or its reading changes but for the received bytes, where
+    a gap passes the window's or where the received bytes drop; only a sending period received
+    bytes, their growth over it."""
 
     file: FileKey
     source: SourceKey | None  # None for a source without a user hash
