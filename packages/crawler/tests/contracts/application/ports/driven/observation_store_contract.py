@@ -83,6 +83,21 @@ class ObservationStoreContract(ABC):
         writer.record_observation(seen_again)
         assert reader.read_latest_observation(file) == seen_again
 
+    def test_a_later_report_at_another_size_is_read_at_the_file_s_first_size(
+        self, *, randomness: Random, writer: ObservationWriter, reader: ObservationReader
+    ) -> None:
+        file = draw_file(randomness)
+        first, later = (
+            draw_file_observation(randomness, file=file, has_media=True, observed_at=observed_at)
+            for observed_at in draw_instants(randomness, count=2)
+        )
+        size_bytes = later.reported_file.size_bytes + 1
+        writer.record_observation(first)
+        writer.record_observation(
+            replace(later, reported_file=replace(later.reported_file, size_bytes=size_bytes))
+        )
+        assert reader.read_latest_observation(file) == later
+
     def test_the_best_observation_is_the_most_sourced_though_not_the_latest(
         self, *, randomness: Random, writer: ObservationWriter, reader: ObservationReader
     ) -> None:

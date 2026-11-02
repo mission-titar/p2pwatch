@@ -181,7 +181,7 @@ a function does.
 | `contact point` | `ContactPoint`, the server a source connects through, as its network names one (`ip:port` on eD2k), built only valid: `parse_contact_point` gives `None` for any other text | a peer's address, which the catalog never stores |
 | `latest point` | `LatestPoint`, a source's latest point under one of its variants: its role, its instant, its session's received bytes; `carried_role` carries its role to a reading in a passing state, `EarlierPoints.of` reduces a source's earlier ones | `last point` |
 | `reported file` | `ReportedFile`, what the network reports of a file, with no instant: the mapper builds it, a `SearchAnswer` carries it | `observation` |
-| `observation` | `FileObservation`, a reported file, its `observed_at`, the instant the crawler learned of it, stamped right before the write, and its node; every catalog read returns it whole | a reported file, `sighting` |
+| `observation` | `FileObservation`, a reported file, its `observed_at`, the instant the crawler learned of it, stamped right before the write, and its node; every catalog read returns it whole, at the size its file was first recorded at | a reported file, `sighting` |
 | `cataloguer` | `Cataloguer`, records a reported file as an observation, then has the file judge judge it again | `record_observation`, which is the Writer's |
 | `file judge` | `FileJudge`, judges a file on every filename the catalog knows and records the decisions that changed, built once and shared by the cataloguer and the reevaluation | a decision helper |
 | `candidate` | a `FileCandidate`, one name of a file and its metadata, the matcher's input; a `DownloadCandidate` is a file with a download-tier decision | `names` |

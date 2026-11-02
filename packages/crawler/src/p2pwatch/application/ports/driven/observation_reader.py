@@ -8,7 +8,8 @@ from p2pwatch.domain.observation import FileObservation
 
 
 class ObservationReader(ABC):
-    """Reads a file's observations; every read returns a :class:`FileObservation` whole."""
+    """Reads a file's observations; every read returns a :class:`FileObservation` whole, at the
+    size its file was first recorded at."""
 
     @abstractmethod
     def read_latest_observation(self, file: FileKey) -> FileObservation | None:
