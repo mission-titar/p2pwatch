@@ -1,0 +1,3 @@
+Operator need: when the aMule container starts, its log should state which amuled build it runs (what `amuled --version` prints), so that an operator reading `docker logs` can tell which aMule they run when reporting a problem. If amuled cannot tell its version (the command fails or prints nothing), the container still boots, and the log says the version is unknown.
+
+Implement it in this repository, with its tests. You are done when `uv run pytest --no-cov` passes from packages/amule. Do not run `poe lint-all`, `poe check` or any other static check (ruff, mypy, ast-grep, tach, vulture): I run them myself afterwards. Run one command per Bash call. Do not commit and do not push. Finish with a short report of what you changed.
