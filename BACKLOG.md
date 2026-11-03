@@ -20,9 +20,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
   its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`.
 
-- **aMule 3.2.0 pinned**: `ARG AMULE_VERSION` and `ARG AMULE_COMMIT` moved from 3.1.0 to 3.2.0, which fixes 15
-  advisories, by the weekly bump or by hand. `packages/amule/Dockerfile`, `.github/workflows/amule-bump.yml`.
-
 ## Features
 
 - **Multi network**: a generic core driving one container per P2P client, renamed p2pwatch.
