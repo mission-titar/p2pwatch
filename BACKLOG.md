@@ -12,8 +12,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 ## Debt
 
-- **Measure which rules of `.claude/CLAUDE.md` change an agent's result**, to cut the ones Sonnet and Opus follow anyway:
-  method and costs in `agents/handoffs/2026-11-03 - handoff - instruction file trim.md`.
 - **Test quality** (lot 3 of the gate tooling umbrella): every unit test keeps unique coverage of its unit, the others are
   pruned, mutmut proving no detected mutant is lost. D3 to D5 and D13 to D15 of `agents/specs/2026-10-14-gate-tooling-and-test-quality.md`, lot order in D12.
 
