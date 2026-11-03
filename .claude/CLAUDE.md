@@ -76,6 +76,7 @@ The project's glossary (the shared words, what each means, what it is never call
 |---|---|
 | `amule-container.md` | `packages/amule/`, `.github/` |
 | `amuleapi.md` | the amuleapi adapter, its tests and `FakeAmuleApiServer`, `packages/amule/`, `agents/reference/` |
+| `coverage.md` | every package's `src` and `tests` |
 | `deploy.md` | `deploy/`, the config adapter, matching's tests |
 | `docs.md` | `docs/` |
 | `glossary.md` | `packages/`, `agents/specs/` |

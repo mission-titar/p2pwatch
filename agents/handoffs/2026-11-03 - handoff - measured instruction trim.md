@@ -5,7 +5,8 @@
 `.claude/CLAUDE.md` is cut from 35 KB to 10 KB on measurement: what stays changed an agent's result, what left did
 not, or the gate catches it within a few turns. The design invariants that concern one subsystem moved to seven new
 path-scoped rules (`amule-container`, `deploy`, `docs`, `merge`, `packaging`, `stores`, `text-encoding`); two stay in the
-default context (no peer address in the catalog, no read of downloaded bytes). `coverage.md` is deleted.
+default context (no peer address in the catalog, no read of downloaded bytes). `coverage.md` stays: the arms removed it with
+the coverage rule, but no task met its pitfalls, which the code does not show.
 
 ## Method
 
