@@ -7,4 +7,8 @@ from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 
 def test_reports_the_free_bytes_of_the_filesystem_holding_the_path(tmp_path: Path) -> None:
     free_space_meter: FreeSpaceMeter = ShutilFreeSpaceMeter(tmp_path)
-    assert free_space_meter.free_bytes() == shutil.disk_usage(tmp_path).free
+    # The filesystem is live: the reading lies between two direct reads around it.
+    before = shutil.disk_usage(tmp_path).free
+    reading = free_space_meter.free_bytes()
+    after = shutil.disk_usage(tmp_path).free
+    assert min(before, after) <= reading <= max(before, after)

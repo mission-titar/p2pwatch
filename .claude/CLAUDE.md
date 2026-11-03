@@ -4,7 +4,7 @@
 
 `p2pwatch` continuously surveils the eMule network (eD2k + Kad, via an aMule client driven over amuleapi, its REST surface) to recover lost-media episodes of the French dub of *Keroro mission Titar* (aired 2008 on Teletoon), cataloguing all available metadata along the way.
 
-A virtual uv workspace of eight packages under `packages/`: the crawler `p2pwatch` (with its in-process webui), `p2pwatch_amule` (the aMule container's boot step and port-sync), `catalog_matching` (the matching engine, shared domain), `pytest_settings` (shared test configuration), and four dev/CI tooling packages never shipped in a prod image (`vex_checks`, `template_checks`, `coverage_checks`, `amule_bump`). A node is two images, two containers: the core `p2pwatch` and `p2pwatch-amule` (compose service `ed2k`), which the core reaches at `ed2k:4711`.
+A uv workspace of eight packages under `packages/`: the crawler `p2pwatch` (with its in-process webui), `p2pwatch_amule` (the aMule container's boot step and port-sync), `catalog_matching` (the matching engine), `pytest_settings` (shared test configuration), and four `*_checks` / `amule_bump` dev tooling packages never shipped in a prod image. A node is two containers: the core `p2pwatch` and `p2pwatch-amule` (compose service `ed2k`).
 
 ## Orientation
 
@@ -13,11 +13,10 @@ The live state, history, and recommended next step are deliberately **not** in t
 - `agents/handoffs/`: one continuation guide per lot (`<ISO date> - handoff - <context>.md`). **The newest is the entry point**: current state, what was just built, learned pitfalls, next step, and what is *not yet validated against real hardware*.
 - `agents/workflow.md`: how work moves (tiers, phases, the stacked blocks, pull request bodies, Wrap, defect classes, evidence, review findings). **Read it before starting a lot or a block.**
 - `agents/specs/2026-06-10-crawler-mvp-design.md`: the authoritative MVP design (17 sections). Other dated specs in that dir record each subsystem's design + decisions; `agents/plans/` is historical, no plan is written since a tier Spec lot's spec is its brief.
-- `docs/contributing/testing.md`: every test suite (unit + the integration markers), prerequisites, CI pistes.
-- `docs/install.md`: bring a node up (the include layout and its direct/vpn variants, secrets, first boot); `docs/operate.md`: operate & tune one (lifecycle, metrics, catalog tools); `docs/high-id.md`, `docs/limits.md`, `docs/migration-4x.md` (4.x single container to the two-container layout); `docs/troubleshooting.md`: symptom → cause → fix entries (any level).
-- `agents/reference/`: dated empirical findings about amuled. The EC notes there are a historical record since the 2026-09-22 migration to amuleapi; the live API reference is aMule's own `docs/api/REFERENCE.md`, in the source tree the image builds from.
+- `docs/`: the operator's site (install, operate, troubleshooting); `docs/contributing/testing.md`: every test suite, the integration markers, prerequisites.
+- `agents/reference/`: dated empirical findings about amuled; the live API reference is aMule's own `docs/api/REFERENCE.md`, in the source tree the image builds from.
 - `BACKLOG.md` (repo root): what the project intends to do next, one entry of at most two lines each, linking the spec that holds the detail. **Read it before proposing work**, and write to it only after the operator has agreed. It carries no history: an entry is deleted when it ships or is dropped, never annotated. What reaches it (defect class 3, a review finding's exit) is in `agents/workflow.md`.
-- `git tag`: releases are annotated `vX.Y.Z`, **pushed**, with the milestone name in the tag MESSAGE (`v1.0.1 - performance patch`), not in the tag itself. Pushing the tag is what publishes the versioned image: `release.yml` triggers on `v*`, publishing `X.Y.Z` **and** `latest`, then the GitHub release (title and notes from the tag message). Every push to `main` publishes `main`/`sha-<short>` and nothing else: `latest` means the newest release, never the tip of `main`, so an unreleased build is tested through the `main` tag. A release is the operator's decision, which the lead proposes after a lot's stack merges (`agents/workflow.md`, Wrap).
+- Releases: an annotated tag `vX.Y.Z`, **pushed**, the milestone in its message (`v1.0.1 - performance patch`), publishes the image and the GitHub release. `latest` is the newest release, never the tip of `main`, which is tested through the `main` tag. A release is the operator's decision (`agents/workflow.md`, Wrap).
 - `SECURITY.md`: the signed images, their SBOMs and VEX files.
 
 ## Design invariants
@@ -37,7 +36,9 @@ uv run poe fix       # auto-fix everything mechanical: ruff --fix + ruff format 
 
 **Before hand-fixing lint / formatting / SQL, run `uv run poe fix`**: don't spend turns rewriting by hand what a fixer applies mechanically; review its diff instead.
 
-**The gate is PER PACKAGE** (`cd packages/<pkg> && uv run pytest`). The intent: each package owns its own pytest config and 100 % branch coverage in isolation: a root run would mix coverage data across packages and break the per-package threshold. A bare `uv run pytest` from the repo root is also blocked mechanically (the root has no `[tool.pytest.ini_options]` and a root `conftest.py` sets `collect_ignore_glob = ["packages/*"]` → exit 5 with zero collected). Every `tests/` directory is a package (data directories such as matching's `tests/fixtures` aside), so a test module is `tests.<path>`, imports its helpers as such (`from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient`), and may share its basename with a test module of another directory or package.
+**`poe check` ends with `GATE GREEN`**; red, its last lines name every failed static check (`Subtasks 'lint', 'type-check' returned non-zero`), each one's output above: don't pipe it through `tail` and rerun it to find out.
+
+**The gate is PER PACKAGE** (`cd packages/<pkg> && uv run pytest`; a root `pytest` collects nothing). Every `tests/` directory is a package, so a test module is `tests.<path>` and imports its helpers as such (`from tests.fakes.adapters.driven.fake_upstream_client import FakeUpstreamClient`).
 
 **Single test** (the package-wide `--cov-fail-under=100` makes a lone test "fail": disable coverage):
 
@@ -45,7 +46,7 @@ uv run poe fix       # auto-fix everything mechanical: ruff --fix + ruff format 
 ( cd packages/matching && uv run pytest tests/domain/test_engine.py::test_evaluate_real_62a_is_download_via_first_rule_on_62a --no-cov -q )
 ```
 
-Integration suites (Docker, deselected by default, excluded from coverage) are documented in `docs/contributing/testing.md`. They run locally, Docker Desktop included; only the compose smoke's completion test fails under Docker Desktop (its bind mount keeps SQLite's `-shm` incoherent), and CI is authoritative for it.
+Integration suites (Docker, deselected by default): `docs/contributing/testing.md`.
 
 ## Hard rules
 
@@ -55,9 +56,8 @@ Integration suites (Docker, deselected by default, excluded from coverage) are d
 - **A test never patches a module** (`monkeypatch`, `unittest.mock.patch`): what it tunes is a parameter, a port or a callback `Protocol`.
 - **Only the clock adapters read the system clock or sleep**: everything else injects `WallClock` or `MonotonicClock`.
 - **No I/O in the core**: `domain/` and `application/` import only what `ast-grep/rules/*-imports.yml` lists; a module that does I/O is an adapter.
-- **Python only** (>=3.13). Conventional commits (`feat(domain):`, `fix(domain):`, `test:`, `chore:`, `docs:`).
+- **Python only** (>=3.13), conventional commits.
 - **One named teammate per block of a tier Spec lot** (Act) and **the holistic review once per tier Spec lot**, at the head of Wrap over the top of the stack (`agents/workflow.md`): the cross-cutting review regularly catches bugs, don't skip it. A lot of one block is offered its waiver and the operator decides; tier Direct has none.
-- For library/framework/CLI questions, use the current docs, not recalled knowledge.
 
 ## Naming
 
@@ -70,7 +70,7 @@ The project's glossary (the shared words, what each means, what it is never call
 
 ## Path-scoped rules
 
-`.claude/rules/` holds what matters for one part of the tree only. Claude Code loads each file when its Read, Edit or Write tool touches a matching path; **Serena's tools load none**, so before working in one of these paths through Serena alone, Read its file first.
+Claude Code loads each file when its Read, Edit or Write tool touches a matching path; **Serena's tools load none**: before working in one of these paths through Serena alone, Read its file first.
 
 | File | Paths |
 |---|---|
