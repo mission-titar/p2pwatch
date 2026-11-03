@@ -4,4 +4,4 @@
 -- The sqlite dialect of sqlfluff does not parse VACUUM, hence the noqa.
 VACUUM; -- noqa: PRS
 -- The crawler holds its connection for good, so the WAL the VACUUM grew would never shrink.
-PRAGMA wal_checkpoint(TRUNCATE);
+PRAGMA wal_checkpoint (TRUNCATE);

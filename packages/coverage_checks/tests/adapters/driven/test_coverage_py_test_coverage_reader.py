@@ -192,7 +192,8 @@ def test_a_data_file_that_is_no_coverage_database_is_a_broken_input_naming_it(
     data_file = re.escape(repr(str(tmp_path / ".coverage")))
 
     with pytest.raises(
-        BrokenInputError, match=f"^Couldn't use data file {data_file}: file is not a database$"
+        BrokenInputError,
+        match=f"^Couldn't use data file {data_file}: file is not a database: \\(SQLITE_NOTADB\\)$",
     ):
         _reader(tmp_path).read_test_coverage_by_module({PurePath("src/pkg/sizes.py"): ()})
     gc.collect()  # a connection left open warns as it is collected, failing this test
