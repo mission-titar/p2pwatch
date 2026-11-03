@@ -111,8 +111,8 @@ lint           = { cmd = "ruff check .", help = "Lint Python with ruff" }
 format-check   = { cmd = "ruff format --check .", help = "Check Python formatting with ruff" }
 sql-lint       = { cmd = "sqlfluff lint packages/crawler/src", help = "Lint the embedded SQLite migrations" }
 # The rule tests check each case's verdict, without snapshots of the messages.
-code-pattern-check = { help = "Ban dynamic attribute access, module patching, Protocol ports, dataclasses not keyword-only, SQLite connections opened outside the opener, OR IGNORE in a string, literal logger names and option defaults, Readers' and Writers' other verbs, and the core's other imports and I/O builtins (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }] }
-architecture-check = { help = "Check the imports between rings, adapters and hexagons (tach, tach.toml)", sequence = [{ cmd = "tach check" }, { cmd = "tach check-external" }] }
+code-pattern-check = { help = "Ban dynamic attribute access, module patching, Protocol ports, dataclasses not keyword-only, SQLite connections opened outside the opener, OR IGNORE in a string, literal logger names and option defaults, Readers' and Writers' other verbs, and the core's other imports and I/O builtins (ast-grep, sgconfig.yml), rules tested first", sequence = [{ cmd = "ast-grep test --skip-snapshot-tests" }, { cmd = "ast-grep scan" }], ignore_fail = "return_non_zero" }
+architecture-check = { help = "Check the imports between rings, adapters and hexagons (tach, tach.toml)", sequence = [{ cmd = "tach check" }, { cmd = "tach check-external" }], ignore_fail = "return_non_zero" }
 template-check = { cmd = "python -m template_checks logic-free packages/crawler/src/p2pwatch/adapters/driving/webui/templates", help = "Assert webui templates carry no logic" }
 _template-attributes = { cmd = "python -m template_checks template-attributes packages/crawler/src/p2pwatch/adapters/driving/webui/templates" }
 dead-code-check = { shell = 'vulture --ignore-names "$TEMPLATE_ATTRIBUTES"', uses = { TEMPLATE_ATTRIBUTES = "_template-attributes" }, help = "Find code no production path reaches (vulture on src, the templates' attributes ignored)" }
@@ -123,9 +123,11 @@ format-fix     = { cmd = "ruff format .", help = "Apply ruff formatting" }
 sql-fix        = { cmd = "sqlfluff fix packages/crawler/src", help = "Auto-fix the SQLite migrations" }
 docs-build     = { cmd = "zensical build --clean --strict", help = "Build the documentation site (fails on broken links)" }
 docs-serve     = { cmd = "zensical serve", help = "Preview the documentation site locally" }
-lint-all       = { help = "Run every static check (no tests)", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "architecture-check", "dead-code-check", "type-check", "pyrefly-check", "sql-lint", "template-check"] }
+# Every check runs even after one fails, so one run names them all in its last line.
+lint-all       = { help = "Run every static check (no tests), all of them even after one fails", sequence = ["lint", "format-check", "dependency-check", "code-pattern-check", "architecture-check", "dead-code-check", "type-check", "pyrefly-check", "sql-lint", "template-check"], ignore_fail = "return_non_zero" }
 fix            = { help = "Auto-fix everything mechanical (ruff lint + format + sqlfluff)", sequence = ["lint-fix", "format-fix", "sql-fix"], ignore_fail = "return_non_zero" }
-check          = { help = "The full gate: every static check + all unit tests", sequence = ["lint-all", "test"] }
+check          = { help = "The full gate: every static check + all unit tests, ending with GATE GREEN", sequence = ["lint-all", "test", "_gate-green"] }
+_gate-green    = { cmd = "echo GATE GREEN", help = "The line only a green gate prints" }
 
 # Every `src`, no tests (code only tests reach is dead), in one run: a package's API serves another.
 # Not `pytest_settings`: test configuration, whose hook pytest calls by name.
@@ -145,6 +147,7 @@ min_confidence = 60
 # deptry has no notion of test code: `src` alone against the runtime dependencies (DEP004 on a
 # test-only import), then `src` and `tests` against them plus the `dev` group.
 [tool.poe.tasks.dependency-check]
+ignore_fail = "return_non_zero"
 help = "Check each package's declared dependencies against its imports (deptry)"
 sequence = [
   { cmd = "deptry src", cwd = "packages/matching" },
@@ -167,6 +170,7 @@ sequence = [
 
 # One mypy run per package, since every package's tests are a package named `tests`.
 [tool.poe.tasks.type-check]
+ignore_fail = "return_non_zero"
 help = "Type-check each package with mypy (strict, src + tests)"
 sequence = [
   { cmd = "mypy src tests", cwd = "packages/matching" },
@@ -181,6 +185,7 @@ sequence = [
 
 # One run per package, each from its own `[tool.pyrefly]`: pyrefly's sub-configs cannot change import paths.
 [tool.poe.tasks.pyrefly-check]
+ignore_fail = "return_non_zero"
 help = "Check each package's imports with pyrefly (src + tests), the resolution Serena's renames rely on"
 sequence = [
   { cmd = "pyrefly check", cwd = "packages/matching" },
@@ -195,6 +200,7 @@ sequence = [
 
 # `test` runs each package's suite in its own process (cwd) so per-package coverage
 # stays isolated: a single root pytest run would mix coverage and break --cov-fail-under=100.
+# It stops at the first failing suite: `_unit-coverage-check` reads a complete `.coverage`.
 [tool.poe.tasks.test]
 help = "Run every package's unit suite (per-package 100% branch coverage) and the VEX source rules' tests, then each module's by its own tests"
 sequence = [
@@ -212,6 +218,7 @@ sequence = [
 
 # Private: poe runs it only inside `test`, so it never reads a stale or partial `.coverage`.
 [tool.poe.tasks._unit-coverage-check]
+ignore_fail = "return_non_zero"
 help = "Check each module is covered by its own tests, the test files mirroring src"
 sequence = [
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/matching" },
