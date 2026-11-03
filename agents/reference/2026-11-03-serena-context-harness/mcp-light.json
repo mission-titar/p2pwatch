@@ -1,0 +1,1 @@
+{"mcpServers": {"serena": {"type": "stdio", "command": "serena", "args": ["start-mcp-server", "--context=/tmp/claude-1000/-home-geoffrey-Repositories-emule-indexer/0a9e6c25-0edf-4b9b-a8be-a1dd3bc26942/scratchpad/trim2/light-context.yml", "--project-from-cwd"], "env": {}}}}

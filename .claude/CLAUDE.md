@@ -14,7 +14,7 @@ The live state, history, and recommended next step are deliberately **not** in t
 - `agents/workflow.md`: how work moves (tiers, phases, the stacked blocks, pull request bodies, Wrap, defect classes, evidence, review findings). **Read it before starting a lot or a block.**
 - `agents/specs/2026-06-10-crawler-mvp-design.md`: the authoritative MVP design (17 sections). Other dated specs in that dir record each subsystem's design + decisions; `agents/plans/` is historical, no plan is written since a tier Spec lot's spec is its brief.
 - `docs/`: the operator's site (install, operate, troubleshooting); `docs/contributing/testing.md`: every test suite, the integration markers, prerequisites.
-- `agents/reference/`: dated empirical findings about amuled; the live API reference is aMule's own `docs/api/REFERENCE.md`, in the source tree the image builds from.
+- `agents/reference/`: dated empirical findings (amuled, the instruction measurements); the live API reference is aMule's own `docs/api/REFERENCE.md`, in the source tree the image builds from.
 - `BACKLOG.md` (repo root): what the project intends to do next, one entry of at most two lines each, linking the spec that holds the detail. **Read it before proposing work**, and write to it only after the operator has agreed. It carries no history: an entry is deleted when it ships or is dropped, never annotated. What reaches it (defect class 3, a review finding's exit) is in `agents/workflow.md`.
 - Releases: an annotated tag `vX.Y.Z`, **pushed**, the milestone in its message (`v1.0.1 - performance patch`), publishes the image and the GitHub release. `latest` is the newest release, never the tip of `main`, which is tested through the `main` tag. A release is the operator's decision (`agents/workflow.md`, Wrap).
 - `SECURITY.md`: the signed images, their SBOMs and VEX files.
@@ -47,6 +47,8 @@ uv run poe fix       # auto-fix everything mechanical: ruff --fix + ruff format 
 ```
 
 Integration suites (Docker, deselected by default): `docs/contributing/testing.md`.
+
+**Symbols through Serena** (`find_symbol`, `find_referencing_symbols`, `rename_symbol`), backed by the language server: it sees every reference and every override, `grep` sees strings. Read `.claude/rules/serena.md` before a rename.
 
 ## Hard rules
 

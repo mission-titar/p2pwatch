@@ -1,0 +1,14 @@
+# The light arm's Serena prompts: what the tools are for, in a few lines, no insistence.
+prompts:
+  connection_prompt: |
+    Serena's tools see the code through the language server: symbols, references, overrides, renames. `initial_instructions` describes them in a few lines.
+  system_prompt: |
+    Serena's tools see the code through the language server. `get_symbols_overview` gives a file's symbols,
+    `find_symbol` a definition (`include_body=True` for its code, `depth=1` for a class's members),
+    `find_referencing_symbols` every reference and override, `rename_symbol` a rename that reaches them all,
+    `replace_symbol_body` and `insert_after_symbol` edits at the symbol level. Line numbers are 0-based.
+    Independent calls can be issued in one turn.
+
+    {{ context_system_prompt }}
+  cc_system_prompt_override: |
+    Unused in this arm.

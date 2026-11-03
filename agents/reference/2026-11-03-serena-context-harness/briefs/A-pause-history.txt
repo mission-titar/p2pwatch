@@ -1,0 +1,3 @@
+Operator need: on the node page of the web UI, an operator wants to see when the crawl was last paused and when it was last resumed from the web UI's controls, each with its date and time. Both must survive a restart of the node: a container recreated over the same data volume still shows them. A node never paused shows that it never was.
+
+Implement it in this repository, with its tests. You are done when `uv run pytest --no-cov` passes from packages/crawler. Do not run `poe lint-all`, `poe check` or any other static check (ruff, mypy, ast-grep, tach, vulture): I run them myself afterwards. Run one command per Bash call. Do not commit and do not push. Finish with a short report of what you changed.

@@ -1,0 +1,3 @@
+before launch: 5h 36% week 45% 2026-11-03T16:12:54+01:00
+after runs: 2026-11-03T16:33:39+01:00
+after runs: 5h 56% week 47% (measurement: 20 points of the 5-hour window, 2 of the week, this session's own work included)
