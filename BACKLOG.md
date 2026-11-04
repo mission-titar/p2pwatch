@@ -17,8 +17,11 @@ An agent adds an entry only after the operator has agreed to it.
 
 ## Must be done before the next release
 
-- **The Grype scan back on p2pwatch at the v5 release**: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
-  its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`.
+- **v5 release readiness**: seven thematic lots (aMule container, migration and first start, config validation, fault
+  isolation, webui, release chain, migration guide), then release candidates checked on the operator's node. Umbrella spec: `agents/specs/2026-11-04-v5-release-readiness.md`.
+
+- **The Grype scan back on p2pwatch right after the v5.0.0 tag**, once `latest` is published: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
+  its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`, D21 of `agents/specs/2026-11-04-v5-release-readiness.md`.
 
 ## Features
 
