@@ -10,7 +10,7 @@ pytest-settings = { workspace = true }
 [dependency-groups]
 dev = [
   "deptry>=0.25.1",
-  "mypy>=2.4.0",
+  "mypy>=2.4.1",
   "ruff>=0.17.3",
   "sqlfluff>=4.4.0",
   "types-pyyaml>=6.0.12.20260906",
