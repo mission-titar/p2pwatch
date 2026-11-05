@@ -42,6 +42,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import tomllib
 import uuid
 from collections.abc import Iterator, Mapping
 from functools import partial
@@ -493,7 +494,7 @@ def _render(variant: str, *, tmp_path: Path) -> Any:
     assert compose_run.returncode == 0, compose_run.stderr
     rendered = json.loads(compose_run.stdout)
     assert not rendered.get("volumes"), f"named volumes are gone, got {rendered['volumes']}"
-    return rendered["services"]
+    return rendered
 
 
 def _binds(service: Any) -> dict[str, tuple[Path, bool]]:
@@ -509,7 +510,7 @@ def _ports(service: Any) -> set[tuple[int, str]]:
 @pytest.mark.parametrize("variant", _VARIANTS)
 def test_the_deploy_layout_renders(*, variant: str, tmp_path: Path) -> None:
     """The core and `ed2k` render from deploy/compose.yml, `ed2k` from its own directory."""
-    services = _render(variant, tmp_path=tmp_path)
+    services = _render(variant, tmp_path=tmp_path)["services"]
     ed2k_directory = tmp_path / "ed2k"
     core, ed2k = services[_CORE], services[_AMULE]
 
@@ -523,6 +524,8 @@ def test_the_deploy_layout_renders(*, variant: str, tmp_path: Path) -> None:
     assert _binds(core)["/data"] == (tmp_path / "data", False)
     assert "network_mode" not in core  # the core stays outside the tunnel
     assert _ports(core) == {(8080, "tcp")}
+    # A dead service restarts the container through this policy alone: the smoke sets none.
+    assert ed2k["restart"] == "unless-stopped"
 
     if variant == "direct":
         assert set(services) == {_CORE, _AMULE}
@@ -536,6 +539,22 @@ def test_the_deploy_layout_renders(*, variant: str, tmp_path: Path) -> None:
     gluetun = services["ed2k-gluetun"]
     assert _ports(gluetun) == {(4711, "tcp")}
     assert "ports" not in ed2k
+    assert gluetun["restart"] == "unless-stopped"
+
+
+def test_gluetun_opens_only_the_forwarded_port_read(tmp_path: Path) -> None:
+    """Every container of the compose network reaches gluetun's control server: one role opens."""
+    rendered = _render("vpn", tmp_path=tmp_path)
+    gluetun = rendered["services"]["ed2k-gluetun"]
+
+    # Kept, the default role takes every route no file role names, `PUT /v1/vpn/status` included.
+    assert "HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE" not in gluetun["environment"]
+    [mount] = gluetun["configs"]
+    assert mount["target"] == "/gluetun/auth/config.toml"
+    roles = tomllib.loads(rendered["configs"][mount["source"]]["content"])
+    assert roles == {
+        "roles": [{"name": "port-sync", "auth": "none", "routes": ["GET /v1/portforward"]}]
+    }
 
 
 # --- Completion scenario (scope-reduction spec §4) ---------------------------------------------
