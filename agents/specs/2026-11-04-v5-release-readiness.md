@@ -45,7 +45,8 @@ one or more release candidates tested on the operator's own node.
   is to run two processes and restart the one that dies; a container restart does it with less code, removes the
   port race by construction (every process dies before the new ones start), and gives both containers one model:
   Docker is the only supervisor.* The cost, accepted: a port-sync bug restarts amuled too, which reconnects to eD2k
-  and Kad; it shows in the container's restart count, and lot 4 makes the port-sync robust to its own errors.
+  and Kad; it shows in the container's restart count, and lot 4 makes the port-sync robust to its own errors. (Corrected: replaced by lot 1's D3, s6 kept with a
+  `finish` per service that brings the container down, exit 0; `agents/specs/2026-11-04-v5-amule-container.md`.)
 - **D2. The ed2k healthcheck also requires amuleapi to answer.** *Today it checks amuled alone, so a container whose
   crawler has lost aMule reports `healthy`.*
 
@@ -180,7 +181,7 @@ Commands for each row: appendix C. The audit's instruments are committed under
 | The 4.x `crawler.yml` and `matcher.yml` left unmigrated | one refusal per run | every refusal in one run |
 | `merge --into` a running node's catalog | the crawler loses writes | refused |
 | amuleapi stopped inside `ed2k` | `healthy` | `unhealthy` |
-| The port-sync killed inside `ed2k` | s6 restarts it alone | the container exits in error and Docker restarts it |
+| The port-sync killed inside `ed2k` | s6 restarts it alone | the container exits and Docker restarts it (Corrected: exit 0, lot 1's D3) |
 | `docker compose stop ed2k` | amuled shuts down cleanly | amuled shuts down cleanly |
 
 ### In tests and CI
@@ -229,8 +230,8 @@ re-measures what it acts on.
 - MAJOR: Dependabot has never updated `packages/amule/Dockerfile` (its `uv` is 0.12.21, the crawler's 0.13.6); cause
   unproven.
 - MINOR: `AMULE_API_PASSWORD` passes on amuleapi's argv; `--set-admin-pass-stdin` exists at the pin.
-- MINOR, unproven: after a container restart the port-sync can call s6 before `s6-supervise` listens (moot with D24).
-- Facts for D24: s6's four roles today are running amuled and the port-sync side by side, restarting the one that
+- MINOR, unproven: after a container restart the port-sync can call s6 before `s6-supervise` listens (moot with D24). (Corrected: D24 replaced by lot 1's D3; closes with lot 1's block 70.)
+- Facts for D24 (Corrected: D24 replaced by lot 1's D3, s6 kept): s6's four roles today are running amuled and the port-sync side by side, restarting the one that
   dies, letting the port-sync stop and start amuled (gone with D1), and the healthcheck's `s6-svstat` (gone with D2).
   A manual `s6-svc -r` of amuled never lost the API in 12 runs (s6 respawns about 1 s after the signal, the old
   amuleapi exits in 145 to 475 ms): a margin, not a guarantee, which a container restart makes moot. Waiting on the
@@ -361,7 +362,7 @@ a test can hold them.
 | Unmigrated config | `validate-config` on the 4.x files; fails if any of the 13 refusals is missing from one run |
 | `merge` on a running node | `docker compose exec p2pwatch python -m p2pwatch merge --into /data/catalog.db ...`; fails if it runs |
 | amuleapi stopped | kill amuleapi inside `ed2k`, `docker inspect` health after the interval; fails on `healthy` |
-| Port-sync killed | kill the port-sync inside `ed2k`; `docker inspect -f '{{.RestartCount}}'` rises and `ed2k` is healthy again; fails if the container stays up without a port-sync |
+| Port-sync killed | kill the port-sync inside `ed2k`; `docker inspect -f '{{.RestartCount}}'` rises and `ed2k` is healthy again; fails if the container stays up without a port-sync (Corrected: held by lot 1's CI rows) |
 | `ed2k` stopped | `docker compose stop ed2k`, then its log; fails without `aMule shutdown completed` |
 | Error in one channel | a test injecting a failing kad client; fails if the ed2k searches stop |
 | Slow page | a test sleeping 10 s in one page while timing `/health`; fails at 100 ms or more |
