@@ -58,6 +58,7 @@ Integration suites (Docker, deselected by default): `docs/contributing/testing.m
 - **A test never patches a module** (`monkeypatch`, `unittest.mock.patch`): what it tunes is a parameter, a port or a callback `Protocol`.
 - **Only the clock adapters read the system clock or sleep**: everything else injects `WallClock` or `MonotonicClock`.
 - **No I/O in the core**: `domain/` and `application/` import only what `ast-grep/rules/*-imports.yml` lists; a module that does I/O is an adapter.
+- **Strict TDD**: write the failing test first, watch it fail, then the minimal code that passes it.
 - **Python only** (>=3.13), conventional commits.
 - **One named teammate per block of a tier Spec lot** (Act) and **the holistic review once per tier Spec lot**, at the head of Wrap over the top of the stack (`agents/workflow.md`): the cross-cutting review regularly catches bugs, don't skip it. A lot of one block is offered its waiver and the operator decides; tier Direct has none.
 
