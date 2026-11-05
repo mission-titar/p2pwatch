@@ -17,13 +17,14 @@ class CommandRunner(Protocol):
         group: Gid,
         extra_groups: Sequence[Gid],
         env: Mapping[str, str],
+        input: str,
         check: bool,
         text: Literal[True],
     ) -> subprocess.CompletedProcess[str]: ...
 
 
 class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
-    """``amuleapi --set-admin-pass`` over the config directory, run through ``run_command``."""
+    """``amuleapi --set-admin-pass-stdin`` over the config directory, by ``run_command``."""
 
     def __init__(
         self,
@@ -44,13 +45,15 @@ class AmuleApiAdminPasswordSetter(AdminPasswordSetter):
             [
                 "amuleapi",
                 f"--config-dir={self._config_directory}",
-                f"--set-admin-pass={api_password}",
+                # On stdin: on the command line, any user of the host reads it in ps.
+                "--set-admin-pass-stdin",
             ],
             user=uid,
             group=gid,
             # Empty, not omitted: an omitted list keeps root's supplementary groups, 0 included.
             extra_groups=[],
             env={**self._env, "HOME": str(self._home_directory)},
+            input=api_password,
             check=True,
             text=True,
         )

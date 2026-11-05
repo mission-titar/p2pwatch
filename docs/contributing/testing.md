@@ -198,7 +198,7 @@ conteneur et son propre Ryuk ; ce montage n'existe plus.
 ### 3.1 `api_integration` (crawler, **Docker requis**)
 
 **Ce que ça prouve.** L'adapter parle à un **vrai démon** : le mot de passe admin écrit par
-`amuleapi --set-admin-pass` ouvre bien une session, un mauvais mot de passe est refusé, le statut
+`amuleapi --set-admin-pass-stdin` ouvre bien une session, un mauvais mot de passe est refusé, le statut
 réseau se décode, et une recherche ed2k (`search()`) va à son terme et rend ses résultats.
 
 **Prérequis exacts.** Un démon lancé selon le **§3.0** et `P2PWATCH_TEST_API_HOST` exportée. Sans

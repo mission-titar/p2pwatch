@@ -31,7 +31,7 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
         monotonic_clock=AsyncioMonotonicClock(),
         transport_factory=httpx.AsyncHTTPTransport,
     )
-    await client.status()  # its login accepts the admin password written by --set-admin-pass
+    await client.status()  # its login accepts the admin password written by --set-admin-pass-stdin
     await client.close()
 
 
