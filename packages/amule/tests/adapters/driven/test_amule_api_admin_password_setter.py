@@ -1,4 +1,4 @@
-"""AmuleApiAdminPasswordSetter: ``amuleapi --set-admin-pass`` run as the uid and gid given."""
+"""AmuleApiAdminPasswordSetter: ``amuleapi --set-admin-pass-stdin`` run as the uid and gid given."""
 
 from pathlib import Path
 
@@ -30,7 +30,7 @@ def test_amuleapi_sets_the_password_as_the_uid_and_gid_alone() -> None:
         "mot de passé", uid=Uid(1000), gid=Gid(1001)
     )
 
-    argv = ["amuleapi", "--config-dir=/home/amule/.aMule", "--set-admin-pass=mot de passé"]
+    argv = ["amuleapi", "--config-dir=/home/amule/.aMule", "--set-admin-pass-stdin"]
     assert command_runner.commands == [
         (
             argv,
@@ -39,11 +39,23 @@ def test_amuleapi_sets_the_password_as_the_uid_and_gid_alone() -> None:
                 "group": 1001,
                 "extra_groups": [],
                 "env": {**ENV, "HOME": "/home/amule"},
+                "input": "mot de passé",
                 "check": True,
                 "text": True,
             },
         )
     ]
+
+
+def test_the_password_never_reaches_the_command_line() -> None:
+    command_runner = FakeCommandRunner()
+
+    _admin_password_setter(command_runner).set_admin_password(
+        "mot de passé", uid=Uid(1000), gid=Gid(1001)
+    )
+
+    [(argv, _)] = command_runner.commands
+    assert not [argument for argument in argv if "passé" in argument]
 
 
 def test_mypy_refuses_a_command_runner_text_false() -> None:
@@ -55,6 +67,7 @@ def test_mypy_refuses_a_command_runner_text_false() -> None:
         group=Gid(1001),
         extra_groups=[],
         env=ENV,
+        input="mot de passé",
         check=True,
         text=False,  # type: ignore[arg-type]
     )
