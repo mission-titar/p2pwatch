@@ -15,14 +15,30 @@ updates:
     commit-message:
       prefix: "chore(ci)"
 
-  # The FROM lines of each packages/*/Dockerfile; compose image refs are not covered.
+  # The FROM lines of each image's Dockerfile; compose image refs are not covered.
+  # One entry per image: an open group pull request defers every directory it does not list.
   - package-ecosystem: "docker"
-    directories:
-      - "/packages/*"
+    directory: "/packages/amule"
     schedule:
       interval: "weekly"
+    # The default 3 days restart on each re-push of a tag, which held Debian's security digests back.
+    cooldown:
+      default-days: 0
     groups:
-      docker:
+      amule-image:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: "docker"
+    directory: "/packages/crawler"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 0
+    groups:
+      crawler-image:
         patterns:
           - "*"
     commit-message:
