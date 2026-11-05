@@ -13,13 +13,16 @@ services:
       WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY:?}
       SERVER_COUNTRIES: ${SERVER_COUNTRIES:-}
       VPN_PORT_FORWARDING: ${VPN_PORT_FORWARDING:-off}
-      HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE: '{"auth":"none"}'
     # ed2k has no network of its own: the core reaches it through this alias.
     networks:
       default:
         aliases: [ed2k]
     ports:
       - "4711:4711"
+    # gluetun's default path for its roles; a route no role names answers 401.
+    configs:
+      - source: gluetun-auth
+        target: /gluetun/auth/config.toml
     restart: unless-stopped
 
   ed2k:
@@ -31,3 +34,12 @@ services:
     depends_on: [ed2k-gluetun]
     environment:
       PORT_SYNC: ${VPN_PORT_FORWARDING:-off}
+
+# Port-sync only reads the forwarded port: every other route, stopping the VPN included, stays closed.
+configs:
+  gluetun-auth:
+    content: |
+      [[roles]]
+      name = "port-sync"
+      auth = "none"
+      routes = ["GET /v1/portforward"]
