@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS amule
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS amule
 
 # The aMule pin: amule-bump rewrites these two lines; never write the version elsewhere.
 ARG AMULE_VERSION=3.2.0
@@ -30,9 +30,9 @@ RUN sed "s/@AMULE_VERSION@/${AMULE_VERSION}/g" /tmp/amule.cdx.json \
       > /out/usr/local/share/amule/amule.cdx.json
 
 # A stage, not COPY --from=<image>: Dependabot only bumps FROM lines.
-FROM ghcr.io/astral-sh/uv:0.12.21@sha256:a7aed3216253ee804de3e2d8afa5073baa1a177335345d43845cd4165e43b711 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS python
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS python
 
 # The build context has no .git: hatch-vcs reads the version CI computed from this variable.
 ARG VERSION=0.0.0
@@ -56,7 +56,7 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --package p2pwatch-amule
 
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 
 # ARG after FROM only lives in the stage that declares it, hence the re-declaration.
 ARG VERSION=0.0.0
