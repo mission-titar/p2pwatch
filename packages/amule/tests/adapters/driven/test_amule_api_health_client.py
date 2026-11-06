@@ -1,4 +1,4 @@
-"""AmuleApiHealthClient: ready on a 200 with ec_connected true, not ready on anything else."""
+"""AmuleApiHealthClient: healthy on a 200 with ec_connected true, unhealthy on anything else."""
 
 import logging
 import socket
@@ -41,12 +41,12 @@ def _logged_lines(caplog: pytest.LogCaptureFixture) -> list[tuple[str, int, str]
         b'{"status":"ok","ec_connected":true,"snapshot_ready":false}',
     ],
 )
-def test_a_200_with_ec_connected_true_is_ready_and_logs_nothing(
+def test_a_200_with_ec_connected_true_is_healthy_and_logs_nothing(
     *, amule_api: FakeAmuleApiServer, body: bytes, caplog: pytest.LogCaptureFixture
 ) -> None:
     amule_api.health_body = body
 
-    assert health_client(amule_api, api_url=amule_api.api_url + "/").is_api_ready() is True
+    assert health_client(amule_api).is_api_healthy() is True
 
     assert amule_api.request_lines == ["GET /api/v1/health HTTP/1.1"]
     assert _logged_lines(caplog) == []
@@ -64,24 +64,24 @@ def test_a_200_with_ec_connected_true_is_ready_and_logs_nothing(
         b"\xff\xfe",
     ],
 )
-def test_a_200_without_ec_connected_true_is_not_ready_logged_under_the_module_s_name(
+def test_a_200_without_ec_connected_true_is_unhealthy_logged_under_the_module_s_name(
     *, amule_api: FakeAmuleApiServer, body: bytes, caplog: pytest.LogCaptureFixture
 ) -> None:
     amule_api.health_body = body
 
-    assert health_client(amule_api).is_api_ready() is False
+    assert health_client(amule_api).is_api_healthy() is False
 
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.WARNING, f"amuleapi reports no link to amuled (200 {body!r})")
     ]
 
 
-def test_a_success_other_than_200_is_not_ready(
+def test_a_success_other_than_200_is_unhealthy(
     *, amule_api: FakeAmuleApiServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     amule_api.health_status = 202
 
-    assert health_client(amule_api).is_api_ready() is False
+    assert health_client(amule_api).is_api_healthy() is False
 
     assert _logged_lines(caplog) == [
         (
@@ -97,7 +97,7 @@ def test_a_reply_is_logged_up_to_its_first_100_bytes(
 ) -> None:
     amule_api.health_body = b"x" * 101
 
-    assert health_client(amule_api).is_api_ready() is False
+    assert health_client(amule_api).is_api_healthy() is False
 
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.WARNING, f"amuleapi reports no link to amuled (200 {b'x' * 100!r})")
@@ -113,7 +113,7 @@ def test_a_reply_is_logged_up_to_its_first_100_bytes(
         (200, None, True, "timed out"),
     ],
 )
-def test_a_failed_request_is_not_ready_logged_under_the_module_s_name(
+def test_a_failed_request_is_unhealthy_logged_under_the_module_s_name(
     *,
     amule_api: FakeAmuleApiServer,
     status: int,
@@ -128,7 +128,7 @@ def test_a_failed_request_is_not_ready_logged_under_the_module_s_name(
         is_holding,
     )
 
-    assert health_client(amule_api).is_api_ready() is False
+    assert health_client(amule_api).is_api_healthy() is False
 
     [(name, level, message)] = _logged_lines(caplog)
     assert (name, level) == (LOGGER_NAME, logging.WARNING)
@@ -136,7 +136,7 @@ def test_a_failed_request_is_not_ready_logged_under_the_module_s_name(
     assert error in message
 
 
-def test_a_refused_connection_is_not_ready(
+def test_a_refused_connection_is_unhealthy(
     *, amule_api: FakeAmuleApiServer, caplog: pytest.LogCaptureFixture
 ) -> None:
     # amuleapi's normal starting state: it listens only once its EC login succeeded.
@@ -144,7 +144,7 @@ def test_a_refused_connection_is_not_ready(
         closed.bind(("127.0.0.1", 0))
         port = closed.getsockname()[1]
 
-    assert health_client(amule_api, api_url=f"http://127.0.0.1:{port}").is_api_ready() is False
+    assert health_client(amule_api, api_url=f"http://127.0.0.1:{port}").is_api_healthy() is False
 
     [(name, level, message)] = _logged_lines(caplog)
     assert (name, level) == (LOGGER_NAME, logging.WARNING)

@@ -5,5 +5,5 @@ class ApiHealthClient(ABC):
     """Reads whether amuleapi answers, linked to amuled."""
 
     @abstractmethod
-    def is_api_ready(self) -> bool:
+    def is_api_healthy(self) -> bool:
         """True when amuleapi answers and reports its link to amuled, else False; never raises."""

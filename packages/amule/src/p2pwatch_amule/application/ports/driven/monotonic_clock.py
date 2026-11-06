@@ -3,7 +3,7 @@ from datetime import timedelta
 
 
 class MonotonicClock(ABC):
-    """Every interval and deadline kept in memory: a step of the wall clock never moves it."""
+    """The poll's sleep, on a clock a step of the wall clock never moves."""
 
     @abstractmethod
     def sleep(self, duration: timedelta) -> None:

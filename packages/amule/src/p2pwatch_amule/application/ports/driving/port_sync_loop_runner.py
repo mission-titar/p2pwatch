@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 
 
 class PortSyncLoopRunner(ABC):
-    """Polls gluetun's forwarded port and restarts amuled on it, until the process is stopped."""
+    """Polls gluetun's forwarded port and sets amuled's ports to it live until the process stops."""
 
     @abstractmethod
     def run_port_sync_loop(self) -> None:
-        """Never returns; raises ``SettingsError`` on a refused variable, ``OSError`` when the
-        supervisor cannot be run."""
+        """Never returns; raises ``SettingsError`` on a refused variable, ``ListenPortError`` when
+        amuleapi fails other than not ready or rejecting the port."""
