@@ -10,6 +10,8 @@ the core `p2pwatch` and the aMule container `ed2k`, and asserts the WIRING, NO r
   3. deploy/'s layout renders with `docker compose config`, in both variants.
   4. port-sync stays down with PORT_SYNC unset; started against a stand-in for gluetun, it
      restarts amuled on the forwarded port only when that port moved.
+  5. amuled or port-sync dying unasked stops `ed2k`; `s6-svc -d` and `docker compose stop` do
+     not; `ed2k` turns `unhealthy` without amuleapi.
 Tear-down: `docker compose down -v` plus the throwaway state directory, in a finally.
 The suite refuses to run as root: a PUID of 0 would make the ownership check pass on a root file.
 
@@ -306,8 +308,7 @@ def test_build_succeeds(project_files: tuple[Path, ...]) -> None:
 def _up_until_ed2k_is_healthy(files: tuple[Path, ...]) -> None:
     compose_run = _run("up", "-d", *_BUILD_FLAGS, files=files, timeout=1800)
     assert compose_run.returncode == 0, compose_run.stderr
-    # The healthcheck tests s6-svstat's OUTPUT, not its exit code (it exits 0 for a stopped
-    # service too). `healthy` therefore means amuled really is up under s6.
+    # `healthy` means amuleapi answers and reports its link to amuled.
     _wait_for(
         "health",
         probe=lambda: _ps_field(_AMULE, field="Health", files=files),
@@ -467,6 +468,109 @@ def test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved(
     assert (up, pid_after != pid_before) == ("true", True)
 
 
+# The pids, one per line, of `ed2k`'s processes whose argv starts with the script's arguments.
+_PIDS_BY_ARGV_PREFIX = """
+import sys
+from pathlib import Path
+prefix = [argument.encode() for argument in sys.argv[1:]]
+for process in Path("/proc").iterdir():
+    try:
+        argv = (process / "cmdline").read_bytes().split(b"\\0") if process.name.isdigit() else []
+    except OSError:
+        continue
+    if argv[: len(prefix)] == prefix:
+        print(process.name)
+"""
+
+_AMULED_ARGV = ("amuled",)
+_PORT_SYNC_ARGV = ("python", "-m", "p2pwatch_amule", "port-sync")
+_AMULEAPI_ARGV = ("/usr/local/bin/amuleapi",)
+
+
+def _pids(argv_prefix: tuple[str, ...], *, files: tuple[Path, ...]) -> str:
+    """The pids of `ed2k`'s processes whose argv starts with `argv_prefix`, read from /proc."""
+    return _exec(_AMULE, "python3", "-c", _PIDS_BY_ARGV_PREFIX, *argv_prefix, files=files)
+
+
+def _signal_the_one_process(
+    signal: str, *, argv_prefix: tuple[str, ...], files: tuple[Path, ...]
+) -> None:
+    """Send `signal` to the one process of `ed2k` whose argv starts with `argv_prefix`."""
+    _wait_for(
+        f"one process {argv_prefix}",
+        probe=lambda: str(_pids(argv_prefix, files=files).isdigit()),
+        target="True",
+        files=files,
+    )
+    pid = _pids(argv_prefix, files=files)
+    # The image has no kill binary: the shell's builtin.
+    assert _exec(_AMULE, "sh", "-c", f"kill -{signal} {pid}", files=files) == ""
+
+
+def _ed2k_logs(files: tuple[Path, ...]) -> str:
+    return _run("logs", "--no-color", _AMULE, files=files, timeout=60).stdout
+
+
+@pytest.mark.parametrize(
+    ("service", "argv_prefix"),
+    [("amuled", _AMULED_ARGV), ("port-sync", _PORT_SYNC_ARGV)],
+    ids=["amuled", "port-sync"],
+)
+def test_a_service_that_dies_unasked_stops_the_container(
+    *, service: str, argv_prefix: tuple[str, ...], project_files: tuple[Path, ...]
+) -> None:
+    """Docker's restart policy then restarts it, which the smoke stack leaves out."""
+    _up_until_ed2k_is_healthy(project_files)
+    assert _exec(_AMULE, "s6-svc", "-u", f"/etc/services.d/{service}", files=project_files) == ""
+
+    _signal_the_one_process("KILL", argv_prefix=argv_prefix, files=project_files)
+
+    state = partial(_ps_field, _AMULE, field="State", files=project_files)
+    _wait_for(f"{_AMULE} state", probe=state, target="exited", files=project_files)
+    assert f"finish {service}: exit 256 signal 9 wantedup true" in _ed2k_logs(project_files)
+
+
+def test_a_service_stopped_through_s6_leaves_the_container_up(
+    project_files: tuple[Path, ...],
+) -> None:
+    _up_until_ed2k_is_healthy(project_files)
+
+    assert _exec(_AMULE, "s6-svc", "-d", _AMULED_SERVICE, files=project_files) == ""
+    time.sleep(10)  # noqa: TID251
+
+    assert _ps_field(_AMULE, field="State", files=project_files) == "running"
+    assert _exec(_AMULE, "s6-svstat", "-o", "up", _AMULED_SERVICE, files=project_files) == "false"
+    assert "finish amuled: exit 0 signal 0 wantedup false" in _ed2k_logs(project_files)
+
+
+def test_a_compose_stop_lets_amuled_save_and_exit(project_files: tuple[Path, ...]) -> None:
+    _up_until_ed2k_is_healthy(project_files)
+
+    compose_run = _run("stop", _AMULE, files=project_files, timeout=60)
+
+    assert compose_run.returncode == 0, compose_run.stderr
+    assert _ps_field(_AMULE, field="State", files=project_files) == "exited"
+    # Exit 0, not signal 15: amuled met one SIGTERM, a second one kills it unsaved.
+    assert "finish amuled: exit 0 signal 0 wantedup false" in _ed2k_logs(project_files)
+    amuled_log = (_STATE_DIRECTORY / "amule" / "logfile").read_text(errors="replace")
+    assert "aMule shutdown completed." in amuled_log
+
+
+def test_ed2k_is_unhealthy_without_amuleapi_until_restarted(
+    project_files: tuple[Path, ...],
+) -> None:
+    """amuleapi exits 0 on SIGTERM, which amuled never relaunches."""
+    _up_until_ed2k_is_healthy(project_files)
+
+    _signal_the_one_process("TERM", argv_prefix=_AMULEAPI_ARGV, files=project_files)
+
+    health = partial(_ps_field, _AMULE, field="Health", files=project_files)
+    _wait_for(f"{_AMULE} health", probe=health, target="unhealthy", files=project_files)
+    compose_run = _run("restart", _AMULE, files=project_files, timeout=120)
+    assert compose_run.returncode == 0, compose_run.stderr
+    _wait_for(f"{_AMULE} health", probe=health, target="healthy", files=project_files)
+
+
 def _render(variant: str, *, tmp_path: Path) -> Any:
     """`docker compose config` of a copy of deploy/'s compose files, switched to `variant`.
 
@@ -526,6 +630,7 @@ def test_the_deploy_layout_renders(*, variant: str, tmp_path: Path) -> None:
     assert _ports(core) == {(8080, "tcp")}
     # A dead service restarts the container through this policy alone: the smoke sets none.
     assert ed2k["restart"] == "unless-stopped"
+    assert ed2k["healthcheck"]["test"] == ["CMD", "python", "-m", "p2pwatch_amule", "health"]
 
     if variant == "direct":
         assert set(services) == {_CORE, _AMULE}
@@ -633,8 +738,8 @@ def _shared_hashes(files: tuple[Path, ...]) -> frozenset[str] | None:
     """Hashes amuled currently shares, read over the API from the core.
 
     `None` means the call itself did not complete. That is a READINESS state, not a result:
-    `s6-svc -r` takes amuleapi down with amuled and brings both back, and in between the API
-    answers `503 ec_unavailable` or nothing at all. Callers poll on it.
+    while `ed2k` restarts, the API answers `503 ec_unavailable` or nothing at all. Callers poll
+    on it.
     """
     output = _exec(_CORE, "python", "-c", _SHARED_HASHES, files=files)
     try:
@@ -648,9 +753,9 @@ def _wait_new_shared_hash(
 ) -> str:
     """Poll until exactly one hash appeared in amuled's shared list, and return it.
 
-    Called right after `s6-svc -r`, so it is the readiness probe for the restart TOO: amuled is
-    still shutting down for the first attempts (amuleapi refuses or resets), then comes back and
-    hashes the IncomingDir asynchronously. A failed amuleapi call is therefore a poll iteration,
+    Called right after `ed2k`'s restart, so it is the readiness probe for the restart TOO: amuled
+    is still starting for the first attempts (amuleapi refuses or resets), then hashes the
+    IncomingDir asynchronously. A failed amuleapi call is therefore a poll iteration,
     not a failure.
     The "exactly one" bound is what identifies OUR file: the smoke amuled shares nothing else at
     that point (its only queue entry has no sources and no bytes, so it is not shared yet).
@@ -696,17 +801,8 @@ def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, .
         timeout=120,
     )
     assert drop.returncode == 0, f"{drop.stdout}{drop.stderr}"
-    # amuled only scans its IncomingDir at startup, so the rescan is an s6 restart in `ed2k`.
-    restart = _run(
-        "exec",
-        "-T",
-        _AMULE,
-        "s6-svc",
-        "-r",
-        "/etc/services.d/amuled",
-        files=project_files,
-        timeout=60,
-    )
+    # amuled only scans its IncomingDir at startup, so the rescan is a restart of `ed2k`.
+    restart = _run("restart", _AMULE, files=project_files, timeout=120)
     assert restart.returncode == 0, f"{restart.stdout}{restart.stderr}"
     native_id = _wait_new_shared_hash(before, files=project_files)
 

@@ -267,12 +267,12 @@ au catalogue, arrêt borné).
 `tests/smoke/compose.yaml` : `ed2k` (l'image `p2pwatch-amule`, amuled et le port-sync sous s6) et
 `p2pwatch` (le cœur, sous `user: PUID:PGID`, `/downloads` en lecture seule). **Aucun octet de
 contenu n'est jamais téléchargé** (amuled n'a ni serveur eD2k ni VPN ; seule son API est
-sollicitée). Cinq choses :
+sollicitée). Six choses :
 
 1. `docker compose build` réussit (les deux images se construisent) ;
-2. les deux conteneurs tournent, `ed2k` devient **`healthy`**, le cœur joint amuleapi à
-   `ed2k:4711`, sa webui répond à `/health` et son tableau de bord montre une lecture d'`amuled`
-   (interrogés via `docker compose exec`, donc aucun port hôte n'est nécessaire), et
+2. les deux conteneurs tournent, `ed2k` devient **`healthy`** (amuleapi répond), le cœur joint
+   amuleapi à `ed2k:4711`, sa webui répond à `/health` et son tableau de bord montre une lecture
+   d'`amuled` (interrogés via `docker compose exec`, donc aucun port hôte n'est nécessaire), et
    `data/catalog.db` appartient à `PUID`, lu dans le conteneur ;
 3. le port-sync reste arrêté sans `PORT_SYNC` (`false false false` pour `up`, `wantedup` et
    `normallyup`, depuis 25 s au moins) ; lancé face à une doublure de gluetun (un fichier
@@ -283,7 +283,10 @@ sollicitée). Cinq choses :
    `PORT_SYNC_POLL_SECONDS` à 1 ;
 4. un fichier qu'amuled partage et qui a quitté sa file est enregistré `completed` par le cœur,
    par le vrai chemin HTTP vers `ed2k:4711` ;
-5. `deploy/` se rend avec `docker compose config` dans ses deux variantes : services, alias,
+5. amuled ou le port-sync tué arrête `ed2k`, `s6-svc -d` sur amuled le laisse tourner,
+   `docker compose stop` laisse amuled sauver ses fichiers, et `ed2k` passe `unhealthy` sans
+   amuleapi puis `healthy` après `docker compose restart ed2k` ;
+6. `deploy/` se rend avec `docker compose config` dans ses deux variantes : services, alias,
    `network_mode`, `PORT_SYNC`, montages d'`ed2k` sous `ed2k/`, **aucun volume nommé**.
 
 Le smoke sollicite **délibérément** le vrai chemin de propriété : l'état vit dans des **bind mounts**
