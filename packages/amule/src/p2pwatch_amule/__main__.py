@@ -4,8 +4,10 @@ import logging
 import os
 import sys
 
-from p2pwatch_amule.composition.command_line import build_command_line
+from p2pwatch_amule.composition.command_line import AMULE_API_URL, build_command_line
 
 if __name__ == "__main__":  # pragma: no cover
-    command_line = build_command_line(env=os.environ, root_logger=logging.getLogger())
+    command_line = build_command_line(
+        env=os.environ, root_logger=logging.getLogger(), amule_api_url=AMULE_API_URL
+    )
     raise SystemExit(command_line.run(sys.argv[1:]))

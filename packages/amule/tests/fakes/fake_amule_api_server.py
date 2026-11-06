@@ -28,7 +28,7 @@ class FakeAmuleApiServer:
     preferences answer ``preferences_status`` and ``preferences_body`` to ``token``'s bearer;
     ``raw_reply``'s bytes, or no answer while ``is_holding``, replace any; records each request."""
 
-    def __init__(self, *, port: int = 0) -> None:
+    def __init__(self) -> None:
         self.health_status = 200
         self.health_body = READY_BODY
         self.password = "s3cret"
@@ -77,7 +77,7 @@ class FakeAmuleApiServer:
             def log_message(self, format: str, *args: Any) -> None:
                 """Silent: the requests are recorded instead."""
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         host, bound_port = self._server.server_address[:2]
         self.api_url = f"http://{host!s}:{bound_port}"
         self.url_opener = build_opener(ProxyHandler({}))  # direct, whatever HTTP_PROXY says

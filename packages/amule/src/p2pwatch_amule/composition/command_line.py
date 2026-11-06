@@ -30,14 +30,15 @@ _HOME_DIRECTORY = Path("/home/amule")
 _CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
 _AMULE_CONF_PATH = _CONFIG_DIRECTORY / "amule.conf"
 _PORT_SYNC_SERVICE_DIRECTORY = Path("/etc/services.d/port-sync")
-_AMULE_API_URL = "http://127.0.0.1:4711"
+AMULE_API_URL = "http://127.0.0.1:4711"
 _AMULE_API_HEALTH_TIMEOUT_SECONDS = 2  # under the compose healthcheck's 3 s timeout
 
 
 def build_command_line(
-    *, env: Mapping[str, str], root_logger: logging.Logger
+    *, env: Mapping[str, str], root_logger: logging.Logger, amule_api_url: str
 ) -> ArgparseCommandLine:
-    """The command line run in the environment ``env``, logging through ``root_logger``."""
+    """The command line run in the environment ``env`` on the amuleapi at ``amule_api_url``,
+    logging through ``root_logger``."""
     amule_conf_store = PosixAmuleConfStore(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
     return ArgparseCommandLine(
         container_booter=BootComposition(
@@ -73,13 +74,13 @@ def build_command_line(
         port_sync_loop_runner=PortSyncComposition(
             env=env,
             gluetun_url_opener=build_opener(),  # through the environment's proxies, if any
-            amule_api_url=_AMULE_API_URL,
+            amule_api_url=amule_api_url,
             amule_api_url_opener=build_opener(ProxyHandler({})),  # loopback, never through a proxy
             monotonic_clock=SystemMonotonicClock(),
         ),
         api_health_checker=CheckApiHealth(
             api_health_client=AmuleApiHealthClient(
-                api_url=_AMULE_API_URL,
+                api_url=amule_api_url,
                 timeout_seconds=_AMULE_API_HEALTH_TIMEOUT_SECONDS,
                 url_opener=build_opener(ProxyHandler({})),  # loopback, never through a proxy
             )
