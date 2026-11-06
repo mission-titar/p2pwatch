@@ -49,7 +49,7 @@ flowchart LR
   crawler -->|"REST · ed2k:4711"| amuleapi
   amuled -->|"starts, one-off EC token"| amuleapi
   amuleapi -->|"EC · 127.0.0.1:4712"| amuled
-  sync -->|"amule.conf + s6-svc"| amuled
+  sync -->|"REST · 127.0.0.1:4711"| amuleapi
   client -->|"all traffic, vpn variant"| gluetun
   gluetun --> net
   amuled -->|"finished files"| out
@@ -66,8 +66,9 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
   `crawler.yml`. Celui-ci ne configure que le mot de passe, depuis `${AMULE_API_PASSWORD}` : c'est
   le mot de passe admin d'amuleapi, le même que celui de son interface web. `${AMULE_EC_PASSWORD}`
   ne sert qu'au lien interne amuleapi ↔ amuled, et le cœur ne le voit pas.
-- **Redémarrer `amuled`, c'est `s6-svc` dans `ed2k`**, un redémarrage de processus local, pas un
-  redémarrage de conteneur (§9). `amuleapi` suit, puisque `amuled` le relance.
+- **Redémarrer `amuled`, c'est redémarrer `ed2k`** (`docker compose restart ed2k`) : un service
+  qui sort sans que s6 l'ait demandé arrête le conteneur (§13), et le port-sync change les ports
+  d'amuled à chaud, sans le redémarrer (§9).
 - **Les conteneurs démarrent sans ordre** (pas de `depends_on` entre eux), donc le crawler frappe
   couramment à la porte avant qu'`amuled` n'ait démarré `amuleapi` ; « démon injoignable au
   démarrage » est toléré et absorbé par le backoff.
@@ -152,7 +153,7 @@ développement et en CI, jamais dans une image.
 | Hexagone | Paquet | Ports pilotants | Ce que pilotent ses adaptateurs |
 |---|---|---|---|
 | `p2pwatch` | `packages/crawler/`, avec `catalog_matching` (`packages/matching/`), son domaine dans une distribution à part | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise |
-| `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass-stdin` |
+| `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner`, `ApiHealthChecker` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass-stdin`, le REST d'amuleapi (santé, préférences) |
 | `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `AppliedClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
 | `template_checks` | `packages/template_checks/` | `LogicFreeChecker`, `TemplateAttributeLister` | les gabarits de la webui |
 | `coverage_checks` | `packages/coverage_checks/` | `UnitCoverageChecker` | `.coverage`, l'arbre du paquet et son `pyproject.toml` |
@@ -670,28 +671,29 @@ Derrière un VPN, le port entrant change ; sans High-ID, la connectabilité (et 
 dégrade. Le port-sync appartient au client : c'est un service s6 du conteneur `ed2k`
 (`python -m p2pwatch_amule port-sync`, sous l'utilisateur `amule`), et le cœur n'en sait rien.
 Toutes les `PORT_SYNC_POLL_SECONDS` (60 s par défaut), il compare le **port forwardé** de gluetun
-au `[eMule] Port` d'`amule.conf`. S'ils diffèrent, et si le dernier redémarrage date de plus de
-`PORT_SYNC_RESTART_MIN_SECONDS` (300 s) :
+au port TCP d'amuled, lu par `GET /api/v1/preferences` sur amuleapi (`127.0.0.1:4711`). S'ils
+diffèrent, il pose les deux ports à chaud par `PATCH /api/v1/preferences` : amuled les rebinde sans
+redémarrer, garde ses transferts et sa session Kad, et enregistre lui-même `amule.conf`.
 
 ```mermaid
 flowchart LR
-  g["gluetun's port<br/>differs"] --> d["s6-svc -wD -d amuled"]
-  d -->|"exit 0"| w["write Port + UDPPort"]
-  d -->|"failed or 60 s timeout"| u
-  w --> u["s6-svc -u amuled<br/>(always)"]
+  g["gluetun's port<br/>differs"] --> p["PATCH tcp_port + udp_port"]
+  p -->|"200"| ok["set live"]
+  p -->|"not ready or 400"| n["next poll"]
+  p -->|"anything else"| x["port-sync exits:<br/>the container restarts"]
 ```
 
-- **amuled n'est jamais laissé arrêté.** Un `-d` laisse le service voulu arrêté : le `-u` est dans
-  un `finally`, et le port-sync en envoie aussi un à son démarrage, qui répare un port-sync tué
-  entre les deux.
-- **L'écriture n'est jamais perdue.** amuled écrit toute sa config en sortant : le fichier n'est lu
-  et écrit qu'une fois l'arrêt confirmé par `-wD`, puis remplacé d'un bloc (fichier temporaire et
-  `rename`), jamais réécrit sur place.
-- **Les deux ports reçoivent la même valeur** (`Port` en TCP, `UDPPort` en UDP pour Kad) : un
-  tunnel ne forwarde qu'un port. amuled ne les lit qu'au démarrage, d'où le redémarrage.
-- **Les droits.** s6 réserve le pilotage d'un service à root, et l'abonnement à ses événements
-  (dont `-wD` a besoin) au groupe de root. Le script `run` du port-sync, en root, attend le
-  superviseur d'`amuled`, lui accorde `s6-svperms -G amule -E amule`, puis descend vers `amule`.
+- **Les deux ports reçoivent la même valeur** (`tcp_port`, `udp_port` pour Kad) : un tunnel ne
+  forwarde qu'un port.
+- **Un jeton gardé.** Le port-sync se connecte une fois avec `AMULE_API_PASSWORD`, garde le jeton et
+  ne se reconnecte qu'une fois sur un `401`, jamais en boucle (amuleapi verrouille un client qui
+  rejoue ses `401`).
+- **amuleapi pas prêt** (connexion refusée, délai dépassé, `503` avant son premier instantané, `401`
+  après la reconnexion) : journalisé, réessayé au prochain sondage. Le premier tour tourne avant
+  qu'amuleapi n'écoute ; lever ferait redémarrer le conteneur en boucle.
+- **Un refus** (`400` : au-delà de 65532, un port déjà pris, le port EC) : journalisé en erreur,
+  amuled reste sur son port, le prochain sondage réessaie.
+- **Toute autre erreur** sort du port-sync, et son `finish` arrête le conteneur (§13).
 - **Interrupteur.** `PORT_SYNC` reçoit `VPN_PORT_FORWARDING` tel quel ; éteint, le one-shot de
   démarrage pose le fichier `down` du service, et s6 ne le lance jamais. Allumé, il valide les
   réglages ([Devenir High-ID](../high-id.md)) avant tout, et sort en nommant une valeur invalide.

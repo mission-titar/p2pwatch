@@ -58,10 +58,10 @@ version with a known CVE, scan it, confirm the finding appears, then confirm it 
 real version. Pick the red version with care: it must match a CVE the real one does not. For aMule
 that is 2.2.4 (CVE-2009-1440); later releases only share with the current one two amuleweb CVEs
 that carry no version bound, so they prove nothing. For wxWidgets it is 2.8.10 (CVE-2009-2369). The same care applies to a renamed Debian
-package or any binary catalogued under a name of our choosing. The aMule case is enforced
+package or any binary catalogued under a name of our choosing. The aMule and wxWidgets cases are enforced
 mechanically: every PR (`validate.yml`) checks that the SBOM of the built aMule image holds
-`pkg:generic/amule@` at the pinned version, and the aMule leg of `release.yml` fails before signing
-if either of its SBOMs lacks it. Every other declared or renamed component is on whoever makes it.
+`pkg:generic/amule@` and `pkg:generic/wxwidgets@` at the pinned versions, and the aMule leg of
+`release.yml` fails before signing if either of its SBOMs lacks one. Every other declared or renamed component is on whoever makes it.
 
 ## Triage process (VEX)
 
