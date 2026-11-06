@@ -174,27 +174,27 @@ def test_a_refusal_whose_body_breaks_off_is_an_error_without_it(
 
 
 @pytest.mark.parametrize(
-    ("raw_reply", "is_holding", "error"),
-    [
-        (b"garbage\r\n", False, "garbage"),
-        (b"", False, "Remote end closed connection without response"),
-        (None, True, "timed out"),
-    ],
+    ("raw_reply", "error"),
+    [(b"garbage\r\n", "garbage"), (b"", "Remote end closed connection without response")],
 )
 def test_a_failed_request_is_an_error(
-    *,
-    amule_api: FakeAmuleApiServer,
-    raw_reply: bytes | None,
-    is_holding: bool,
-    error: str,
+    *, amule_api: FakeAmuleApiServer, raw_reply: bytes, error: str
 ) -> None:
-    amule_api.raw_reply, amule_api.is_holding = raw_reply, is_holding
+    amule_api.raw_reply = raw_reply
 
     with pytest.raises(ListenPortError, match="^POST /api/v1/auth/login") as raised:
         listen_port_client(amule_api).set_listen_port(40123)
 
     assert type(raised.value) is ListenPortError
     assert error in str(raised.value)
+
+
+def test_a_timeout_is_amuleapi_not_ready(amule_api: FakeAmuleApiServer) -> None:
+    # amuleapi serialises its EC calls through one worker: a slow answer is a busy amuleapi.
+    amule_api.is_holding = True
+
+    with pytest.raises(ApiNotReadyError, match="^POST /api/v1/auth/login.*timed out"):
+        listen_port_client(amule_api).set_listen_port(40123)
 
 
 def test_a_refused_connection_is_amuleapi_not_ready(amule_api: FakeAmuleApiServer) -> None:

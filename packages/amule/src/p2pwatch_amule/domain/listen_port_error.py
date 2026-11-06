@@ -3,8 +3,8 @@ class ListenPortError(Exception):
 
 
 class ApiNotReadyError(ListenPortError):
-    """amuled's API cannot serve yet: not listening, without its first snapshot, or refusing a
-    fresh token."""
+    """amuled's API cannot serve yet: not listening, too busy to answer in time, without its first
+    snapshot, or refusing a fresh token."""
 
 
 class ListenPortRejectedError(ListenPortError):

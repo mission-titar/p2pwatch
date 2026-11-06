@@ -91,10 +91,14 @@ class AmuleApiListenPortClient(ListenPortClient):
         except (OSError, http.client.HTTPException) as error:
             # URLError and timeouts are OSErrors; a garbled reply is an HTTPException.
             failure = f"{method} {path}: {error}"
-            if isinstance(error, URLError) and isinstance(error.reason, ConnectionRefusedError):
-                # amuleapi's starting state: it listens only once its EC login succeeded.
+            if _is_not_ready(error.reason if isinstance(error, URLError) else error):
                 raise ApiNotReadyError(failure) from error
             raise ListenPortError(failure) from error
+
+
+def _is_not_ready(error: object) -> bool:
+    """Refused before amuleapi's EC login, timed out while its one EC worker is busy."""
+    return isinstance(error, ConnectionRefusedError | TimeoutError)
 
 
 def _raise_unless_success(*, status: int, message: str) -> None:
