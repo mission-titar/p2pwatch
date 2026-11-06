@@ -72,7 +72,6 @@ def build_command_line(
         ),
         port_sync_loop_runner=PortSyncComposition(
             env=env,
-            amule_conf_reader=amule_conf_store,
             gluetun_url_opener=build_opener(),  # through the environment's proxies, if any
             amule_api_url=_AMULE_API_URL,
             amule_api_url_opener=build_opener(ProxyHandler({})),  # loopback, never through a proxy

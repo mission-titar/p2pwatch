@@ -16,8 +16,8 @@ _PREFERENCES_PATH = "/api/v1/preferences"
 
 
 class AmuleApiListenPortClient(ListenPortClient):
-    """``PATCH <api_url>/api/v1/preferences`` with both ports by ``url_opener``, under a token kept
-    from a login with ``api_password``, logged in again once when amuleapi refuses it."""
+    """``GET`` and ``PATCH <api_url>/api/v1/preferences`` by ``url_opener``, under a token kept from
+    a login with ``api_password``, logged in again once when amuleapi refuses it."""
 
     def __init__(
         self,
@@ -33,9 +33,25 @@ class AmuleApiListenPortClient(ListenPortClient):
         self._url_opener = url_opener
         self._token: str | None = None
 
+    def read_listen_port(self) -> int:
+        status, reply = self._send_with_token(method="GET", body=None)
+        message = f"GET {_PREFERENCES_PATH}: {status} {reply[:100]!r}"
+        if status == HTTPStatus.UNAUTHORIZED:
+            raise ApiNotReadyError(message)
+        _raise_unless_success(status=status, message=message)
+        try:
+            tcp_port = json.loads(reply)["connection"]["tcp_port"]
+        except (ValueError, LookupError, TypeError):
+            tcp_port = None
+        if type(tcp_port) is not int:  # a JSON true is a Python int too
+            raise ListenPortError(
+                f"amuleapi's preferences answered without a TCP port ({reply[:100]!r})"
+            )
+        return tcp_port
+
     def set_listen_port(self, port: int) -> None:
         connection = {"tcp_port": port, "udp_port": port}
-        status, reply = self._patch_preferences({"connection": connection})
+        status, reply = self._send_with_token(method="PATCH", body={"connection": connection})
         message = f"PATCH {_PREFERENCES_PATH}: {status} {reply[:100]!r}"
         if status == HTTPStatus.BAD_REQUEST:
             raise ListenPortRejectedError(message)
@@ -43,18 +59,17 @@ class AmuleApiListenPortClient(ListenPortClient):
             raise ApiNotReadyError(message)
         _raise_unless_success(status=status, message=message)
 
-    def _patch_preferences(self, preferences: object) -> tuple[int, bytes]:
-        """PATCH under the kept token; logs in first when none is kept or amuleapi refused it."""
+    def _send_with_token(self, *, method: str, body: object) -> tuple[int, bytes]:
+        """The preferences under the kept token; logs in first when none is kept or amuleapi
+        refused it."""
         if self._token is not None:
             status, reply = self._send(
-                method="PATCH", path=_PREFERENCES_PATH, body=preferences, token=self._token
+                method=method, path=_PREFERENCES_PATH, body=body, token=self._token
             )
             if status != HTTPStatus.UNAUTHORIZED:
                 return status, reply
         self._token = self._log_in()
-        return self._send(
-            method="PATCH", path=_PREFERENCES_PATH, body=preferences, token=self._token
-        )
+        return self._send(method=method, path=_PREFERENCES_PATH, body=body, token=self._token)
 
     def _log_in(self) -> str:
         status, login_reply = self._send(
@@ -76,13 +91,16 @@ class AmuleApiListenPortClient(ListenPortClient):
     def _send(
         self, *, method: str, path: str, body: object, token: str | None
     ) -> tuple[int, bytes]:
-        """The reply's status and body, its first 100 bytes on a refusal; raises when none came."""
-        headers = {"Content-Type": "application/json"}
+        """The reply's status and body, its first 100 bytes on a refusal; raises when none came. A
+        ``None`` body sends none."""
+        headers: dict[str, str] = {}
+        data: bytes | None = None
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(body).encode()
         if token is not None:
             headers["Authorization"] = f"Bearer {token}"
-        request = Request(
-            self._api_url + path, data=json.dumps(body).encode(), headers=headers, method=method
-        )
+        request = Request(self._api_url + path, data=data, headers=headers, method=method)
         try:
             with self._url_opener.open(request, timeout=self._timeout_seconds) as response:
                 return int(response.status), response.read()

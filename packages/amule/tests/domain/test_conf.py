@@ -1,11 +1,9 @@
-"""amule.conf for the boot step and port-sync: its EC digest, reconciled keys and listen port."""
+"""amule.conf for the boot step: its EC digest and reconciled keys."""
 
 import configparser
 import hashlib
 
-import pytest
-
-from p2pwatch_amule.domain.conf import ec_password_digest, reconcile_conf, tcp_listen_port
+from p2pwatch_amule.domain.conf import ec_password_digest, reconcile_conf
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
@@ -99,18 +97,3 @@ def test_a_percent_sign_survives_without_interpolation() -> None:
 def test_a_duplicate_key_does_not_abort_and_the_last_value_wins() -> None:
     content = reconcile_conf("[eMule]\nMaxUpload=1\nMaxUpload=42\n", ec_digest=DIGEST)
     assert _section(content, name="eMule") == {"MaxUpload": "42"}
-
-
-def test_the_listen_port_is_read_from_the_emule_section() -> None:
-    assert tcp_listen_port("[Obfuscation]\nPort=1\n\n[eMule]\nPort=51820\n") == 51820
-
-
-def test_an_absent_listen_port_is_amules_default() -> None:
-    assert tcp_listen_port("[eMule]\nMaxUpload=42\n") == 4662
-    assert tcp_listen_port("") == 4662
-
-
-@pytest.mark.parametrize("conf", ["[eMule]\nPort=4662x\n", "Port=4662\n"])
-def test_an_unreadable_listen_port_raises_a_value_error(conf: str) -> None:
-    with pytest.raises(ValueError):
-        tcp_listen_port(conf)
