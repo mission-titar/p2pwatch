@@ -40,7 +40,6 @@ arrêté. Ses autres réglages ont des valeurs par défaut :
 |---|---|---|
 | `GLUETUN_CONTROL_URL` | `http://localhost:8000` | Le serveur de contrôle de gluetun. |
 | `PORT_SYNC_POLL_SECONDS` | `60` | L'intervalle entre deux lectures du port. |
-| `PORT_SYNC_RESTART_MIN_SECONDS` | `300` | L'intervalle minimal entre deux redémarrages d'amuled. |
 
 Pour en changer un, ajoutez-le sous `environment:` du service `ed2k` dans `ed2k/vpn.compose.yml`.
 Une valeur invalide arrête le conteneur `ed2k` au démarrage, en nommant la variable.

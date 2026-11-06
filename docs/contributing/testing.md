@@ -344,18 +344,22 @@ en root** : un `PUID` à 0 ferait passer la vérification de propriété sur un 
     créer de réseau et `docker run` échoue sur
     `failed to add the host (veth…) <=> sandbox (veth…) pair interfaces: operation not supported`.
 
-**Attendu.** **9 tests passés** sur un moteur aux vrais montages du noyau : les deux tests du
+**Attendu.** **15 tests passés** sur un moteur aux vrais montages du noyau : les deux tests du
 harnais (`test_the_harness_hides_everything_but_the_daemon_selectors`,
 `test_a_chosen_daemon_that_answers_nothing_fails_the_call`), `test_build_succeeds`,
 `test_the_two_containers_work_together`,
 `test_port_sync_stays_down_with_port_sync_unset`,
-`test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved`,
-`test_a_file_amuled_shares_is_recorded_completed`, et les 2 cas paramétrés de
-`test_the_deploy_layout_renders` (`direct` et `vpn`). Sous Docker Desktop : 8 passés, 1 échec
-(l'encadré ci-dessus). En CI les images sont préconstruites et `IMAGE_TAG` est posée, si bien que
-`test_build_succeeds` est **ignoré** (8 passés, 1 skip) et que le `up` réutilise les images
-préconstruites. Le teardown est un `docker compose down -v` plus le répertoire d'état jetable, dans
-un `finally`. Prévoyez plusieurs minutes (le build et le up tiennent sous des timeouts de 1 800 s).
+`test_port_sync_sets_the_forwarded_port_live_only_when_it_moved`,
+les 2 cas paramétrés de `test_a_service_that_dies_unasked_stops_the_container` (`amuled` et
+`port-sync`), `test_a_service_stopped_through_s6_leaves_the_container_up`,
+`test_a_compose_stop_lets_amuled_save_and_exit`,
+`test_ed2k_is_unhealthy_without_amuleapi_until_restarted`,
+les 2 cas paramétrés de `test_the_deploy_layout_renders` (`direct` et `vpn`),
+`test_gluetun_opens_only_the_forwarded_port_read` et `test_a_file_amuled_shares_is_recorded_completed`.
+Sous Docker Desktop : 14 passés, 1 échec (l'encadré ci-dessus). En CI les images sont préconstruites
+et `IMAGE_TAG` est posée, si bien que `test_build_succeeds` est **ignoré** (14 passés, 1 skip) et que
+le `up` réutilise les images préconstruites. Le teardown est un `docker compose down -v` plus le
+répertoire d'état jetable, dans un `finally`. Prévoyez plusieurs minutes (le build et le up tiennent sous des timeouts de 1 800 s).
 
 ---
 

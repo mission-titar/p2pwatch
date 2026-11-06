@@ -4,7 +4,7 @@
 
 `p2pwatch` continuously surveils the eMule network (eD2k + Kad, via an aMule client driven over amuleapi, its REST surface) to recover lost-media episodes of the French dub of *Keroro mission Titar* (aired 2008 on Teletoon), cataloguing all available metadata along the way.
 
-A uv workspace of eight packages under `packages/`: the crawler `p2pwatch` (with its in-process webui), `p2pwatch_amule` (the aMule container's boot step and port-sync), `catalog_matching` (the matching engine), `pytest_settings` (shared test configuration), and four `*_checks` / `amule_bump` dev tooling packages never shipped in a prod image. A node is two containers: the core `p2pwatch` and `p2pwatch-amule` (compose service `ed2k`).
+A uv workspace of eight packages under `packages/`: the crawler `p2pwatch` (with its in-process webui), `p2pwatch_amule` (the aMule container's boot step, port-sync and healthcheck), `catalog_matching` (the matching engine), `pytest_settings` (shared test configuration), and four `*_checks` / `amule_bump` dev tooling packages never shipped in a prod image. A node is two containers: the core `p2pwatch` and `p2pwatch-amule` (compose service `ed2k`).
 
 ## Orientation
 
