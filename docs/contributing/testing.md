@@ -383,8 +383,9 @@ Déjà en CI :
   - `build-and-verify` : un job **par architecture sur son runner natif** (`amd64` sur
     `ubuntu-latest`, `arm64` sur `ubuntu-24.04-arm`). Chacun construit les **deux images**, le cœur
     et `p2pwatch-amule` (caches `crawler-<arch>` et `amule-<arch>`). Sur l'image d'aMule, il vérifie
-    la version que rapportent `amuled` et `amuleapi` et la présence de `pkg:generic/amule` à la
-    version épinglée dans son SBOM. Il lance ensuite **`compose_integration`** contre les deux
+    la version que rapportent `amuled` et `amuleapi`, que `amuled` charge depuis `/usr/local/lib` le
+    wxWidgets épinglé (`ARG WX_VERSION`) et la présence de `pkg:generic/amule` à la version épinglée
+    dans son SBOM. Il lance ensuite **`compose_integration`** contre les deux
     images construites localement (`IMAGE_TAG=ci-<sha>`), puis démarre un conteneur jetable de
     `p2pwatch-amule` et lance contre lui **`api_integration`, `download_integration` et
     `orchestration_integration`** en un seul appel pytest. Il dépose enfin un digest par image

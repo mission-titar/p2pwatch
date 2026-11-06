@@ -57,3 +57,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **A rule test naming no rule fails the gate**: raise the `ast-grep-cli` floor once `ast-grep test` fails on a test
   whose rule id no rule declares, as asked by https://github.com/ast-grep/ast-grep/issues/2994 (its PR #3000 unmerged).
+
+- **Drop the wxWidgets build of the aMule image** once its Debian base ships wx 3.2.12 or the fix: likely sid first,
+  so trixie only through a stable backport, else forky. D6 of `agents/specs/2026-11-04-v5-amule-container.md`.

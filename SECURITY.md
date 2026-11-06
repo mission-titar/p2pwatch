@@ -50,12 +50,14 @@ aMule is now compiled from a pinned git commit, so it carries no package metadat
 aMule image's Dockerfile (`packages/amule/Dockerfile`) **declares** it by hand in `/usr/local/share/amule/amule.cdx.json`, a CycloneDX file
 generated from `ARG AMULE_VERSION` (`pkg:generic/amule@...` with the CPE Grype matches on). Syft reads that file only when its `sbom-cataloger` is selected
 (`SYFT_SELECT_CATALOGERS=+sbom-cataloger`); without it, aMule is silently absent from the SBOM.
+The wxWidgets amuled runs on is built in the same Dockerfile and declared in the same file, from
+`ARG WX_VERSION` (`pkg:generic/wxwidgets@...`, CPE `wxwidgets:wxwidgets`).
 
 **Standing rule: any component we declare by hand is proven red then green**: declare it at a
 version with a known CVE, scan it, confirm the finding appears, then confirm it disappears at the
 real version. Pick the red version with care: it must match a CVE the real one does not. For aMule
 that is 2.2.4 (CVE-2009-1440); later releases only share with the current one two amuleweb CVEs
-that carry no version bound, so they prove nothing. The same care applies to a renamed Debian
+that carry no version bound, so they prove nothing. For wxWidgets it is 2.8.10 (CVE-2009-2369). The same care applies to a renamed Debian
 package or any binary catalogued under a name of our choosing. The aMule case is enforced
 mechanically: every PR (`validate.yml`) checks that the SBOM of the built aMule image holds
 `pkg:generic/amule@` at the pinned version, and the aMule leg of `release.yml` fails before signing

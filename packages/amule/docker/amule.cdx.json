@@ -11,6 +11,15 @@
       "purl": "pkg:generic/amule@@AMULE_VERSION@",
       "cpe": "cpe:2.3:a:amule:amule:@AMULE_VERSION@:*:*:*:*:*:*:*",
       "licenses": [{ "license": { "id": "GPL-2.0-or-later" } }]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:generic/wxwidgets@@WX_VERSION@",
+      "name": "wxwidgets",
+      "version": "@WX_VERSION@",
+      "purl": "pkg:generic/wxwidgets@@WX_VERSION@",
+      "cpe": "cpe:2.3:a:wxwidgets:wxwidgets:@WX_VERSION@:*:*:*:*:*:*:*",
+      "licenses": [{ "license": { "id": "wxWindows" } }]
     }
   ]
 }

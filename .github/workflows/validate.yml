@@ -131,6 +131,17 @@ jobs:
           echo "$amuleapi"
           grep -qF "aMuleD $AMULE_VERSION compiled" <<< "$amuled"
           grep -qF "amuleapi $AMULE_VERSION compiled" <<< "$amuleapi"
+      # 3.2.11 and 3.2.12 share a soname; /usr/local/lib holds only the wx amuled was compiled on.
+      - name: Check that amuled runs on the pinned wxWidgets (${{ matrix.arch }})
+        env:
+          IMAGE: ${{ env.AMULE_IMAGE }}:ci-${{ github.sha }}
+        run: |
+          wx_version=$(sed -n 's/^ARG WX_VERSION=//p' packages/amule/Dockerfile)
+          docker run --rm --entrypoint ldd "$IMAGE" /usr/local/bin/amuled | tee /tmp/amuled.ldd
+          grep -qE '^\s*libwx_baseu-3\.2\.so\.0 => /usr/local/lib/' /tmp/amuled.ldd
+          grep -qE '^\s*libwx_baseu_net-3\.2\.so\.0 => /usr/local/lib/' /tmp/amuled.ldd
+          amuled=$(docker run --rm --entrypoint amuled "$IMAGE" --version || true)
+          grep -qF "with wxBase v${wx_version:?no ARG WX_VERSION= line in packages/amule/Dockerfile} and" <<< "$amuled"
       - name: Install Syft, verified (${{ matrix.arch }})
         uses: ./.github/actions/install-syft
       # The same Syft and cataloger selection as release.yml, so a PR proves what a release
