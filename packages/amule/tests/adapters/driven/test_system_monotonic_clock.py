@@ -1,9 +1,12 @@
 import time
+from datetime import timedelta
 
 import pytest
 
 from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotonicClock
 from tests.contracts.application.ports.driven.monotonic_clock_contract import (
+    Action,
+    ElapsedDuring,
     MonotonicClockContract,
 )
 
@@ -13,10 +16,11 @@ class TestSystemMonotonicClock(MonotonicClockContract):
     def monotonic_clock(self) -> SystemMonotonicClock:
         return SystemMonotonicClock()
 
+    @pytest.fixture
+    def elapsed_during(self) -> ElapsedDuring:
+        def elapsed(action: Action) -> timedelta:
+            before = time.monotonic_ns()  # noqa: TID251
+            action()
+            return timedelta(microseconds=(time.monotonic_ns() - before) / 1000)  # noqa: TID251
 
-def test_now_reads_the_system_monotonic_clock() -> None:
-    before = time.monotonic_ns()  # noqa: TID251
-
-    instant = SystemMonotonicClock().now()
-
-    assert before <= instant.nanoseconds <= time.monotonic_ns()  # noqa: TID251
+        return elapsed
