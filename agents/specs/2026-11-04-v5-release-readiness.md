@@ -39,7 +39,8 @@ one or more release candidates tested on the operator's own node.
   it; changing the ports live removes that trigger, and with it the image's restart machinery.* That the live change
   keeps High-ID behind a real forwarding VPN is unproven offline; it is checked on the operator's node at the first
   rc. Should it fail, the fallback is designed in lot 1: the port-sync writes the new port and exits, so Docker
-  restarts the container on it (D24).
+  restarts the container on it (D24) (Corrected: lot 1's D2 and D3: the fallback is described there, not written, and the
+  container restarts through s6's `finish`, D24 replaced).
 - **D24. s6 leaves the aMule image: its entrypoint starts amuled and the port-sync, stops the other as soon as one
   exits, and exits in error, so Docker restarts the container.** *With the live port change, s6's only remaining role
   is to run two processes and restart the one that dies; a container restart does it with less code, removes the
@@ -139,7 +140,7 @@ one or more release candidates tested on the operator's own node.
 
 | Lot | Theme | Decisions | Order |
 |---|---|---|---|
-| 1 | aMule container | D1, D2, D24 | first: the worst defect, and the riskiest claim |
+| 1 | aMule container | D1, D2, D24 (Corrected: D24 replaced by lot 1's D3) | first: the worst defect, and the riskiest claim |
 | 2 | migration and first start | D4 to D9 | any time before 7 |
 | 3 | configuration validation | D10, D11 | any time before 7 |
 | 4 | fault isolation | D12, D13 | before 5: its design frames the webui's failure behaviour |

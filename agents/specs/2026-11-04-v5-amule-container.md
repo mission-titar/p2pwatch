@@ -65,10 +65,10 @@ the forwarded port's read.
   line, any user of the host reads it in `ps` during the boot.* Block 10.
 - **D8. Dependabot watches each image's directory in an entry of its own.** *With one entry over both, an open pull
   request for the crawler's image made every run skip the aMule image: it has never been updated.* Block 10.
-- **D9. Both images move to the current `debian:trixie-slim`, and the aMule image to the crawler's `uv`.** *The
+- **D9. Both images move to the current `debian:trixie-slim`, and the aMule image to the crawler's `uv`** (Corrected: not in block 10, which left the `uv` stages to Dependabot's #637, merged to `main` on 2026-11-06 and under the whole stack: both images build on `uv` 0.13.7, the same digest). *The
   pinned base ships five fixable High CVEs across both images, four of them in `p2pwatch-amule`, the image facing
   P2P peers.* Should a Dependabot
-  pull request bring them before block 10, it takes them instead. Block 10.
+  pull request bring them before block 10, it takes them instead (Corrected: bumped by hand to `a72b4433...` in block 10: Debian re-pushed `trixie-slim` during the lot and the 3-day cooldown held Dependabot's digest back twice). Block 10.
 - **D10. Under the VPN, gluetun's control server answers only the forwarded port's read without authentication; every
   other route is closed.** *Today no route asks for authentication, which gluetun's docs strongly discourage: any
   container of the compose network, the crawler included, can stop the VPN (`PUT /v1/vpn/status` stopped a test
@@ -127,6 +127,7 @@ above.
 | 50 | `feat/port-sync-live-port` | the port set live, the restart kept as fallback | D1 |
 | 60 | `feat/port-sync-amuleapi-session` | the token kept, amuleapi not ready retried | D1 |
 | 70 | `refactor/amuled-restart-removal` | the restart removed | D1 |
+| 75 | `refactor/amule-clock-now-removal` | `MonotonicClock.now()` and `MonotonicInstant` removed (Corrected: inserted on 2026-11-06, split out of block 80 at 23 files) | |
 | 80 | `feat/port-sync-reads-live-port` | the port read through amuleapi | D1 |
 | 90 | `docs/v5-amule-container-wrap` | closing block | |
 
@@ -141,6 +142,14 @@ above.
   port, which stays Low-ID.
 - **A port-sync bug restarts amuled too** (D3, the umbrella's D24 cost): lot 4 makes the port-sync robust to its own
   errors.
+- **A `ListenPortError` that repeats restarts the container in a loop** (Corrected: found by the holistic review,
+  accepted by the operator on 2026-11-06): a route renamed or a body changed by an aMule bump (`404`, a `400` to the
+  login, malformed preferences) makes the port-sync exit, the container restart, and the next round, one poll after
+  amuleapi listens again, exit again. Under the VPN amuled then restarts about once a minute for good, dropping
+  transfers and Kad, while `ed2k` reads `healthy` most of the time. Its signal: `docker inspect -f
+  '{{.RestartCount}}' ed2k` rising, the port-sync's traceback in `docker compose logs ed2k`. Every amule-bump pull
+  request runs the smoke's port-sync test against the real amuleapi; lot 4 owns the fix, with the port-sync's
+  robustness.
 - **A crashed service makes the container exit 0**, as a requested stop does: s6-svscan exits so when told to, and
   the operator keeps it simple over a script that would tell the two apart. The crash shows in the restart count and
   the `finish` log line; the umbrella's "exits in error" reads exit 0.
@@ -174,7 +183,8 @@ compose files, block 20's CI step for the wx build.
 
 Every block is green alone: `dead-code-check` (vulture over every `src`) refuses a port or method whose caller lands in
 a later block, so each block brings a port with its first caller and deletes what it stops calling. Sizes are
-estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
+estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way) (Corrected: two blocks fell outside
+that band: block 60, 274 lines for about 120; block 40, 173 for about 250).
 
 ### Block 10: password on stdin, Dependabot, bases, gluetun's routes (D7, D8, D9, D10)
 
@@ -187,8 +197,8 @@ estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
   3 days count from the tag's latest push, so each Debian re-push of `trixie-slim` restarts the wait (it held back
   the October security digest), while the caution guards against packages anyone can publish more than against
   Debian's official images.
-- The five `FROM debian:trixie-slim@...` lines (amule 3, crawler 2) to the current digest; the aMule image's `uv`
-  stage to the crawler's version and digest.
+- The five `FROM debian:trixie-slim@...` lines (amule 3, crawler 2) to the current digest (Corrected: bumped by hand to `a72b4433...` in block 10: Debian re-pushed `trixie-slim` during the lot and the 3-day cooldown held Dependabot's digest back twice); the
+  aMule image's `uv` stage to the crawler's version and digest (Corrected: not in block 10, which left the `uv` stages to Dependabot's #637, merged to `main` on 2026-11-06 and under the whole stack: both images build on `uv` 0.13.7, the same digest).
 - `deploy/ed2k/vpn.compose.yml`: a top-level `configs:` entry with inline `content:`, a TOML role
   `routes = ["GET /v1/portforward"]`, `auth = "none"`, mounted at `/gluetun/auth/config.toml` (gluetun's default
   `HTTP_CONTROL_SERVER_AUTH_CONFIG_FILEPATH`). `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE` is removed: kept, it hands
@@ -206,19 +216,26 @@ estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
   and with its libcurl backend, since aMule's `cmake/wx.cmake` stops unless `wxUSE_WEBREQUEST` is on; aMule builds
   against it; the runtime copies its libraries and drops Debian's
   `libwxbase3.2-1t64` (and the GTK build dependencies the stage no longer needs); the libraries land in
-  `/usr/local/lib`, so the final stage runs `ldconfig`.
+  `/usr/local/lib`, so the final stage runs `ldconfig` (Corrected: wx builds on Debian's regex and zlib, without XML
+  so without its bundled expat; the runtime also drops `libglib2.0-0t64`, which only Debian's GTK build of wx
+  pulled in, and gains `libpcre2-32-0` and wx's licence).
 - `amule.cdx.json` declares the wx component with its CPE, as it declares aMule, since Syft finds no package metadata
   for it.
 - `BACKLOG.md`: the "Postponed" entry of section 6.
 - A CI step on the built aMule image checks that amuled resolves `libwx_baseu` from `/usr/local/lib` and that the
   library embeds `wxWidgets 3.2.12`: the file name cannot tell, 3.2.11 and 3.2.12 both being `.so.0.4.3`
-  (`version.bkl`). `validate.yml` checks only aMule's version today.
+  (`version.bkl`). `validate.yml` checks only aMule's version today. (Corrected: `libwx_baseu` holds no version
+  string, so the step checks that `ldd` resolves both wx libraries from `/usr/local/lib` and that `amuled --version`
+  reads `wxBase v<WX_VERSION>`; the closing block adds `pkg:generic/wxwidgets@<WX_VERSION>` to the SBOM checks of
+  `validate.yml` and `release.yml`.)
 - About 80 lines (`.reviews/v5-lot1-estimate-2.md`).
 
 ### Block 30: the `health` command on amuleapi (D4)
 
 - A driven port for amuleapi's readiness (`ApiHealthClient`: ready when `GET http://127.0.0.1:4711/api/v1/health`
-  answers `200` with `ec_connected` true; refused, timed out or `false` is not ready), its adapter
+  answers `200` with `ec_connected` true; refused, timed out or `false` is not ready) (Corrected: healthy and
+  unhealthy, `ApiHealthClient.is_api_healthy`, renamed in the closing block, since the port-sync's
+  `ApiNotReadyError` names another state, amuleapi before its first snapshot), its adapter
   `AmuleApiHealthClient`, a fake amuleapi server in the package's tests (as `FakeGluetunControlServer`), no contract
   (the package's HTTP clients have none, as `ForwardedPortClient`). No auth; before its EC login amuleapi has no
   listener at all, so refused is the normal starting state.
@@ -231,6 +248,7 @@ estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
 - The compose healthcheck runs block 30's command as `CMD` (tested Python, not inline code in the compose file);
   `interval 30s`, `timeout 3s`, `retries 3`, `start_period 30s` unchanged. The smoke stack's own healthcheck
   (`tests/smoke/compose.yaml`, today `s6-svstat -u`) runs it too, and `_up_until_ed2k_is_healthy`'s comment follows.
+  (Corrected: the deploy render test also asserts `ed2k`'s healthcheck command.)
 
 - `docker/services.d/amuled/finish` and `docker/services.d/port-sync/finish` (mode 0755): log the service's exit, and
   when s6 still wants it up, `exec s6-svscanctl -t /etc/services.d`. The `wantedup` guard keeps Docker's stop and
@@ -259,19 +277,27 @@ estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
   30 gains login and `PATCH`.
 - The round: when the ports differ, `PATCH` first; on its failure, today's restart, as before this block. A first
   round before amuleapi listens therefore still restarts amuled until block 60, which the pull request names.
+  (Corrected: the `PATCH` is tried on every round, inside the restart window too, only the fallback held to it;
+  superseded by block 70.)
 - `PortSyncSettings` gains the API password, required when the port-sync is on.
 - The compose smoke's port-sync test: a TCP listener on the new port and UDP listeners on it and on port + 3 in
-  `/proc/net/tcp` and `/proc/net/udp` of `ed2k`, amuled's pid unchanged, amuleapi answering.
+  `/proc/net/tcp` and `/proc/net/udp` of `ed2k`, amuled's pid unchanged, amuleapi answering (Corrected: and
+  `amule.conf` holding the new port, amuled saving it itself).
 - About 420 lines, 16 files.
 
 ### Block 60: the token kept, amuleapi not ready retried (D1)
 
 - The adapter keeps its token and logs in again once on a `401`, and splits its failure in two: amuleapi not ready
   (refused, `503` before the first snapshot, a `401` after its one re-login) and a rejection (`400 bad_request` above
-  65532, `400 amuled_rejected` for a port held or the EC port, amuled rolling back).
+  65532, `400 amuled_rejected` for a port held or the EC port, amuled rolling back). (Corrected: not ready also
+  covers a timeout, read or connect, at the lead's request as a fix-back, and a `503` on either route, the login's
+  included; with no kept token, the first login's `401` is that one re-login. A rejection is any `400` to the
+  `PATCH`.)
 - The round: not ready is logged and retried at the next poll, since the first round runs at once, before amuleapi
   listens, and a propagated refusal would make the container restart in a loop under the VPN; a rejection keeps
-  today's restart until block 70. Anything else propagates, the port-sync exits and block 40 restarts the container.
+  today's restart until block 70. Anything else propagates, the port-sync exits and block 40 restarts the container
+  (Corrected: named, a refused login (`401 invalid_credentials`, `429`), a `400` to the login, any other non-2xx, a
+  garbled reply, a login without a token).
   A test runs the first round against a refusing amuleapi.
 - About 120 lines, 8 files.
 
@@ -281,20 +307,30 @@ estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
   Deleted with their tests, as nothing calls them any more: `is_amuled_restart_due`,
   `with_listen_port`, `ServiceSupervisor.stop_amuled` and `start_amuled` (port, s6 adapter, fake),
   `restart_min_interval` and `PORT_SYNC_RESTART_MIN_SECONDS`, the port-sync's `amule.conf` writer wiring and its
-  ids, `s6-svperms` in its run script.
-- About 490 lines, 17 files, at the bound: `docs/high-id.md`'s variable row and `.claude/rules/amuleapi.md`'s two stale
+  ids, `s6-svperms` in its run script (Corrected: and the run script's wait for amuled's `supervise/control`).
+- About 490 lines, 17 files, at the bound (Corrected: 520 lines, 19 files, accepted as is by the operator on 2026-11-06,
+  the split through `vulture_whitelist.py` declined): `docs/high-id.md`'s variable row and `.claude/rules/amuleapi.md`'s two stale
   facts (amuled does not flush `amule.conf` on exit; a token survives an amuleapi restart, the boot's password reset
   invalidating it) go to the closing block. Should the measured block still pass a bound, the only green split
   bridges two names through `vulture_whitelist.py` (`.reviews/v5-lot1-estimate-3.md`, 60a and 60b): the lead asks the
   operator first.
+
+### Block 75: `MonotonicClock.now()` and `MonotonicInstant` removed
+
+(Corrected: inserted on 2026-11-06, a class 2 the operator accepted.) No `src` of `p2pwatch_amule` reads `now` once
+block 70 removes the restart floor; vulture misses it, the crawler having a `.now`. Written in block 80, which then
+passed the file bound (23 files), and split out along its commit: 127 lines, 9 files. The clock contract states
+`sleep`'s promise through an `elapsed_during` fixture each implementation supplies.
 
 ### Block 80: the port read through amuleapi (D1)
 
 - `ListenPortClient.read_listen_port` (`GET /api/v1/preferences`, `connection.tcp_port`), the round comparing on it;
   `tcp_listen_port` and the port-sync's `amule.conf` reader deleted. The port-sync then reads no file of amuled's.
   The read's failures (refused, `503` before the first snapshot, a `401` after its one re-login) are logged and
-  retried at the next poll, as the `PATCH`'s.
-- About 270 lines, 13 files.
+  retried at the next poll, as the `PATCH`'s. (Corrected: a timeout too, as block 60's; a `400` to the read
+  propagates, not a rejection; preferences without an integer `connection.tcp_port`, a JSON `true` included,
+  propagate as `ListenPortError`.)
+- About 270 lines, 13 files (Corrected: 316 lines, 15 files, the clock removal split out as block 75).
 
 ### Block 90: closing
 
@@ -314,7 +350,7 @@ estimates on this cut (`.reviews/v5-lot1-estimate-3.md`, about 25 % either way).
 | First round | a lifecycle test, amuleapi refusing: fails if the port-sync raises or restarts amuled |
 | amuleapi stopped | SIGTERM to amuleapi, then `docker inspect` health: fails if it stays `healthy` past `interval x retries` |
 | Password on stdin | the adapter's test: fails if the argv given to `run_command` contains the password, or if `input` does not carry it; the smoke's core logs in with it |
-| wxWidgets | block 20's CI step on the built image: fails unless `ldd` resolves `libwx_baseu` from `/usr/local/lib` and the library embeds `wxWidgets 3.2.12` |
+| wxWidgets | block 20's CI step on the built image: fails unless `ldd` resolves `libwx_baseu` from `/usr/local/lib` and the library embeds `wxWidgets 3.2.12` (Corrected: unless `ldd` resolves both wx libraries from `/usr/local/lib` and `amuled --version` reads `wxBase v<WX_VERSION>`) |
 | gluetun's routes | the deploy render test reads the inline role; at rc1, from `p2pwatch`, `GET http://ed2k:8000/v1/portforward` answers and `PUT http://ed2k:8000/v1/vpn/status` gets `401`: fails if the `PUT` is accepted |
 | Debian packages | `docker run --rm --entrypoint dpkg-query <image> -W libssl3t64 libpcre2-8-0` on both images: fails on `~deb13u2` (the aMule image already ships `libpcre2-8-0` at `~deb13u3` on `main`) |
 | Dependabot | after block 10 merges, a Dependabot job "docker in /packages/amule" in the repository's Dependabot runs: fails if none appears in the next weekly run |
@@ -339,7 +375,7 @@ Desktop, an internal network, 20 part files.
 | s6 `finish` with `s6-svscanctl -t` | amuled or the port-sync SIGKILLed: the container exits 0 (no `.s6-svscan/finish` yet), restarted by `unless-stopped` after 0.13 s; `docker stop` 0.31 s, one SIGTERM to amuled, part files saved; `docker restart` clean; without the `wantedup` guard `s6-svc -d` would restart the container |
 | wxWidgets | Debian trixie 3.2.8, sid 3.2.11, Ubuntu 26.04 3.2.9 and 26.10 3.2.11, Alpine 3.24 and edge 3.2.9, Fedora 45 3.2.11: none with the fix (`3382306c8`, in 3.2.12); rawhide and Arch 3.2.12 but no `s6`, Arch amd64 only |
 | Dependabot | jobs for `/packages/*` log "Deferring creation of a new pull request" and update only the directories an open group pull request lists; no job ever targeted `/packages/amule` |
-| Current bases | `debian:trixie-slim@sha256:f6b08b09...` (`libssl3t64 3.5.7-1~deb13u3`, `libpcre2-8-0 10.46-1~deb13u3`); pinned: `libssl3t64` `~deb13u2` in both images, `libpcre2-8-0` `~deb13u2` in the crawler's only |
+| Current bases | `debian:trixie-slim@sha256:f6b08b09...` (Corrected: bumped by hand to `a72b4433...` in block 10: Debian re-pushed `trixie-slim` during the lot and the 3-day cooldown held Dependabot's digest back twice) (`libssl3t64 3.5.7-1~deb13u3`, `libpcre2-8-0 10.46-1~deb13u3`); pinned: `libssl3t64` `~deb13u2` in both images, `libpcre2-8-0` `~deb13u2` in the crawler's only |
 | Fixable High CVEs | Grype `v0.121.0 --only-fixed` on `docker save` archives: five over both images, four in `p2pwatch-amule` (`CVE-2026-84782`, `-54873`, `-84784`, `-72897`, `libssl3t64`), five in `p2pwatch` (the same and `CVE-2026-103111`, `libpcre2-8-0`) |
 | gluetun's roles | read at `v3.41.3`: a route with no role answers `401`; the file at `/gluetun/auth/config.toml` by default; `SetDefaultRole` gives the default role every route no file role names. Run on `qmcgaw/gluetun:latest` with the inline `configs:` entry: `read 1 roles from authentication file`, `GET /v1/portforward` `200`, five other routes `401`; with the env default role kept, `PUT /v1/vpn/status` `200` |
 | wx libraries | amuled links `libwx_baseu` and `libwx_baseu_net`, amuleapi `libwx_baseu`; aMule's `cmake/wx.cmake` requires `wxUSE_WEBREQUEST`; 3.2.11 and 3.2.12 share the library version `0.4.3`, 3.2.8 is `0.4.1` |
