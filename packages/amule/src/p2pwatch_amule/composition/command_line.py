@@ -30,8 +30,6 @@ _HOME_DIRECTORY = Path("/home/amule")
 _CONFIG_DIRECTORY = _HOME_DIRECTORY / ".aMule"
 _AMULE_CONF_PATH = _CONFIG_DIRECTORY / "amule.conf"
 _PORT_SYNC_SERVICE_DIRECTORY = Path("/etc/services.d/port-sync")
-_AMULED_SERVICE_DIRECTORY = Path("/etc/services.d/amuled")
-_AMULED_STOP_TIMEOUT_SECONDS = 60
 _AMULE_API_URL = "http://127.0.0.1:4711"
 _AMULE_API_HEALTH_TIMEOUT_SECONDS = 2  # under the compose healthcheck's 3 s timeout
 
@@ -41,12 +39,6 @@ def build_command_line(
 ) -> ArgparseCommandLine:
     """The command line run in the environment ``env``, logging through ``root_logger``."""
     amule_conf_store = PosixAmuleConfStore(amule_conf_path=_AMULE_CONF_PATH, change_owner=os.chown)
-    service_supervisor = S6ServiceSupervisor(
-        port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY,
-        amuled_service_directory=_AMULED_SERVICE_DIRECTORY,
-        stop_timeout_seconds=_AMULED_STOP_TIMEOUT_SECONDS,
-        run_command=subprocess.run,
-    )
     return ArgparseCommandLine(
         container_booter=BootComposition(
             env=env,
@@ -74,13 +66,13 @@ def build_command_line(
                 env=env,
                 run_command=subprocess.run,
             ),
-            service_supervisor=service_supervisor,
+            service_supervisor=S6ServiceSupervisor(
+                port_sync_service_directory=_PORT_SYNC_SERVICE_DIRECTORY
+            ),
         ),
         port_sync_loop_runner=PortSyncComposition(
             env=env,
             amule_conf_reader=amule_conf_store,
-            amule_conf_writer=amule_conf_store,
-            service_supervisor=service_supervisor,
             gluetun_url_opener=build_opener(),  # through the environment's proxies, if any
             amule_api_url=_AMULE_API_URL,
             amule_api_url_opener=build_opener(ProxyHandler({})),  # loopback, never through a proxy

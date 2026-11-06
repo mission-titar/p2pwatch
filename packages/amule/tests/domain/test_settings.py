@@ -21,9 +21,7 @@ BOOT_ENV = {
     "AMULE_EC_PASSWORD": "hunter2",
     "AMULE_API_PASSWORD": "s3cret",
 }
-# amule.conf's owner, which port-sync's writes keep as the boot step's do.
-IDS = {"PUID": "1000", "PGID": "1001"}
-PORT_SYNC_ENV = {**IDS, "AMULE_API_PASSWORD": "s3cret"}
+PORT_SYNC_ENV = {"AMULE_API_PASSWORD": "s3cret"}
 
 
 def test_the_boot_variables_give_the_boot_settings() -> None:
@@ -128,9 +126,6 @@ def test_no_variable_set_but_the_required_ones_gives_todays_values() -> None:
     assert parse_port_sync_settings(PORT_SYNC_ENV) == PortSyncSettings(
         gluetun_control_url="http://localhost:8000",
         poll_interval=timedelta(seconds=60),
-        restart_min_interval=timedelta(seconds=300),
-        uid=Uid(1000),
-        gid=Gid(1001),
         api_password="s3cret",
     )
 
@@ -140,7 +135,6 @@ def test_an_empty_variable_takes_the_domains_value() -> None:
         **PORT_SYNC_ENV,
         "GLUETUN_CONTROL_URL": "",
         "PORT_SYNC_POLL_SECONDS": "",
-        "PORT_SYNC_RESTART_MIN_SECONDS": "",
     }
     assert parse_port_sync_settings(env) == parse_port_sync_settings(PORT_SYNC_ENV)
 
@@ -150,14 +144,10 @@ def test_each_variable_overrides_the_domains_value() -> None:
         **PORT_SYNC_ENV,
         "GLUETUN_CONTROL_URL": "https://gluetun:9999/prefix",
         "PORT_SYNC_POLL_SECONDS": "5",
-        "PORT_SYNC_RESTART_MIN_SECONDS": "30",
     }
     assert parse_port_sync_settings(env) == PortSyncSettings(
         gluetun_control_url="https://gluetun:9999/prefix",
         poll_interval=timedelta(seconds=5),
-        restart_min_interval=timedelta(seconds=30),
-        uid=Uid(1000),
-        gid=Gid(1001),
         api_password="s3cret",
     )
 
@@ -175,14 +165,11 @@ def test_port_sync_refuses_an_api_password_with_a_control_character() -> None:
         parse_port_sync_settings({**PORT_SYNC_ENV, "AMULE_API_PASSWORD": "s3\ncret"})
 
 
-@pytest.mark.parametrize("name", ["PORT_SYNC_POLL_SECONDS", "PORT_SYNC_RESTART_MIN_SECONDS"])
 @pytest.mark.parametrize("setting", ["0", "-1", "1.5", "60s", "1_000", " 60", "١٠"])
-def test_a_number_that_is_not_a_positive_integer_is_refused_naming_it(
-    *, name: str, setting: str
-) -> None:
-    message = f"{name} must be a positive integer, got {setting!r}"
+def test_a_poll_interval_that_is_not_a_positive_integer_is_refused_naming_it(setting: str) -> None:
+    message = f"PORT_SYNC_POLL_SECONDS must be a positive integer, got {setting!r}"
     with pytest.raises(SettingsError, match=f"^{re.escape(message)}$"):
-        parse_port_sync_settings({name: setting})
+        parse_port_sync_settings({"PORT_SYNC_POLL_SECONDS": setting})
 
 
 @pytest.mark.parametrize(

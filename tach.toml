@@ -840,12 +840,10 @@ path = "p2pwatch_amule.application.port_sync_lifecycle"
 layer = "lifecycle"
 depends_on = [
   "p2pwatch_amule.application.ports.driven.amule_conf_reader",
-  "p2pwatch_amule.application.ports.driven.amule_conf_writer",
   "p2pwatch_amule.application.ports.driven.forwarded_port_client",
   "p2pwatch_amule.application.ports.driven.listen_port_client",
   "p2pwatch_amule.application.ports.driven.logger",
   "p2pwatch_amule.application.ports.driven.monotonic_clock",
-  "p2pwatch_amule.application.ports.driven.service_supervisor",
   "p2pwatch_amule.domain",
 ]
 

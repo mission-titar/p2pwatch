@@ -10,9 +10,7 @@ from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client import (
 from p2pwatch_amule.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
-from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
 from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.application.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 from p2pwatch_amule.domain.settings import parse_port_sync_settings
 
@@ -29,8 +27,6 @@ class PortSyncComposition(PortSyncLoopRunner):
         *,
         env: Mapping[str, str],
         amule_conf_reader: AmuleConfReader,
-        amule_conf_writer: AmuleConfWriter,
-        service_supervisor: ServiceSupervisor,
         gluetun_url_opener: OpenerDirector,
         amule_api_url: str,
         amule_api_url_opener: OpenerDirector,
@@ -38,8 +34,6 @@ class PortSyncComposition(PortSyncLoopRunner):
     ) -> None:
         self._env = env
         self._amule_conf_reader = amule_conf_reader
-        self._amule_conf_writer = amule_conf_writer
-        self._service_supervisor = service_supervisor
         self._gluetun_url_opener = gluetun_url_opener
         self._amule_api_url = amule_api_url
         self._amule_api_url_opener = amule_api_url_opener
@@ -61,8 +55,6 @@ class PortSyncComposition(PortSyncLoopRunner):
                 url_opener=self._amule_api_url_opener,
             ),
             amule_conf_reader=self._amule_conf_reader,
-            amule_conf_writer=self._amule_conf_writer,
-            service_supervisor=self._service_supervisor,
             monotonic_clock=self._monotonic_clock,
             logger=StdlibLogger(PortSyncLifecycle.__module__),
         ).run()

@@ -5,12 +5,7 @@ import hashlib
 
 import pytest
 
-from p2pwatch_amule.domain.conf import (
-    ec_password_digest,
-    reconcile_conf,
-    tcp_listen_port,
-    with_listen_port,
-)
+from p2pwatch_amule.domain.conf import ec_password_digest, reconcile_conf, tcp_listen_port
 
 DIGEST = hashlib.md5(b"hunter2").hexdigest()
 
@@ -119,20 +114,3 @@ def test_an_absent_listen_port_is_amules_default() -> None:
 def test_an_unreadable_listen_port_raises_a_value_error(conf: str) -> None:
     with pytest.raises(ValueError):
         tcp_listen_port(conf)
-
-
-def test_the_listen_port_is_written_to_both_tcp_and_udp() -> None:
-    content = with_listen_port("[eMule]\nPort=4662\nUDPPort=4672\n", port=51820)
-    assert _section(content, name="eMule") == {"Port": "51820", "UDPPort": "51820"}
-
-
-def test_writing_the_listen_port_keeps_every_other_key_and_section() -> None:
-    existing = reconcile_conf("[eMule]\nMaxUpload=42\nNick=100%s\n", ec_digest=DIGEST)
-    content = with_listen_port(existing, port=51820)
-    assert content == existing.replace("Nick=100%s\n", "Nick=100%s\nPort=51820\nUDPPort=51820\n")
-
-
-def test_writing_the_listen_port_adds_a_missing_emule_section() -> None:
-    content = with_listen_port("[AmuleApi]\nEnabled=1\n", port=51820)
-    assert _section(content, name="eMule") == {"Port": "51820", "UDPPort": "51820"}
-    assert _section(content, name="AmuleApi") == {"Enabled": "1"}

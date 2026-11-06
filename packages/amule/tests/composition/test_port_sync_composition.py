@@ -1,4 +1,4 @@
-"""Port-sync's assembly: gluetun and amuleapi as stand-ins, amule.conf and s6 as fakes."""
+"""Port-sync's assembly: gluetun and amuleapi as stand-ins, amule.conf as a fake."""
 
 import logging
 import socket
@@ -15,7 +15,6 @@ from p2pwatch_amule.composition.port_sync_composition import PortSyncComposition
 from p2pwatch_amule.domain.settings_error import SettingsError
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
-from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSupervisor
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 from tests.fakes.fake_gluetun_control_server import FakeGluetunControlServer
 
@@ -38,8 +37,6 @@ def _port_sync_composition(
     port_sync_composition = PortSyncComposition(
         env=env,
         amule_conf_reader=amule_conf,
-        amule_conf_writer=amule_conf,
-        service_supervisor=FakeServiceSupervisor(actions),
         gluetun_url_opener=build_opener(ProxyHandler({})),
         amule_api_url=amule_api_url,
         amule_api_url_opener=build_opener(ProxyHandler({})),
@@ -64,8 +61,6 @@ def test_port_sync_sets_gluetuns_port_live_under_its_modules_logger_names(
 
         monotonic_clock.on_sleep = between_rounds
         env = {
-            "PUID": "1000",
-            "PGID": "1001",
             "GLUETUN_CONTROL_URL": gluetun.control_url,
             "PORT_SYNC_POLL_SECONDS": "5",
             "AMULE_API_PASSWORD": amule_api.password,
@@ -82,7 +77,7 @@ def test_port_sync_sets_gluetuns_port_live_under_its_modules_logger_names(
         "POST /api/v1/auth/login?include_token=true HTTP/1.1",
         "PATCH /api/v1/preferences HTTP/1.1",
     ]
-    assert actions == ["start amuled", "read amule.conf"]
+    assert actions == ["read amule.conf"]
     assert amule_conf.conf == CONF
     assert [(record.name, record.getMessage()) for record in caplog.records] == [
         (GluetunForwardedPortClient.__module__, "gluetun reports no forwarded port (b'{}')"),
@@ -106,8 +101,6 @@ def test_a_first_round_before_amuleapi_listens_leaves_amuled_running(
         refusing_url = f"http://127.0.0.1:{closed.getsockname()[1]}"
     with FakeGluetunControlServer() as gluetun:
         env = {
-            "PUID": "1000",
-            "PGID": "1001",
             "GLUETUN_CONTROL_URL": gluetun.control_url,
             "AMULE_API_PASSWORD": "s3cret",
         }
@@ -117,7 +110,7 @@ def test_a_first_round_before_amuleapi_listens_leaves_amuled_running(
         with caplog.at_level(logging.INFO), pytest.raises(_Stop):
             port_sync_composition.run_port_sync_loop()
 
-    assert actions == ["start amuled", "read amule.conf"]
+    assert actions == ["read amule.conf"]
     assert amule_conf.conf == CONF
     (not_ready,) = caplog.records
     assert not_ready.getMessage().startswith(
@@ -125,9 +118,9 @@ def test_a_first_round_before_amuleapi_listens_leaves_amuled_running(
     )
 
 
-def test_a_refused_variable_raises_before_amuled_is_started() -> None:
+def test_a_refused_variable_raises_before_any_round() -> None:
     actions: list[str] = []
-    env = {"PUID": "1000", "PGID": "1001", "GLUETUN_CONTROL_URL": "ftp://gluetun"}
+    env = {"GLUETUN_CONTROL_URL": "ftp://gluetun"}
     port_sync_composition, _ = _port_sync_composition(
         env, actions=actions, monotonic_clock=FakeMonotonicClock()
     )
