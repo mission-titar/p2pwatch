@@ -5,7 +5,7 @@
 FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
 
 # --- Python stage: build /app/.venv against Debian's python3, the same one the runtime holds ---
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS python
+FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS python
 
 # Product version, computed from the git tag on the CI runner and injected here. The build
 # context has no .git (.dockerignore excludes it), so hatch-vcs/setuptools-scm reads
@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --package p2pwatch
 
 # --- Runtime: the crawler and its webui ---
-FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
 # ARG after FROM only lives in the stage that declares it, hence the re-declaration.
 ARG VERSION=0.0.0
