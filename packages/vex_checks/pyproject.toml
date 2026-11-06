@@ -32,6 +32,7 @@ packages = ["src/vex_checks"]
 [tool.pytest.ini_options]
 addopts = "--cov=vex_checks --cov=tests --cov-branch --cov-report=term-missing --cov-fail-under=100 --cov-context=test"
 testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
 branch = true
