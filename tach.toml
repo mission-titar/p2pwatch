@@ -820,10 +820,7 @@ depends_on = ["p2pwatch_amule.application.ports.driven.logger"]
 [[modules]]
 path = "p2pwatch_amule.adapters.driven.system_monotonic_clock"
 layer = "adapters"
-depends_on = [
-  "p2pwatch_amule.domain",
-  "p2pwatch_amule.application.ports.driven.monotonic_clock",
-]
+depends_on = ["p2pwatch_amule.application.ports.driven.monotonic_clock"]
 
 [[modules]]
 path = "p2pwatch_amule.adapters.driving.cli"
@@ -946,7 +943,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch_amule.application.ports.driven.monotonic_clock"
 layer = "ports"
-depends_on = ["p2pwatch_amule.domain"]
+depends_on = []
 
 [[modules]]
 path = "p2pwatch_amule.application.ports.driven.service_supervisor"
