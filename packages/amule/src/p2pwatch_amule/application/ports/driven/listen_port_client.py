@@ -6,4 +6,5 @@ class ListenPortClient(ABC):
 
     @abstractmethod
     def set_listen_port(self, port: int) -> None:
-        """Sets amuled's TCP and UDP ports to ``port``; raises ``ListenPortError`` otherwise."""
+        """Sets amuled's TCP and UDP ports to ``port``; raises ``ApiNotReadyError`` while the API
+        cannot serve, ``ListenPortRejectedError`` if amuled refuses it, or ``ListenPortError``."""
