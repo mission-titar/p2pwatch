@@ -129,6 +129,7 @@ above.
 | 70 | `refactor/amuled-restart-removal` | the restart removed | D1 |
 | 75 | `refactor/amule-clock-now-removal` | `MonotonicClock.now()` and `MonotonicInstant` removed (Corrected: inserted on 2026-11-06, split out of block 80 at 23 files) | |
 | 80 | `feat/port-sync-reads-live-port` | the port read through amuleapi | D1 |
+| 85 | `fix/amule-holistic-findings` | the holistic review's code fixes (Corrected: the closing block split for the file bound, 27 files) | |
 | 90 | `docs/v5-amule-container-wrap` | closing block | |
 
 ## 6. Limits and scope
@@ -332,10 +333,18 @@ passed the file bound (23 files), and split out along its commit: 127 lines, 9 f
   propagate as `ListenPortError`.)
 - About 270 lines, 13 files (Corrected: 316 lines, 15 files, the clock removal split out as block 75).
 
+### Block 85: the holistic review's code fixes
+
+(Corrected: the closing block split for the file bound on 2026-11-06, at 141 lines and 27 files.) The code half of
+the holistic findings: the command line takes amuleapi's URL so no unit test binds port 4711, the health side renamed
+healthy, the refusal bodies cut once, the dead `rstrip` and whitelist line removed, wx asserted in the SBOM checks.
+95 lines, 19 files.
+
 ### Block 90: closing
 
 - The holistic review's findings, `BACKLOG.md`, the handoff (workflow, Wrap); `docs/high-id.md`'s variable row and
-  `.claude/rules/amuleapi.md`'s two stale facts (block 70).
+  `.claude/rules/amuleapi.md`'s two stale facts (block 70). (Corrected: the records only, the code fixes being
+  block 85's: 46 lines, 8 files.)
 
 ## Appendix B. Acceptance, in detail
 
