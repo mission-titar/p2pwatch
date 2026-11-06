@@ -16,9 +16,9 @@ services:
     volumes:
       - ./amule:/home/amule/.aMule
       - ./downloads:/downloads
-    # s6-svstat exits 0 for a stopped service too, so test what it prints, not its exit code.
+    # Healthy when amuleapi answers and reports its link to amuled.
     healthcheck:
-      test: ["CMD-SHELL", 'test "$$(s6-svstat -u /etc/services.d/amuled)" = true']
+      test: ["CMD", "python", "-m", "p2pwatch_amule", "health"]
       interval: 30s
       timeout: 3s
       retries: 3

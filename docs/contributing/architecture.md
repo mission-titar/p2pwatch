@@ -26,7 +26,8 @@ Un **workspace uv** de huit paquets, plus des dépendances externes.
 cœur, `p2pwatch`, ne porte que le crawler et sa webui : pas de superviseur, il tourne directement
 sous `PUID:PGID`. Le client eMule, `ed2k` (image `p2pwatch-amule`), fait tourner **s6**
 (`s6-svscan` est PID 1), qui en supervise deux services, `amuled` et le port-sync ; c'est `amuled`
-qui démarre `amuleapi`, et qui l'emporte avec lui en s'arrêtant. Sous la variante VPN, seul `ed2k`
+qui démarre `amuleapi`, et qui l'emporte avec lui en s'arrêtant. Un service qui sort sans que s6
+l'ait demandé arrête le conteneur, que Docker relance (§13). Sous la variante VPN, seul `ed2k`
 partage le namespace réseau d'`ed2k-gluetun` : le cœur reste hors du tunnel.
 
 ```mermaid
@@ -103,7 +104,7 @@ flowchart RL
 | Paquet | Dist | Rôle |
 |---|---|---|
 | `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
-| `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`) et le port-sync (`python -m p2pwatch_amule port-sync`, §9). |
+| `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`), le port-sync (`python -m p2pwatch_amule port-sync`, §9) et le healthcheck (`python -m p2pwatch_amule health`, §13). |
 | `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
 | `pytest_settings` | `pytest-settings` | **Configuration de test partagée**, un seul module et non un hexagone : les réglages de pytest que la suite de chaque paquet applique, chargés par son point d'entrée `pytest11`. Hors de la portée de vulture, comme les tests. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
@@ -782,24 +783,23 @@ démon sont
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
 
-## 13. Le healthcheck lit la sortie de s6-svstat, pas son code de retour
+## 13. Le healthcheck interroge amuleapi ; un service mort arrête le conteneur
 
-Si vous écrivez une sonde autour de `s6-svstat` (un contrôle de supervision, un `healthcheck:`
-maison), testez la valeur qu'elle imprime, pas son code de retour : sinon elle déclarera **sain un
-amuled arrêté**.
+Le healthcheck d'`ed2k` lance `python -m p2pwatch_amule health`, sain quand
+`GET http://127.0.0.1:4711/api/v1/health` répond `200` avec `ec_connected` vrai : quand le crawler
+peut piloter aMule. Avant sa connexion EC à amuled, amuleapi n'écoute pas : un refus est l'état
+normal du démarrage, que couvre `start_period`.
 
-`s6-svstat` sort en 0 même pour un service arrêté ; avec `-u`, il imprime `false` sur la sortie
-standard. Un code de retour non nul signifie tout autre chose : c'est s6-supervise lui-même qui ne
-tourne pas pour ce répertoire de service. Le healthcheck livré teste donc la valeur imprimée :
+**Un service qui sort sans que s6 l'ait demandé arrête le conteneur.** Le `finish` de chaque
+service (`packages/amule/docker/services.d/<service>/finish`) journalise sa sortie
+(`finish amuled: exit 256 signal 9 wantedup true`) et, si s6 veut encore le service levé, lance
+`s6-svscanctl -t` : s6 arrête l'autre service proprement et sort en 0, puis
+`restart: unless-stopped` relance le conteneur, tous ses processus ensemble. `docker stop` et
+`s6-svc -d` laissent `wantedup` à `false` et n'arrêtent que ce qu'ils visent. Une sonde autour de
+`s6-svstat` teste ce qu'il imprime, jamais son code de retour, qui vaut 0 pour un service arrêté.
 
-```yaml
-test: ["CMD-SHELL", 'test "$$(s6-svstat -u /etc/services.d/amuled)" = true']
-```
-
-(le `$$` est l'échappement compose d'un `$` littéral ; dans le conteneur, la commande est
-`test "$(s6-svstat -u /etc/services.d/amuled)" = true`).
-
-**Ce que `unhealthy` signifie, et ne signifie pas.** Le healthcheck est celui du conteneur `ed2k`,
-qui ne passe `unhealthy` que quand amuled est arrêté. Le cœur n'en a pas : Docker le relance déjà
+**Ce que `unhealthy` signifie, et ne signifie pas.** amuleapi n'est pas un service s6 mais l'enfant
+d'amuled : tombé seul, il fait passer `ed2k` `unhealthy`, et rien ne le relance, Docker ne relançant
+pas un conteneur `unhealthy` ; `docker compose restart ed2k` le ramène. Le cœur n'a pas de healthcheck : Docker le relance déjà
 après toute sortie, et l'état d'amuled qu'un healthcheck lui aurait fait rapporter, sa boucle de
 statut le rapporte et l'alerte.

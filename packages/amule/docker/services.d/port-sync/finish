@@ -1,0 +1,6 @@
+#!/bin/sh
+# An exit s6 was not asked for stops the container; Docker's restart policy restarts it.
+echo "finish port-sync: exit $1 signal $2 wantedup $(s6-svstat -o wantedup .)"
+if [ "$(s6-svstat -o wantedup .)" = true ]; then
+	exec s6-svscanctl -t /etc/services.d
+fi
