@@ -3,7 +3,7 @@ name = "pytest-settings"
 dynamic = ["version"]
 description = "The pytest settings every package's tests share, loaded through its entry point"
 requires-python = ">=3.13"
-dependencies = ["pytest>=9.1.1"]
+dependencies = ["pytest>=9.2.0"]
 
 [dependency-groups]
 dev = ["pytest-cov>=5"]
