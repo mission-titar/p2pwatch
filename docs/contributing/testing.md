@@ -278,9 +278,10 @@ sollicitée). Six choses :
    `normallyup`, depuis 25 s au moins) ; lancé face à une doublure de gluetun (un fichier
    `/v1/portforward` servi par `python -m http.server` sur le `localhost:8000` d'`ed2k`, l'URL par
    défaut), il laisse amuled et `amule.conf` tels quels tant que la doublure sert le port
-   qu'amuled écoute, puis, quand elle en sert un autre, écrit ce port en `Port` et `UDPPort` et
-   relance amuled, qui revient avec un nouveau pid. La pile smoke règle
-   `PORT_SYNC_POLL_SECONDS` à 1 ;
+   qu'amuled écoute, puis, quand elle en sert un autre, le règle à chaud par amuleapi : amuled
+   écoute alors en TCP sur ce port et en UDP sur lui et sur port + 3 (lus dans `/proc/net`
+   d'`ed2k`), garde son pid et l'écrit lui-même dans `amule.conf`, et amuleapi répond toujours. La
+   pile smoke règle `PORT_SYNC_POLL_SECONDS` à 1 ;
 4. un fichier qu'amuled partage et qui a quitté sa file est enregistré `completed` par le cœur,
    par le vrai chemin HTTP vers `ed2k:4711` ;
 5. amuled ou le port-sync tué arrête `ed2k`, `s6-svc -d` sur amuled le laisse tourner,

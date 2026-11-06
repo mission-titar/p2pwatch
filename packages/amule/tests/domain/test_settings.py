@@ -23,6 +23,7 @@ BOOT_ENV = {
 }
 # amule.conf's owner, which port-sync's writes keep as the boot step's do.
 IDS = {"PUID": "1000", "PGID": "1001"}
+PORT_SYNC_ENV = {**IDS, "AMULE_API_PASSWORD": "s3cret"}
 
 
 def test_the_boot_variables_give_the_boot_settings() -> None:
@@ -123,29 +124,30 @@ def test_any_other_value_is_refused_naming_port_sync(port_sync: str) -> None:
         is_port_sync_enabled({"PORT_SYNC": port_sync})
 
 
-def test_no_variable_set_but_the_ids_gives_todays_values() -> None:
-    assert parse_port_sync_settings(IDS) == PortSyncSettings(
+def test_no_variable_set_but_the_required_ones_gives_todays_values() -> None:
+    assert parse_port_sync_settings(PORT_SYNC_ENV) == PortSyncSettings(
         gluetun_control_url="http://localhost:8000",
         poll_interval=timedelta(seconds=60),
         restart_min_interval=timedelta(seconds=300),
         uid=Uid(1000),
         gid=Gid(1001),
+        api_password="s3cret",
     )
 
 
 def test_an_empty_variable_takes_the_domains_value() -> None:
     env = {
-        **IDS,
+        **PORT_SYNC_ENV,
         "GLUETUN_CONTROL_URL": "",
         "PORT_SYNC_POLL_SECONDS": "",
         "PORT_SYNC_RESTART_MIN_SECONDS": "",
     }
-    assert parse_port_sync_settings(env) == parse_port_sync_settings(IDS)
+    assert parse_port_sync_settings(env) == parse_port_sync_settings(PORT_SYNC_ENV)
 
 
 def test_each_variable_overrides_the_domains_value() -> None:
     env = {
-        **IDS,
+        **PORT_SYNC_ENV,
         "GLUETUN_CONTROL_URL": "https://gluetun:9999/prefix",
         "PORT_SYNC_POLL_SECONDS": "5",
         "PORT_SYNC_RESTART_MIN_SECONDS": "30",
@@ -156,14 +158,21 @@ def test_each_variable_overrides_the_domains_value() -> None:
         restart_min_interval=timedelta(seconds=30),
         uid=Uid(1000),
         gid=Gid(1001),
+        api_password="s3cret",
     )
 
 
-@pytest.mark.parametrize("name", list(IDS))
-def test_port_sync_refuses_a_missing_id_naming_it(name: str) -> None:
-    env = {key: setting for key, setting in IDS.items() if key != name}
+@pytest.mark.parametrize("name", list(PORT_SYNC_ENV))
+def test_port_sync_refuses_a_missing_required_variable_naming_it(name: str) -> None:
+    env = {key: setting for key, setting in PORT_SYNC_ENV.items() if key != name}
     with pytest.raises(SettingsError, match=f"^{name} is required$"):
         parse_port_sync_settings(env)
+
+
+def test_port_sync_refuses_an_api_password_with_a_control_character() -> None:
+    message = "AMULE_API_PASSWORD must not contain a control character"
+    with pytest.raises(SettingsError, match=f"^{message}$"):
+        parse_port_sync_settings({**PORT_SYNC_ENV, "AMULE_API_PASSWORD": "s3\ncret"})
 
 
 @pytest.mark.parametrize("name", ["PORT_SYNC_POLL_SECONDS", "PORT_SYNC_RESTART_MIN_SECONDS"])

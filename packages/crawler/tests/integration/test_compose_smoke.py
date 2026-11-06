@@ -9,7 +9,7 @@ the core `p2pwatch` and the aMule container `ed2k`, and asserts the WIRING, NO r
      shows its first reading of `amuled` on the dashboard, and writes data/ as PUID.
   3. deploy/'s layout renders with `docker compose config`, in both variants.
   4. port-sync stays down with PORT_SYNC unset; started against a stand-in for gluetun, it
-     restarts amuled on the forwarded port only when that port moved.
+     sets amuled's ports live through amuleapi only when the forwarded port moved.
   5. amuled or port-sync dying unasked stops `ed2k`; `s6-svc -d` and `docker compose stop` do
      not; `ed2k` turns `unhealthy` without amuleapi.
 Tear-down: `docker compose down -v` plus the throwaway state directory, in a finally.
@@ -416,7 +416,21 @@ def _amuled_up_and_pid(files: tuple[Path, ...]) -> str:
     return _exec(_AMULE, "s6-svstat", "-o", "up,pid", _AMULED_SERVICE, files=files)
 
 
-def test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved(
+# "True True" once a TCP socket listens on the port, and UDP sockets sit on it and on port + 3.
+_LISTENS_ON = """
+import sys
+from pathlib import Path
+port = int(sys.argv[1])
+def ports(protocol, state):
+    paths = [Path("/proc/net", protocol + suffix) for suffix in ("", "6")]
+    tables = [path.read_text().splitlines()[1:] for path in paths if path.exists()]
+    rows = [line.split() for lines in tables for line in lines]
+    return {int(row[1].rsplit(":", 1)[1], 16) for row in rows if state in (None, row[3])}
+print(port in ports("tcp", "0A"), {port, port + 3} <= ports("udp", None))
+"""
+
+
+def test_port_sync_sets_the_forwarded_port_live_only_when_it_moved(
     project_files: tuple[Path, ...],
 ) -> None:
     """The stand-in first serves the port amuled listens on, then another one."""
@@ -452,20 +466,18 @@ def test_port_sync_restarts_amuled_on_the_forwarded_port_only_when_it_moved(
     assert _amuled_up_and_pid(project_files) == f"true {pid_before}"
 
     _serve_forwarded_port(_FORWARDED_PORT, files=project_files)
-    moved = f"{_FORWARDED_PORT} {_FORWARDED_PORT}"
     _wait_for(
-        "amule.conf's ports",
-        probe=partial(_listen_ports, project_files),
-        target=moved,
+        "amuled's listeners on the forwarded port",
+        probe=partial(
+            _exec, _AMULE, "python3", "-c", _LISTENS_ON, str(_FORWARDED_PORT), files=project_files
+        ),
+        target="True True",
         files=project_files,
     )
-    # Written only while amuled is down: up again, it is the process port-sync started.
-    amuled_up = partial(
-        _exec, _AMULE, "s6-svstat", "-o", "up", _AMULED_SERVICE, files=project_files
-    )
-    _wait_for("amuled up again", probe=amuled_up, target="true", files=project_files)
-    up, pid_after = _amuled_up_and_pid(project_files).split()
-    assert (up, pid_after != pid_before) == ("true", True)
+    # amuled saves the ports itself, which port-sync's next round compares against.
+    assert _listen_ports(project_files) == f"{_FORWARDED_PORT} {_FORWARDED_PORT}"
+    assert _amuled_up_and_pid(project_files) == f"true {pid_before}"
+    assert _exec(_CORE, "python", "-c", _AMULEAPI_HEALTH, files=project_files) == "200"
 
 
 # The pids, one per line, of `ed2k`'s processes whose argv starts with the script's arguments.
