@@ -93,7 +93,7 @@ def test_a_new_port_is_set_live_and_amuled_left_running(node: Node) -> None:
 def test_a_rejected_port_is_logged_amuled_left_on_its_port_and_retried_at_the_next_poll(
     node: Node,
 ) -> None:
-    node.listen_port_client.error = REFUSAL
+    node.listen_port_client.set_error = REFUSAL
     node.run_loop(rounds=2)
     assert node.actions == [READ, SET, READ, SET]
     assert node.listen_port_client.listen_port == 4662
@@ -109,9 +109,9 @@ def test_amuleapi_not_ready_at_the_first_round_is_logged_and_retried_at_the_next
     node: Node,
 ) -> None:
     def ready() -> None:
-        node.listen_port_client.error = None
+        node.listen_port_client.set_error = None
 
-    node.listen_port_client.error = NOT_READY
+    node.listen_port_client.set_error = NOT_READY
     node.between_rounds = ready
     node.run_loop(rounds=2)
     assert node.actions == [READ, SET, READ, SET]
@@ -151,8 +151,8 @@ def test_another_failure_of_the_read_ends_the_loop(node: Node) -> None:
     assert node.logger.lines == []
 
 
-def test_another_failure_of_amuleapi_ends_the_loop_without_restarting_amuled(node: Node) -> None:
-    node.listen_port_client.error = ListenPortError("PATCH /api/v1/preferences: 500 b''")
+def test_another_failure_of_amuleapi_ends_the_loop(node: Node) -> None:
+    node.listen_port_client.set_error = ListenPortError("PATCH /api/v1/preferences: 500 b''")
     node.run_loop(raises=ListenPortError)
     assert node.actions == [READ, SET]
     assert node.logger.lines == []

@@ -27,7 +27,7 @@ class AmuleApiListenPortClient(ListenPortClient):
         timeout_seconds: float,
         url_opener: OpenerDirector,
     ) -> None:
-        self._api_url = api_url.rstrip("/")
+        self._api_url = api_url
         self._api_password = api_password
         self._timeout_seconds = timeout_seconds
         self._url_opener = url_opener
@@ -35,7 +35,7 @@ class AmuleApiListenPortClient(ListenPortClient):
 
     def read_listen_port(self) -> int:
         status, reply = self._send_with_token(method="GET", body=None)
-        message = f"GET {_PREFERENCES_PATH}: {status} {reply[:100]!r}"
+        message = f"GET {_PREFERENCES_PATH}: {status} {reply!r}"
         if status == HTTPStatus.UNAUTHORIZED:
             raise ApiNotReadyError(message)
         _raise_unless_success(status=status, message=message)
@@ -52,7 +52,7 @@ class AmuleApiListenPortClient(ListenPortClient):
     def set_listen_port(self, port: int) -> None:
         connection = {"tcp_port": port, "udp_port": port}
         status, reply = self._send_with_token(method="PATCH", body={"connection": connection})
-        message = f"PATCH {_PREFERENCES_PATH}: {status} {reply[:100]!r}"
+        message = f"PATCH {_PREFERENCES_PATH}: {status} {reply!r}"
         if status == HTTPStatus.BAD_REQUEST:
             raise ListenPortRejectedError(message)
         if status == HTTPStatus.UNAUTHORIZED:
@@ -76,7 +76,7 @@ class AmuleApiListenPortClient(ListenPortClient):
             method="POST", path=_LOGIN_PATH, body={"password": self._api_password}, token=None
         )
         _raise_unless_success(
-            status=status, message=f"POST {_LOGIN_PATH}: {status} {login_reply[:100]!r}"
+            status=status, message=f"POST {_LOGIN_PATH}: {status} {login_reply!r}"
         )
         try:
             token = json.loads(login_reply).get("token")

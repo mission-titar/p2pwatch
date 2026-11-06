@@ -11,4 +11,4 @@ class CheckApiHealth(ApiHealthChecker):
         self._api_health_client = api_health_client
 
     def check_api_health(self) -> bool:
-        return self._api_health_client.is_api_ready()
+        return self._api_health_client.is_api_healthy()

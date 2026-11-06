@@ -9,7 +9,7 @@ _logger = logging.getLogger(__name__)
 
 
 class AmuleApiHealthClient(ApiHealthClient):
-    """``GET <api_url>/api/v1/health`` by ``url_opener``: ready on a ``200`` whose
+    """``GET <api_url>/api/v1/health`` by ``url_opener``: healthy on a ``200`` whose
     ``ec_connected`` is true."""
 
     def __init__(
@@ -19,11 +19,11 @@ class AmuleApiHealthClient(ApiHealthClient):
         timeout_seconds: float,
         url_opener: OpenerDirector,
     ) -> None:
-        self._url = api_url.rstrip("/") + "/api/v1/health"
+        self._url = api_url + "/api/v1/health"
         self._timeout_seconds = timeout_seconds
         self._url_opener = url_opener
 
-    def is_api_ready(self) -> bool:
+    def is_api_healthy(self) -> bool:
         try:
             with self._url_opener.open(self._url, timeout=self._timeout_seconds) as response:
                 status: int = response.status

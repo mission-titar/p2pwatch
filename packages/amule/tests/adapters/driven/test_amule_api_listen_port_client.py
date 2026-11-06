@@ -39,7 +39,7 @@ def listen_port_client(
 
 
 def test_the_ports_are_patched_with_the_token_of_a_login(amule_api: FakeAmuleApiServer) -> None:
-    listen_port_client(amule_api, api_url=amule_api.api_url + "/").set_listen_port(40123)
+    listen_port_client(amule_api).set_listen_port(40123)
 
     login, patch = amule_api.requests
     assert (login.line, login.authorization) == (LOGIN, None)
