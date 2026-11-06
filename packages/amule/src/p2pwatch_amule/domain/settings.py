@@ -37,6 +37,7 @@ class PortSyncSettings:
     restart_min_interval: timedelta
     uid: Uid
     gid: Gid
+    api_password: str
 
 
 def parse_boot_settings(env: Mapping[str, str]) -> BootSettings:
@@ -68,7 +69,7 @@ def is_port_sync_enabled(env: Mapping[str, str]) -> bool:
 
 def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
     """Return port-sync's settings from `env`, an unset or empty variable taking the domain's
-    value; the ids, amule.conf's owner, are required."""
+    value; the ids, amule.conf's owner, and the API password are required."""
     url = env.get("GLUETUN_CONTROL_URL") or DEFAULT_GLUETUN_CONTROL_URL
     try:
         parts = urlsplit(url)
@@ -92,6 +93,7 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         ),
         uid=_puid(env),
         gid=_pgid(env),
+        api_password=_password(env, name="AMULE_API_PASSWORD"),
     )
 
 

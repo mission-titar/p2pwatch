@@ -1,4 +1,4 @@
-"""Port-sync's loop: amuled is never left down, and the port is written only while it is down."""
+"""Port-sync's loop: the port set live, else amuled restarted around a write, never left down."""
 
 import dataclasses
 from datetime import timedelta
@@ -9,9 +9,11 @@ import pytest
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.identifiers import Gid, Uid
+from p2pwatch_amule.domain.listen_port_error import ListenPortError
 from p2pwatch_amule.domain.settings import PortSyncSettings
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_forwarded_port_client import FakeForwardedPortClient
+from tests.fakes.adapters.driven.fake_listen_port_client import FakeListenPortClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
 from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSupervisor
@@ -20,12 +22,15 @@ DOWN = "stop amuled"
 UP = "start amuled"
 READ = "read amule.conf"
 WRITE = "write amule.conf as 1000:1001"
+SET = "set listen port 51820"
+REFUSAL = ListenPortError("PATCH /api/v1/preferences: 400 b'amuled_rejected'")
 SETTINGS = PortSyncSettings(
     gluetun_control_url="http://localhost:8000",
     poll_interval=timedelta(seconds=60),
     restart_min_interval=timedelta(seconds=300),
     uid=Uid(1000),
     gid=Gid(1001),
+    api_password="s3cret",
 )
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\nMaxUpload=42\n\n[AmuleApi]\nEnabled=1\n\n"
 
@@ -39,14 +44,15 @@ class RoundCallback(Protocol):
 
 
 class Node:
-    """amule.conf and the supervisor recording into one action list, gluetun's port, a clock, a
-    logger."""
+    """amule.conf, amuleapi and the supervisor recording into one action list, gluetun's port, a
+    clock, a logger."""
 
     def __init__(self) -> None:
         self.actions: list[str] = []
         self.amule_conf = FakeAmuleConfStore(self.actions)
         self.amule_conf.conf = CONF
         self.forwarded_port_client = FakeForwardedPortClient()
+        self.listen_port_client = FakeListenPortClient(self.actions)
         self.service_supervisor = FakeServiceSupervisor(self.actions)
         self.between_rounds: RoundCallback = lambda: None
         self.monotonic_clock = FakeMonotonicClock()
@@ -73,6 +79,7 @@ class Node:
             PortSyncLifecycle(
                 port_sync_settings=port_sync_settings,
                 forwarded_port_client=self.forwarded_port_client,
+                listen_port_client=self.listen_port_client,
                 amule_conf_reader=self.amule_conf,
                 amule_conf_writer=self.amule_conf,
                 service_supervisor=self.service_supervisor,
@@ -86,11 +93,28 @@ def node() -> Node:
     return Node()
 
 
-def test_a_new_port_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> None:
+def test_a_new_port_is_set_live_and_amuled_left_running(node: Node) -> None:
     node.run_loop()
-    assert node.actions == [UP, READ, DOWN, READ, WRITE, UP]
+    assert node.actions == [UP, READ, SET]
+    assert node.conf == CONF
+    assert node.logger.lines == [
+        LoggedLine(
+            level="info", message="gluetun forwards 51820, amuled listened on 4662: set live"
+        )
+    ]
+
+
+def test_a_live_change_refused_stops_amuled_writes_both_ports_and_starts_it(node: Node) -> None:
+    node.listen_port_client.error = REFUSAL
+    node.run_loop()
+    assert node.actions == [UP, READ, SET, DOWN, READ, WRITE, UP]
     assert node.conf == with_listen_port(CONF, port=51820)
     assert node.logger.lines == [
+        LoggedLine(
+            level="error",
+            message="amuleapi did not set the port live "
+            "(PATCH /api/v1/preferences: 400 b'amuled_rejected')",
+        ),
         LoggedLine(
             level="info",
             message="gluetun forwards 51820, amuled listens on 4662: restarting amuled",
@@ -104,6 +128,7 @@ def test_the_write_keeps_what_amuled_flushed_on_exit(node: Node) -> None:
         node.amule_conf.conf = CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed")
 
     node.service_supervisor.on_stop_amuled = flush
+    node.listen_port_client.error = REFUSAL
     node.run_loop()
     assert node.conf == with_listen_port(
         CONF.replace("MaxUpload=42", "MaxUpload=42\nNick=flushed"), port=51820
@@ -112,17 +137,19 @@ def test_the_write_keeps_what_amuled_flushed_on_exit(node: Node) -> None:
 
 def test_a_down_wait_that_fails_writes_nothing_and_still_starts_amuled(node: Node) -> None:
     node.service_supervisor.is_amuled_stopped = False
+    node.listen_port_client.error = REFUSAL
     node.run_loop()
-    assert node.actions == [UP, READ, DOWN, UP]
+    assert node.actions == [UP, READ, SET, DOWN, UP]
     assert node.conf == CONF
-    assert node.logger.lines[1:] == []
+    assert node.logger.lines[2:] == []
 
 
 def test_a_write_that_raises_still_starts_amuled_and_is_logged(node: Node) -> None:
     node.amule_conf.write_error = OSError("No space left on device")
+    node.listen_port_client.error = REFUSAL
     node.run_loop()
-    assert node.actions == [UP, READ, DOWN, READ, UP]
-    assert node.logger.lines[1:] == [
+    assert node.actions == [UP, READ, SET, DOWN, READ, UP]
+    assert node.logger.lines[2:] == [
         LoggedLine(level="error", message="amule.conf was not written (No space left on device)")
     ]
 
@@ -134,9 +161,10 @@ def test_an_amule_conf_gone_once_amuled_stopped_writes_nothing_and_still_starts_
         node.amule_conf.conf = None
 
     node.service_supervisor.on_stop_amuled = remove
+    node.listen_port_client.error = REFUSAL
     node.run_loop()
-    assert node.actions == [UP, READ, DOWN, READ, UP]
-    assert node.logger.lines[1:] == [
+    assert node.actions == [UP, READ, SET, DOWN, READ, UP]
+    assert node.logger.lines[2:] == [
         LoggedLine(
             level="error",
             message="amule.conf no longer exists once amuled stopped, nothing written",
@@ -158,15 +186,18 @@ def test_no_forwarded_port_asks_the_supervisor_nothing(node: Node) -> None:
 
 def test_a_restart_within_the_window_asks_the_supervisor_nothing(node: Node) -> None:
     node.between_rounds = node.move_the_forwarded_port
+    node.listen_port_client.error = REFUSAL
     node.run_loop(dataclasses.replace(SETTINGS, poll_interval=timedelta(seconds=299)), rounds=2)
-    assert node.actions == [UP, READ, DOWN, READ, WRITE, UP, READ]
+    assert node.actions == [UP, READ, SET, DOWN, READ, WRITE, UP, READ, "set listen port 51821"]
 
 
 def test_a_restart_once_the_window_is_over_goes_ahead(node: Node) -> None:
     node.between_rounds = node.move_the_forwarded_port
+    node.listen_port_client.error = REFUSAL
     node.run_loop(dataclasses.replace(SETTINGS, poll_interval=timedelta(seconds=300)), rounds=2)
-    restart = [READ, DOWN, READ, WRITE, UP]
-    assert node.actions == [UP, *restart, *restart]
+    restart = [DOWN, READ, WRITE, UP]
+    second_set = "set listen port 51821"
+    assert node.actions == [UP, READ, SET, *restart, READ, second_set, *restart]
 
 
 def test_the_start_sends_up_before_the_first_round_then_polls_every_60s(node: Node) -> None:

@@ -81,7 +81,9 @@ def build_command_line(
             amule_conf_reader=amule_conf_store,
             amule_conf_writer=amule_conf_store,
             service_supervisor=service_supervisor,
-            url_opener=build_opener(),  # gluetun reached through the environment's proxies, if any
+            gluetun_url_opener=build_opener(),  # through the environment's proxies, if any
+            amule_api_url=_AMULE_API_URL,
+            amule_api_url_opener=build_opener(ProxyHandler({})),  # loopback, never through a proxy
             monotonic_clock=SystemMonotonicClock(),
         ),
         api_health_checker=CheckApiHealth(

@@ -1,4 +1,4 @@
-"""Port-sync's assembly: gluetun's stand-in, amule.conf and s6 through their fakes."""
+"""Port-sync's assembly: gluetun and amuleapi as stand-ins, amule.conf and s6 as fakes."""
 
 import logging
 from datetime import timedelta
@@ -11,11 +11,11 @@ from p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client import (
 )
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.composition.port_sync_composition import PortSyncComposition
-from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.settings_error import SettingsError
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_monotonic_clock import FakeMonotonicClock
 from tests.fakes.adapters.driven.fake_service_supervisor import FakeServiceSupervisor
+from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 from tests.fakes.fake_gluetun_control_server import FakeGluetunControlServer
 
 CONF = "[eMule]\nPort=4662\nUDPPort=4672\n\n"
@@ -26,7 +26,11 @@ class _Stop(Exception):
 
 
 def _port_sync_composition(
-    env: dict[str, str], *, actions: list[str], monotonic_clock: FakeMonotonicClock
+    env: dict[str, str],
+    *,
+    actions: list[str],
+    monotonic_clock: FakeMonotonicClock,
+    amule_api_url: str = "http://127.0.0.1:4711",
 ) -> tuple[PortSyncComposition, FakeAmuleConfStore]:
     amule_conf = FakeAmuleConfStore(actions)
     amule_conf.conf = CONF
@@ -35,19 +39,21 @@ def _port_sync_composition(
         amule_conf_reader=amule_conf,
         amule_conf_writer=amule_conf,
         service_supervisor=FakeServiceSupervisor(actions),
-        url_opener=build_opener(ProxyHandler({})),
+        gluetun_url_opener=build_opener(ProxyHandler({})),
+        amule_api_url=amule_api_url,
+        amule_api_url_opener=build_opener(ProxyHandler({})),
         monotonic_clock=monotonic_clock,
     )
     return port_sync_composition, amule_conf
 
 
-def test_port_sync_restarts_amuled_on_gluetuns_port_under_its_modules_logger_names(
+def test_port_sync_sets_gluetuns_port_live_under_its_modules_logger_names(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     actions: list[str] = []
     monotonic_clock = FakeMonotonicClock()
     # gluetun has no port for a round, then it forwards 51820.
-    with FakeGluetunControlServer() as gluetun:
+    with FakeGluetunControlServer() as gluetun, FakeAmuleApiServer() as amule_api:
         gluetun.body = b"{}"
 
         def between_rounds() -> None:
@@ -61,29 +67,25 @@ def test_port_sync_restarts_amuled_on_gluetuns_port_under_its_modules_logger_nam
             "PGID": "1001",
             "GLUETUN_CONTROL_URL": gluetun.control_url,
             "PORT_SYNC_POLL_SECONDS": "5",
+            "AMULE_API_PASSWORD": amule_api.password,
         }
         port_sync_composition, amule_conf = _port_sync_composition(
-            env, actions=actions, monotonic_clock=monotonic_clock
+            env, actions=actions, monotonic_clock=monotonic_clock, amule_api_url=amule_api.api_url
         )
         with caplog.at_level(logging.INFO), pytest.raises(_Stop):
             port_sync_composition.run_port_sync_loop()
 
     assert gluetun.request_lines == ["GET /v1/portforward HTTP/1.1"] * 2
     assert monotonic_clock.sleeps == [timedelta(seconds=5)] * 2
-    assert actions == [
-        "start amuled",
-        "read amule.conf",
-        "stop amuled",
-        "read amule.conf",
-        "write amule.conf as 1000:1001",
-        "start amuled",
+    assert amule_api.request_lines == [
+        "POST /api/v1/auth/login?include_token=true HTTP/1.1",
+        "PATCH /api/v1/preferences HTTP/1.1",
     ]
-    assert amule_conf.conf == with_listen_port(CONF, port=51820)
-    lifecycle = PortSyncLifecycle.__module__
+    assert actions == ["start amuled", "read amule.conf"]
+    assert amule_conf.conf == CONF
     assert [(record.name, record.getMessage()) for record in caplog.records] == [
         (GluetunForwardedPortClient.__module__, "gluetun reports no forwarded port (b'{}')"),
-        (lifecycle, "gluetun forwards 51820, amuled listens on 4662: restarting amuled"),
-        (lifecycle, "amule.conf now sets Port and UDPPort to 51820"),
+        (PortSyncLifecycle.__module__, "gluetun forwards 51820, amuled listened on 4662: set live"),
     ]
 
 

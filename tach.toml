@@ -766,6 +766,14 @@ layer = "adapters"
 depends_on = ["p2pwatch_amule.application.ports.driven.api_health_client"]
 
 [[modules]]
+path = "p2pwatch_amule.adapters.driven.amule_api_listen_port_client"
+layer = "adapters"
+depends_on = [
+  "p2pwatch_amule.application.ports.driven.listen_port_client",
+  "p2pwatch_amule.domain",
+]
+
+[[modules]]
 path = "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client"
 layer = "adapters"
 depends_on = [
@@ -834,6 +842,7 @@ depends_on = [
   "p2pwatch_amule.application.ports.driven.amule_conf_reader",
   "p2pwatch_amule.application.ports.driven.amule_conf_writer",
   "p2pwatch_amule.application.ports.driven.forwarded_port_client",
+  "p2pwatch_amule.application.ports.driven.listen_port_client",
   "p2pwatch_amule.application.ports.driven.logger",
   "p2pwatch_amule.application.ports.driven.monotonic_clock",
   "p2pwatch_amule.application.ports.driven.service_supervisor",
@@ -863,6 +872,7 @@ layer = "composition"
 depends_on = [
   "p2pwatch_amule.adapters.driven.amule_api_admin_password_setter",
   "p2pwatch_amule.adapters.driven.amule_api_health_client",
+  "p2pwatch_amule.adapters.driven.amule_api_listen_port_client",
   "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client",
   "p2pwatch_amule.adapters.driven.posix_account_provisioner",
   "p2pwatch_amule.adapters.driven.posix_amule_conf_store",
@@ -922,6 +932,11 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch_amule.application.ports.driven.forwarded_port_client"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch_amule.application.ports.driven.listen_port_client"
 layer = "ports"
 depends_on = []
 
