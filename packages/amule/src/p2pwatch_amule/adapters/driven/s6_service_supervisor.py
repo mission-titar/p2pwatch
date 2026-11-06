@@ -1,58 +1,16 @@
-import logging
-import subprocess
 from pathlib import Path
-from typing import Literal, Protocol
 
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 
-# Under its module's name, so no wiring can give it another (docs/migration-4x.md cites it).
-_logger = logging.getLogger(__name__)
-
-
-class CommandRunner(Protocol):
-    def __call__(
-        self, args: list[str], /, *, capture_output: bool, text: Literal[True]
-    ) -> subprocess.CompletedProcess[str]: ...
-
 
 class S6ServiceSupervisor(ServiceSupervisor):
-    """s6 over the services' directories: a ``down`` file keeps a service from starting,
-    ``s6-svc``, run through ``run_command``, stops and starts amuled."""
+    """s6 over the services' directories: a ``down`` file keeps a service from starting."""
 
-    def __init__(
-        self,
-        *,
-        port_sync_service_directory: Path,
-        amuled_service_directory: Path,
-        stop_timeout_seconds: int,
-        run_command: CommandRunner,
-    ) -> None:
+    def __init__(self, *, port_sync_service_directory: Path) -> None:
         self._port_sync_down_file = port_sync_service_directory / "down"
-        self._amuled_service_directory = amuled_service_directory
-        self._stop_timeout_seconds = stop_timeout_seconds
-        self._run_command = run_command
 
     def enable_port_sync(self) -> None:
         self._port_sync_down_file.unlink(missing_ok=True)
 
     def disable_port_sync(self) -> None:
         self._port_sync_down_file.touch()
-
-    def stop_amuled(self) -> bool:
-        stop_timeout_ms = str(self._stop_timeout_seconds * 1000)
-        return self._signal_amuled("-wD", "-T", stop_timeout_ms, "-d")
-
-    def start_amuled(self) -> None:
-        self._signal_amuled("-u")
-
-    def _signal_amuled(self, *options: str) -> bool:
-        """Run `s6-svc <options>` on amuled; return whether it exited 0, logging why not."""
-        s6_svc_run = self._run_command(
-            ["s6-svc", *options, str(self._amuled_service_directory)],
-            capture_output=True,
-            text=True,
-        )
-        if s6_svc_run.returncode != 0:
-            command, stderr = " ".join(["s6-svc", *options]), s6_svc_run.stderr.strip()
-            _logger.error("%s exited %d: %s", command, s6_svc_run.returncode, stderr)
-        return s6_svc_run.returncode == 0

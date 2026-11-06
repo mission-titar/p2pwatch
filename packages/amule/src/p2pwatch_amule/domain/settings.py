@@ -14,7 +14,6 @@ from p2pwatch_amule.domain.settings_error import SettingsError
 
 DEFAULT_GLUETUN_CONTROL_URL = "http://localhost:8000"
 DEFAULT_PORT_SYNC_POLL_INTERVAL = timedelta(seconds=60)
-DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL = timedelta(seconds=300)
 
 # gluetun's own booleans (gosettings' parseBool), since PORT_SYNC receives VPN_PORT_FORWARDING.
 _ON = ("enabled", "yes", "on", "true")
@@ -34,9 +33,6 @@ class BootSettings:
 class PortSyncSettings:
     gluetun_control_url: str
     poll_interval: timedelta
-    restart_min_interval: timedelta
-    uid: Uid
-    gid: Gid
     api_password: str
 
 
@@ -69,7 +65,7 @@ def is_port_sync_enabled(env: Mapping[str, str]) -> bool:
 
 def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
     """Return port-sync's settings from `env`, an unset or empty variable taking the domain's
-    value; the ids, amule.conf's owner, and the API password are required."""
+    value; the API password is required."""
     url = env.get("GLUETUN_CONTROL_URL") or DEFAULT_GLUETUN_CONTROL_URL
     try:
         parts = urlsplit(url)
@@ -86,13 +82,6 @@ def parse_port_sync_settings(env: Mapping[str, str]) -> PortSyncSettings:
         poll_interval=_seconds(
             env, name="PORT_SYNC_POLL_SECONDS", default=DEFAULT_PORT_SYNC_POLL_INTERVAL
         ),
-        restart_min_interval=_seconds(
-            env,
-            name="PORT_SYNC_RESTART_MIN_SECONDS",
-            default=DEFAULT_PORT_SYNC_RESTART_MIN_INTERVAL,
-        ),
-        uid=_puid(env),
-        gid=_pgid(env),
         api_password=_password(env, name="AMULE_API_PASSWORD"),
     )
 

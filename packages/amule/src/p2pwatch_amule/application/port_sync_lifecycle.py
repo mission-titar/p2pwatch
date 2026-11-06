@@ -1,24 +1,20 @@
 """Keeps amuled's listen port on gluetun's forwarded port: each round sets it live through
-amuleapi, waits for the next poll while amuleapi is not ready, else puts it in amule.conf,
-restarting amuled around the write."""
+amuleapi, and leaves amuled on its port until the next poll when amuleapi is not ready or rejects
+it."""
 
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
-from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
 from p2pwatch_amule.application.ports.driven.forwarded_port_client import ForwardedPortClient
 from p2pwatch_amule.application.ports.driven.listen_port_client import ListenPortClient
 from p2pwatch_amule.application.ports.driven.logger import Logger
 from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
-from p2pwatch_amule.domain.amuled_restart import is_amuled_restart_due
-from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
+from p2pwatch_amule.domain.conf import tcp_listen_port
 from p2pwatch_amule.domain.listen_port_error import ApiNotReadyError, ListenPortRejectedError
-from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings import PortSyncSettings
 
 
 class PortSyncLifecycle:
-    """Polls every ``poll_interval``; a rejected live change restarts amuled, at most once per
-    ``restart_min_interval``, another failure ends the loop; port-sync's root, behind no port."""
+    """Polls every ``poll_interval``; a failure of amuleapi other than not ready or a rejection
+    ends the loop; port-sync's root, behind no port."""
 
     def __init__(
         self,
@@ -27,8 +23,6 @@ class PortSyncLifecycle:
         forwarded_port_client: ForwardedPortClient,
         listen_port_client: ListenPortClient,
         amule_conf_reader: AmuleConfReader,
-        amule_conf_writer: AmuleConfWriter,
-        service_supervisor: ServiceSupervisor,
         monotonic_clock: MonotonicClock,
         logger: Logger,
     ) -> None:
@@ -36,40 +30,30 @@ class PortSyncLifecycle:
         self._forwarded_port_client = forwarded_port_client
         self._listen_port_client = listen_port_client
         self._amule_conf_reader = amule_conf_reader
-        self._amule_conf_writer = amule_conf_writer
-        self._service_supervisor = service_supervisor
         self._monotonic_clock = monotonic_clock
         self._logger = logger
 
     def run(self) -> None:
-        # A port-sync stopped between a stop and its start left amuled down: bring it back first.
-        self._service_supervisor.start_amuled()
-        latest_restart = None
         while True:
-            latest_restart = self._sync_listen_port_once(
-                latest_restart, now=self._monotonic_clock.now()
-            )
+            self._sync_listen_port_once()
             self._monotonic_clock.sleep(self._port_sync_settings.poll_interval)
 
-    def _sync_listen_port_once(
-        self, latest_restart: MonotonicInstant | None, *, now: MonotonicInstant
-    ) -> MonotonicInstant | None:
-        """Run one round; return amuled's latest restart, `now` if this round restarted it."""
+    def _sync_listen_port_once(self) -> None:
         forwarded_port = self._forwarded_port_client.read_forwarded_port()
         if forwarded_port is None:
-            return latest_restart
+            return
         try:
             amule_conf = self._amule_conf_reader.read_amule_conf()
             if amule_conf is None:
                 self._logger.error("amule.conf does not exist, amuled left as is")
-                return latest_restart
+                return
             listen_port = tcp_listen_port(amule_conf)
         except (OSError, ValueError) as error:
-            # The operator's file: a crash would only make s6 respawn port-sync every second.
+            # The operator's file: raising would restart the container, amuled included.
             self._logger.error("amule.conf's port is unreadable, amuled left as is (%s)", error)
-            return latest_restart
+            return
         if forwarded_port == listen_port:
-            return latest_restart
+            return
         try:
             self._listen_port_client.set_listen_port(forwarded_port)
         except ApiNotReadyError as error:
@@ -77,48 +61,11 @@ class PortSyncLifecycle:
             self._logger.info(
                 "amuleapi is not ready, %d waits for the next poll (%s)", forwarded_port, error
             )
-            return latest_restart
         except ListenPortRejectedError as error:
-            self._logger.error("amuleapi did not set the port live (%s)", error)
+            self._logger.error(
+                "amuleapi rejected %d, amuled stays on %d (%s)", forwarded_port, listen_port, error
+            )
         else:
             self._logger.info(
                 "gluetun forwards %d, amuled listened on %d: set live", forwarded_port, listen_port
             )
-            return latest_restart
-        if not is_amuled_restart_due(
-            forwarded_port=forwarded_port,
-            listen_port=listen_port,
-            latest_restart=latest_restart,
-            now=now,
-            restart_min_interval=self._port_sync_settings.restart_min_interval,
-        ):
-            return latest_restart
-
-        self._logger.info(
-            "gluetun forwards %d, amuled listens on %d: restarting amuled",
-            forwarded_port,
-            listen_port,
-        )
-        try:
-            # amuled flushes its config when it exits: a write while it runs could be overwritten.
-            if self._service_supervisor.stop_amuled():
-                self._write_listen_port(forwarded_port)
-        except OSError as error:
-            self._logger.error("amule.conf was not written (%s)", error)
-        finally:
-            # A stop leaves amuled wanted down: without this start it would stay down for good.
-            self._service_supervisor.start_amuled()
-        return now
-
-    def _write_listen_port(self, forwarded_port: int) -> None:
-        """Write ``forwarded_port`` into amule.conf as amuled left it on exit."""
-        amule_conf = self._amule_conf_reader.read_amule_conf()
-        if amule_conf is None:
-            self._logger.error("amule.conf no longer exists once amuled stopped, nothing written")
-            return
-        self._amule_conf_writer.set_amule_conf(
-            with_listen_port(amule_conf, port=forwarded_port),
-            uid=self._port_sync_settings.uid,
-            gid=self._port_sync_settings.gid,
-        )
-        self._logger.info("amule.conf now sets Port and UDPPort to %d", forwarded_port)

@@ -55,16 +55,6 @@ def tcp_listen_port(conf: str) -> int:
     return parser.getint("eMule", "Port", fallback=DEFAULT_TCP_PORT)
 
 
-def with_listen_port(conf: str, *, port: int) -> str:
-    """Return `conf` with `[eMule] Port` and `UDPPort` set to `port`, every other key kept."""
-    parser = _parser()
-    parser.read_string(conf)
-    if not parser.has_section("eMule"):
-        parser.add_section("eMule")
-    parser["eMule"].update({"Port": str(port), "UDPPort": str(port)})
-    return _written(parser)
-
-
 def _parser() -> _CaseSensitiveParser:
     # RawConfigParser: no %-interpolation, so a password or a path containing % survives.
     # strict=False: a hand-edited file with a duplicate key must not abort the boot.
