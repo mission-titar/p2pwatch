@@ -46,13 +46,16 @@ Drafted by block 80's teammate, corrected by the closing block's (90). Spec:
 | 70 | #642 | the restart removed | 520, 19 (accepted by the operator) |
 | 75 | #643 | `MonotonicClock.now()` and `MonotonicInstant` removed | 127, 9 |
 | 80 | #644 | the port read through amuleapi | 316, 15 |
-| 90 | this one | closing: the holistic findings, the records | see its pull request |
+| 85 | on #644 | the holistic review's code fixes | 95, 19 |
+| 90 | on block 85 | closing: the records | 46, 8 |
 
 - **Block 75** is the operator's class 2 of 2026-11-06 (found by block 70): no `src` of `p2pwatch_amule` read `now`
   once the restart floor left, and vulture misses it since the crawler has a `.now`. It was written in block 80, which
   then passed the file bound (23 files), and split out along its commit. The clock contract now states `sleep`'s
   promise through an `elapsed_during` fixture each implementation supplies (the system clock's test reads
   `time.monotonic_ns()`, the fake's sums its recorded sleeps).
+- **Blocks 85 and 90** are the closing block split for the file bound (141 lines, 27 files): the code fixes, then
+  the records, each green alone. The lot holds 11 blocks.
 - Departures, from the block reports (each marked `(Corrected: ...)` in the spec by block 90):
   - Block 10 bumped the Debian digest by hand: Debian re-pushed `trixie-slim` during the lot and the 3-day cooldown
     held Dependabot's digest back twice. It left the `uv` stages to Dependabot's #637 (merged 2026-11-06). Its
@@ -76,8 +79,8 @@ Drafted by block 80's teammate, corrected by the closing block's (90). Spec:
 
 ## The holistic review's findings and their exits
 
-Review: `.reviews/v5-lot1-holistic.md` (0 CRITICAL, 2 MAJOR, 14 MINOR). Every one is fixed in block 90 unless its
-line says otherwise.
+Review: `.reviews/v5-lot1-holistic.md` (0 CRITICAL, 2 MAJOR, 14 MINOR). Every one is fixed in block 85 (code) or 90
+(records) unless its line says otherwise.
 
 | Severity | Finding | Exit |
 |---|---|---|
@@ -128,14 +131,14 @@ These pages describe behaviour this lot removed; lot 7 rewrites them, block 90 l
 ## The lot's counts
 
 From `gh run list --branch <branch>` and the pull requests' timelines (`head_ref_force_pushed`), on 2026-11-06 before
-block 90's push:
+blocks 85 and 90 were pushed:
 
 - **Fix-backs: 2.** Block 10's Debian digest (17:09Z, a commit added to #631) and block 60's timeout (17:41Z, a commit
   added to #641).
 - **Cascaded rebases: 1.** Block 10's fix-back moved #634, #636 and #639 (17:09Z); block 60's had nothing above it
   yet. Block 75's insertion rewrote no pushed branch (#643 and #644 opened after it).
 - **Runs those re-triggered: 8**, 3 of them cancelled by a newer push: 1 on #631, 2 each on #634, #636 and #639, 1 on
-  #641. Fewer than the lot's 10 blocks.
+  #641. Fewer than the lot's 11 blocks.
 - **Rebases onto `main`: 2**, outside the fix-backs: #631 alone after #632 merged (16:04Z, 1 run), the whole stack
   after #637 merged (20:21Z, 16 runs started over the 9 branches, 7 cancelled by a second run on the same commit).
 - **Bodies the operator called unreadable unprompted: none.**
@@ -143,7 +146,7 @@ block 90's push:
 ## Pitfalls learned
 
 - **Serena's `find_referencing_symbols` is unusable**: it returned nothing on `ApiNotReadyError` (block 70), raised
-  `IndexError: list index out of range` (block 80), and returned `{}` on `ApiHealthClient/is_api_ready` (block 90),
+  `IndexError: list index out of range` (block 80), and returned `{}` on `ApiHealthClient/is_api_ready` (block 85),
   which `git grep -w` finds in 5 files. Every rename and deletion of blocks 70 to 90 was checked by `git grep -w` per
   name. Ask the operator for `/mcp reconnect serena`.
 - **A unit test binds no fixed host port**: a node on the developer's host publishes 4711 on every interface, and a
@@ -193,6 +196,6 @@ block 90's push:
 
 ## Next step
 
-The operator reads the whole stack (#631 to #644 and block 90) and merges it with `gh stack merge --rebase`; then rc1
+The operator reads the whole stack (#631 to #644, blocks 85 and 90) and merges it with `gh stack merge --rebase`; then rc1
 on the operator's node, the rows above, High-ID first. Lot 4 then takes the port-sync's robustness, the restart loop
 included; lot 7 the operator pages listed above.
