@@ -1,4 +1,5 @@
-"""Port-sync's loop: the port set live, else amuled restarted around a write, never left down."""
+"""Port-sync's loop: the port set live, retried while amuleapi is not ready, else amuled restarted
+around a write, never left down."""
 
 import dataclasses
 from datetime import timedelta
@@ -9,7 +10,11 @@ import pytest
 from p2pwatch_amule.application.port_sync_lifecycle import PortSyncLifecycle
 from p2pwatch_amule.domain.conf import with_listen_port
 from p2pwatch_amule.domain.identifiers import Gid, Uid
-from p2pwatch_amule.domain.listen_port_error import ListenPortError
+from p2pwatch_amule.domain.listen_port_error import (
+    ApiNotReadyError,
+    ListenPortError,
+    ListenPortRejectedError,
+)
 from p2pwatch_amule.domain.settings import PortSyncSettings
 from tests.fakes.adapters.driven.fake_amule_conf_store import FakeAmuleConfStore
 from tests.fakes.adapters.driven.fake_forwarded_port_client import FakeForwardedPortClient
@@ -23,7 +28,8 @@ UP = "start amuled"
 READ = "read amule.conf"
 WRITE = "write amule.conf as 1000:1001"
 SET = "set listen port 51820"
-REFUSAL = ListenPortError("PATCH /api/v1/preferences: 400 b'amuled_rejected'")
+REFUSAL = ListenPortRejectedError("PATCH /api/v1/preferences: 400 b'amuled_rejected'")
+NOT_READY = ApiNotReadyError("POST /api/v1/auth/login: <urlopen error [Errno 111] refused>")
 SETTINGS = PortSyncSettings(
     gluetun_control_url="http://localhost:8000",
     poll_interval=timedelta(seconds=60),
@@ -66,8 +72,14 @@ class Node:
         # The first restart wrote 51820; gluetun moving again must wait for the window.
         self.forwarded_port_client.forwarded_port = 51821
 
-    def run_loop(self, port_sync_settings: PortSyncSettings = SETTINGS, *, rounds: int = 1) -> None:
-        """Runs the loop until its ``rounds``-th sleep."""
+    def run_loop(
+        self,
+        port_sync_settings: PortSyncSettings = SETTINGS,
+        *,
+        rounds: int = 1,
+        raises: type[Exception] = _Stop,
+    ) -> None:
+        """Runs the loop until its ``rounds``-th sleep, or until it ``raises``."""
 
         def stop_after_the_last_round() -> None:
             if len(self.monotonic_clock.sleeps) == rounds:
@@ -75,7 +87,7 @@ class Node:
             self.between_rounds()
 
         self.monotonic_clock.on_sleep = stop_after_the_last_round
-        with pytest.raises(_Stop):
+        with pytest.raises(raises):
             PortSyncLifecycle(
                 port_sync_settings=port_sync_settings,
                 forwarded_port_client=self.forwarded_port_client,
@@ -121,6 +133,30 @@ def test_a_live_change_refused_stops_amuled_writes_both_ports_and_starts_it(node
         ),
         LoggedLine(level="info", message="amule.conf now sets Port and UDPPort to 51820"),
     ]
+
+
+def test_amuleapi_not_ready_at_the_first_round_is_logged_and_retried_at_the_next_poll(
+    node: Node,
+) -> None:
+    def ready() -> None:
+        node.listen_port_client.error = None
+
+    node.listen_port_client.error = NOT_READY
+    node.between_rounds = ready
+    node.run_loop(rounds=2)
+    assert node.actions == [UP, READ, SET, READ, SET]
+    assert node.logger.lines[0] == LoggedLine(
+        level="info",
+        message="amuleapi is not ready, 51820 waits for the next poll "
+        "(POST /api/v1/auth/login: <urlopen error [Errno 111] refused>)",
+    )
+
+
+def test_another_failure_of_amuleapi_ends_the_loop_without_restarting_amuled(node: Node) -> None:
+    node.listen_port_client.error = ListenPortError("PATCH /api/v1/preferences: 500 b''")
+    node.run_loop(raises=ListenPortError)
+    assert node.actions == [UP, READ, SET]
+    assert node.logger.lines == []
 
 
 def test_the_write_keeps_what_amuled_flushed_on_exit(node: Node) -> None:

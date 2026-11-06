@@ -1,6 +1,7 @@
 """Port-sync's assembly: gluetun and amuleapi as stand-ins, amule.conf and s6 as fakes."""
 
 import logging
+import socket
 from datetime import timedelta
 from urllib.request import ProxyHandler, build_opener
 
@@ -87,6 +88,41 @@ def test_port_sync_sets_gluetuns_port_live_under_its_modules_logger_names(
         (GluetunForwardedPortClient.__module__, "gluetun reports no forwarded port (b'{}')"),
         (PortSyncLifecycle.__module__, "gluetun forwards 51820, amuled listened on 4662: set live"),
     ]
+
+
+def test_a_first_round_before_amuleapi_listens_leaves_amuled_running(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    actions: list[str] = []
+    monotonic_clock = FakeMonotonicClock()
+
+    def stop() -> None:
+        raise _Stop
+
+    monotonic_clock.on_sleep = stop
+    # amuleapi's starting state: it listens only once its EC login succeeded.
+    with socket.socket() as closed:
+        closed.bind(("127.0.0.1", 0))
+        refusing_url = f"http://127.0.0.1:{closed.getsockname()[1]}"
+    with FakeGluetunControlServer() as gluetun:
+        env = {
+            "PUID": "1000",
+            "PGID": "1001",
+            "GLUETUN_CONTROL_URL": gluetun.control_url,
+            "AMULE_API_PASSWORD": "s3cret",
+        }
+        port_sync_composition, amule_conf = _port_sync_composition(
+            env, actions=actions, monotonic_clock=monotonic_clock, amule_api_url=refusing_url
+        )
+        with caplog.at_level(logging.INFO), pytest.raises(_Stop):
+            port_sync_composition.run_port_sync_loop()
+
+    assert actions == ["start amuled", "read amule.conf"]
+    assert amule_conf.conf == CONF
+    (not_ready,) = caplog.records
+    assert not_ready.getMessage().startswith(
+        "amuleapi is not ready, 51820 waits for the next poll (POST /api/v1/auth/login"
+    )
 
 
 def test_a_refused_variable_raises_before_amuled_is_started() -> None:

@@ -1,5 +1,6 @@
 """Keeps amuled's listen port on gluetun's forwarded port: each round sets it live through
-amuleapi, else puts it in amule.conf, restarting amuled around the write."""
+amuleapi, waits for the next poll while amuleapi is not ready, else puts it in amule.conf,
+restarting amuled around the write."""
 
 from p2pwatch_amule.application.ports.driven.amule_conf_reader import AmuleConfReader
 from p2pwatch_amule.application.ports.driven.amule_conf_writer import AmuleConfWriter
@@ -10,14 +11,14 @@ from p2pwatch_amule.application.ports.driven.monotonic_clock import MonotonicClo
 from p2pwatch_amule.application.ports.driven.service_supervisor import ServiceSupervisor
 from p2pwatch_amule.domain.amuled_restart import is_amuled_restart_due
 from p2pwatch_amule.domain.conf import tcp_listen_port, with_listen_port
-from p2pwatch_amule.domain.listen_port_error import ListenPortError
+from p2pwatch_amule.domain.listen_port_error import ApiNotReadyError, ListenPortRejectedError
 from p2pwatch_amule.domain.monotonic_instant import MonotonicInstant
 from p2pwatch_amule.domain.settings import PortSyncSettings
 
 
 class PortSyncLifecycle:
-    """Polls every ``poll_interval``; a refused live change restarts amuled, at most once per
-    ``restart_min_interval``; port-sync's root, behind no port, as ``CrawlerLifecycle``."""
+    """Polls every ``poll_interval``; a rejected live change restarts amuled, at most once per
+    ``restart_min_interval``, another failure ends the loop; port-sync's root, behind no port."""
 
     def __init__(
         self,
@@ -71,7 +72,13 @@ class PortSyncLifecycle:
             return latest_restart
         try:
             self._listen_port_client.set_listen_port(forwarded_port)
-        except ListenPortError as error:
+        except ApiNotReadyError as error:
+            # The first round runs before amuleapi listens: raising would restart the container.
+            self._logger.info(
+                "amuleapi is not ready, %d waits for the next poll (%s)", forwarded_port, error
+            )
+            return latest_restart
+        except ListenPortRejectedError as error:
             self._logger.error("amuleapi did not set the port live (%s)", error)
         else:
             self._logger.info(

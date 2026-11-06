@@ -24,15 +24,16 @@ class Route(Protocol):
 
 class FakeAmuleApiServer:
     """amuleapi on a loopback port: GET answers ``health_status`` and ``health_body``, POST logs in
-    with ``password`` for ``login_body``, PATCH answers ``preferences_status`` and
-    ``preferences_body`` to ``TOKEN``'s bearer; ``raw_reply``'s bytes, or no answer while
+    with ``password`` for ``login_body``, else ``token``, PATCH answers ``preferences_status`` and
+    ``preferences_body`` to ``token``'s bearer; ``raw_reply``'s bytes, or no answer while
     ``is_holding``, replace any; records each request."""
 
     def __init__(self, *, port: int = 0) -> None:
         self.health_status = 200
         self.health_body = READY_BODY
         self.password = "s3cret"
-        self.login_body = json.dumps({"token": TOKEN, "role": "admin"}).encode()
+        self.token = TOKEN
+        self.login_body: bytes | None = None
         self.preferences_status = 200
         self.preferences_body = b'{"connection":{"tcp_port":40123,"udp_port":40123}}'
         self.raw_reply: bytes | None = None
@@ -87,10 +88,12 @@ class FakeAmuleApiServer:
     def _login(self, request: ApiRequest) -> tuple[int, bytes]:
         if json.loads(request.body).get("password") != self.password:
             return 401, _INVALID_CREDENTIALS_BODY
-        return 200, self.login_body
+        if self.login_body is not None:
+            return 200, self.login_body
+        return 200, json.dumps({"token": self.token, "role": "admin"}).encode()
 
     def _set_preferences(self, request: ApiRequest) -> tuple[int, bytes]:
-        if request.authorization != f"Bearer {TOKEN}":
+        if request.authorization != f"Bearer {self.token}":
             return 401, _UNAUTHORIZED_BODY
         return self.preferences_status, self.preferences_body
 
