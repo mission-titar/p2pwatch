@@ -6,21 +6,24 @@ import pytest
 
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch_amule.domain.settings_error import SettingsError
+from tests.fakes.application.use_cases.fake_api_health_checker import FakeApiHealthChecker
 from tests.fakes.composition.fake_container_booter import FakeContainerBooter
 from tests.fakes.composition.fake_port_sync_loop_runner import FakePortSyncLoopRunner
 
 
 class _DrivingPorts:
-    """The two driving ports, each recording what it was asked."""
+    """The three driving ports, each recording what it was asked."""
 
     def __init__(self) -> None:
         self.container_booter = FakeContainerBooter()
         self.port_sync_loop_runner = FakePortSyncLoopRunner()
+        self.api_health_checker = FakeApiHealthChecker()
 
     def command_line(self, root_logger: logging.Logger | None = None) -> ArgparseCommandLine:
         return ArgparseCommandLine(
             container_booter=self.container_booter,
             port_sync_loop_runner=self.port_sync_loop_runner,
+            api_health_checker=self.api_health_checker,
             root_logger=root_logger or logging.Logger("root"),
         )
 
@@ -32,6 +35,7 @@ def test_boot_boots_the_container_only() -> None:
 
     assert driving_ports.container_booter.boots == 1
     assert driving_ports.port_sync_loop_runner.runs == 0
+    assert driving_ports.api_health_checker.checks == 0
 
 
 def test_port_sync_runs_its_loop_only() -> None:
@@ -41,6 +45,21 @@ def test_port_sync_runs_its_loop_only() -> None:
 
     assert driving_ports.port_sync_loop_runner.runs == 1
     assert driving_ports.container_booter.boots == 0
+    assert driving_ports.api_health_checker.checks == 0
+
+
+@pytest.mark.parametrize(("is_healthy", "exit_code"), [(True, 0), (False, 1)])
+def test_health_checks_amuleapi_only_and_exits_zero_when_healthy(
+    *, is_healthy: bool, exit_code: int
+) -> None:
+    driving_ports = _DrivingPorts()
+    driving_ports.api_health_checker.is_healthy = is_healthy
+
+    assert driving_ports.command_line().run(["health"]) == exit_code
+
+    assert driving_ports.api_health_checker.checks == 1
+    assert driving_ports.container_booter.boots == 0
+    assert driving_ports.port_sync_loop_runner.runs == 0
 
 
 def test_a_variable_the_booter_refuses_is_printed_alone_and_returns_one(
@@ -85,10 +104,10 @@ def test_the_help_lists_the_subcommands(capsys: pytest.CaptureFixture[str]) -> N
         _DrivingPorts().command_line().run(["--help"])
 
     assert exit_info.value.code == 0
-    assert "{boot,port-sync}" in capsys.readouterr().out
+    assert "{boot,port-sync,health}" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("command", ["boot", "port-sync"])
+@pytest.mark.parametrize("command", ["boot", "port-sync", "health"])
 def test_every_subcommand_logs_at_info_with_its_logger_name(command: str) -> None:
     root_logger = logging.Logger("root")
 

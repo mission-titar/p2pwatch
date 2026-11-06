@@ -7,11 +7,12 @@ import pwd
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
-from urllib.request import build_opener
+from urllib.request import ProxyHandler, build_opener
 
 from p2pwatch_amule.adapters.driven.amule_api_admin_password_setter import (
     AmuleApiAdminPasswordSetter,
 )
+from p2pwatch_amule.adapters.driven.amule_api_health_client import AmuleApiHealthClient
 from p2pwatch_amule.adapters.driven.posix_account_provisioner import PosixAccountProvisioner
 from p2pwatch_amule.adapters.driven.posix_amule_conf_store import PosixAmuleConfStore
 from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
@@ -20,6 +21,7 @@ from p2pwatch_amule.adapters.driven.posix_amuled_directory_preparer import (
 from p2pwatch_amule.adapters.driven.s6_service_supervisor import S6ServiceSupervisor
 from p2pwatch_amule.adapters.driven.system_monotonic_clock import SystemMonotonicClock
 from p2pwatch_amule.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
+from p2pwatch_amule.application.use_cases.check_api_health import CheckApiHealth
 from p2pwatch_amule.composition.boot_composition import BootComposition
 from p2pwatch_amule.composition.port_sync_composition import PortSyncComposition
 from p2pwatch_amule.domain.conf import INCOMING_DIRECTORY, TEMP_DIRECTORY
@@ -30,6 +32,8 @@ _AMULE_CONF_PATH = _CONFIG_DIRECTORY / "amule.conf"
 _PORT_SYNC_SERVICE_DIRECTORY = Path("/etc/services.d/port-sync")
 _AMULED_SERVICE_DIRECTORY = Path("/etc/services.d/amuled")
 _AMULED_STOP_TIMEOUT_SECONDS = 60
+_AMULE_API_URL = "http://127.0.0.1:4711"
+_AMULE_API_HEALTH_TIMEOUT_SECONDS = 2  # under the compose healthcheck's 3 s timeout
 
 
 def build_command_line(
@@ -79,6 +83,13 @@ def build_command_line(
             service_supervisor=service_supervisor,
             url_opener=build_opener(),  # gluetun reached through the environment's proxies, if any
             monotonic_clock=SystemMonotonicClock(),
+        ),
+        api_health_checker=CheckApiHealth(
+            api_health_client=AmuleApiHealthClient(
+                api_url=_AMULE_API_URL,
+                timeout_seconds=_AMULE_API_HEALTH_TIMEOUT_SECONDS,
+                url_opener=build_opener(ProxyHandler({})),  # loopback, never through a proxy
+            )
         ),
         root_logger=root_logger,
     )
