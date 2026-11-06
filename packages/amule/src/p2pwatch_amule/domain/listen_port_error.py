@@ -1,5 +1,5 @@
 class ListenPortError(Exception):
-    """amuled's API did not set its listen ports, its message saying why."""
+    """amuled's API did not read or set its listen ports, its message saying why."""
 
 
 class ApiNotReadyError(ListenPortError):

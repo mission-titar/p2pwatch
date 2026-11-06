@@ -474,7 +474,7 @@ def test_port_sync_sets_the_forwarded_port_live_only_when_it_moved(
         target="True True",
         files=project_files,
     )
-    # amuled saves the ports itself, which port-sync's next round compares against.
+    # amuled saves the ports itself; port-sync's next round reads them back through amuleapi.
     assert _listen_ports(project_files) == f"{_FORWARDED_PORT} {_FORWARDED_PORT}"
     assert _amuled_up_and_pid(project_files) == f"true {pid_before}"
     assert _exec(_CORE, "python", "-c", _AMULEAPI_HEALTH, files=project_files) == "200"

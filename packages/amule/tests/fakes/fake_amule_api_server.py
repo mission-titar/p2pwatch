@@ -23,10 +23,10 @@ class Route(Protocol):
 
 
 class FakeAmuleApiServer:
-    """amuleapi on a loopback port: GET answers ``health_status`` and ``health_body``, POST logs in
-    with ``password`` for ``login_body``, else ``token``, PATCH answers ``preferences_status`` and
-    ``preferences_body`` to ``token``'s bearer; ``raw_reply``'s bytes, or no answer while
-    ``is_holding``, replace any; records each request."""
+    """amuleapi on a loopback port: GET of the health answers ``health_status`` and ``health_body``,
+    POST logs in with ``password`` for ``login_body``, else ``token``, GET and PATCH of the
+    preferences answer ``preferences_status`` and ``preferences_body`` to ``token``'s bearer;
+    ``raw_reply``'s bytes, or no answer while ``is_holding``, replace any; records each request."""
 
     def __init__(self, *, port: int = 0) -> None:
         self.health_status = 200
@@ -44,13 +44,16 @@ class FakeAmuleApiServer:
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:
+                if self.path == "/api/v1/preferences":
+                    self._answer(fake_server._preferences)
+                    return
                 self._answer(lambda request: (fake_server.health_status, fake_server.health_body))
 
             def do_POST(self) -> None:
                 self._answer(fake_server._login)
 
             def do_PATCH(self) -> None:
-                self._answer(fake_server._set_preferences)
+                self._answer(fake_server._preferences)
 
             def _answer(self, route: Route) -> None:
                 request = ApiRequest(
@@ -92,7 +95,7 @@ class FakeAmuleApiServer:
             return 200, self.login_body
         return 200, json.dumps({"token": self.token, "role": "admin"}).encode()
 
-    def _set_preferences(self, request: ApiRequest) -> tuple[int, bytes]:
+    def _preferences(self, request: ApiRequest) -> tuple[int, bytes]:
         if request.authorization != f"Bearer {self.token}":
             return 401, _UNAUTHORIZED_BODY
         return self.preferences_status, self.preferences_body

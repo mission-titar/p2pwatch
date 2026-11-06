@@ -2,7 +2,12 @@ from abc import ABC, abstractmethod
 
 
 class ListenPortClient(ABC):
-    """Changes amuled's listen ports through its API, amuled running on."""
+    """Reads and changes amuled's listen ports through its API, amuled running on."""
+
+    @abstractmethod
+    def read_listen_port(self) -> int:
+        """amuled's TCP port; raises ``ApiNotReadyError`` while the API cannot serve, or
+        ``ListenPortError``."""
 
     @abstractmethod
     def set_listen_port(self, port: int) -> None:

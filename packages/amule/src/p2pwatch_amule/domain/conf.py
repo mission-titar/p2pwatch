@@ -1,4 +1,4 @@
-"""amule.conf: the file the container boots with (`reconcile_conf`), and its listen port."""
+"""amule.conf: the file the container boots with (`reconcile_conf`)."""
 
 import configparser
 import hashlib
@@ -6,8 +6,6 @@ import io
 
 INCOMING_DIRECTORY = "/downloads/incoming"
 TEMP_DIRECTORY = "/downloads/temp"
-# aMule's DEFAULT_TCP_PORT (src/Preferences.cpp), what amuled binds when `Port` is absent.
-DEFAULT_TCP_PORT = 4662
 
 
 class _CaseSensitiveParser(configparser.RawConfigParser):
@@ -43,16 +41,6 @@ def reconcile_conf(existing_conf: str | None, *, ec_digest: str) -> str:
         parser.add_section("AmuleApi")
     parser["AmuleApi"].update({"Enabled": "1", "BindAddress": "0.0.0.0", "HttpPort": "4711"})
     return _written(parser)
-
-
-def tcp_listen_port(conf: str) -> int:
-    """Return the TCP port amuled binds, `[eMule] Port`; raise `ValueError` when unreadable."""
-    parser = _parser()
-    try:
-        parser.read_string(conf)
-    except configparser.Error as error:
-        raise ValueError(error) from error
-    return parser.getint("eMule", "Port", fallback=DEFAULT_TCP_PORT)
 
 
 def _parser() -> _CaseSensitiveParser:
