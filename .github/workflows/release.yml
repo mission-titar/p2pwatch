@@ -99,18 +99,20 @@ jobs:
           -o syft-json=/tmp/sbom.syft.json
           -o cyclonedx-json=/tmp/sbom.cyclonedx.json
 
-      # aMule is declared by a file only the sbom-cataloger reads, and that cataloger is off unless
+      # aMule and wx are declared by a file only the sbom-cataloger reads, and that cataloger is off unless
       # selected (the SYFT_SELECT_CATALOGERS above): a regression is SILENT, Grype scores it zero.
-      - name: Gate that aMule is in the SBOM under its CPE-matching declaration
+      - name: Gate that aMule and wxWidgets are in the SBOM under their CPE-matching declarations
         if: matrix.package == 'amule'
         run: |
           for sbom in /tmp/sbom.syft.json /tmp/sbom.cyclonedx.json; do
-            if ! grep -q '"pkg:generic/amule@' "$sbom"; then
-              echo "::error::no pkg:generic/amule in $sbom: either the sbom-cataloger did not run"
-              echo "::error::(SYFT_SELECT_CATALOGERS=+sbom-cataloger) or the image lost its"
-              echo "::error::/usr/local/share/amule/amule.cdx.json. Grype would score aMule zero."
-              exit 1
-            fi
+            for component in amule wxwidgets; do
+              if ! grep -q "\"pkg:generic/${component}@" "$sbom"; then
+                echo "::error::no pkg:generic/${component} in $sbom: either the sbom-cataloger did not run"
+                echo "::error::(SYFT_SELECT_CATALOGERS=+sbom-cataloger) or the image lost its"
+                echo "::error::/usr/local/share/amule/amule.cdx.json. Grype would score ${component} zero."
+                exit 1
+              fi
+            done
           done
 
       - name: Gate that image-family VEX claims hold against the SBOM
