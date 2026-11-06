@@ -5,6 +5,7 @@ import logging
 import sys
 from collections.abc import Sequence
 
+from p2pwatch_amule.application.ports.driving.api_health_checker import ApiHealthChecker
 from p2pwatch_amule.application.ports.driving.container_booter import ContainerBooter
 from p2pwatch_amule.application.ports.driving.port_sync_loop_runner import PortSyncLoopRunner
 from p2pwatch_amule.domain.settings_error import SettingsError
@@ -13,32 +14,40 @@ _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
 class ArgparseCommandLine:
-    """``boot`` over ``container_booter``, ``port-sync`` over ``port_sync_loop_runner``; a refused
-    variable is printed."""
+    """``boot`` over ``container_booter``, ``port-sync`` over ``port_sync_loop_runner``, ``health``
+    over ``api_health_checker``; a refused variable is printed."""
 
     def __init__(
         self,
         *,
         container_booter: ContainerBooter,
         port_sync_loop_runner: PortSyncLoopRunner,
+        api_health_checker: ApiHealthChecker,
         root_logger: logging.Logger,
     ) -> None:
         self._container_booter = container_booter
         self._port_sync_loop_runner = port_sync_loop_runner
+        self._api_health_checker = api_health_checker
         self._root_logger = root_logger
 
     def run(self, argv: Sequence[str]) -> int:
         """Runs the subcommand ``argv`` names, returns its exit code."""
         _configure_logging(self._root_logger)
         parser = argparse.ArgumentParser(
-            prog="p2pwatch_amule", description="aMule's container: boot step and port-sync"
+            prog="p2pwatch_amule",
+            description="aMule's container: boot step, port-sync and health check",
         )
         subparsers = parser.add_subparsers(dest="command", required=True)
         subparsers.add_parser("boot", help="prepare the container, once, as root, before s6")
         subparsers.add_parser(
             "port-sync", help="keep amuled's listen port on gluetun's forwarded port"
         )
+        subparsers.add_parser(
+            "health", help="exit 0 when amuleapi answers, linked to amuled, else 1"
+        )
         args = parser.parse_args(argv)
+        if args.command == "health":
+            return 0 if self._api_health_checker.check_api_health() else 1
         try:
             if args.command == "boot":
                 self._container_booter.boot_container()
