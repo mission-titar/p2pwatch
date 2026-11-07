@@ -55,6 +55,8 @@ RUN apt-get update \
 COPY --from=python /app/.venv /app/.venv
 
 ENV PATH="/app/.venv/bin:$PATH"
+# SQLite's temporary files (sorts, the reclaim's copy) on the disk the free-space check measures.
+ENV SQLITE_TMPDIR=/data
 WORKDIR /app
 CMD ["python", "-m", "p2pwatch", "crawl", \
      "--config", "/app/config/crawler.yml", \
