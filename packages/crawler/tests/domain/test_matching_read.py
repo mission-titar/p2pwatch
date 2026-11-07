@@ -1,12 +1,15 @@
 """``MatchingExplainer``: a file's explanation over every filename, from the engine it is given."""
 
+from pathlib import PurePath
+
 import yaml
 
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.engine import Explanation, MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.validation import parse_matcher_config
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _MAX_FILENAME_LENGTH = 4096
@@ -17,7 +20,7 @@ _MAX_FILENAME_LENGTH = 4096
 
 
 def _minimal_targets() -> tuple[TargetSegment, ...]:
-    return parse_targets(
+    return targets_from_document(
         yaml.safe_load(
             """\
 episodes:
@@ -28,7 +31,8 @@ episodes:
       - letter: a
         title: "La Grenouille Cosmique"
 """
-        )
+        ),
+        file_path=PurePath("targets.yml"),
     )
 
 

@@ -5,11 +5,12 @@ import pytest
 from p2pwatch.adapters.driven.config.crawler_config import load_config, read_crawler_config
 from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config_from_document
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.crawler_config import LoadedConfig
 from p2pwatch.domain.invalid_config import InvalidConfigError
-from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.validation import parse_matcher_config
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 _DEPLOY = Path(__file__).resolve().parents[6] / "deploy"
@@ -58,7 +59,7 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
             ).document,
             file_path=config_path,
         ),
-        targets=parse_targets(load_yaml(targets_path)),
+        targets=targets_from_document(load_yaml(targets_path), file_path=targets_path),
         matcher_config=parse_matcher_config(load_yaml(matcher_path)),
         policy_fingerprint=policy_fingerprint(
             matcher_path.read_bytes(), targets_bytes=targets_path.read_bytes()

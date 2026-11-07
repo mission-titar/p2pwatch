@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from p2pwatch.adapters.driven.config.crawler_config import read_targets
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
     SqliteCatalogScanReader,
@@ -15,7 +16,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.domain.matching.engine import MatchingEngine
-from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.validation import parse_matcher_config
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
@@ -33,7 +34,7 @@ _FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 def engine() -> MatchingEngine:
     """REAL engine: deployment matcher + golden-corpus targets (shared fixtures)."""
     config = parse_matcher_config(load_yaml(_MATCHER))
-    targets = parse_targets(load_yaml(_FIXTURES / "golden_targets.yaml"))
+    targets = read_targets(_FIXTURES / "golden_targets.yaml")
     return MatchingEngine(config, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
 

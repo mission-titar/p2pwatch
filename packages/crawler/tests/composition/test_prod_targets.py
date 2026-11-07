@@ -7,8 +7,7 @@ target (segment A); the bi-segment episodes have two.
 
 from pathlib import Path
 
-from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
-from p2pwatch.domain.matching.validation import parse_targets
+from p2pwatch.adapters.driven.config.crawler_config import read_targets
 
 _TARGETS = Path(__file__).resolve().parents[4] / "deploy" / "targets.yml"
 
@@ -35,19 +34,19 @@ _FOUND = {
 
 
 def test_prod_targets_load_180_unique_segments() -> None:
-    targets = parse_targets(load_yaml(_TARGETS))
+    targets = read_targets(_TARGETS)
     assert len(targets) == 180
     assert len({t.target_id for t in targets}) == 180
 
 
 def test_prod_targets_segment_counts_per_season() -> None:
-    targets = parse_targets(load_yaml(_TARGETS))
+    targets = read_targets(_TARGETS)
     assert sum(t.season == 1 for t in targets) == 91
     assert sum(t.season == 2 for t in targets) == 89
 
 
 def test_prod_targets_absolute_numbering_is_contiguous_1_to_103() -> None:
-    targets = parse_targets(load_yaml(_TARGETS))
+    targets = read_targets(_TARGETS)
     assert {t.absolute_number for t in targets} == set(range(1, 104))
 
 
@@ -56,7 +55,7 @@ def test_prod_targets_seasonal_relationship_holds() -> None:
     # bare-number mono token: we lock the relation absolute = offset + seasonal and the
     # seasonal contiguity, so that a mistranscribed seasonal_number (with a valid
     # absolute) does not silently route the seasonal form to the wrong episode.
-    targets = parse_targets(load_yaml(_TARGETS))
+    targets = read_targets(_TARGETS)
     for t in targets:
         offset = 0 if t.season == 1 else 51
         assert t.absolute_number == offset + t.seasonal_number, t.target_id
@@ -65,6 +64,6 @@ def test_prod_targets_seasonal_relationship_holds() -> None:
 
 
 def test_prod_targets_found_segments_match_recovered_list() -> None:
-    targets = parse_targets(load_yaml(_TARGETS))
+    targets = read_targets(_TARGETS)
     found = {t.target_id for t in targets if t.status == "found"}
     assert found == _FOUND

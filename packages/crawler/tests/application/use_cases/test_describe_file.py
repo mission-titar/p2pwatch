@@ -2,9 +2,11 @@
 its first decision holds against the current policy."""
 
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePath
 
 import yaml
 
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driving.file_describer import FileDescription
@@ -19,7 +21,7 @@ from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord, Explanation, MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
-from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.validation import parse_matcher_config
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
@@ -73,7 +75,7 @@ _PERIOD = SharingPeriod(
     received_bytes=0,
     node_id=NodeId("n1"),
 )
-_TARGETS = parse_targets(
+_TARGETS = targets_from_document(
     yaml.safe_load(
         """\
 episodes:
@@ -84,7 +86,8 @@ episodes:
       - letter: a
         title: "La Grenouille Cosmique"
 """
-    )
+    ),
+    file_path=PurePath("targets.yml"),
 )
 
 _MAX_FILENAME_LENGTH = 4096

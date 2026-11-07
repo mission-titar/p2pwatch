@@ -1,9 +1,12 @@
 """Tests of MatchingEngine.explain(candidates, target_id): every name of one file."""
 
+from pathlib import PurePath
+
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.domain.matching.engine import Explanation, MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import FileCandidate
-from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _MATCHER = {
     "tokens": {
@@ -36,7 +39,7 @@ _TARGETS = {
 def _engine(max_filename_length: int = 4096) -> MatchingEngine:
     return MatchingEngine(
         parse_matcher_config(_MATCHER),
-        targets=parse_targets(_TARGETS),
+        targets=targets_from_document(_TARGETS, file_path=PurePath("targets.yml")),
         max_filename_length=max_filename_length,
     )
 
