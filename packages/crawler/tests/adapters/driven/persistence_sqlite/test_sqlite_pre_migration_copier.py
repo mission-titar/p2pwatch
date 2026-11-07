@@ -365,7 +365,11 @@ def _link_refused_with(code: int) -> Linker:
     return refused_link
 
 
-@pytest.mark.parametrize("code", [errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP])
+@pytest.mark.parametrize(
+    "code",
+    [errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP],
+    ids=["EPERM", "ENOTSUP", "EOPNOTSUPP"],
+)
 def test_a_copy_where_hard_links_are_refused_is_published_by_a_rename(
     *, tmp_path: Path, code: int
 ) -> None:
