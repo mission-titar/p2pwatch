@@ -68,6 +68,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
 | `wall clock` | `WallClock`, the UTC time of day: every stamp a row, an event or a display carries | an interval or a deadline kept in memory |
 | `monotonic clock` | `MonotonicClock`, its `MonotonicInstant`s: every interval and deadline kept in memory; `p2pwatch_amule`'s only sleeps | a stamp, anything persisted |
+| `ticker` | `Ticker`, calls back every period while a long synchronous operation holds its thread, for a progress line; `ThreadingTicker` waits on a thread of its own, since the operation holds the event loop | a `MonotonicClock` sleep, which runs on that loop |
 | `persisted wait` | a wait that survives a restart: its start on the wall clock and its duration, clamped by `remaining_wait` when the node meets it again | a deadline persisted alone |
 | `own tests` | a module's own tests: the test files named after it, in the directory mirroring its own (`tests/a/test_b*.py` for `src/<pkg>/a/b.py`) | a test that runs the module in passing |
 | `claim` | one of our OpenVEX `not_affected` statements: an advisory id and its justification; `read_claims` returns a VEX file's justifications by advisory id; a `ClaimProblem` is what a check finds wrong with an advisory's claims, its message worded once | `statement` past `OpenVexReader`; `violation` for a `ClaimProblem`, which may contradict no premise |
