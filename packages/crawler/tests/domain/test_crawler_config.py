@@ -1,4 +1,3 @@
-import dataclasses
 import re
 from datetime import timedelta
 from pathlib import PurePath
@@ -19,7 +18,6 @@ from p2pwatch.domain.crawler_config import (
     cross_value_problems,
     parse_download,
     parse_observability,
-    parse_webui,
 )
 from p2pwatch.domain.observability.policy import Audience
 
@@ -84,7 +82,6 @@ def _parse_sections(raw: dict[str, Any]) -> None:
     """Each section of ``raw`` through its parse, as the config adapter hands it."""
     parse_observability(raw["observability"])
     parse_download(raw["download"])
-    parse_webui(raw.get("webui", {}))
 
 
 # --------------------------------------------------------------------- policy
@@ -133,7 +130,6 @@ def _with_seconds(section: str, *, key: str, seconds: int) -> dict[str, Any]:
     [
         ("download", "poll_interval_seconds"),
         ("download", "sources_interval_seconds"),
-        ("webui", "source_period_gap_seconds"),
         ("observability", "notification_timeout_seconds"),
     ],
 )
@@ -158,7 +154,6 @@ def test_an_absence_is_at_most_thirty_days(key: str) -> None:
 @pytest.mark.parametrize(
     ("parse", "section", "key_path"),
     [
-        (parse_webui, {"enabled": True}, "webui.enabled"),
         (
             parse_observability,
             {"metrics": {"enabled": True, "port": 9090}},
@@ -189,7 +184,7 @@ def _with_backoff(*, base_seconds: float, cap_seconds: float) -> CrawlerConfig:
         local_db_path="/data/local.db",
         observability=parse_observability({}),
         download=None,
-        webui=parse_webui({}),
+        webui=_default_webui(),
     )
 
 
@@ -403,6 +398,12 @@ def test_notification_node_prefix_non_bool_rejected() -> None:
         parse_observability(raw["observability"])
 
 
+def test_a_notification_url_empty_is_refused() -> None:
+    section = {"notifications": [{"url": "", "audience": "community"}]}
+    with pytest.raises(ConfigValueError, match=r"notifications\[0\]\.url: non-empty string"):
+        parse_observability(section)
+
+
 def test_notifications_bad_audience_rejected() -> None:
     raw = _minimal_raw() | {
         "observability": {
@@ -430,55 +431,3 @@ def test_a_notification_tag_is_refused_with_its_new_name(target: dict[str, str])
         ConfigValueError, match=r"notifications\[0\]: key 'tag' was renamed 'audience'"
     ):
         parse_observability(raw["observability"])
-
-
-# ------------------------------------------------------------------- webui
-
-
-def test_webui_host_and_port_are_silently_ignored() -> None:
-    # A legacy config still carrying host/port must NOT fail: those keys are simply not read
-    # (the bind is fixed in code). The result is the defaults, nothing else.
-    raw = _minimal_raw() | {"webui": {"host": "1.2.3.4", "port": 9999}}
-    config = parse_webui(raw["webui"])
-    assert config == _default_webui()
-    # the type no longer carries a bind
-    assert {field.name for field in dataclasses.fields(WebuiConfig)}.isdisjoint({"host", "port"})
-
-
-def test_webui_amule_url_defaults_to_the_published_port() -> None:
-    # Both web surfaces are published by default (design §9): p2pwatch on 8080, amuleweb on
-    # 4711. The default is the no-proxy case; anything else is the operator's to set.
-    assert parse_webui({}).amule_url == "http://localhost:4711"
-
-
-def test_webui_amule_url_is_configurable_for_a_reverse_proxy() -> None:
-    # The link must survive a reverse proxy in front of 8080, which is the whole point of the key.
-    raw = _minimal_raw() | {"webui": {"amule_url": "https://mule.example.org/amule"}}
-    assert parse_webui(raw["webui"]).amule_url == "https://mule.example.org/amule"
-
-
-@pytest.mark.parametrize("webui", [{}, {"host": "1.2.3.4"}], ids=["empty", "no-key"])
-def test_webui_source_period_gap_defaults_to_the_writers_tolerance_at_the_shipped_defaults(
-    webui: dict[str, Any],
-) -> None:
-    # 3 x (300 + 30): three reads' spacing at the shipped intervals (source points spec, D6).
-    config = parse_webui(webui)
-    assert config.source_period_gap == timedelta(seconds=990)
-
-
-def test_webui_source_period_gap_is_configurable() -> None:
-    raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": 600}}
-    assert parse_webui(raw["webui"]).source_period_gap == timedelta(seconds=600)
-
-
-@pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan")])
-def test_webui_source_period_gap_is_a_positive_finite_number(seconds: float) -> None:
-    raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": seconds}}
-    with pytest.raises(ConfigValueError, match=r"webui\.source_period_gap_seconds"):
-        parse_webui(raw["webui"])
-
-
-def test_webui_amule_url_empty_is_fatal() -> None:
-    raw = _minimal_raw() | {"webui": {"amule_url": ""}}
-    with pytest.raises(ConfigValueError, match="non-empty string"):
-        parse_webui(raw["webui"])
