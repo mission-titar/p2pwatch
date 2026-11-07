@@ -21,6 +21,7 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_MATCHER_PATH,
     DEFAULT_TARGETS_PATH,
 )
+from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
@@ -147,6 +148,9 @@ class ArgparseCommandLine:
             return 1
         except OutOfSpaceError as error:
             print(f"Out of disk space, refusing to start: {error}", file=sys.stderr, flush=True)
+            return 1
+        except HeldDatabaseError as error:
+            print(f"Database in use, refusing to start: {error}", file=sys.stderr, flush=True)
             return 1
         except TimeoutError:
             # The deadline firing is the crawler keeping its promise not to hang; a worker timing

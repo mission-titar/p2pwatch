@@ -18,6 +18,7 @@ from p2pwatch.application.ports.driving.config_validator import (
 )
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.broken_input_error import BrokenInputError
+from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
@@ -90,6 +91,20 @@ def test_crawl_refuses_to_start_short_of_disk_space_in_one_line(
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
 
     assert capsys.readouterr().err == f"Out of disk space, refusing to start: {refusal}\n"
+
+
+def test_crawl_refuses_to_start_on_a_database_another_process_holds_in_one_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    crawler_runner = FakeCrawlerRunner(
+        HeldDatabaseError("/data/catalog.db is held by another process")
+    )
+
+    assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
+
+    assert capsys.readouterr().err == (
+        "Database in use, refusing to start: /data/catalog.db is held by another process\n"
+    )
 
 
 def test_crawl_exits_zero_when_the_shutdown_deadline_fires(

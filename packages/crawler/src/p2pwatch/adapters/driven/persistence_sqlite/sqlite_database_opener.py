@@ -25,7 +25,6 @@ from typing import Any
 from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
-    HeldDatabaseError,
     MigrationError,
     PersistenceError,
     wrap_sqlite_errors,
@@ -49,6 +48,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
 from p2pwatch.application.ports.driven.memory_releaser import MemoryReleaser
 from p2pwatch.application.ports.driven.ticker import Ticker
 from p2pwatch.domain.gigabytes import gigabytes
+from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ def _configure(connection: sqlite3.Connection, *, path: Path) -> None:
         journal_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()["journal_mode"]
     except sqlite3.Error as error:
         if error.sqlite_errorcode == sqlite3.SQLITE_BUSY:
-            raise HeldDatabaseError(f"{path} is held by another connection") from error
+            raise HeldDatabaseError(f"{path} is held by another process") from error
         raise PersistenceError(str(error)) from error
     if journal_mode != "wal":
         raise PersistenceError(

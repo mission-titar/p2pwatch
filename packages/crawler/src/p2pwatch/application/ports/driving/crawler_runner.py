@@ -12,4 +12,5 @@ class CrawlerRunner(ABC):
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
     ) -> None:
         """Raises ``InvalidConfigError`` on a refused config, ``OutOfSpaceError`` short of disk
-        space for a database's opening, ``TimeoutError`` on a fired bound."""
+        space for a database's opening, ``HeldDatabaseError`` for a database another process
+        holds, ``TimeoutError`` on a fired bound."""

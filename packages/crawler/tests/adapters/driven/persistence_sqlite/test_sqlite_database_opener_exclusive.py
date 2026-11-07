@@ -7,7 +7,7 @@ from typing import Protocol
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import HeldDatabaseError
+from p2pwatch.domain.held_database_error import HeldDatabaseError
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
@@ -56,7 +56,7 @@ def test_an_exclusive_opening_beside_another_connection_raises_held_database_err
     with closing(open_holder(path)), pytest.raises(HeldDatabaseError) as refusal:
         database_opener().open_catalog(path, exclusive=True)
 
-    assert str(refusal.value) == f"{path} is held by another connection"
+    assert str(refusal.value) == f"{path} is held by another process"
     assert _version(path) == 5
     assert list(tmp_path.glob("*.pre-*")) == []
 
@@ -96,7 +96,7 @@ def test_a_reopen_that_finds_the_database_held_raises_it_migrated_its_copy_kept(
     opener = database_opener_held_at_reopen(path, holders=holders)
 
     try:
-        with pytest.raises(HeldDatabaseError, match="is held by another connection"):
+        with pytest.raises(HeldDatabaseError, match="is held by another process"):
             opener.open_catalog(path, exclusive=True)
     finally:
         for holder in holders:
