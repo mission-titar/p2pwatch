@@ -8,6 +8,7 @@ from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config
 from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
+    DownloadConfig,
     NotificationTarget,
     ObservabilityConfig,
     SearchConfig,
@@ -323,6 +324,122 @@ def test_a_notification_tag_is_one_problem_naming_its_new_name(notification: obj
     ]
 
 
+def _download(**keys: object) -> dict[str, Any]:
+    """``_document()`` with downloads on, every download key set, then ``keys``."""
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 30.0,
+        "min_free_bytes": 1_000_000_000,
+        "lost_after_seconds": 3600.0,
+        "output_dir": "/data/out",
+        "reappeared_after_seconds": 5400.0,
+        "sources_interval_seconds": 120.0,
+    }
+    return _document() | {"download": download | keys}
+
+
+def test_the_download_values_build_its_config() -> None:
+    assert crawler_config_from_document(_download(), file_path=_FILE).download == DownloadConfig(
+        poll_interval_seconds=30.0,
+        min_free_bytes=1_000_000_000,
+        lost_after=timedelta(hours=1),
+        output_directory="/data/out",
+        reappeared_after=timedelta(seconds=5400),
+        sources_interval=timedelta(seconds=120),
+    )
+
+
+def test_a_download_on_takes_the_defaults_of_its_keys_but_the_poll_interval() -> None:
+    document = _document() | {"download": {"enabled": True, "poll_interval_seconds": 30}}
+    assert crawler_config_from_document(document, file_path=_FILE).download == DownloadConfig(
+        poll_interval_seconds=30.0,
+        min_free_bytes=10_737_418_240,
+        lost_after=timedelta(hours=24),
+        output_directory="/downloads",
+        reappeared_after=timedelta(hours=12),
+        sources_interval=timedelta(minutes=5),
+    )
+
+
+@pytest.mark.parametrize(
+    "download",
+    [{}, {"enabled": False}, {"poll_interval_seconds": 30.0}, {"min_free_bytes": 1024}],
+    ids=["empty", "off", "poll-without-enabled", "wiring-without-enabled"],
+)
+def test_a_download_not_enabled_is_off_its_wiring_not_required(download: dict[str, Any]) -> None:
+    document = _document() | {"download": download}
+    assert crawler_config_from_document(document, file_path=_FILE).download is None
+
+
+def test_a_download_on_requires_its_poll_interval() -> None:
+    document = _document() | {"download": {"enabled": True, "min_free_bytes": 1024}}
+    assert _problems(document) == [("download.poll_interval_seconds", "Field required")]
+
+
+@pytest.mark.parametrize(
+    ("key", "seconds"),
+    [
+        ("poll_interval_seconds", 86_400),
+        ("sources_interval_seconds", 86_400),
+        ("lost_after_seconds", 2_592_000),
+        ("reappeared_after_seconds", 2_592_000),
+    ],
+)
+def test_a_download_duration_is_accepted_up_to_its_bound(*, key: str, seconds: int) -> None:
+    crawler_config_from_document(_download(**{key: seconds}), file_path=_FILE)
+
+
+@pytest.mark.parametrize("enabled", ["oui", 1, None])
+def test_a_download_enabled_is_a_boolean(enabled: object) -> None:
+    assert _problems(_download(enabled=enabled)) == [
+        ("download.enabled", "Input should be a valid boolean")
+    ]
+
+
+_A_DAY = "Input should be less than or equal to 86400"
+_THIRTY_DAYS = "Input should be less than or equal to 2592000"
+
+
+@pytest.mark.parametrize("enabled", [True, False], ids=["on", "off"])
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("poll_interval_seconds", "souvent", "Input should be a valid number"),
+        ("poll_interval_seconds", True, "Input should be a valid number"),
+        ("poll_interval_seconds", 0.0, "Input should be greater than 0"),
+        ("poll_interval_seconds", 86_401, _A_DAY),
+        ("min_free_bytes", 0, "Input should be greater than 0"),
+        ("min_free_bytes", 1024.0, "Input should be a valid integer"),
+        ("min_free_bytes", True, "Input should be a valid integer"),
+        ("lost_after_seconds", 0.0, "Input should be greater than 0"),
+        ("lost_after_seconds", 2_592_001, _THIRTY_DAYS),
+        ("output_dir", 42, "Input should be a valid string"),
+        ("output_dir", "", "String should have at least 1 character"),
+        ("reappeared_after_seconds", -1, "Input should be greater than 0"),
+        ("reappeared_after_seconds", 1e15, _THIRTY_DAYS),
+        ("sources_interval_seconds", 0, "Input should be greater than 0"),
+        ("sources_interval_seconds", 86_401, _A_DAY),
+        ("unread", 1, "Extra inputs are not permitted"),
+    ]
+    + [
+        (key, number, "Input should be a finite number")
+        for key in (
+            "poll_interval_seconds",
+            "lost_after_seconds",
+            "reappeared_after_seconds",
+            "sources_interval_seconds",
+        )
+        for number in (float("inf"), float("nan"))
+    ],
+)
+def test_a_download_value_out_of_its_type_is_refused_whether_on_or_off(
+    *, key: str, value: object, message: str, enabled: bool
+) -> None:
+    document = _download(enabled=enabled)
+    document["download"][key] = value
+    assert _problems(document) == [(f"download.{key}", message)]
+
+
 def test_a_root_key_nothing_reads_is_refused() -> None:
     document = _document() | {"amules": [{"name": "amule-1", "password": "x"}]}
     assert _problems(document) == [("amules", "Extra inputs are not permitted")]
@@ -371,9 +488,9 @@ def test_every_problem_of_the_root_and_of_each_section_is_listed() -> None:
     }
     assert [key for key, _ in _problems(document)] == [
         "shutdown_deadline_seconds",
+        "download.enabled",
         "observability.log_level",
         "webui.amule_url",
         "port_sync",
         "amules",
-        "download.enabled",
     ]

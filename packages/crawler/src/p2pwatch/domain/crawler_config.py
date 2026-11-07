@@ -1,5 +1,6 @@
-"""``crawler.yml``'s objects, the parse of ``download``, which the config adapter's schema leaves
-as a mapping, raising a ``ConfigValueError`` on its first problem, and its rules across values.
+"""``crawler.yml``'s objects, the parse of ``download``, which builds the section the config
+adapter's schema checked, raising a ``ConfigValueError`` on its first problem, and its rules
+across values.
 
 The config adapter resolves ``${NAME}`` in every string value before the parse, which never sees
 the environment. ``download`` is ``None`` unless ``enabled: true``, its wiring keys required only

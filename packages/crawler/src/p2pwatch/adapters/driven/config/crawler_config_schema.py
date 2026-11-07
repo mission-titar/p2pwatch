@@ -1,15 +1,14 @@
-"""``crawler.yml`` as written, read by pydantic but its ``download``, and the ``CrawlerConfig`` it
-builds."""
+"""``crawler.yml`` as written, read by pydantic, and the ``CrawlerConfig`` it builds."""
 
-from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import PurePath
 from types import GenericAlias
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, create_model
+from pydantic import BaseModel, Discriminator, Field, Tag, ValidationError, create_model
 
 from p2pwatch.adapters.driven.config.validation_problems import (
+    TAG_MARK,
     moved_key,
     removed_key,
     renamed_key,
@@ -17,13 +16,17 @@ from p2pwatch.adapters.driven.config.validation_problems import (
 )
 from p2pwatch.domain.config_defaults import (
     DEFAULT_AMULE_URL,
+    DEFAULT_DOWNLOAD_ENABLED,
     DEFAULT_LOG_LEVEL,
+    DEFAULT_LOST_AFTER,
+    DEFAULT_MIN_FREE_BYTES,
     DEFAULT_NODE_PREFIX,
     DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
+    DEFAULT_OUTPUT_DIRECTORY,
+    DEFAULT_REAPPEARED_AFTER,
     DEFAULT_SOURCE_PERIOD_GAP,
+    DEFAULT_SOURCES_INTERVAL,
 )
-from p2pwatch.domain.config_problem import ConfigProblem
-from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
@@ -40,10 +43,12 @@ from p2pwatch.domain.observability.policy import Audience
 
 _FILE_NAME = "crawler.yml"
 
-# Coherent bounds for a P2P watch: a day for a delay (operator, 2026-10-13).
+# Coherent bounds for a P2P watch: a day for a delay, 30 days for an absence (operator, 2026-10-13).
 _A_DAY_SECONDS = 86_400
+_THIRTY_DAYS_SECONDS = 2_592_000
 
 _Seconds = Annotated[float, Field(gt=0, le=_A_DAY_SECONDS)]
+_Absence = Annotated[float, Field(gt=0, le=_THIRTY_DAYS_SECONDS)]
 _Text = Annotated[str, Field(min_length=1)]
 
 
@@ -57,6 +62,42 @@ class _BackoffSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False
 class _SearchSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
     keywords: Annotated[list[_Text], Field(min_length=1)]
     backoff: _BackoffSchema
+
+
+class _DownloadKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+    min_free_bytes: Annotated[int, Field(gt=0)] = DEFAULT_MIN_FREE_BYTES
+    lost_after_seconds: _Absence = DEFAULT_LOST_AFTER.total_seconds()
+    output_dir: _Text = DEFAULT_OUTPUT_DIRECTORY
+    reappeared_after_seconds: _Absence = DEFAULT_REAPPEARED_AFTER.total_seconds()
+    sources_interval_seconds: _Seconds = DEFAULT_SOURCES_INTERVAL.total_seconds()
+
+
+# Two schemas, so that only a download on requires its wiring and every key is checked either way.
+class _DownloadOff(_DownloadKeys):
+    enabled: bool = DEFAULT_DOWNLOAD_ENABLED
+    poll_interval_seconds: _Seconds | None = None
+
+
+class _DownloadOn(_DownloadKeys):
+    enabled: Literal[True]
+    poll_interval_seconds: _Seconds
+
+
+_ON = f"{TAG_MARK}on"
+_OFF = f"{TAG_MARK}off"
+
+
+def _download_tag(download: object) -> str:
+    """The schema of ``download``: on when its ``enabled`` is true, off for anything else."""
+    if isinstance(download, dict) and download.get("enabled", DEFAULT_DOWNLOAD_ENABLED) is True:
+        return _ON
+    return _OFF
+
+
+_DownloadSchema = Annotated[
+    Annotated[_DownloadOn, Tag(_ON)] | Annotated[_DownloadOff, Tag(_OFF)],
+    Discriminator(_download_tag),
+]
 
 
 # Every refusing field is built, since vulture reads a field nothing reads as dead code.
@@ -109,6 +150,7 @@ class _RootKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
     catalog_db_path: _Text
     local_db_path: _Text
     search: _SearchSchema
+    download: _DownloadSchema = Field(default_factory=_DownloadOff)
     # Their schemas in CrawlerConfigSchema, which add the refusing keys.
     observability: _ObservabilityKeys
     webui: _WebuiKeys
@@ -126,9 +168,7 @@ _REMOVED_KEYS = (
 )
 
 _FIELDS: dict[str, Any] = (
-    # Read by the domain's parse, until its schema.
-    {"download": (dict[str, Any], Field(default_factory=dict))}
-    | {"observability": (_ObservabilitySchema, Field(default_factory=_ObservabilitySchema))}
+    {"observability": (_ObservabilitySchema, Field(default_factory=_ObservabilitySchema))}
     | {"webui": (_WebuiSchema, Field(default_factory=_WebuiSchema))}
     | {key: (_REMOVED, None) for key in _REMOVED_KEYS}
     | {"backoff": (moved_key("search.backoff", file_name=_FILE_NAME), None)}
@@ -137,17 +177,12 @@ CrawlerConfigSchema = create_model("CrawlerConfigSchema", __base__=_RootKeys, **
 
 
 def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePath) -> CrawlerConfig:
-    """``document``'s ``CrawlerConfig``; ``InvalidConfigError`` with every problem of its values
-    but download's first, or once they hold, every problem across its values."""
-    problems: list[ConfigProblem] = []
+    """``document``'s ``CrawlerConfig``; ``InvalidConfigError`` with every problem of its values,
+    or once they hold, every problem across its values."""
     try:
         root = CrawlerConfigSchema.model_validate(document)
     except ValidationError as error:
-        problems.extend(validation_problems(error, file_path=file_path))
-        root = None
-    download = _download(document, file_path=file_path, problems=problems)
-    if root is None or download is None:
-        raise InvalidConfigError(tuple(problems))
+        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
     backoff = root.search.backoff
     crawler_config = CrawlerConfig(
         search=SearchConfig(
@@ -164,7 +199,7 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
         catalog_db_path=root.catalog_db_path,
         local_db_path=root.local_db_path,
         observability=_observability(root.observability),
-        download=download.value,
+        download=_download(root.download),
         webui=WebuiConfig(
             amule_url=root.webui.amule_url,
             source_period_gap=timedelta(seconds=root.webui.source_period_gap_seconds),
@@ -190,21 +225,20 @@ def _observability(observability: _ObservabilityKeys) -> ObservabilityConfig:
     )
 
 
-@dataclass(kw_only=True, frozen=True)
-class _Parsed:
-    value: DownloadConfig | None  # apart from None, which a disabled download parses to
-
-
-def _download(
-    document: dict[str, Any], *, file_path: PurePath, problems: list[ConfigProblem]
-) -> _Parsed | None:
-    """The domain's parse of ``download``, whether the root holds or not; ``None`` with its problem
-    appended to ``problems``, or when the section is no mapping, which the root's schema refuses."""
-    section = document.get("download", {})
-    if not isinstance(section, dict):
-        return None
-    try:
-        return _Parsed(value=parse_download(section))
-    except ConfigValueError as error:
-        problems.append(ConfigProblem(file_path=file_path, key=error.key, message=error.message))
-        return None
+def _download(download: _DownloadOn | _DownloadOff) -> DownloadConfig | None:
+    match download:
+        case _DownloadOn(enabled=True):
+            # Built by the domain's parse, which refuses none of the values the schema holds.
+            return parse_download(
+                {
+                    "enabled": True,
+                    "poll_interval_seconds": download.poll_interval_seconds,
+                    "min_free_bytes": download.min_free_bytes,
+                    "lost_after_seconds": download.lost_after_seconds,
+                    "output_dir": download.output_dir,
+                    "reappeared_after_seconds": download.reappeared_after_seconds,
+                    "sources_interval_seconds": download.sources_interval_seconds,
+                }
+            )
+        case _:
+            return None
