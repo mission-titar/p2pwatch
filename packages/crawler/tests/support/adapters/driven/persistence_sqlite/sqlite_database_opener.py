@@ -3,6 +3,7 @@
 
 import sqlite3
 from pathlib import Path
+from typing import Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
@@ -19,15 +20,19 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 _AMPLE_BYTES = 1 << 62
 
 
-class _PragmaSettingCopier(SqlitePreMigrationCopier):
-    """Sets a pragma where the opener calls its copier: once the connection is configured, before
-    the migrations."""
+class _Preparation(Protocol):
+    def __call__(self, connection: sqlite3.Connection, /) -> object: ...
 
-    def __init__(self, pragma: str) -> None:
+
+class _PreparingCopier(SqlitePreMigrationCopier):
+    """Prepares each connection where the opener calls its copier: once the connection is
+    configured, before the migrations."""
+
+    def __init__(self, prepare: _Preparation) -> None:
         super().__init__(
             FakeTime().wall, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
         )
-        self._pragma = pragma
+        self._prepare = prepare
 
     def ensure_copy(
         self,
@@ -37,7 +42,7 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
         pending: PendingMigrations,
         open_reader: ReaderOpener,
     ) -> None:
-        connection.execute(self._pragma)
+        self._prepare(connection)
         super().ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
 
 
@@ -47,13 +52,24 @@ def database_opener() -> SqliteDatabaseOpener:
     return SqliteDatabaseOpener(
         SqlitePreMigrationCopier(
             FakeTime().wall, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
-        )
+        ),
+        ticker=FakeTicker(),
     )
 
 
 def database_opener_setting(pragma: str) -> SqliteDatabaseOpener:
     """The same, ``pragma`` run on each connection before its migrations."""
-    return SqliteDatabaseOpener(_PragmaSettingCopier(pragma))
+    return SqliteDatabaseOpener(
+        _PreparingCopier(lambda connection: connection.execute(pragma)), ticker=FakeTicker()
+    )
+
+
+def database_opener_ticked_by(ticker: FakeTicker) -> SqliteDatabaseOpener:
+    """The same, ticked by ``ticker``, which a migration script ticks by ``SELECT tick();``."""
+    return SqliteDatabaseOpener(
+        _PreparingCopier(lambda connection: connection.create_function("tick", 0, ticker.tick)),
+        ticker=ticker,
+    )
 
 
 def open_catalog(path: Path) -> sqlite3.Connection:

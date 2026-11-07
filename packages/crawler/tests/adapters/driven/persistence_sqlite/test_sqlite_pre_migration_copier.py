@@ -390,7 +390,7 @@ _FAILING = _COPY_BEFORE + "DELETE FROM t;\nINSERT INTO absent VALUES (1);"
 
 def _open(path: Path, *, scripts: tuple[Migration, ...], copier: SqlitePreMigrationCopier) -> None:
     """An open over the scripts through ``copier``, then the connection closed."""
-    SqliteDatabaseOpener(copier).open(path, scripts=scripts).close()
+    SqliteDatabaseOpener(copier, ticker=FakeTicker()).open(path, scripts=scripts).close()
 
 
 def test_a_block_failing_after_a_migration_succeeded_is_retried_on_the_same_copy(

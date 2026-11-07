@@ -332,12 +332,14 @@ class CrawlerComposition(CrawlerRunner):
         shutdown_requester = RequestShutdown(run_state_store)
         # The last context exits first: the resources close, then the signal handlers go.
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
+            ticker = ThreadingTicker(monotonic_clock)
             database_opener = SqliteDatabaseOpener(
                 SqlitePreMigrationCopier(
                     wall_clock,
-                    ticker=ThreadingTicker(monotonic_clock),
+                    ticker=ticker,
                     free_bytes=lambda directory: disk_usage(directory).free,
-                )
+                ),
+                ticker=ticker,
             )
             catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
             stack.callback(catalog_connection.close)
