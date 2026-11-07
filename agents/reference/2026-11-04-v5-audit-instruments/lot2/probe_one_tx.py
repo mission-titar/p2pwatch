@@ -1,3 +1,4 @@
+# Written for main before v5 lot 2 (fe691fbc): lot 2 changed _connect's arguments and deleted Migration.transactional.
 """Probe: copy, then every transactional catalog migration in one transaction, then VACUUM.
 
 probe_one_tx.py DATA_DIR [catalog|local]

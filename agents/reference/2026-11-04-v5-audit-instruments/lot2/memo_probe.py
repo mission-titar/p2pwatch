@@ -1,3 +1,4 @@
+# Written for main before v5 lot 2 (fe691fbc): lot 2 changed _connect's arguments and deleted Migration.transactional.
 import ctypes, gc, sys
 from importlib import resources
 from pathlib import Path

@@ -1,3 +1,4 @@
+# Written for main before v5 lot 2 (fe691fbc): lot 2's opener and copier also take ticker, free_bytes, memory_releaser.
 """Opens v4.1.0-made databases with main's opener, then checks every value field by field.
 
 Usage: uv run python main_check.py <dbs_dir> (from packages/crawler of main).
