@@ -27,7 +27,8 @@ a catalog a running crawler holds. On the way it closes the small defects the au
 - **Short of disk space, the start refuses in one line**, in gigabytes, saying how much to free: before the copy
   when the usual reserve is missing, during the migrations in the rare case it is not enough: the database is then
   left at its starting version, or, when the space ran out after the migrations committed, migrated with only its
-  reclaim to redo.
+  reclaim to redo. (Corrected: how much to free before the copy only; out of space during the migrations or the
+  reclaim, the line gives the free space, the need being unknown, block 40.)
 - **A migration refused on a value names the value**, not "user-defined function raised exception".
 - **The crawler gives back the migration's memory**: about 100 MB after an upgrade instead of about 400 MB, and a
   catalog of many distinct observations no longer pushes the migration past the container's 2 GB.
@@ -51,7 +52,9 @@ a catalog a running crawler holds. On the way it closes the small defects the au
   migrations, and at any opening where a quarter of the file or more is free pages, without a copy.** *SQLite refuses
   `VACUUM` inside a transaction, so D1 cannot hold it (umbrella D5). An upgrade frees at least its old tables (96 % of
   the operator's file, 49 % of a catalog that folds nothing), so an interrupted reclaim is replayed by the quarter
-  rule, which an ordinary catalog, which only grows, never meets.* Block 10.
+  rule, which an ordinary catalog, which only grows, never meets.* Block 10. (Corrected: the quarter rule alone, after a
+  block as at any opening, the operator's decision of 2026-11-07: "after any block" made every future upgrade rewrite
+  the whole catalog, even a block that frees nothing, unchecked for space; block 80.)
 - **D3. The start reports each long step before it begins and every 30 seconds while it runs**: the copy (its size
   and its share written), the comparison with an existing copy, the migrations, the reclaim; it says that a stop
   now only costs the time spent; the next start says when it found an interrupted copy; a free-space refusal is one
@@ -88,7 +91,7 @@ Commands in appendix B.
 | A migration failing after others succeeded | the database stays at its starting version | the earlier ones stay committed |
 | A restart after that failure | reuses the copy, writes no second one | writes a `pre-<next>` copy |
 | A disk full during the block | rolled back, the one-line space refusal | the failing migration's error, earlier ones committed |
-| A block of migrations leaving under half of the file free | compacted | compacted only by `catalog/0009` |
+| A block of migrations leaving a quarter of the file free or more (Corrected: was "under half", block 80) | compacted | compacted only by `catalog/0009` |
 | A database a quarter free or more, opened with nothing pending | compacted | untouched |
 | A long step of the opening | a line before it and every 30 s | a line before it, none during it |
 | An interrupted copy found at the start | named in the log | deleted silently |
@@ -103,14 +106,16 @@ Commands in appendix B.
 
 ### On a copy of the operator's node and a synthetic catalog, at the lot's Wrap
 
-Run by the lead on the stack's top, before the holistic review, with the audit's instruments.
+Run by the lead on the stack's top, before the holistic review, with the audit's instruments. (Corrected: with the
+lead's Wrap probes, `lot2/wrap_open.py`, `wrap_kill.py` and `wrap_space.py`, beside the audit's `compare.py`;
+appendix B.)
 
 | Check | After the lot | On main |
 |---|---|---|
 | Content after the migration | `compare.py` all OK | all OK |
 | A stop during the migrations, then a restart | the copy reused, no second `pre-*` | a second full copy |
 | A stop during the reclaim, then a restart | compacted at the restart | replayed (version 8) |
-| A `data/` short of space | one line naming what to free | a traceback |
+| A `data/` short of space | one line naming what to free (Corrected: before the copy; during the block, the free space alone) | a traceback |
 | The first start's log | no gap over 60 s before `crawler started` | 6 then 4 silent minutes |
 | `merge --into` the catalog while a process writes it | refused before writing | the writer's writes fail |
 | A synthetic catalog that folds nothing, on a disk with the reserve only | refused in one line, the database at version 5 | refused mid-way, at an intermediate version |
@@ -137,8 +142,10 @@ Run by the lead on the stack's top, before the holistic review, with the audit's
 |---|---|---|---|
 | 10 | `feat/migrations-all-or-nothing` | one transaction per start, the reclaim after it | D1, D2 |
 | 20 | `feat/copy-progress-lines` | the copy's steps reported | D3 |
+| 25 | `feat/comparison-progress-lines` | the comparison's steps reported (Corrected: split from block 20 for the size bound) | D3 |
 | 30 | `feat/migration-progress-lines` | the migrations' and the reclaim's steps reported | D3 |
 | 40 | `feat/free-space-refusal-line` | the free-space refusal in one line | D1, D3 |
+| 45 | `feat/sqlite-temp-files-under-data` | `SQLITE_TMPDIR=/data` in the image (Corrected: split from block 40 for the file bound; the operator's option (b) on block 40's class 2 question, SQLite's temporary files outside `/data`) | D1 |
 | 50 | `fix/migration-memory-release` | the connection reopened, the memory released, the memo bounded | D5 |
 | 60 | `feat/merge-refuses-held-catalog` | a merge refuses a held destination | D4 |
 | 70 | `fix/migration-small-findings` | the refused value named, the copy without hard links, the dead statement | D7 |
@@ -161,7 +168,8 @@ Sizes: appendix A, estimated by a Sonnet agent on this cut (`.reviews/v5-lot2-es
 - **Reusing a copy costs a full comparison of both databases**: about 95 s per side on the operator's catalog, so
   3 minutes, against a 2 to 6 minute copy that also takes 7.5 GB.
 - **A running merge makes a starting crawler fail to open the catalog** until it ends, and Docker restarts it: the
-  docs say to stop the node before `merge --into`.
+  docs say to stop the node before `merge --into`. (Corrected: the crawler refuses in one line, `Database in use`,
+  block 80.)
 - **Two rare raw metadata shapes lose a value at the migration** (D6): a metadata name repeated within one reading
   keeps only its last value, and a plain `media` name beside `media.*` names is dropped. Only data written before v3
   can hold the first, no release since v3.0 writes the second, and the operator's catalog holds neither.
@@ -193,9 +201,11 @@ caller lands in a later block.
 - `_apply_migrations` runs `BEGIN`, every pending script in order, `PRAGMA user_version = <latest>`, `COMMIT`; any
   `sqlite3.Error` rolls the whole block back and raises `MigrationError` naming the migration that failed. The check
   that a script left the transaction open stays, per script. `secure_delete` and `cache_size` are read before the
-  block and restored after it (0007 and 0008 set them), `temp_store` as today.
+  block and restored after it (0007 and 0008 set them), `temp_store` as today. (Corrected: the restore was deleted by block 50, the
+  connection opened again after the block drops them.)
 - A `SQLITE_FULL` during the block (`sqlite3.Error.sqlite_errorcode`) raises a distinct `MigrationError` subclass,
   which block 40 turns into the one-line refusal; until then it reads as today's failure, naming the migration.
+  (Corrected: block 40 replaced the subclass by the domain's `OutOfSpaceError`, which is not a `MigrationError`.)
 - The migration outside a transaction is deleted, as the operator asked on 2026-11-07: dead once 0009 leaves, and
   broken with D1, since a script outside the transaction would break the all-or-nothing. Gone: `_NO_TRANSACTION` and
   its branch in `migration_scripts.py`, `Migration.transactional`, the opener's `_run_outside_transaction` and its
@@ -205,7 +215,7 @@ caller lands in a later block.
 - `catalog/0009_vacuum.sql` keeps its number and holds only a comment saying the opening reclaims since lot 2: a
   development database past version 9 is unaffected, and no release ever shipped it (v4.1.0 stops at 5).
 - The reclaim, in `open` (not `open_reader`), after the migrations: when a block was applied, or when
-  `freelist_count * 4 >= page_count`: `VACUUM` then `PRAGMA wal_checkpoint(TRUNCATE)`, outside any transaction, a
+  `freelist_count * 4 >= page_count` (Corrected: when `freelist_count * 4 >= page_count` alone, D2): `VACUUM` then `PRAGMA wal_checkpoint(TRUNCATE)`, outside any transaction, a
   `SQLITE_FULL` raising the same subclass. Measured: 4.8 s on the operator's catalog (1 818 073 free of 1 895 041
   pages), the WAL peaking at 278 MB, the file 277 MB; the catalog that folds nothing ends its block 49 % free.
 - The copier is unchanged: its prefix is still the first pending version, so after a failed block the next start
@@ -215,7 +225,8 @@ caller lands in a later block.
   the reclaim; line 500, "`catalog/0009` rend au disque, par un `VACUUM`", now the opening's reclaim.
 - Tests: the opener's with scripts in a temporary directory (a second script failing leaves the version and the
   first's tables absent; a `no-transaction` directive refused; the reclaim after a block leaving under half free, and
-  on an opening with nothing pending at a quarter free, not below; a full disk during the block, through a database
+  on an opening with nothing pending at a quarter free, not below (Corrected: after a block at a quarter free, not
+  below, block 80); a full disk during the block, through a database
   whose `max_page_count` is set low, rolls back and raises the subclass); the existing interrupted-copy tests
   adjusted.
 - About 290 to 480 lines, 9 to 11 files: near the bound, the first to split along the reclaim if it passes.
@@ -243,7 +254,8 @@ caller lands in a later block.
 
 - The opener reports, through block 20's port: before the migrations, from which version to which, in one step, and
   that a stop rolls them back; every 30 s, the migration running and the elapsed time; before the reclaim, the free
-  space it gives back.
+  space it gives back. (Corrected: the time since the block began, so that it is not read as the migration's; the
+  reclaim's own line every 30 s came with block 80.)
 - Tests: the opener with the fake ticker.
 - About 80 to 110 lines, 4 or 5 files.
 
@@ -251,7 +263,9 @@ caller lands in a later block.
 
 - A domain error beside `StoreError` (the command line, a driving adapter, cannot import the SQLite adapter's
   `MigrationError`), raised by the copier's free-space check and by block 10's `SQLITE_FULL` path: the directory, the
-  GB needed when known, the GB free, the GB to free.
+  GB needed when known, the GB free, the GB to free. (Corrected: after a `SQLITE_FULL`, no GB to free, the need
+  unknown; the need rounded up and the free space down, the GB to free their difference, block 80; the reserve must
+  also hold SQLite's temporary files, which block 45 puts under `/data`.)
 - `ArgparseCommandLine` prints it as one line, exit 1, as it does `InvalidConfigError`. For a merge, the catalog
   copier maps it to `CatalogCopyError`, as it maps `PersistenceError` today, so `merge` keeps its one `Merge failed`
   line, now in GB. Every other `MigrationError` keeps today's path.
@@ -261,14 +275,16 @@ caller lands in a later block.
 ### Block 50: the connection reopened, the memory released, the memo bounded (D5)
 
 - The opening's order: the migrations, the reclaim, then, when migrations were applied, the connection closed and
-  opened again (same pragmas, block 60's locking mode included, `remove_migration_sql_functions` again), then an
+  opened again (Corrected: the reopen comes before the reclaim, so that the `VACUUM` runs under the build's pragmas
+  with no restore code) (same pragmas, block 60's locking mode included, `remove_migration_sql_functions` again), then an
   injected memory releaser called once.
 - The releaser's adapter calls glibc's `malloc_trim(0)` through `ctypes`, and does nothing where the C library has
   none; the composition passes it to the crawler's and the command line's openers.
 - `create_memoized_function` takes a bound (`functools.lru_cache(maxsize=...)` in place of `cache`), sized to hold
   the operator's 14 237 variants with room (65 536 suggested); the reopen still drops it.
 - Observables: the returned connection's memo holds no entry (the memo's `cache_info` reachable through what
-  `create_memoized_function` registers, the teammate's choice of seam); the releaser's call count on a fake; the
+  `create_memoized_function` registers, the teammate's choice of seam) (Corrected: the opener's test proves the
+  returned connection is a new one, which holds no memo); the releaser's call count on a fake; the
   adapter resolves `malloc_trim` on the gate's glibc; the memo stays at its bound over more distinct values.
 - About 210 to 330 lines, 12 to 14 files.
 
@@ -276,7 +292,9 @@ caller lands in a later block.
 
 - The merge's destination is opened in SQLite's exclusive locking mode (`PRAGMA locking_mode=EXCLUSIVE` before its
   first access, no busy wait), so the opening fails while another connection holds the file, even idle, `--into` or
-  `--output --force` alike; the refusal reaches the command line as a `MergeError`: the destination is held by
+  `--output --force` alike (Corrected: `PRAGMA main.locking_mode=EXCLUSIVE`, since a bare one holds every database
+  attached later; `SQLITE_BUSY` at any connection's first access raises `HeldDatabaseError`, so a crawler started
+  during a merge refuses too, in one line since block 80, which moved the error to the domain); the refusal reaches the command line as a `MergeError`: the destination is held by
   another process, stop the node first. The lock lasts the merge, block 50's reopen included, so a crawler cannot
   open the catalog meanwhile.
 - The sources keep their read-only attach.
@@ -293,13 +311,16 @@ caller lands in a later block.
 
 - Each migration SQL function registered by `register_sql_functions` keeps the exception it raised and the value it
   was given, and `MigrationError` names them: `migration 7 failed: iso_to_micros('2026-07-04 12:00') raised
-  ValueError: ...`, the value cut to 100 characters. SQLite forwards only its fixed text.
+  ValueError: ...`, the value cut to 100 characters (Corrected: the whole argument list cut to 100 characters, then
+  `...`). SQLite forwards only its fixed text.
 - `_rename_without_replacing` takes the linking function as a parameter (`os.link` by default); when it is refused
   (`EPERM`, `ENOTSUP`, `EOPNOTSUPP`), the copy is published by `os.rename` once the final name is checked absent. Only
   one opener writes a database's copies, and the final name carries the second. No placeholder file: a crash between a
   reservation and the replace would leave an empty file that looks like a rollback copy.
 - `local/0010_backoff_states.sql`: the `UPDATE ... 'channel_backoff'` that can never match is deleted (`local/0006`
-  deleted those rows; never released).
+  deleted those rows; never released). (Corrected: code of 2026-10-10 to 2026-10-13, never released, wrote the key
+  again after `local/0006`, so a development `local.db` at 6 to 9 could hold it; `local/0011` drops
+  `scheduler_state` whole, so the outcome is the same.)
 - Tests: a migration over an instant without a time zone names it; the publication with an injected link raising `EPERM` (on main the
   copy fails), and an existing final name refused on both paths.
 - About 190 to 320 lines, 8 to 10 files.
@@ -314,17 +335,20 @@ caller lands in a later block.
 | Row | Command, and the output that fails it |
 |---|---|
 | Content | `compare.py <pristine> <migrated> catalog` (audit instruments, `migration-e2e/`); fails on any `DIFF` |
-| Stop during the migrations | `kill_test.py` (audit, `schema-migrations/`) at full scale, SIGKILL 60 s into the block, restart, `ls data/`; fails on a second `pre-*` |
-| Stop during the reclaim | SIGKILL during the reclaim, restart, file size; fails above 300 MB |
-| Short of space | `freespace.sh` (audit, `migration-e2e/`); fails on a traceback or a figure in bytes |
-| First start's log | the crawler's log with timestamps on the copy, through `crawler started`; fails on a gap over 60 s |
+| Stop during the migrations | `kill_test.py` (audit, `schema-migrations/`) at full scale, SIGKILL 60 s into the block, restart, `ls data/`; fails on a second `pre-*` (Corrected: `wrap_kill.py <data> <trigger> <delay>`, `lot2/`, the kill 60 s after the block's first line) |
+| Stop during the reclaim | SIGKILL during the reclaim, restart, file size; fails above 300 MB (Corrected: `wrap_kill.py <data> <trigger> <delay>`, `lot2/`, the kill after the reclaim's first line) |
+| Short of space | `freespace.sh` (audit, `migration-e2e/`); fails on a traceback or a figure in bytes (Corrected: `wrap_space.py <seed> <factor>`, `lot2/`, a tmpfs in a user namespace) |
+| First start's log | the crawler's log with timestamps on the copy, through `crawler started`; fails on a gap over 60 s (Corrected: `wrap_open.py <data>`, `lot2/`, which opens both databases as the composition does) |
 | Merge into a written catalog | `writer.py` (lead's probe) on the migrated copy, then `merge --into` it; fails if the merge runs or a write fails |
 | Folding nothing | `make_nofold.py` (lead's probe) at 1 000 000 observations on a filesystem sized to the reserve (a loop or tmpfs mount); fails on a traceback, or on a `user_version` other than 5 after the refusal |
 | Its memory | the probe's resident memory sampled through the block; fails at 1 GB or more |
 | Memory, at rc | `docker compose exec p2pwatch grep VmRSS /proc/1/status` once the first start's reevaluation ends; fails at 150 MB or more |
 
 The lead's probes are committed beside the audit's, under `agents/reference/2026-11-04-v5-audit-instruments/lot2/`,
-in the first block.
+in the first block. (Corrected: the Wrap's probes, `wrap_open.py`, `wrap_kill.py` and `wrap_space.py`, run against the
+lot's code and were committed by block 80; `open_once.py`, which `kill_test.py` runs, `main_check.py`,
+`main_check_negative.py`, `memprobe.py`, `memo_probe.py` and `probe_one_tx.py` were written for main before the lot and
+say so in their first line.)
 
 ## Appendix C. Facts
 
