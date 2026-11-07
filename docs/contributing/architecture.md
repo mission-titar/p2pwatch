@@ -511,12 +511,12 @@ points (§8.3) : il supprime `source_ranges` et `source_variants`, et recrée la
 d'attente et raison d'échec. `bytes_done` reste `NULL` sur les lignes existantes, dont on ignore
 la progression passée, pour que la première lecture n'invente pas un progrès.
 `local/0009` renomme la table et la colonne de l'empreinte de la politique, désormais
-`reevaluation_state.policy_fingerprint`, sans toucher à sa valeur. `local/0010` renomme la clé de
-la carte des backoffs, désormais `backoff_states`, et la raison d'attente d'un fichier qu'aMule
-vérifie ou alloue, désormais `local_processing`. `local/0011` remplace `scheduler_state` par la
-table `backoff_states`, `STRICT`, une ligne par client ou canal en backoff : ses tentatives, le
-début de son attente en microsecondes et son délai. Les attentes en cours à la mise à niveau sont
-perdues, et chaque backoff repart de sa base. `catalog/0013` renomme `raw_meta` en `raw_metadata`
+`reevaluation_state.policy_fingerprint`, sans toucher à sa valeur. `local/0010` renomme la raison
+d'attente d'un fichier qu'aMule vérifie ou alloue, désormais `local_processing`. `local/0011`
+remplace `scheduler_state` par la table `backoff_states`, `STRICT`, une ligne par client ou canal
+en backoff : ses tentatives, le début de son attente en microsecondes et son délai. Les attentes en
+cours à la mise à niveau sont perdues, et chaque backoff repart de sa base.
+`catalog/0013` renomme `raw_meta` en `raw_metadata`
 dans `observation_variants` et `source_variants`, `local/0012` `downloads.last_seen_at` et
 `last_progress_at` en `latest_seen_at` et `latest_progress_at` : des `RENAME COLUMN`, comme
 `catalog/0012`, qui ne réécrivent aucune ligne. `catalog/0014` renomme `observed_at` en
