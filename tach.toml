@@ -701,7 +701,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.application.ports.driving.config_validator"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driving.console_query_runner"

@@ -4,10 +4,10 @@ from pathlib import PurePath
 
 from p2pwatch.application.ports.driven.config_checker import ConfigChecker
 from p2pwatch.application.ports.driving.config_validator import (
-    ConfigProblem,
     ConfigReport,
     ConfigValidator,
 )
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 
 

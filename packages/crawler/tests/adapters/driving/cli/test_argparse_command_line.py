@@ -12,12 +12,12 @@ from p2pwatch.application.ports.driving.catalog_merger import (
     NewCatalog,
 )
 from p2pwatch.application.ports.driving.config_validator import (
-    ConfigProblem,
     ConfigReport,
     ConfigValidator,
 )
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.broken_input_error import BrokenInputError
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
