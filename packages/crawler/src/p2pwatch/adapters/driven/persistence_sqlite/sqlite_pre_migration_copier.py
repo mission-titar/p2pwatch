@@ -1,5 +1,6 @@
 """Keeps a copy of a database, beside it, before a migration that rewrites its rows."""
 
+import errno
 import logging
 import os
 import sqlite3
@@ -21,6 +22,14 @@ from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 _logger = logging.getLogger(__name__)
 # Under a minute between two lines: a silent start is one an operator restarts.
 _PROGRESS_PERIOD = timedelta(seconds=30)
+
+
+class Linker(Protocol):
+    def __call__(self, source: Path, destination: Path, /) -> None: ...  # noqa: PLR0917
+
+
+# What a filesystem refusing hard links answers (EPERM: vfat, some FUSE and network mounts).
+_LINK_REFUSED = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP})
 
 
 class FreeBytesMeter(Protocol):
@@ -184,14 +193,22 @@ def _delete_leftovers(path: Path) -> None:
         journal.unlink()
 
 
-def _rename_without_replacing(partial: Path, *, final: Path) -> None:
+def _rename_without_replacing(partial: Path, *, final: Path, link: Linker = os.link) -> None:
     # os.rename and os.replace would silently replace a file at the final name.
     try:
-        os.link(partial, final)
+        try:
+            link(partial, final)
+        except OSError as error:
+            if error.errno not in _LINK_REFUSED:
+                raise
+            # Only one opener writes a database's copies, and their names carry the second.
+            if final.exists():
+                raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST)) from error
+            os.rename(partial, final)
     except OSError as error:
         raise MigrationError(
             f"pre-migration copy: {final} not created: {error.strerror}"
         ) from error
     finally:
-        partial.unlink()
+        partial.unlink(missing_ok=True)
     _logger.info("pre-migration copy: %s", final)
