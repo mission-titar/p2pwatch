@@ -48,7 +48,7 @@ Drafted by block 70's teammate from the block reports, for the closing block (80
 | 45 | #655 | `SQLITE_TMPDIR=/data` in the image | 6, 3 |
 | 50 | #656 | the connection reopened, the memory released, the memo bounded | 354, 19 |
 | 60 | #657 | a merge refuses a held destination | 248, 8 |
-| 70 | #TBD | the refused value named, the copy without hard links, the dead statement | 234, 10 |
+| 70 | #658 | the refused value named, the copy without hard links, the dead statement | 234, 10 |
 | 80 | | closing | |
 
 - **Block 20 was split for the size bound** into 20 and 25: with the comparison's lines it came to 519 lines; they
