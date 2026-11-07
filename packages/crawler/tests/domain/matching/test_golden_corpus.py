@@ -4,12 +4,13 @@ from typing import Any
 import pytest
 import yaml
 
+from p2pwatch.adapters.driven.config.crawler_config import read_targets
 from p2pwatch.domain.matching.config import RegexDefinition
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.matchers import RegexMatcher
 from p2pwatch.domain.matching.models import FileCandidate
-from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _MAX_FILENAME_LENGTH = 4096
 
@@ -21,9 +22,7 @@ _MATCHER = Path(__file__).resolve().parents[5] / "deploy" / "matcher.yml"
 
 def _engine() -> MatchingEngine:
     config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
-    targets = parse_targets(
-        yaml.safe_load((_FIXTURES / "golden_targets.yaml").read_text(encoding="utf-8"))
-    )
+    targets = read_targets(_FIXTURES / "golden_targets.yaml")
     return MatchingEngine(config, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
 

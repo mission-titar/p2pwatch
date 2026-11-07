@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config_from_document
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_problem import ConfigProblem
@@ -13,11 +14,7 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.matching.validation import (
-    MatchingConfigError,
-    parse_matcher_config,
-    parse_targets,
-)
+from p2pwatch.domain.matching.validation import MatchingConfigError, parse_matcher_config
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 
@@ -65,11 +62,7 @@ def read_crawler_config(config_path: Path, *, env: Mapping[str, str]) -> Crawler
 
 def read_targets(targets_path: Path) -> tuple[TargetSegment, ...]:
     """``targets.yml`` parsed; ``InvalidConfigError`` with its problem."""
-    document = _document_of(targets_path)
-    try:
-        return parse_targets(document)
-    except MatchingConfigError as error:
-        raise _one_problem(targets_path, message=str(error)) from error
+    return targets_from_document(_document_of(targets_path), file_path=targets_path)
 
 
 def read_matcher_config(matcher_path: Path) -> MatcherConfig:

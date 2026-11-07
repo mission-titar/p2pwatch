@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 from urllib.parse import urlencode
 
@@ -14,6 +14,7 @@ from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.adapters.driving.webui.app import (
     _catalog_entry_displays,
     _normalize_direction,
@@ -51,7 +52,6 @@ from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord, Explanation
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.matching.validation import parse_targets
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.observability.node_metric import NodeGauge, NodeMetricSample
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -90,6 +90,7 @@ from tests.fakes.application.use_cases.fake_source_name_describer import (
 TEST_HASH = "aabbccdd00112233aabbccdd00112233"
 SEEN_AT = "2026-06-22T10:00:00.000000+00:00"
 _AMULE_URL = "http://localhost:4711"
+_TARGETS_FILE = PurePath("targets.yml")
 # Wednesday 2026-10-14 20:00 UTC: the period tables read the 7 days before it.
 _FAKE_TIME = FakeTime(datetime(2026, 10, 14, 20, 0, tzinfo=UTC))
 _WALL_CLOCK = _FAKE_TIME.wall
@@ -299,7 +300,7 @@ def _href(path: str, *, since: datetime, until: datetime, **kept: str) -> str:
 
 
 def _targets() -> tuple[TargetSegment, ...]:
-    return parse_targets(
+    return targets_from_document(
         yaml.safe_load(
             """\
 episodes:
@@ -310,7 +311,8 @@ episodes:
       - letter: a
         title: "La Grenouille Cosmique"
 """
-        )
+        ),
+        file_path=_TARGETS_FILE,
     )
 
 
@@ -1660,7 +1662,7 @@ async def test_target_page_resolves_title_via_segment_mapping() -> None:
 
 
 def _targets_ab() -> tuple[TargetSegment, ...]:
-    return parse_targets(
+    return targets_from_document(
         yaml.safe_load(
             """\
 episodes:
@@ -1673,7 +1675,8 @@ episodes:
       - letter: b
         title: "Duel Contre Giroro"
 """
-        )
+        ),
+        file_path=_TARGETS_FILE,
     )
 
 

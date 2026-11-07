@@ -3,13 +3,14 @@
 
 from dataclasses import replace
 from datetime import timedelta
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 import yaml
 from httpx import ASGITransport, AsyncClient, Response
 from starlette.applications import Starlette
 
+from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.adapters.driving.webui.app import build_app
 from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRun
 from p2pwatch.application.ports.driving.crawl_summarizer import CrawlSummary
@@ -19,7 +20,6 @@ from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricList
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.matching.validation import parse_targets
 from p2pwatch.domain.node_state import NodeState
 from tests.fakes.application.use_cases.fake_console_query_runner import (
     FakeConsoleQueryRunner,
@@ -51,7 +51,7 @@ _UNKNOWN_DB = "Unknown database. Choose catalog.db or local.db."
 
 
 def _targets() -> tuple[TargetSegment, ...]:
-    return parse_targets(
+    return targets_from_document(
         yaml.safe_load(
             """\
 episodes:
@@ -62,7 +62,8 @@ episodes:
       - letter: a
         title: "La Grenouille Cosmique"
 """
-        )
+        ),
+        file_path=PurePath("targets.yml"),
     )
 
 
