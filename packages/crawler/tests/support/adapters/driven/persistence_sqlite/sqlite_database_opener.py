@@ -14,7 +14,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
     FreeBytesMeter,
     SqlitePreMigrationCopier,
 )
+from p2pwatch.application.ports.driven.memory_releaser import MemoryReleaser
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
+from tests.fakes.adapters.driven.fake_memory_releaser import FakeMemoryReleaser
 from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
@@ -47,14 +49,18 @@ class _PreparingCopier(SqlitePreMigrationCopier):
         super().ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
 
 
-def database_opener(*, free_bytes: FreeBytesMeter | None = None) -> SqliteDatabaseOpener:
+def database_opener(
+    *, free_bytes: FreeBytesMeter | None = None, memory_releaser: MemoryReleaser | None = None
+) -> SqliteDatabaseOpener:
     """An opener whose pre-migration copies are named from a ``FakeTime``, ticked by a
-    ``FakeTicker`` and never short of space, unless ``free_bytes`` measures otherwise."""
+    ``FakeTicker`` and never short of space, unless ``free_bytes`` measures otherwise, releasing
+    memory through a ``FakeMemoryReleaser`` unless ``memory_releaser`` is given."""
     free_bytes = free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes
     return SqliteDatabaseOpener(
         SqlitePreMigrationCopier(FakeTime().wall, ticker=FakeTicker(), free_bytes=free_bytes),
         ticker=FakeTicker(),
         free_bytes=free_bytes,
+        memory_releaser=memory_releaser or FakeMemoryReleaser(),
     )
 
 
@@ -66,6 +72,7 @@ def database_opener_setting(
         _PreparingCopier(lambda connection: connection.execute(pragma)),
         ticker=FakeTicker(),
         free_bytes=free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
     )
 
 
@@ -75,6 +82,18 @@ def database_opener_ticked_by(ticker: FakeTicker) -> SqliteDatabaseOpener:
         _PreparingCopier(lambda connection: connection.create_function("tick", 0, ticker.tick)),
         ticker=ticker,
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
+    )
+
+
+def database_opener_registering(function_name: str) -> SqliteDatabaseOpener:
+    """The same, the SQL function ``function_name`` registered on each connection before its
+    migrations, so that a test tells the connection that migrated from one opened after."""
+    return SqliteDatabaseOpener(
+        _PreparingCopier(lambda connection: connection.create_function(function_name, 0, int)),
+        ticker=FakeTicker(),
+        free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
     )
 
 

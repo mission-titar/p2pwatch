@@ -19,6 +19,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.gigabytes import gigabytes
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
+from tests.fakes.adapters.driven.fake_memory_releaser import FakeMemoryReleaser
 from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
@@ -27,6 +28,7 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
 )
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
+    database_opener_registering,
     database_opener_setting,
     database_opener_ticked_by,
     open_catalog,
@@ -525,9 +527,16 @@ def test_open_registers_the_variant_functions_before_migrating(tmp_path: Path) -
         assert rows(connection, sql="SELECT us FROM probe") == [{"us": 1}]
 
 
-def test_open_removes_iso_to_micros_once_migrated(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "scripts",
+    [(), (Migration(version=1, script="CREATE TABLE t (x);"),)],
+    ids=["nothing pending", "reopened after a block"],
+)
+def test_open_removes_iso_to_micros_once_migrated(
+    *, tmp_path: Path, scripts: tuple[Migration, ...]
+) -> None:
     with (
-        closing(_open(tmp_path / "catalog.db", scripts=())) as connection,
+        closing(_open(tmp_path / "catalog.db", scripts=scripts)) as connection,
         pytest.raises(sqlite3.OperationalError, match="no such function: iso_to_micros"),
     ):
         connection.execute("SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00')")
@@ -751,24 +760,14 @@ def test_a_vacuum_in_a_script_fails_inside_the_block(tmp_path: Path) -> None:
     assert _version_and_tables(path)[0] == 0
 
 
-_LARGE_REWRITE_PRAGMAS = "PRAGMA secure_delete = OFF;\nPRAGMA cache_size = -262144;\n"
-
-
-def test_a_script_pragmas_are_restored_after_the_block(tmp_path: Path) -> None:
-    """``secure_delete = 1`` stands for the image's build, which compiles ``SECURE_DELETE`` in."""
-    opener = database_opener_setting("PRAGMA secure_delete = ON")
-    script = _LARGE_REWRITE_PRAGMAS + "CREATE TABLE t (x INTEGER);"
+def test_the_pragmas_a_script_sets_end_with_the_block(tmp_path: Path) -> None:
+    script = "PRAGMA secure_delete = FAST;\nPRAGMA cache_size = -262144;\nCREATE TABLE t (x);"
     scripts = (Migration(version=1, script=script),)
-    with closing(opener.open(tmp_path / "pragmas.db", scripts=scripts)) as connection:
-        assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 1}]
-        assert rows(connection, sql="PRAGMA cache_size") == [{"cache_size": -2000}]
-
-
-def test_a_fast_secure_delete_is_restored_as_fast(tmp_path: Path) -> None:
-    opener = database_opener_setting("PRAGMA secure_delete = FAST")
-    scripts = (Migration(version=1, script=_LARGE_REWRITE_PRAGMAS),)
-    with closing(opener.open(tmp_path / "fast.db", scripts=scripts)) as connection:
-        assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 2}]
+    with closing(sqlite3.connect(":memory:")) as fresh:
+        build_pragmas = rows(fresh, sql="SELECT * FROM pragma_secure_delete, pragma_cache_size")
+    with closing(_open(tmp_path / "pragmas.db", scripts=scripts)) as connection:
+        pragmas = rows(connection, sql="SELECT * FROM pragma_secure_delete, pragma_cache_size")
+    assert pragmas == build_pragmas
 
 
 # --- The reclaim: after a block of migrations, or at a quarter of free pages ---
@@ -856,3 +855,48 @@ def test_a_failed_reclaim_raises_a_migration_error(tmp_path: Path) -> None:
         holder.execute("BEGIN IMMEDIATE")
         with pytest.raises(MigrationError, match="^reclaim failed: database is locked"):
             opener.open(path, scripts=())
+
+
+# --- After a block: the connection opened again, the memory given back ---
+
+_ONE_SCRIPT = (Migration(version=1, script="CREATE TABLE t (x);"),)
+
+
+def test_an_opening_that_migrated_returns_a_connection_opened_after_the_block(
+    tmp_path: Path,
+) -> None:
+    opener = database_opener_registering("migrated_here")
+    with (
+        closing(opener.open(tmp_path / "catalog.db", scripts=_ONE_SCRIPT)) as connection,
+        pytest.raises(sqlite3.OperationalError, match="no such function: migrated_here"),
+    ):
+        connection.execute("SELECT migrated_here()")
+
+
+def test_an_opening_with_nothing_pending_returns_its_first_connection(tmp_path: Path) -> None:
+    opener = database_opener_registering("opened_here")
+    with closing(opener.open(tmp_path / "catalog.db", scripts=())) as connection:
+        assert rows(connection, sql="SELECT opened_here() AS here") == [{"here": 0}]
+
+
+def test_an_opening_that_migrated_leaves_no_connection_open(tmp_path: Path) -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _open(tmp_path / "catalog.db", scripts=_ONE_SCRIPT).close()
+        # A connection left open warns when it is collected.
+        gc.collect()
+    assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
+
+
+@pytest.mark.parametrize(
+    ("scripts", "release_count"),
+    [(_ONE_SCRIPT, 1), ((), 0)],
+    ids=["after a block", "nothing pending"],
+)
+def test_an_opening_releases_the_memory_once_after_a_block(
+    *, tmp_path: Path, scripts: tuple[Migration, ...], release_count: int
+) -> None:
+    memory_releaser = FakeMemoryReleaser()
+    opener = database_opener(memory_releaser=memory_releaser)
+    opener.open(tmp_path / "catalog.db", scripts=scripts).close()
+    assert memory_releaser.release_count == release_count

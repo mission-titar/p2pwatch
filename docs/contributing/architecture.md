@@ -574,17 +574,22 @@ récente que le code est refusée. Les règles d'écriture :
   `PRAGMA cache_size = -262144` (256 Mo). Là où SQLite est compilé avec `SECURE_DELETE`, comme dans
   l'image, le `DROP` d'une grosse table garde tout son contenu dans le journal de l'instruction, en
   mémoire, jusqu'au manque de mémoire ; le cache plus grand accélère une copie limitée par les
-  entrées-sorties. L'ouvreur relit ces deux pragmas avant la transaction et les rétablit après elle :
-  un script règle ce dont il a besoin et ne remet jamais rien en place.
+  entrées-sorties. L'ouvreur ferme sa connexion après la transaction et en ouvre une neuve, qui repart
+  des pragmas de la compilation : un script règle ce dont il a besoin et ne remet jamais rien en
+  place.
 - **Les tris passent par des fichiers temporaires** (`temp_store = FILE`) : un tri en mémoire n'a pas
   de plafond. L'image les met dans `/data` (`SQLITE_TMPDIR`), sur le disque que mesure la
   vérification de place libre.
+- **La mémoire des migrations est rendue.** Les fonctions SQL mémoïsées (`content_hash`,
+  `fold_raw_meta`) gardent au plus 65 536 entrées. La connexion neuve laisse derrière elle leur
+  mémo et le cache de pages de la transaction, puis l'ouvreur demande à la bibliothèque C de rendre
+  au système ce qu'elle garde de libre (`malloc_trim` de la glibc, via `GlibcMemoryReleaser`).
 - **Pas de `VACUUM`**, que SQLite refuse dans une transaction. L'ouvreur rend la place libérée
-  lui-même, après la transaction : un `VACUUM` puis un `PRAGMA wal_checkpoint(TRUNCATE)`, après
-  toute migration, et à toute ouverture où les pages libres font au moins le quart du fichier. Une
-  mise à niveau libère au moins ses anciennes tables, si bien qu'un arrêt pendant ce compactage le
-  fait reprendre au démarrage suivant ; un catalogue ordinaire, qui ne fait que grandir, n'atteint
-  jamais ce quart.
+  lui-même, après la transaction, sur la connexion neuve : un `VACUUM` puis un
+  `PRAGMA wal_checkpoint(TRUNCATE)`, après toute migration, et à toute ouverture où les pages
+  libres font au moins le quart du fichier. Une mise à niveau libère au moins ses anciennes tables,
+  si bien qu'un arrêt pendant ce compactage le fait reprendre au démarrage suivant ; un catalogue
+  ordinaire, qui ne fait que grandir, n'atteint jamais ce quart.
 - **La directive `-- migration: copy-before`**, seule et exacte en première ligne, marque un script
   qui supprime ou réécrit des lignes : un `DELETE`, un `UPDATE`, un `DROP TABLE`, un
   `INSERT ... SELECT`, un `INSERT OR REPLACE`, un `REPLACE INTO`, un

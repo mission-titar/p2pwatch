@@ -20,6 +20,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
 )
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
+from tests.fakes.adapters.driven.fake_memory_releaser import FakeMemoryReleaser
 from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
@@ -401,7 +402,10 @@ _FAILING = _COPY_BEFORE + "DELETE FROM t;\nINSERT INTO absent VALUES (1);"
 def _open(path: Path, *, scripts: tuple[Migration, ...], copier: SqlitePreMigrationCopier) -> None:
     """An open over the scripts through ``copier``, then the connection closed."""
     SqliteDatabaseOpener(
-        copier, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
+        copier,
+        ticker=FakeTicker(),
+        free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
     ).open(path, scripts=scripts).close()
 
 

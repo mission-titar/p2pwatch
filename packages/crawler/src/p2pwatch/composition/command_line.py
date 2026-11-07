@@ -1,5 +1,6 @@
 """The command line of ``python -m p2pwatch``, on the driving ports' implementations."""
 
+import ctypes
 import logging
 from collections.abc import Mapping
 from pathlib import Path
@@ -8,6 +9,7 @@ from shutil import disk_usage
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.config.filesystem_config_checker import FilesystemConfigChecker
 from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
+from p2pwatch.adapters.driven.glibc_memory_releaser import GlibcMemoryReleaser
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
@@ -55,6 +57,8 @@ def build_command_line(
                     ),
                     ticker=ticker,
                     free_bytes=lambda directory: disk_usage(directory).free,
+                    # None: the process's own symbols, the C library's included.
+                    memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
                 )
             ),
             logger=StdlibLogger(MergeCatalogs.__module__),
