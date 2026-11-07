@@ -109,9 +109,42 @@ def source_content_hash_by_position(  # noqa: PLR0917
     )
 
 
-def register_sql_functions(connection: sqlite3.Connection) -> None:
+class SqlFunction[R](Protocol):
+    def __call__(self, *arguments: Any, **keywords: Any) -> R: ...
+
+
+# A failed call's arguments, as its error shows them.
+_SHOWN_CHARACTERS = 100
+
+
+class SqlFunctionFailures:
+    """The latest call a registered SQL function failed, its name, arguments and error: SQLite
+    forwards only "user-defined function raised exception"."""
+
+    def __init__(self) -> None:
+        self.latest: str | None = None
+
+    def recording[R](self, function: SqlFunction[R], *, name: str) -> SqlFunction[R]:
+        """``function``, keeping a call that raises as ``latest`` before it propagates."""
+
+        def recorded(*arguments: Any, **keywords: Any) -> R:
+            try:
+                return function(*arguments, **keywords)
+            except Exception as error:
+                shown = ", ".join(map(repr, arguments))
+                if len(shown) > _SHOWN_CHARACTERS:
+                    shown = shown[:_SHOWN_CHARACTERS] + "..."
+                self.latest = f"{name}({shown}) raised {type(error).__name__}: {error}"
+                raise
+
+        return recorded
+
+
+def register_sql_functions(
+    connection: sqlite3.Connection, *, failures: SqlFunctionFailures
+) -> None:
     """Registers ``content_hash``, ``source_content_hash``, ``file_id``, ``source_id``,
-    ``fold_raw_meta`` and ``iso_to_micros``."""
+    ``fold_raw_meta`` and ``iso_to_micros``, each keeping its failed call in ``failures``."""
 
     # A v4 raw_meta, its [name, value] pairs folded as the mapper folds a result.
     def fold_stored(  # noqa: PLR0917
@@ -126,21 +159,30 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
 
     # Memoized up to a bound: the opening reopens the connection after migrating, which drops it.
     create_memoized_function(
-        connection, name="content_hash", argument_count=7, function=content_hash_by_position
+        connection,
+        name="content_hash",
+        argument_count=7,
+        function=failures.recording(content_hash_by_position, name="content_hash"),
     )
     # The SQL name keeps the spelling migration catalog/0007 calls.
     create_memoized_function(
-        connection, name="fold_raw_meta", argument_count=4, function=fold_stored
+        connection,
+        name="fold_raw_meta",
+        argument_count=4,
+        function=failures.recording(fold_stored, name="fold_raw_meta"),
     )
-    connection.create_function(
-        "source_content_hash", 9, source_content_hash_by_position, deterministic=True
-    )
-    connection.create_function("file_id", 2, file_id, deterministic=True)
-    connection.create_function("source_id", 2, source_id, deterministic=True)
-    # Never memoized: every observation has its own stamp, the memo would hold them all.
+    # iso_to_micros never memoized: each observation has its own stamp, the memo would hold all.
     # The migrations' reference, the one sanctioned: remove_migration_sql_functions drops it after.
     iso_to_micros = micros.iso_to_micros  # type: ignore[deprecated]
-    connection.create_function("iso_to_micros", 1, iso_to_micros, deterministic=True)
+    for name, argument_count, function in (
+        ("source_content_hash", 9, source_content_hash_by_position),
+        ("file_id", 2, file_id),
+        ("source_id", 2, source_id),
+        ("iso_to_micros", 1, iso_to_micros),
+    ):
+        connection.create_function(
+            name, argument_count, failures.recording(function, name=name), deterministic=True
+        )
 
 
 def _unmapped_from_pairs(pairs: list[list[str]]) -> dict[str, object]:
@@ -172,16 +214,12 @@ _MEMO_BOUND = 65_536
 type Memo = _lru_cache_wrapper[str | bytes]
 
 
-class SqlFunction(Protocol):
-    def __call__(self, *arguments: Any, **keywords: Any) -> str | bytes: ...
-
-
 def create_memoized_function(
     connection: sqlite3.Connection,
     *,
     name: str,
     argument_count: int,
-    function: SqlFunction,
+    function: SqlFunction[str | bytes],
 ) -> Memo:
     """Registers ``function`` as the SQL function ``name``, called once per distinct arguments
     among the latest ``_MEMO_BOUND``, and returns its memo."""

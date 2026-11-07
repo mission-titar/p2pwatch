@@ -616,6 +616,27 @@ def test_a_failing_second_script_rolls_back_the_first_and_keeps_the_starting_ver
     assert _version_and_tables(path) == (0, set())
 
 
+def test_a_migration_over_an_instant_without_a_time_zone_names_it(tmp_path: Path) -> None:
+    path = tmp_path / "naive.db"
+    with pytest.raises(
+        MigrationError,
+        match=r"^migration 2 failed: iso_to_micros\('2026-07-04 12:00'\) raised ValueError:"
+        r" instant_to_micros requires an aware datetime$",
+    ):
+        _open(
+            path,
+            scripts=(
+                Migration(version=1, script="CREATE TABLE t (stamp);"),
+                Migration(
+                    version=2,
+                    script="INSERT INTO t VALUES ('2026-07-04 12:00');\n"
+                    "UPDATE t SET stamp = iso_to_micros(stamp);",
+                ),
+            ),
+        )
+    assert _version_and_tables(path) == (0, set())
+
+
 def test_a_full_disk_during_the_block_rolls_it_back_and_raises_out_of_space(
     tmp_path: Path,
 ) -> None:

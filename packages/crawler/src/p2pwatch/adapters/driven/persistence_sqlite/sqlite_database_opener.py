@@ -42,6 +42,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
     SqlitePreMigrationCopier,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    SqlFunctionFailures,
     register_sql_functions,
     remove_migration_sql_functions,
 )
@@ -96,7 +97,8 @@ class SqliteDatabaseOpener:
         took; a database newer than the ``scripts`` raises ``MigrationError``, a lack of disk space
         ``OutOfSpaceError``. ``exclusive``, each connection holds ``path`` until it closes, and
         another one raises ``HeldDatabaseError``, at the reopen too, the database then migrated."""
-        connection = _connect(path, exclusive=exclusive)
+        failures = SqlFunctionFailures()
+        connection = _connect(path, exclusive=exclusive, failures=failures)
         try:
             pending = _pending_migrations(connection, scripts=scripts)
             self._pre_migration_copier.ensure_copy(
@@ -112,11 +114,12 @@ class SqliteDatabaseOpener:
                 pending=pending,
                 ticker=self._ticker,
                 free_bytes=self._free_bytes,
+                failures=failures,
             )
             if pending.migrations:
                 # Closed, it drops the memos, the page cache and the pragmas the scripts set.
                 connection.close()
-                connection = _connect(path, exclusive=exclusive)
+                connection = _connect(path, exclusive=exclusive, failures=failures)
                 with wrap_sqlite_errors():
                     connection.execute("PRAGMA temp_store=FILE")
             _reclaim(connection, path=path, pending=pending, free_bytes=self._free_bytes)
@@ -157,10 +160,10 @@ def read_only_uri(path: Path) -> str:
     return f"file:{quote(str(path))}?mode=ro"
 
 
-def _connect(path: Path, *, exclusive: bool) -> sqlite3.Connection:
+def _connect(path: Path, *, exclusive: bool, failures: SqlFunctionFailures) -> sqlite3.Connection:
     """A connection to ``path`` in WAL, its rows read by column name, its pragmas set and the SQL
-    functions registered; ``exclusive``, it holds ``path`` from its first access until it closes,
-    refused at once beside another connection."""
+    functions registered, their failed calls kept in ``failures``; ``exclusive``, it holds
+    ``path`` from its first access until it closes, refused at once beside another connection."""
     with wrap_sqlite_errors():
         connection = sqlite3.connect(
             f"file:{quote(str(path))}",
@@ -176,7 +179,7 @@ def _connect(path: Path, *, exclusive: bool) -> sqlite3.Connection:
                 connection.execute("PRAGMA main.locking_mode=EXCLUSIVE")
         _configure(connection, path=path)
         with wrap_sqlite_errors():
-            register_sql_functions(connection)
+            register_sql_functions(connection, failures=failures)
     except BaseException:
         # Unconditional close: whatever fails, the connection must not leak.
         connection.close()
@@ -238,10 +241,11 @@ def _apply_migrations(
     pending: PendingMigrations,
     ticker: Ticker,
     free_bytes: FreeBytesMeter,
+    failures: SqlFunctionFailures,
 ) -> None:
     """Applies the pending scripts in order in one transaction, the schema version written once,
-    at its end; the rules for writing one: ``docs/contributing/architecture.md``, "Écrire une
-    migration"."""
+    at its end, a failure naming the SQL function call that raised it; the rules for writing one:
+    ``docs/contributing/architecture.md``, "Écrire une migration"."""
     if not pending.migrations:
         return
     _logger.info(
@@ -269,7 +273,8 @@ def _apply_migrations(
         raise _migration_error(
             error,
             connection=connection,
-            message=f"{step.name} failed: {error}",
+            # A failed call aborts its statement, so the latest one kept is this error's.
+            message=f"{step.name} failed: {failures.latest or error}",
             step=f"migrations of {path} ({step.name})",
             outcome=f"the database left at version {pending.current_version}",
             path=path,
