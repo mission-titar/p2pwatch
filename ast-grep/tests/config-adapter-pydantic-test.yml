@@ -1,0 +1,11 @@
+id: config-adapter-pydantic
+valid:
+  - import dataclasses
+  - from p2pwatch.adapters.driven.config.crawler_config import read_crawler_config
+  - import pydantic_settings_lookalike
+invalid:
+  - import pydantic
+  - from pydantic import BaseModel, ValidationError
+  - from pydantic.functional_validators import AfterValidator
+  - from pydantic_core import PydanticCustomError
+  - import pydantic_core as core

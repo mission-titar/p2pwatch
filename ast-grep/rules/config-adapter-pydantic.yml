@@ -1,0 +1,10 @@
+id: config-adapter-pydantic
+language: python
+severity: error
+message: Only the config adapter imports `pydantic`, which reads the config files as written; the core keeps its own objects.
+note: "Receive the domain object the config adapter built."
+files: ["packages/*/src/**/*.py"]
+ignores: ["packages/crawler/src/p2pwatch/adapters/driven/config/**"]
+rule:
+  matches: imported-module
+  regex: ^pydantic(_core)?(\.\w+)*$
