@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.config.crawler_config import load_config
+from p2pwatch.adapters.driven.config.crawler_config import load_config, read_crawler_config
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.config_problem import ConfigProblem
@@ -94,6 +94,19 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
             message="environment variable 'P2PWATCH_UNSET' referenced but not set",
         ),
     )
+
+
+def test_no_line_prints_a_resolved_variable(tmp_path: Path) -> None:
+    config_path = _write_crawler_config(
+        tmp_path, extra="amule_api_pasword: ${SECRET}\nwebui: ${SECRET}\n"
+    )
+
+    with pytest.raises(InvalidConfigError) as raised:
+        read_crawler_config(config_path, env=_env() | {"SECRET": "hunter2"})
+
+    lines = [f"{problem.key}: {problem.message}" for problem in raised.value.problems]
+    assert {problem.key for problem in raised.value.problems} == {"amule_api_pasword", "webui"}
+    assert all("hunter2" not in line for line in lines)
 
 
 def test_every_unset_variable_is_listed_beside_the_parses_problem(tmp_path: Path) -> None:

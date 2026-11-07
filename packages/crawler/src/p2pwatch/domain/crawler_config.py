@@ -103,21 +103,6 @@ class WebuiConfig:
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
-# Root keys no longer read: refused, so an operator never believes they still apply.
-_REMOVED_KEYS = (
-    "cycle_interval_seconds",
-    "decision_poll_interval_seconds",
-    "keyword_pause_max_seconds",
-    "keyword_pause_min_seconds",
-    "node_id",
-    "port_sync",
-    "search_poll_budget_seconds",
-    "search_poll_interval_seconds",
-)
-
-# Keys read elsewhere now: refused with their new place, so an operator never edits a dead one.
-_MOVED_KEYS = {"backoff": "search.backoff"}
-
 
 @dataclass(kw_only=True, frozen=True)
 class ObservabilityConfig:
@@ -442,12 +427,6 @@ def _section(document: dict[str, Any], *, key: str) -> dict[str, Any]:
 def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     """Builds a validated ``CrawlerConfig`` from the parsed YAML dict, its ``${NAME}`` already
     resolved. Fail-fast §5/§14: any inconsistency → ``ConfigValueError``."""
-    for key in _REMOVED_KEYS:
-        if key in document:
-            raise ConfigValueError(key, message="was removed, delete it from crawler.yml")
-    for key, new_path in _MOVED_KEYS.items():
-        if key in document:
-            raise ConfigValueError(key, message=f"moved to '{new_path}', move it in crawler.yml")
     observability = parse_observability(_section(document, key="observability"))
     return CrawlerConfig(
         search=parse_search(_section(document, key="search")),

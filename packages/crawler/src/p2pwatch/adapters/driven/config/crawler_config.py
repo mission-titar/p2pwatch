@@ -1,15 +1,15 @@
-"""Reads the three config files and hands their parse to the domain (``domain/crawler_config``)."""
+"""Reads the three config files into the domain's objects."""
 
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
+from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config_from_document
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_problem import ConfigProblem
-from p2pwatch.domain.config_value_error import ConfigValueError
-from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig, parse_crawler_config
+from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.models import TargetSegment
@@ -52,13 +52,12 @@ def load_config(
 
 def read_crawler_config(config_path: Path, *, env: Mapping[str, str]) -> CrawlerConfig:
     """``crawler.yml`` parsed, its ``${NAME}`` resolved from ``env``; ``InvalidConfigError`` with
-    every unset variable and the parse's problem."""
+    every unset variable and the parse's problems."""
     interpolated = interpolate_document(_document_of(config_path), env=env, file_path=config_path)
     try:
-        crawler_config = parse_crawler_config(interpolated.document)
-    except ConfigValueError as error:
-        problem = ConfigProblem(file_path=config_path, key=error.key, message=error.message)
-        raise InvalidConfigError((*interpolated.problems, problem)) from error
+        crawler_config = crawler_config_from_document(interpolated.document, file_path=config_path)
+    except InvalidConfigError as error:
+        raise InvalidConfigError((*interpolated.problems, *error.problems)) from error
     if interpolated.problems:
         raise InvalidConfigError(interpolated.problems)
     return crawler_config

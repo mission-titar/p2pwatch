@@ -215,29 +215,6 @@ def test_non_positive_value_is_fatal() -> None:
 
 
 @pytest.mark.parametrize(
-    "key",
-    [
-        "cycle_interval_seconds",
-        "decision_poll_interval_seconds",
-        "keyword_pause_max_seconds",
-        "keyword_pause_min_seconds",
-        "node_id",
-        "port_sync",
-        "search_poll_budget_seconds",
-        "search_poll_interval_seconds",
-    ],
-)
-def test_a_removed_key_is_refused_by_name(key: str) -> None:
-    raw = _minimal_raw() | {key: 5.0}
-    with pytest.raises(ConfigValueError) as raised:
-        parse_crawler_config(raw)
-    assert (raised.value.key, raised.value.message) == (
-        key,
-        "was removed, delete it from crawler.yml",
-    )
-
-
-@pytest.mark.parametrize(
     ("parse", "section", "key_path"),
     [
         (parse_webui, {"enabled": True}, "webui.enabled"),
@@ -256,16 +233,6 @@ def test_a_removed_key_of_a_section_is_refused_by_its_path(
     assert (raised.value.key, raised.value.message) == (
         key_path,
         "was removed, delete it from crawler.yml",
-    )
-
-
-def test_the_root_backoff_is_refused_with_its_new_place() -> None:
-    raw = _minimal_raw() | {"backoff": _minimal_raw()["search"]["backoff"]}
-    with pytest.raises(ConfigValueError) as raised:
-        parse_crawler_config(raw)
-    assert (raised.value.key, raised.value.message) == (
-        "backoff",
-        "moved to 'search.backoff', move it in crawler.yml",
     )
 
 
@@ -336,26 +303,10 @@ def test_non_string_amule_api_password_is_fatal() -> None:
         parse_crawler_config(raw)
 
 
-def test_leftover_pool_keys_are_ignored() -> None:
-    # The live-node migration edits crawler.yml by hand (design §11). An operator who forgets to
-    # delete the old pool keys must still get a bootable crawler, not a fail-fast on a dead key.
-    raw = _minimal_raw() | {
-        "amules": [{"name": "amule-1", "host": "amuled", "port": 4712, "password": "x"}],
-    }
-    assert parse_crawler_config(raw).amule_api_password == "secret"
-
-
 def test_missing_db_path_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["catalog_db_path"]
     with pytest.raises(ConfigValueError, match=r"^catalog_db_path: missing$"):
-        parse_crawler_config(raw)
-
-
-def test_empty_node_id_string_is_fatal() -> None:
-    raw = _minimal_raw()
-    raw["node_id"] = ""
-    with pytest.raises(ConfigValueError, match="node_id"):
         parse_crawler_config(raw)
 
 
