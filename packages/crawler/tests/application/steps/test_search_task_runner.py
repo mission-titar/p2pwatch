@@ -12,7 +12,6 @@ from typing import Any
 
 import pytest
 
-from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
@@ -25,6 +24,7 @@ from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore

@@ -1,9 +1,9 @@
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import TargetSegment
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.node_metric import NodeCounter, NodeGauge, NodeMetricSample
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience

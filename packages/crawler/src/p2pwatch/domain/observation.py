@@ -7,10 +7,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.matching.models import FileCandidate
 from p2pwatch.domain.value_bounds import require_quantity, require_well_formed_text
 
 # DECISION 8: the "MB" shown by eMule clients are binary (MiB).

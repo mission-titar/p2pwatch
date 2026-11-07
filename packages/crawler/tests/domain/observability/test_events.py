@@ -4,9 +4,9 @@ import dataclasses
 
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import (
     DownloadCompleted,
     ObservationRecorded,

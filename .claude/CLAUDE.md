@@ -4,7 +4,7 @@
 
 `p2pwatch` continuously surveils the eMule network (eD2k + Kad, via an aMule client driven over amuleapi, its REST surface) to recover lost-media episodes of the French dub of *Keroro mission Titar* (aired 2008 on Teletoon), cataloguing all available metadata along the way.
 
-A uv workspace of eight packages under `packages/`: the crawler `p2pwatch` (with its in-process webui), `p2pwatch_amule` (the aMule container's boot step, port-sync and healthcheck), `catalog_matching` (the matching engine), `pytest_settings` (shared test configuration), and four `*_checks` / `amule_bump` dev tooling packages never shipped in a prod image. A node is two containers: the core `p2pwatch` and `p2pwatch-amule` (compose service `ed2k`).
+A uv workspace of seven packages under `packages/`: the crawler `p2pwatch` (with its in-process webui and its matching engine), `p2pwatch_amule` (the aMule container's boot step, port-sync and healthcheck), `pytest_settings` (shared test configuration), and four `*_checks` / `amule_bump` dev tooling packages never shipped in a prod image. A node is two containers: the core `p2pwatch` and `p2pwatch-amule` (compose service `ed2k`).
 
 ## Orientation
 
@@ -43,7 +43,7 @@ uv run poe fix       # auto-fix everything mechanical: ruff --fix + ruff format 
 **Single test** (the package-wide `--cov-fail-under=100` makes a lone test "fail": disable coverage):
 
 ```bash
-( cd packages/matching && uv run pytest tests/domain/test_engine.py::test_evaluate_real_62a_is_download_via_first_rule_on_62a --no-cov -q )
+( cd packages/crawler && uv run pytest tests/domain/matching/test_engine.py::test_evaluate_real_62a_is_download_via_first_rule_on_62a --no-cov -q )
 ```
 
 Integration suites (Docker, deselected by default): `docs/contributing/testing.md`.
@@ -83,7 +83,7 @@ Claude Code loads each file when its Read, Edit or Write tool touches a matching
 | `deploy.md` | `deploy/`, the config adapter, matching's tests |
 | `docs.md` | `docs/` |
 | `glossary.md` | `packages/`, `agents/specs/` |
-| `matching.md` | `packages/matching/`, `deploy/matcher.yml`, `deploy/targets.yml` |
+| `matching.md` | the matching engine and its tests, `deploy/matcher.yml`, `deploy/targets.yml` |
 | `merge.md` | the `merge` use case, the catalog copier, the database opener, the command line |
 | `packaging.md` | every `pyproject.toml`, `tach.toml`, every `Dockerfile` |
 | `persistence.md` | the SQLite adapter and its tests |

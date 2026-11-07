@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from catalog_matching.domain.config import (
+from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
@@ -12,8 +12,8 @@ from catalog_matching.domain.config import (
     RegexDefinition,
     TokenReference,
 )
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.validation import (
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.validation import (
     CycleError,
     DepthExceededError,
     MatchingConfigError,

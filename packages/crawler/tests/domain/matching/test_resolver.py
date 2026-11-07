@@ -1,7 +1,7 @@
-from catalog_matching.domain.matchers import AttributeBetweenMatcher, CoverageMatcher, RegexMatcher
-from catalog_matching.domain.models import FileCandidate, TargetSegment
-from catalog_matching.domain.resolver import MatcherResolver
-from catalog_matching.domain.validation import parse_matcher_config
+from p2pwatch.domain.matching.matchers import AttributeBetweenMatcher, CoverageMatcher, RegexMatcher
+from p2pwatch.domain.matching.models import FileCandidate, TargetSegment
+from p2pwatch.domain.matching.resolver import MatcherResolver
+from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _TARGET = TargetSegment(
     season=2,

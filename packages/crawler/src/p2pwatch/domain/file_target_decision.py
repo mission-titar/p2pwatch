@@ -4,10 +4,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 @dataclass(kw_only=True, frozen=True)

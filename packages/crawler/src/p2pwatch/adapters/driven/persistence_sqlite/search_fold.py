@@ -1,6 +1,6 @@
 """``fold_for_search``, the SQL function a reader's search compares the text and a name through."""
 
-from catalog_matching.domain.normalization import fold
+from p2pwatch.domain.matching.normalization import fold
 
 
 def fold_for_search(text: str | None) -> str | None:

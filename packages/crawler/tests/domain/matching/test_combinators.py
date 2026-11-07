@@ -1,11 +1,11 @@
-from catalog_matching.domain.combinators import (
+from p2pwatch.domain.matching.combinators import (
     AllMatcher,
     AnyMatcher,
     Matcher,
     NotMatcher,
 )
-from catalog_matching.domain.matchers import KeywordMatcher
-from catalog_matching.domain.models import FileCandidate
+from p2pwatch.domain.matching.matchers import KeywordMatcher
+from p2pwatch.domain.matching.models import FileCandidate
 
 
 class _Const(Matcher):

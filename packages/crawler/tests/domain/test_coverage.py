@@ -1,6 +1,6 @@
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.coverage import TargetCoverageStatus, coverage_of
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 def test_no_decision_is_none() -> None:

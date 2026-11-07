@@ -3,8 +3,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
 )
@@ -25,6 +23,8 @@ from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient

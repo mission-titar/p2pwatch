@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey

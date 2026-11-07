@@ -6,7 +6,7 @@ expose the same ``matches(candidate) -> bool`` interface.
 
 from abc import ABC, abstractmethod
 
-from catalog_matching.domain.models import FileCandidate
+from p2pwatch.domain.matching.models import FileCandidate
 
 
 class Matcher(ABC):

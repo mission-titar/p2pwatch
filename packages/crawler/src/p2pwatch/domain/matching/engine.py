@@ -11,13 +11,13 @@ later plan.
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from catalog_matching.domain.combinators import Matcher
-from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.matchers import CoverageMatcher
-from catalog_matching.domain.models import FileCandidate, TargetSegment
-from catalog_matching.domain.resolver import MatcherResolver, ResolvedTarget
+from p2pwatch.domain.matching.combinators import Matcher
+from p2pwatch.domain.matching.config import MatcherConfig
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.matchers import CoverageMatcher
+from p2pwatch.domain.matching.models import FileCandidate, TargetSegment
+from p2pwatch.domain.matching.resolver import MatcherResolver, ResolvedTarget
 
 
 @dataclass(kw_only=True, frozen=True)

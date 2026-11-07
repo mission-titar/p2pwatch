@@ -1,8 +1,8 @@
 import random
 
-from catalog_matching.domain.engine import MatchDecision, MatchingEngine
-from catalog_matching.domain.models import FileCandidate, TargetSegment
-from catalog_matching.domain.validation import parse_matcher_config
+from p2pwatch.domain.matching.engine import MatchDecision, MatchingEngine
+from p2pwatch.domain.matching.models import FileCandidate, TargetSegment
+from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _MAX_FILENAME_LENGTH = 4096
 

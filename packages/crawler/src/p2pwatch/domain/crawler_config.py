@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
-from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.models import TargetSegment
 from p2pwatch.domain.config_defaults import (
     DEFAULT_AMULE_URL,
     DEFAULT_DOWNLOAD_ENABLED,
@@ -33,6 +31,8 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_SOURCES_INTERVAL,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.matching.config import MatcherConfig
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.policy import Audience
 
 

@@ -2,9 +2,9 @@
 
 from dataclasses import dataclass
 
-from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import DatedDecision
+from p2pwatch.domain.matching.engine import DecisionRecord
 from p2pwatch.domain.observation import FileObservation
 
 

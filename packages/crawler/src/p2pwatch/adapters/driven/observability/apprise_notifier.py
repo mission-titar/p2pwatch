@@ -23,11 +23,11 @@ from typing import Protocol, assert_never
 
 import apprise
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.ed2k_link import build_ed2k_link
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import (
     CompletedDownload,

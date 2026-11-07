@@ -2,9 +2,6 @@
 
 from datetime import UTC, datetime
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.use_cases.list_files import ListFiles
@@ -12,6 +9,9 @@ from p2pwatch.application.use_cases.paging import PAGE_SIZE
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.fakes.adapters.driven.fake_catalog_file_reader import FakeCatalogFileReader
 

@@ -4,10 +4,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 
-from catalog_matching.domain.engine import Explanation
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.identifiers import FileId
 from p2pwatch.domain.interval import Interval
+from p2pwatch.domain.matching.engine import Explanation
 from p2pwatch.domain.sharing_period import SharingPeriod
 
 

@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
@@ -15,6 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.matching.identifiers import TargetId
 from tests.contracts.application.ports.driven.tracked_download_store_contract import (
     TrackedDownloadStoreContract,
 )

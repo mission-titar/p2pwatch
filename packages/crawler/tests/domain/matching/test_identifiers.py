@@ -1,4 +1,4 @@
-from catalog_matching.domain.identifiers import TargetId
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 def _target_id(target_id: TargetId) -> str:

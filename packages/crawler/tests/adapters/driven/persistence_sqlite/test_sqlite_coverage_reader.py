@@ -7,8 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_coverage_reader import SqliteCoverageReader
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
@@ -17,6 +15,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
 from tests.contracts.application.ports.driven.coverage_reader_contract import (
     CoverageReaderContract,
 )

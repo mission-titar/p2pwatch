@@ -1,11 +1,11 @@
 from collections.abc import Mapping
 from datetime import datetime
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.identifiers import FileId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 
 class FakeCatalogFileReader(CatalogFileReader):

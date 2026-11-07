@@ -3,18 +3,18 @@
 from collections.abc import Mapping
 from pathlib import Path
 
-from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.models import TargetSegment
-from catalog_matching.domain.validation import (
-    MatchingConfigError,
-    parse_matcher_config,
-    parse_targets,
-)
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig, parse_crawler_config
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.matching.config import MatcherConfig
+from p2pwatch.domain.matching.models import TargetSegment
+from p2pwatch.domain.matching.validation import (
+    MatchingConfigError,
+    parse_matcher_config,
+    parse_targets,
+)
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 

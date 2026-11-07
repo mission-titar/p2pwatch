@@ -1,4 +1,4 @@
-from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 
 def test_values_are_the_strings_of_the_policy_and_the_rows() -> None:

@@ -10,8 +10,6 @@ import yaml
 from httpx import ASGITransport, AsyncClient, Response
 from starlette.applications import Starlette
 
-from catalog_matching.domain.models import TargetSegment
-from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import build_app
 from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRun
 from p2pwatch.application.ports.driving.crawl_summarizer import CrawlSummary
@@ -20,6 +18,8 @@ from p2pwatch.application.ports.driving.node_describer import NodeDescription
 from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricListing
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
+from p2pwatch.domain.matching.models import TargetSegment
+from p2pwatch.domain.matching.validation import parse_targets
 from p2pwatch.domain.node_state import NodeState
 from tests.fakes.application.use_cases.fake_console_query_runner import (
     FakeConsoleQueryRunner,

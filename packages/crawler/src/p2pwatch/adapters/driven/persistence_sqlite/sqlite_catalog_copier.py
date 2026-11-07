@@ -37,7 +37,6 @@ from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
-from catalog_matching.domain.validation import has_control_character
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     PersistenceError,
 )
@@ -57,6 +56,7 @@ from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.matching.validation import has_control_character
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)

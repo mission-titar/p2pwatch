@@ -10,7 +10,6 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
@@ -19,6 +18,7 @@ from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 

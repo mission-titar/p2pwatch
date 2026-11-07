@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from catalog_matching.domain.identifiers import TargetId
+from p2pwatch.domain.matching.identifiers import TargetId
 
 LOST = "lost"
 FOUND = "found"

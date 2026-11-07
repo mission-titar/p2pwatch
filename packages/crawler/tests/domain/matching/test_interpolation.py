@@ -2,8 +2,8 @@ import re
 
 import pytest
 
-from catalog_matching.domain.interpolation import InterpolationError, interpolate
-from catalog_matching.domain.models import TargetSegment
+from p2pwatch.domain.matching.interpolation import InterpolationError, interpolate
+from p2pwatch.domain.matching.models import TargetSegment
 
 
 def _target() -> TargetSegment:

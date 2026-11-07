@@ -5,7 +5,7 @@ description = "Crawler eMule: surveillance, catalogue, auto-download (Keroro VF 
 requires-python = ">=3.13"
 dependencies = [
     "apprise>=2.0.0",
-    "catalog-matching",
+    "rapidfuzz>=3.14.6",
     "pyyaml>=6.0.3",
     "httpx>=0.28",
     "starlette>=1.3",
@@ -94,6 +94,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_migration_drop_verification.py" = "SQL migrations of both databases"
 "tests/adapters/driven/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"
+"tests/domain/matching/test_golden_corpus.py" = "deploy/matcher.yml, against the golden corpus"
 "tests/fakes/adapters/driven/test_fake_backoff_state_store.py" = "a fake of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_blocking_monotonic_clock.py" = "a double of tests/fakes"
 "tests/fakes/adapters/driven/test_fake_decision_reader.py" = "a double of tests/fakes"

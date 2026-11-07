@@ -7,7 +7,6 @@ source_roots = [
   "packages/amule_bump/src",
   "packages/coverage_checks/src",
   "packages/crawler/src",
-  "packages/matching/src",
   "packages/pytest_settings/src",
   "packages/template_checks/src",
   "packages/vex_checks/src",
@@ -120,11 +119,6 @@ depends_on = []
 path = "amule_bump.application.ports.driving.amule_bumper"
 layer = "ports"
 depends_on = ["amule_bump.domain"]
-
-[[modules]]
-path = "catalog_matching.domain"
-layer = "domain"
-depends_on = []
 
 [[modules]]
 path = "coverage_checks.__main__"
@@ -532,7 +526,7 @@ depends_on = []
 [[modules]]
 path = "p2pwatch.application.ports.driven.coverage_reader"
 layer = "ports"
-depends_on = []
+depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.decision_reader"

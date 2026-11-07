@@ -1,8 +1,8 @@
 from collections.abc import Mapping
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 class FakeCoverageReader(CoverageReader):

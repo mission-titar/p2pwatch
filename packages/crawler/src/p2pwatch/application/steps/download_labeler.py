@@ -2,11 +2,11 @@
 
 from collections.abc import Sequence
 
-from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.events import TargetTitle
 
 

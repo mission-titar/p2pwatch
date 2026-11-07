@@ -3,12 +3,12 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummary
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
 from p2pwatch.domain.identifiers import ClientName, NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.status_reading import READING_FRESH_FOR, StatusReading
 from tests.fakes.adapters.driven.fake_coverage_reader import FakeCoverageReader

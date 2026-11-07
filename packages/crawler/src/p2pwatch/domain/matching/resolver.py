@@ -11,13 +11,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import assert_never
 
-from catalog_matching.domain.combinators import (
+from p2pwatch.domain.matching.combinators import (
     AllMatcher,
     AnyMatcher,
     Matcher,
     NotMatcher,
 )
-from catalog_matching.domain.config import (
+from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
@@ -31,14 +31,14 @@ from catalog_matching.domain.config import (
     TokenDefinition,
     TokenReference,
 )
-from catalog_matching.domain.interpolation import interpolate
-from catalog_matching.domain.matchers import (
+from p2pwatch.domain.matching.interpolation import interpolate
+from p2pwatch.domain.matching.matchers import (
     AttributeBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
     RegexMatcher,
 )
-from catalog_matching.domain.models import TargetSegment
+from p2pwatch.domain.matching.models import TargetSegment
 
 # Config keyword designating the target's title as the coverage reference (§8.5).
 _TITLE_KEYWORD = "title"

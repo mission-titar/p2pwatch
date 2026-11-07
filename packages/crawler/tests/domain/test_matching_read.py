@@ -2,11 +2,11 @@
 
 import yaml
 
-from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.engine import Explanation, MatchingEngine
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import TargetSegment
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.config import MatcherConfig
+from p2pwatch.domain.matching.engine import Explanation, MatchingEngine
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import TargetSegment
+from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _MAX_FILENAME_LENGTH = 4096

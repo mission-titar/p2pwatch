@@ -1,9 +1,9 @@
 """Tests of MatchingEngine.explain(candidates, target_id): every name of one file."""
 
-from catalog_matching.domain.engine import Explanation, MatchingEngine
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import FileCandidate
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.engine import Explanation, MatchingEngine
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import FileCandidate
+from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 
 _MATCHER = {
     "tokens": {

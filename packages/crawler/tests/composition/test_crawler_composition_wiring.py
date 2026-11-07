@@ -18,7 +18,6 @@ import httpx
 import pytest
 import yaml
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
@@ -30,6 +29,7 @@ from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.composition.crawler_composition import CrawlerComposition
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer

@@ -1,7 +1,7 @@
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction, records_to_write
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 def _record(target_id: TargetId, *, tier: DecisionTier = DecisionTier.DOWNLOAD) -> DecisionRecord:

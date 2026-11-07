@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
 )
@@ -14,6 +13,7 @@ from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import SourceAlert, SourceAlertKind
 from p2pwatch.domain.source import (

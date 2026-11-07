@@ -1,13 +1,13 @@
 import pytest
 
-from catalog_matching.domain.matchers import (
+from p2pwatch.domain.matching.matchers import (
     READERS_BY_ATTR,
     AttributeBetweenMatcher,
     CoverageMatcher,
     KeywordMatcher,
     RegexMatcher,
 )
-from catalog_matching.domain.models import FileCandidate
+from p2pwatch.domain.matching.models import FileCandidate
 
 
 def test_keyword_single_word_present() -> None:

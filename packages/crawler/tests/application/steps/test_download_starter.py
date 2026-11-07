@@ -1,9 +1,9 @@
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.client_errors import DownloadRejectedError
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState, FailureReason
+from p2pwatch.domain.matching.identifiers import TargetId
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader

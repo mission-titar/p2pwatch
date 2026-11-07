@@ -10,7 +10,7 @@ import re
 import unicodedata
 from typing import Any
 
-from catalog_matching.domain.config import (
+from p2pwatch.domain.matching.config import (
     SCOPES,
     AllDefinition,
     AnyDefinition,
@@ -26,16 +26,16 @@ from catalog_matching.domain.config import (
     TokenDefinition,
     TokenReference,
 )
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.interpolation import (
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.interpolation import (
     PLACEHOLDER,
     TARGET_PLACEHOLDERS,
     InterpolationError,
     interpolate,
 )
-from catalog_matching.domain.matchers import READERS_BY_ATTR
-from catalog_matching.domain.models import LOST, TARGET_STATUSES, TargetSegment
+from p2pwatch.domain.matching.matchers import READERS_BY_ATTR
+from p2pwatch.domain.matching.models import LOST, TARGET_STATUSES, TargetSegment
 
 _CONDITION_KEYS = ("all", "any", "not")
 # 4.x names, refused at load with their 5.0 name (``{segment}`` too, in _check_regexes_compile).

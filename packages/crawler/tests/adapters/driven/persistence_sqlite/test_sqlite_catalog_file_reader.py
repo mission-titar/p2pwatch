@@ -10,7 +10,6 @@ from typing import Protocol
 
 import pytest
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_OBSERVATION,
@@ -31,6 +30,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import 
 )
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.file_history import FileHistory
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from tests.contracts.application.ports.driven.catalog_file_reader_contract import (
     CatalogFileReaderContract,
 )

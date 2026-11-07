@@ -1,7 +1,7 @@
 """``ListNodeMetrics``: every node metric of the catalog, with the samples the store holds."""
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.observability.node_metric import (
     CounterIncrement,
     DecisionLabels,

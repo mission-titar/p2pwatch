@@ -15,7 +15,7 @@ otherwise we download.
 
 from enum import StrEnum
 
-from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 
 class DownloadVerdict(StrEnum):

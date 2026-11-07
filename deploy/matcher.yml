@@ -1,6 +1,7 @@
 # Matcher config (deployment): THE SINGLE SOURCE OF TRUTH for the policy. Operator-editable.
-# Everything else derives from it: golden corpus + engine tests (packages/matching), crawler
-# wiring, smoke stack. There is NO other copy to keep in sync.
+# Everything else derives from it: golden corpus + engine tests
+# (packages/crawler/tests/domain/matching), crawler wiring, smoke stack. There is NO other copy
+# to keep in sync.
 #
 # vetoes say what a file is NOT (judged on every name of the file), rules say what it IS.
 
@@ -58,6 +59,6 @@ rules:
   - { name: archive_candidate,   tier: notify,   scope: unattributed, all: [keroro_titar, is_archive, { any: [segment_id, title_hit, source_marker] }] }
   # keroro_large MUST stay the only tier: catalog rule: the webui displays ANY
   # tier=="catalog" decision as "unidentified" (target-agnostic catch-all assumption).
-  # Guarded by packages/matching/tests/test_golden_corpus.py::
+  # Guarded by packages/crawler/tests/domain/matching/test_golden_corpus.py::
   # test_prod_policy_has_exactly_one_catalog_tier_rule_named_keroro_large.
   - { name: keroro_large,        tier: catalog,  scope: unattributed, all: [keroro_titar, { any: [is_video, is_archive] }, { not: episode_number }] }
