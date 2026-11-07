@@ -55,7 +55,7 @@ class SqlitePreMigrationCopier:
             return
         prefix = f"{path.name}.pre-{pending.migrations[0].version:04d}"
         with wrap_sqlite_errors():
-            if _matches_its_latest_copy(
+            if self._matches_its_latest_copy(
                 connection, path=path, prefix=prefix, open_reader=open_reader
             ):
                 return
@@ -101,31 +101,51 @@ class SqlitePreMigrationCopier:
                 f"{free_bytes} free"
             )
 
+    def _matches_its_latest_copy(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        path: Path,
+        prefix: str,
+        open_reader: ReaderOpener,
+    ) -> bool:
+        """Whether the most recent ``<prefix>.*_UTC`` holds the database's content."""
+        candidates = sorted(path.parent.glob(escape(prefix) + ".*_UTC"))
+        if not candidates:
+            return False
+        latest = candidates[-1]
+        _logger.info(
+            "pre-migration copy of %s: comparing with %s, the copy an earlier start made, to "
+            "reuse it if it still matches; a stop now costs only the time spent",
+            path,
+            latest,
+        )
 
-def _matches_its_latest_copy(
-    connection: sqlite3.Connection,
-    *,
-    path: Path,
-    prefix: str,
-    open_reader: ReaderOpener,
-) -> bool:
-    """Whether the most recent ``<prefix>.*_UTC`` holds the database's content; one that cannot
-    be read matches nothing and is left alone."""
-    candidates = sorted(path.parent.glob(escape(prefix) + ".*_UTC"))
-    if not candidates:
-        return False
-    latest = candidates[-1]
-    _logger.info("pre-migration copy of %s: comparing with %s", path, latest)
+        def report_elapsed(*, elapsed: timedelta) -> None:
+            _logger.info(
+                "pre-migration copy of %s: comparing, %d s elapsed", path, elapsed.total_seconds()
+            )
+
+        if not self._ticker.run(
+            lambda: _same_content(connection, copy=latest, open_reader=open_reader),
+            tick=report_elapsed,
+            period=_PROGRESS_PERIOD,
+        ):
+            return False
+        _logger.info("pre-migration copy of %s: reusing %s", path, latest)
+        return True
+
+
+def _same_content(connection: sqlite3.Connection, *, copy: Path, open_reader: ReaderOpener) -> bool:
+    """Whether ``copy`` holds the content of ``connection``'s database; a copy that cannot be read
+    matches nothing and is left alone."""
     try:
-        with closing(open_reader(latest)) as candidate:
+        with closing(open_reader(copy)) as candidate:
             candidate_digest = database_digest(candidate)
     except sqlite3.Error as error:
-        _logger.warning("pre-migration copy: %s cannot be read (%s)", latest, error)
+        _logger.warning("pre-migration copy: %s cannot be read (%s)", copy, error)
         return False
-    if candidate_digest != database_digest(connection):
-        return False
-    _logger.info("pre-migration copy of %s: reusing %s", path, latest)
-    return True
+    return candidate_digest == database_digest(connection)
 
 
 def _live_bytes(connection: sqlite3.Connection) -> int:

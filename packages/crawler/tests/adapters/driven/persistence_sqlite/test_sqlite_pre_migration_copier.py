@@ -169,6 +169,42 @@ def test_a_tick_before_the_copy_s_file_exists_reports_nothing_written(
     )
 
 
+def test_the_comparison_with_an_earlier_copy_is_announced_then_its_time_every_30_s(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    copy = path.parent / _COPY_NAME
+    ticker = FakeTicker()
+    copier = _copier(ticker=ticker)
+    ticked: list[bool] = []
+
+    def tick_once() -> int:
+        if not ticked:
+            ticked.append(True)
+            ticker.tick()
+        return 0
+
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        copier.ensure_copy(
+            connection, path=path, pending=_pending(scripts), open_reader=open_reader
+        )
+        caplog.clear()
+        ticker.periods.clear()
+        connection.set_progress_handler(tick_once, 1)
+        with caplog.at_level("INFO"):
+            copier.ensure_copy(
+                connection, path=path, pending=_pending(scripts), open_reader=open_reader
+            )
+    assert caplog.messages == [
+        f"pre-migration copy of {path}: comparing with {copy}, the copy an earlier start made, "
+        "to reuse it if it still matches; a stop now costs only the time spent",
+        f"pre-migration copy of {path}: comparing, 30 s elapsed",
+        f"pre-migration copy of {path}: reusing {copy}",
+    ]
+    assert ticker.periods == [timedelta(seconds=30)]
+
+
 def test_an_interrupted_copy_is_named_as_it_is_deleted(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
