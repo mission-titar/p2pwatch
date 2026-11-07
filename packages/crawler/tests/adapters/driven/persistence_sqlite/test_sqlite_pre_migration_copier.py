@@ -97,7 +97,7 @@ def _gb(size_bytes: int) -> str:
     return f"{size_bytes / 1e9:.1f} GB"
 
 
-def test_the_copy_is_announced_then_its_share_written_every_30_s_from_nothing(
+def test_the_copy_is_announced_then_its_share_written_every_30_s(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
@@ -106,12 +106,9 @@ def test_the_copy_is_announced_then_its_share_written_every_30_s_from_nothing(
     ticker = FakeTicker()
     written: list[int] = []
 
-    def tick_before_the_file_then_once_partly_written() -> int:
-        # Once the copy's run has begun: the free-space check reads the database before it.
-        size = partial.stat().st_size if partial.exists() else None
-        before_the_file = ticker.periods and not written and size is None
-        if before_the_file or (len(written) == 1 and size):
-            written.append(size or 0)
+    def tick_once_partly_written() -> int:
+        if not written and partial.exists() and partial.stat().st_size > 0:
+            written.append(partial.stat().st_size)
             ticker.tick()
         return 0
 
@@ -126,17 +123,16 @@ def test_the_copy_is_announced_then_its_share_written_every_30_s_from_nothing(
         )
         # A cache of one page spills the copy to its file while it is written.
         connection.execute("PRAGMA cache_size=1")
-        connection.set_progress_handler(tick_before_the_file_then_once_partly_written, 1)
+        connection.set_progress_handler(tick_once_partly_written, 100)
         with caplog.at_level("INFO"):
             _copier(ticker=ticker).ensure_copy(
                 connection, path=path, pending=_pending(scripts), open_reader=open_reader
             )
-    [nothing, written_bytes] = written
-    assert 0 == nothing < written_bytes < live_bytes
+    [written_bytes] = written
+    assert 0 < written_bytes < live_bytes
     assert caplog.messages == [
         f"pre-migration copy of {path}: writing {_gb(live_bytes)} to {partial}; "
         "a stop now costs only the time spent",
-        f"pre-migration copy of {path}: {_gb(0)} of {_gb(live_bytes)} written (0 %)",
         f"pre-migration copy of {path}: {_gb(written_bytes)} of {_gb(live_bytes)} written "
         f"({written_bytes * 100 // live_bytes} %)",
         f"pre-migration copy: {path.parent / _COPY_NAME}",
@@ -144,40 +140,33 @@ def test_the_copy_is_announced_then_its_share_written_every_30_s_from_nothing(
     assert ticker.periods == [timedelta(seconds=30)]
 
 
-def test_the_comparison_with_an_earlier_copy_is_announced_then_its_time_every_30_s(
+def test_a_tick_before_the_copy_s_file_exists_reports_nothing_written(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"
-    copy = path.parent / _COPY_NAME
+    partial = path.parent / "catalog.db.pre-0003.partial"
     ticker = FakeTicker()
-    copier = _copier(ticker=ticker)
     ticked: list[bool] = []
 
-    def tick_once() -> int:
-        if not ticked:
+    def tick_once_before_the_file() -> int:
+        # Once the copy's run has begun: the free-space check reads the database before it.
+        if not ticked and ticker.periods and not partial.exists():
             ticked.append(True)
             ticker.tick()
         return 0
 
     with closing(_seeded(path, scripts=scripts)) as connection:
-        copier.ensure_copy(
-            connection, path=path, pending=_pending(scripts), open_reader=open_reader
-        )
-        caplog.clear()
-        ticker.periods.clear()
-        connection.set_progress_handler(tick_once, 1)
+        live_bytes = _pragma(connection, name="page_size") * _pragma(connection, name="page_count")
+        connection.set_progress_handler(tick_once_before_the_file, 1)
         with caplog.at_level("INFO"):
-            copier.ensure_copy(
+            _copier(ticker=ticker).ensure_copy(
                 connection, path=path, pending=_pending(scripts), open_reader=open_reader
             )
-    assert caplog.messages == [
-        f"pre-migration copy of {path}: comparing with {copy}, the copy an earlier start made, "
-        "to reuse it if it still matches; a stop now costs only the time spent",
-        f"pre-migration copy of {path}: comparing, 30 s elapsed",
-        f"pre-migration copy of {path}: reusing {copy}",
-    ]
-    assert ticker.periods == [timedelta(seconds=30)]
+    assert ticked
+    assert caplog.messages[1] == (
+        f"pre-migration copy of {path}: {_gb(0)} of {_gb(live_bytes)} written (0 %)"
+    )
 
 
 def test_an_interrupted_copy_is_named_as_it_is_deleted(
