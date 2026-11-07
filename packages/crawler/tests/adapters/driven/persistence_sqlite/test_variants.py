@@ -6,6 +6,7 @@ from collections.abc import Iterator
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    SqlFunctionFailures,
     content_hash,
     create_memoized_function,
     register_sql_functions,
@@ -20,9 +21,14 @@ _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 
 
 @pytest.fixture
-def connection() -> Iterator[sqlite3.Connection]:
+def failures() -> SqlFunctionFailures:
+    return SqlFunctionFailures()
+
+
+@pytest.fixture
+def connection(failures: SqlFunctionFailures) -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(":memory:", autocommit=True)
-    register_sql_functions(connection)
+    register_sql_functions(connection, failures=failures)
     yield connection
     connection.close()
 
@@ -175,6 +181,45 @@ def test_file_id_sql_function_is_the_file_key_file_id(connection: sqlite3.Connec
 def test_file_id_sql_function_refuses_an_unknown_network(connection: sqlite3.Connection) -> None:
     with pytest.raises(sqlite3.OperationalError, match="user-defined function raised"):
         connection.execute("SELECT file_id('kad', ?)", (_HASH,)).fetchone()
+
+
+@pytest.mark.parametrize(
+    ("sql", "failure"),
+    [
+        (
+            "SELECT file_id('kad', 'ab')",
+            "file_id('kad', 'ab') raised ValueError: 'kad' is not a valid Network",
+        ),
+        (
+            "SELECT fold_raw_meta('[', NULL, NULL, 0)",
+            "fold_raw_meta('[', None, None, 0) raised JSONDecodeError:"
+            " Expecting value: line 1 column 2 (char 1)",
+        ),
+    ],
+    ids=["plain", "memoized"],
+)
+def test_a_failing_sql_function_keeps_its_call_and_its_error(
+    *, connection: sqlite3.Connection, failures: SqlFunctionFailures, sql: str, failure: str
+) -> None:
+    with pytest.raises(sqlite3.OperationalError, match="user-defined function raised"):
+        connection.execute(sql).fetchone()
+    assert failures.latest == failure
+
+
+def test_a_failing_call_s_arguments_are_cut_to_100_characters(
+    *, connection: sqlite3.Connection, failures: SqlFunctionFailures
+) -> None:
+    with pytest.raises(sqlite3.OperationalError):
+        connection.execute("SELECT file_id('kad', ?)", ("x" * 200,)).fetchone()
+    shown = f"'kad', '{'x' * 200}'"[:100]
+    assert failures.latest == f"file_id({shown}...) raised ValueError: 'kad' is not a valid Network"
+
+
+def test_no_failing_call_keeps_nothing(
+    *, connection: sqlite3.Connection, failures: SqlFunctionFailures
+) -> None:
+    connection.execute("SELECT file_id('ed2k', ?)", (_HASH,)).fetchone()
+    assert failures.latest is None
 
 
 def test_source_id_sql_function_is_the_source_key_source_id(connection: sqlite3.Connection) -> None:

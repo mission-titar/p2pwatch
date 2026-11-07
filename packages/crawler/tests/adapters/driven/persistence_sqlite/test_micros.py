@@ -8,7 +8,10 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import (
     instant_to_micros,
     micros_to_instant,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.variants import register_sql_functions
+from p2pwatch.adapters.driven.persistence_sqlite.variants import (
+    SqlFunctionFailures,
+    register_sql_functions,
+)
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 
 _INSTANT = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
@@ -18,7 +21,7 @@ _MICROS = 1_781_179_200_123_456
 @pytest.fixture
 def connection() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(":memory:", autocommit=True)
-    register_sql_functions(connection)
+    register_sql_functions(connection, failures=SqlFunctionFailures())
     yield connection
     connection.close()
 
