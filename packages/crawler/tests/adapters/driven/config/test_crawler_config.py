@@ -5,8 +5,9 @@ import pytest
 from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.crawler_config import LoadedConfig, parse_crawler_config
-from p2pwatch.domain.config_value_error import ConfigValueError
+from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
@@ -51,7 +52,7 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
 
     assert loaded == LoadedConfig(
         crawler_config=parse_crawler_config(
-            interpolate_document(load_yaml(config_path), env=_env())
+            interpolate_document(load_yaml(config_path), env=_env(), file_path=config_path).document
         ),
         targets=parse_targets(load_yaml(targets_path)),
         matcher_config=parse_matcher_config(load_yaml(matcher_path)),
@@ -70,12 +71,12 @@ def test_a_reference_under_any_key_is_resolved_before_the_parse(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("keywords", "extra", "key_path"),
     [
-        ("['${P2PWATCH_UNSET}']", "", r"search\.keywords\[0\]"),
+        ("['${P2PWATCH_UNSET}']", "", "search.keywords[0]"),
         # Resolved everywhere, so even a section the parse skips needs its variable.
         (
             "[keroro]",
             "download: {enabled: false, output_dir: '${P2PWATCH_UNSET}'}\n",
-            r"download\.output_dir",
+            "download.output_dir",
         ),
     ],
     ids=["keywords", "disabled-section"],
@@ -84,17 +85,36 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
     *, tmp_path: Path, keywords: str, extra: str, key_path: str
 ) -> None:
     config_path = _write_crawler_config(tmp_path, keywords=keywords, extra=extra)
-    with pytest.raises(
-        ConfigValueError,
-        match=rf"^{key_path}: environment variable 'P2PWATCH_UNSET' referenced but not set$",
-    ):
+    with pytest.raises(InvalidConfigError) as raised:
         _load_with_the_shipped_policy(config_path, env=_env())
+    assert raised.value.problems == (
+        ConfigProblem(
+            file_path=config_path,
+            key=key_path,
+            message="environment variable 'P2PWATCH_UNSET' referenced but not set",
+        ),
+    )
+
+
+def test_every_unset_variable_is_listed_beside_the_parses_problem(tmp_path: Path) -> None:
+    config_path = _write_crawler_config(
+        tmp_path, keywords="['${KEYWORD}']", extra="webui: {amule_url: ''}\n"
+    )
+
+    with pytest.raises(InvalidConfigError) as raised:
+        _load_with_the_shipped_policy(config_path, env={})
+
+    assert [(problem.file_path, problem.key) for problem in raised.value.problems] == [
+        (config_path, "search.keywords[0]"),
+        (config_path, "amule_api_password"),
+        (config_path, "webui.amule_url"),
+    ]
 
 
 @pytest.mark.parametrize(
     ("broken_file", "text", "key", "message"),
     [
-        ("crawler.yml", "search: [unclosed\n", None, "{path}: invalid YAML: "),  # a broken file
+        ("crawler.yml", "search: [unclosed\n", None, "invalid YAML: "),  # a broken file
         ("crawler.yml", "search: {}\n", "search.keywords", "missing"),
         ("targets.yml", "episodes: nope\n", None, "'episodes' section: list expected"),
         ("matcher.yml", "tokens: {}\nrules: {}\n", None, "'rules' section: list expected"),
@@ -111,7 +131,7 @@ def test_an_invalid_file_is_an_invalid_config(
     paths[broken_file] = tmp_path / f"broken-{broken_file}"
     paths[broken_file].write_text(text, encoding="utf-8")
 
-    with pytest.raises(ConfigValueError) as raised:
+    with pytest.raises(InvalidConfigError) as raised:
         load_config(
             paths["crawler.yml"],
             targets_path=paths["targets.yml"],
@@ -119,5 +139,28 @@ def test_an_invalid_file_is_an_invalid_config(
             env=_env(),
         )
 
-    assert raised.value.key == key
-    assert raised.value.message.startswith(message.format(path=paths[broken_file]))
+    [problem] = raised.value.problems
+    assert (problem.file_path, problem.key) == (paths[broken_file], key)
+    assert problem.message.startswith(message)
+
+
+def test_every_wrong_file_is_listed_in_the_crawls_order(tmp_path: Path) -> None:
+    config_path = _write_crawler_config(tmp_path, keywords="[]")
+    targets_path = tmp_path / "absent.yml"
+    matcher_path = tmp_path / "matcher.yml"
+    matcher_path.write_text("tokens: {}\nrules: {}\n", encoding="utf-8")
+
+    with pytest.raises(InvalidConfigError) as raised:
+        load_config(config_path, targets_path=targets_path, matcher_path=matcher_path, env=_env())
+
+    assert raised.value.problems == (
+        ConfigProblem(
+            file_path=config_path,
+            key="search.keywords",
+            message="non-empty list of strings expected",
+        ),
+        ConfigProblem(file_path=targets_path, key=None, message="No such file or directory"),
+        ConfigProblem(
+            file_path=matcher_path, key=None, message="'rules' section: list expected, got dict"
+        ),
+    )

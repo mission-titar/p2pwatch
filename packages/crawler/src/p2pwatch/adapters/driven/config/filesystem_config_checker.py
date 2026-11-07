@@ -2,21 +2,16 @@
 
 from collections.abc import Mapping
 from pathlib import Path, PurePath
-from typing import Protocol
 
 from p2pwatch.adapters.driven.config.crawler_config import (
+    FileRead,
     read_crawler_config,
     read_matcher_config,
     read_targets,
 )
 from p2pwatch.application.ports.driven.config_checker import ConfigChecker
-from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_problem import ConfigProblem
-from p2pwatch.domain.config_value_error import ConfigValueError
-
-
-class FileRead(Protocol):
-    def __call__(self) -> object: ...
+from p2pwatch.domain.invalid_config import InvalidConfigError
 
 
 class FilesystemConfigChecker(ConfigChecker):
@@ -26,23 +21,19 @@ class FilesystemConfigChecker(ConfigChecker):
         self._env = env
 
     def check_crawler_config(self, config_path: PurePath) -> tuple[ConfigProblem, ...]:
-        return _problems_of(
-            config_path, read=lambda: read_crawler_config(Path(config_path), env=self._env)
-        )
+        return _problems_of(read=lambda: read_crawler_config(Path(config_path), env=self._env))
 
     def check_targets(self, targets_path: PurePath) -> tuple[ConfigProblem, ...]:
-        return _problems_of(targets_path, read=lambda: read_targets(Path(targets_path)))
+        return _problems_of(read=lambda: read_targets(Path(targets_path)))
 
     def check_matcher_config(self, matcher_path: PurePath) -> tuple[ConfigProblem, ...]:
-        return _problems_of(matcher_path, read=lambda: read_matcher_config(Path(matcher_path)))
+        return _problems_of(read=lambda: read_matcher_config(Path(matcher_path)))
 
 
-def _problems_of(file_path: PurePath, *, read: FileRead) -> tuple[ConfigProblem, ...]:
-    """``read``'s refusal as the one problem of ``file_path``, none when it returns."""
+def _problems_of(*, read: FileRead[object]) -> tuple[ConfigProblem, ...]:
+    """The problems of ``read``'s file, none when it returns."""
     try:
         read()
-    except ConfigValueError as error:
-        return (ConfigProblem(file_path=file_path, key=error.key, message=error.message),)
-    except BrokenInputError as error:
-        return (ConfigProblem(file_path=file_path, key=None, message=error.reason),)
+    except InvalidConfigError as error:
+        return error.problems
     return ()

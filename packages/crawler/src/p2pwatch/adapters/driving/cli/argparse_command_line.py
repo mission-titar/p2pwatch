@@ -22,7 +22,7 @@ from p2pwatch.domain.config_defaults import (
 )
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.held_database_error import HeldDatabaseError
-from p2pwatch.domain.config_value_error import ConfigValueError
+from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
@@ -143,8 +143,10 @@ class ArgparseCommandLine:
                     config_path=args.config, targets_path=args.targets, matcher_path=args.matcher
                 )
             )
-        except ConfigValueError as error:
-            print(f"Invalid config, refusing to start: {error}", file=sys.stderr, flush=True)
+        except InvalidConfigError as error:
+            for problem in error.problems:
+                line = _problem_line(problem)
+                print(f"Invalid config, refusing to start: {line}", file=sys.stderr, flush=True)
             return 1
         except OutOfSpaceError as error:
             print(f"Out of disk space, refusing to start: {error}", file=sys.stderr, flush=True)
