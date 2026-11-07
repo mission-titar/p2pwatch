@@ -17,6 +17,8 @@ copy.
 import logging
 import sqlite3
 from contextlib import suppress
+from dataclasses import dataclass
+from datetime import timedelta
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -28,6 +30,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     PersistenceError,
     wrap_sqlite_errors,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.gigabytes import gigabytes
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
     Migration,
     PendingMigrations,
@@ -42,20 +45,24 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     register_sql_functions,
     remove_migration_sql_functions,
 )
+from p2pwatch.application.ports.driven.ticker import Ticker
 
 _logger = logging.getLogger(__name__)
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 # Index = the value ``PRAGMA secure_delete`` reads; ``= 2`` would set ON, not FAST.
 _SECURE_DELETE_MODES = ("OFF", "ON", "FAST")
+# Under a minute between two lines: a silent start is one an operator restarts.
+_PROGRESS_PERIOD = timedelta(seconds=30)
 
 
 class SqliteDatabaseOpener:
     """Opens a database and applies its pending migrations, the one way the code migrates one, or
     opens a reader of it."""
 
-    def __init__(self, pre_migration_copier: SqlitePreMigrationCopier) -> None:
+    def __init__(self, pre_migration_copier: SqlitePreMigrationCopier, *, ticker: Ticker) -> None:
         self._pre_migration_copier = pre_migration_copier
+        self._ticker = ticker
 
     def open_catalog(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
@@ -83,8 +90,8 @@ class SqliteDatabaseOpener:
                 # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows), and
                 # VACUUM builds its whole copy in a temporary database.
                 connection.execute("PRAGMA temp_store=FILE")
-            _apply_migrations(connection, pending=pending)
-            _reclaim(connection, after_block=bool(pending.migrations))
+            _apply_migrations(connection, path=path, pending=pending, ticker=self._ticker)
+            _reclaim(connection, path=path, after_block=bool(pending.migrations))
             with wrap_sqlite_errors():
                 connection.execute("PRAGMA temp_store=DEFAULT")
                 remove_migration_sql_functions(connection)
@@ -176,7 +183,9 @@ def _latest_version(scripts: tuple[Migration, ...]) -> int:
     return scripts[-1].version if scripts else 0
 
 
-def _apply_migrations(connection: sqlite3.Connection, *, pending: PendingMigrations) -> None:
+def _apply_migrations(
+    connection: sqlite3.Connection, *, path: Path, pending: PendingMigrations, ticker: Ticker
+) -> None:
     """Applies the pending scripts in order in one transaction, the schema version written once,
     at its end; the rules for writing one: ``docs/contributing/architecture.md``, "Écrire une
     migration"."""
@@ -185,48 +194,80 @@ def _apply_migrations(connection: sqlite3.Connection, *, pending: PendingMigrati
     with wrap_sqlite_errors():
         secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()["secure_delete"])
         cache_size = int(connection.execute("PRAGMA cache_size").fetchone()["cache_size"])
+    _logger.info(
+        "migrations of %s: from version %d to version %d in one step; "
+        "a stop now rolls them back, costing only the time spent",
+        path,
+        pending.current_version,
+        pending.migrations[-1].version,
+    )
+    step = _BlockStep()
+
+    def report_running(*, elapsed: timedelta) -> None:
+        _logger.info(
+            "migrations of %s: %s running, %d s elapsed", path, step.name, elapsed.total_seconds()
+        )
+
     # No finally: a failed block fails the open, which closes the connection.
-    _run_in_one_transaction(connection, migrations=pending.migrations)
+    ticker.run(
+        lambda: _run_in_one_transaction(connection, migrations=pending.migrations, step=step),
+        tick=report_running,
+        period=_PROGRESS_PERIOD,
+    )
     with wrap_sqlite_errors():
         connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
         connection.execute(f"PRAGMA cache_size = {cache_size}")
 
 
+@dataclass(kw_only=True)
+class _BlockStep:
+    """The step of the block running, which the ticker's thread reads for its line."""
+
+    name: str = "the block's start"
+
+
 def _run_in_one_transaction(
-    connection: sqlite3.Connection, *, migrations: tuple[Migration, ...]
+    connection: sqlite3.Connection, *, migrations: tuple[Migration, ...], step: _BlockStep
 ) -> None:
     # Two concurrent opens: the loser fails cleanly, single writer by doctrine.
-    step = "the block's start"
     try:
         connection.execute("BEGIN")
         for migration in migrations:
-            step = f"migration {migration.version}"
+            step.name = f"migration {migration.version}"
             _logger.info("migration %d: applying", migration.version)
             connection.executescript(migration.script)
             if not connection.in_transaction:
                 raise MigrationError(
-                    f"{step}: the script closed the migrations' transaction "
+                    f"{step.name}: the script closed the migrations' transaction "
                     "(COMMIT/ROLLBACK forbidden inside a migration script)"
                 )
-        step = f"the commit at version {migrations[-1].version}"
+        step.name = f"the commit at version {migrations[-1].version}"
         connection.execute(f"PRAGMA user_version = {migrations[-1].version}")
         connection.execute("COMMIT")
     except sqlite3.Error as error:
         with suppress(sqlite3.Error):
             connection.execute("ROLLBACK")
-        raise _migration_error(f"{step} failed: {error}", cause=error) from error
+        raise _migration_error(f"{step.name} failed: {error}", cause=error) from error
 
 
-def _reclaim(connection: sqlite3.Connection, *, after_block: bool) -> None:
+def _reclaim(connection: sqlite3.Connection, *, path: Path, after_block: bool) -> None:
     """Gives back the free pages after a block of migrations, or once a quarter of the file is
     free pages, which replays a reclaim a stop interrupted."""
     with wrap_sqlite_errors():
+        page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
         page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
         freelist_count = int(
             connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"]
         )
     if not after_block and freelist_count * 4 < page_count:
         return
+    _logger.info(
+        "reclaim of %s: giving back %s of free pages, %d %% of the file; "
+        "a stop now costs only the time spent",
+        path,
+        gigabytes(freelist_count * page_size),
+        freelist_count * 100 // page_count,
+    )
     try:
         # Outside any transaction, which VACUUM requires.
         connection.execute("VACUUM")
