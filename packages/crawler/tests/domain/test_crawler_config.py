@@ -15,7 +15,7 @@ from p2pwatch.domain.crawler_config import (
     WebuiConfig,
     parse_crawler_config,
 )
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.observability.policy import Audience
 
 
@@ -103,28 +103,28 @@ def test_jitter_ratio_zero_is_accepted() -> None:
 def test_negative_jitter_ratio_is_fatal() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"]["jitter_ratio"] = -0.1
-    with pytest.raises(InvalidConfigError, match="≥ 0 expected"):
+    with pytest.raises(ConfigValueError, match="≥ 0 expected"):
         parse_crawler_config(raw)
 
 
 def test_missing_key_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["shutdown_deadline_seconds"]
-    with pytest.raises(InvalidConfigError, match=r"^shutdown_deadline_seconds: missing$"):
+    with pytest.raises(ConfigValueError, match=r"^shutdown_deadline_seconds: missing$"):
         parse_crawler_config(raw)
 
 
 def test_non_numeric_value_is_fatal() -> None:
     raw = _minimal_raw()
     raw["shutdown_deadline_seconds"] = "souvent"
-    with pytest.raises(InvalidConfigError, match="number expected"):
+    with pytest.raises(ConfigValueError, match="number expected"):
         parse_crawler_config(raw)
 
 
 def test_bool_is_not_accepted_as_a_number() -> None:
     raw = _minimal_raw()
     raw["shutdown_deadline_seconds"] = True
-    with pytest.raises(InvalidConfigError, match="number expected"):
+    with pytest.raises(ConfigValueError, match="number expected"):
         parse_crawler_config(raw)
 
 
@@ -151,7 +151,7 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
     _section(raw, path=section)[key] = number
     with pytest.raises(
-        InvalidConfigError, match=rf"^{_printed_path(section, key=key)}: finite number expected"
+        ConfigValueError, match=rf"^{_printed_path(section, key=key)}: finite number expected"
     ):
         parse_crawler_config(raw)
 
@@ -179,7 +179,7 @@ def _with_seconds(section: str | None, *, key: str, seconds: int) -> dict[str, A
 def test_a_duration_is_at_most_a_day(*, section: str | None, key: str) -> None:
     parse_crawler_config(_with_seconds(section, key=key, seconds=86_400))
     with pytest.raises(
-        InvalidConfigError,
+        ConfigValueError,
         match=rf"^{_printed_path(section, key=key)}: at most 86400 seconds expected, got 86401",
     ):
         parse_crawler_config(_with_seconds(section, key=key, seconds=86_401))
@@ -189,7 +189,7 @@ def test_a_duration_is_at_most_a_day(*, section: str | None, key: str) -> None:
 def test_an_absence_is_at_most_thirty_days(key: str) -> None:
     parse_crawler_config(_with_seconds("download", key=key, seconds=2_592_000))
     with pytest.raises(
-        InvalidConfigError, match=rf"download\.{key}: at most 2592000 seconds expected, got 2592001"
+        ConfigValueError, match=rf"download\.{key}: at most 2592000 seconds expected, got 2592001"
     ):
         parse_crawler_config(_with_seconds("download", key=key, seconds=2_592_001))
 
@@ -197,7 +197,7 @@ def test_an_absence_is_at_most_thirty_days(key: str) -> None:
 def test_non_positive_value_is_fatal() -> None:
     raw = _minimal_raw()
     raw["shutdown_deadline_seconds"] = 0
-    with pytest.raises(InvalidConfigError, match="strictly positive"):
+    with pytest.raises(ConfigValueError, match="strictly positive"):
         parse_crawler_config(raw)
 
 
@@ -216,7 +216,7 @@ def test_non_positive_value_is_fatal() -> None:
 )
 def test_a_removed_key_is_refused_by_name(key: str) -> None:
     raw = _minimal_raw() | {key: 5.0}
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         key,
@@ -235,7 +235,7 @@ def test_a_removed_key_of_a_section_is_refused_by_its_path(
     *, section: dict[str, Any], key_path: str
 ) -> None:
     raw = _minimal_raw() | section
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         key_path,
@@ -245,7 +245,7 @@ def test_a_removed_key_of_a_section_is_refused_by_its_path(
 
 def test_the_root_backoff_is_refused_with_its_new_place() -> None:
     raw = _minimal_raw() | {"backoff": _minimal_raw()["search"]["backoff"]}
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         "backoff",
@@ -256,14 +256,14 @@ def test_the_root_backoff_is_refused_with_its_new_place() -> None:
 def test_a_missing_backoff_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["search"]["backoff"]
-    with pytest.raises(InvalidConfigError, match=r"^search\.backoff\.factor: missing$"):
+    with pytest.raises(ConfigValueError, match=r"^search\.backoff\.factor: missing$"):
         parse_crawler_config(raw)
 
 
 def test_backoff_section_must_be_a_mapping() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"] = [1, 2, 3]
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         "search.backoff",
@@ -274,7 +274,7 @@ def test_backoff_section_must_be_a_mapping() -> None:
 def test_backoff_factor_below_one_is_fatal() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"]["factor"] = 0.5
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         "search.backoff.factor",
@@ -286,7 +286,7 @@ def test_backoff_cap_below_base_is_fatal() -> None:
     raw = _minimal_raw()
     raw["search"]["backoff"]["cap_seconds"] = 1.0
     raw["search"]["backoff"]["base_seconds"] = 10.0
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         parse_crawler_config(raw)
     assert (raised.value.key, raised.value.message) == (
         "search.backoff.cap_seconds",
@@ -300,14 +300,14 @@ def test_backoff_cap_below_base_is_fatal() -> None:
 def test_missing_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["amule_api_password"]
-    with pytest.raises(InvalidConfigError, match=r"^amule_api_password: missing$"):
+    with pytest.raises(ConfigValueError, match=r"^amule_api_password: missing$"):
         parse_crawler_config(raw)
 
 
 def test_empty_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw() | {"amule_api_password": ""}
     with pytest.raises(
-        InvalidConfigError, match=r"^amule_api_password: non-empty string expected, got ''$"
+        ConfigValueError, match=r"^amule_api_password: non-empty string expected, got ''$"
     ):
         parse_crawler_config(raw)
 
@@ -315,7 +315,7 @@ def test_empty_amule_api_password_is_fatal() -> None:
 def test_non_string_amule_api_password_is_fatal() -> None:
     raw = _minimal_raw() | {"amule_api_password": 1234}
     with pytest.raises(
-        InvalidConfigError, match=r"^amule_api_password: non-empty string expected, got 1234$"
+        ConfigValueError, match=r"^amule_api_password: non-empty string expected, got 1234$"
     ):
         parse_crawler_config(raw)
 
@@ -332,14 +332,14 @@ def test_leftover_pool_keys_are_ignored() -> None:
 def test_missing_db_path_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["catalog_db_path"]
-    with pytest.raises(InvalidConfigError, match=r"^catalog_db_path: missing$"):
+    with pytest.raises(ConfigValueError, match=r"^catalog_db_path: missing$"):
         parse_crawler_config(raw)
 
 
 def test_empty_node_id_string_is_fatal() -> None:
     raw = _minimal_raw()
     raw["node_id"] = ""
-    with pytest.raises(InvalidConfigError, match="node_id"):
+    with pytest.raises(ConfigValueError, match="node_id"):
         parse_crawler_config(raw)
 
 
@@ -349,7 +349,7 @@ def test_empty_node_id_string_is_fatal() -> None:
 def test_a_check_carries_the_key_path_it_names_apart_from_its_message() -> None:
     raw = _minimal_raw()
     raw["search"]["keywords"] = []
-    with pytest.raises(InvalidConfigError) as error:
+    with pytest.raises(ConfigValueError) as error:
         parse_crawler_config(raw)
     assert (error.value.key, error.value.message) == (
         "search.keywords",
@@ -359,7 +359,7 @@ def test_a_check_carries_the_key_path_it_names_apart_from_its_message() -> None:
 
 def test_a_notification_that_is_no_mapping_is_refused_under_its_key_path() -> None:
     raw = _minimal_raw() | {"observability": {"notifications": ["discord://a"]}}
-    with pytest.raises(InvalidConfigError) as error:
+    with pytest.raises(ConfigValueError) as error:
         parse_crawler_config(raw)
     assert str(error.value) == "observability.notifications[0]: mapping expected, got str"
     assert error.value.key == "observability.notifications[0]"
@@ -388,19 +388,19 @@ def test_download_section_without_enabled_defaults_to_observer() -> None:
 
 def test_download_enabled_non_bool_is_fatal() -> None:
     raw = _minimal_raw() | {"download": {"enabled": "oui"}}
-    with pytest.raises(InvalidConfigError, match="boolean expected"):
+    with pytest.raises(ConfigValueError, match="boolean expected"):
         parse_crawler_config(raw)
 
 
 def test_download_section_must_be_a_mapping() -> None:
     raw = _minimal_raw() | {"download": [1, 2]}
-    with pytest.raises(InvalidConfigError, match=r"^download: mapping expected, got list$"):
+    with pytest.raises(ConfigValueError, match=r"^download: mapping expected, got list$"):
         parse_crawler_config(raw)
 
 
 def test_download_enabled_true_requires_the_poll_interval() -> None:
     raw = _minimal_raw() | {"download": {"enabled": True, "min_free_bytes": 1024}}
-    with pytest.raises(InvalidConfigError, match="poll_interval_seconds"):
+    with pytest.raises(ConfigValueError, match="poll_interval_seconds"):
         parse_crawler_config(raw)
 
 
@@ -436,28 +436,28 @@ def test_download_sources_interval_defaults_to_five_minutes() -> None:
 @pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan")])
 def test_download_sources_interval_is_a_positive_finite_number(seconds: float) -> None:
     section = _full_download_section() | {"sources_interval_seconds": seconds}
-    with pytest.raises(InvalidConfigError, match=r"download\.sources_interval_seconds"):
+    with pytest.raises(ConfigValueError, match=r"download\.sources_interval_seconds"):
         parse_crawler_config(_minimal_raw() | {"download": section})
 
 
 def test_download_poll_interval_must_be_positive() -> None:
     section = _full_download_section() | {"poll_interval_seconds": 0.0}
     raw = _minimal_raw() | {"download": section}
-    with pytest.raises(InvalidConfigError, match="strictly positive"):
+    with pytest.raises(ConfigValueError, match="strictly positive"):
         parse_crawler_config(raw)
 
 
 def test_download_min_free_must_be_positive_integer() -> None:
     section = _full_download_section() | {"min_free_bytes": 0}
     raw = _minimal_raw() | {"download": section}
-    with pytest.raises(InvalidConfigError, match="strictly positive"):
+    with pytest.raises(ConfigValueError, match="strictly positive"):
         parse_crawler_config(raw)
 
 
 def test_download_lost_after_must_be_positive() -> None:
     section = _full_download_section() | {"lost_after_seconds": 0.0}
     raw = _minimal_raw() | {"download": section}
-    with pytest.raises(InvalidConfigError, match="strictly positive"):
+    with pytest.raises(ConfigValueError, match="strictly positive"):
         parse_crawler_config(raw)
 
 
@@ -487,14 +487,14 @@ def test_a_source_reappears_after_12_hours_by_default() -> None:
 def test_reappeared_after_seconds_is_a_positive_finite_duration(seconds: float) -> None:
     # .inf overflows a duration and .nan would silently disable the event (D9).
     section = _full_download_section() | {"reappeared_after_seconds": seconds}
-    with pytest.raises(InvalidConfigError, match=r"download\.reappeared_after_seconds"):
+    with pytest.raises(ConfigValueError, match=r"download\.reappeared_after_seconds"):
         parse_crawler_config(_minimal_raw() | {"download": section})
 
 
 def test_download_output_dir_must_be_a_string() -> None:
     section = _full_download_section() | {"output_dir": 42}
     raw = _minimal_raw() | {"download": section}
-    with pytest.raises(InvalidConfigError, match="output_dir"):
+    with pytest.raises(ConfigValueError, match="output_dir"):
         parse_crawler_config(raw)
 
 
@@ -504,14 +504,14 @@ def test_download_output_dir_must_be_a_string() -> None:
 def test_a_missing_search_section_is_fatal() -> None:
     raw = _minimal_raw()
     del raw["search"]
-    with pytest.raises(InvalidConfigError, match=r"^search\.keywords: missing$"):
+    with pytest.raises(ConfigValueError, match=r"^search\.keywords: missing$"):
         parse_crawler_config(raw)
 
 
 def test_missing_search_keywords_are_fatal() -> None:
     raw = _minimal_raw()
     del raw["search"]["keywords"]
-    with pytest.raises(InvalidConfigError, match=r"^search\.keywords: missing$"):
+    with pytest.raises(ConfigValueError, match=r"^search\.keywords: missing$"):
         parse_crawler_config(raw)
 
 
@@ -525,7 +525,7 @@ def test_search_keywords_read_from_section() -> None:
 def test_search_keywords_rejects_empty_list() -> None:
     raw = _minimal_raw()
     raw["search"]["keywords"] = []
-    with pytest.raises(InvalidConfigError, match=r"search\.keywords: non-empty list"):
+    with pytest.raises(ConfigValueError, match=r"search\.keywords: non-empty list"):
         parse_crawler_config(raw)
 
 
@@ -533,7 +533,7 @@ def test_search_keywords_rejects_non_string_entry() -> None:
     raw = _minimal_raw()
     raw["search"]["keywords"] = ["keroro", 42]
     with pytest.raises(
-        InvalidConfigError, match=r"search\.keywords: non-empty string expected, got 42"
+        ConfigValueError, match=r"search\.keywords: non-empty string expected, got 42"
     ):
         parse_crawler_config(raw)
 
@@ -564,7 +564,7 @@ def test_observability_parsed() -> None:
 
 def test_observability_bad_log_level_rejected() -> None:
     raw = _minimal_raw() | {"observability": {"log_level": "LOUD"}}
-    with pytest.raises(InvalidConfigError, match="log_level"):
+    with pytest.raises(ConfigValueError, match="log_level"):
         parse_crawler_config(raw)
 
 
@@ -601,7 +601,7 @@ def test_notification_node_prefix_non_bool_rejected() -> None:
         }
     }
     with pytest.raises(
-        InvalidConfigError, match=r"notifications\[0\]\.node_prefix: boolean expected"
+        ConfigValueError, match=r"notifications\[0\]\.node_prefix: boolean expected"
     ):
         parse_crawler_config(raw)
 
@@ -614,7 +614,7 @@ def test_notifications_bad_audience_rejected() -> None:
         }
     }
     with pytest.raises(
-        InvalidConfigError,
+        ConfigValueError,
         match=r"notifications\[0\]\.audience: 'community' or 'operations' expected",
     ):
         parse_crawler_config(raw)
@@ -630,7 +630,7 @@ def test_notifications_bad_audience_rejected() -> None:
 def test_a_notification_tag_is_refused_with_its_new_name(target: dict[str, str]) -> None:
     raw = _minimal_raw() | {"observability": {"log_level": "INFO", "notifications": [target]}}
     with pytest.raises(
-        InvalidConfigError, match=r"notifications\[0\]: key 'tag' was renamed 'audience'"
+        ConfigValueError, match=r"notifications\[0\]: key 'tag' was renamed 'audience'"
     ):
         parse_crawler_config(raw)
 
@@ -650,7 +650,7 @@ def test_webui_host_and_port_are_silently_ignored() -> None:
 
 def test_webui_section_must_be_a_mapping() -> None:
     raw = _minimal_raw() | {"webui": [1, 2]}
-    with pytest.raises(InvalidConfigError, match=r"^webui: mapping expected, got list$"):
+    with pytest.raises(ConfigValueError, match=r"^webui: mapping expected, got list$"):
         parse_crawler_config(raw)
 
 
@@ -684,11 +684,11 @@ def test_webui_source_period_gap_is_configurable() -> None:
 @pytest.mark.parametrize("seconds", [0, -1, float("inf"), float("nan")])
 def test_webui_source_period_gap_is_a_positive_finite_number(seconds: float) -> None:
     raw = _minimal_raw() | {"webui": {"source_period_gap_seconds": seconds}}
-    with pytest.raises(InvalidConfigError, match=r"webui\.source_period_gap_seconds"):
+    with pytest.raises(ConfigValueError, match=r"webui\.source_period_gap_seconds"):
         parse_crawler_config(raw)
 
 
 def test_webui_amule_url_empty_is_fatal() -> None:
     raw = _minimal_raw() | {"webui": {"amule_url": ""}}
-    with pytest.raises(InvalidConfigError, match="non-empty string"):
+    with pytest.raises(ConfigValueError, match="non-empty string"):
         parse_crawler_config(raw)

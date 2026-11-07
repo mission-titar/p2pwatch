@@ -7,7 +7,7 @@ from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig, parse_crawler_config
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.matching.validation import (
@@ -32,7 +32,7 @@ def load_config(
         targets = read_targets(targets_path)
         matcher_config = read_matcher_config(matcher_path)
     except BrokenInputError as error:
-        raise InvalidConfigError(None, message=str(error)) from error
+        raise ConfigValueError(None, message=str(error)) from error
     return LoadedConfig(
         crawler_config=crawler_config,
         targets=targets,
@@ -54,7 +54,7 @@ def read_targets(targets_path: Path) -> tuple[TargetSegment, ...]:
     try:
         return parse_targets(load_yaml(targets_path))
     except MatchingConfigError as error:
-        raise InvalidConfigError(None, message=str(error)) from error
+        raise ConfigValueError(None, message=str(error)) from error
 
 
 def read_matcher_config(matcher_path: Path) -> MatcherConfig:
@@ -62,4 +62,4 @@ def read_matcher_config(matcher_path: Path) -> MatcherConfig:
     try:
         return parse_matcher_config(load_yaml(matcher_path))
     except MatchingConfigError as error:
-        raise InvalidConfigError(None, message=str(error)) from error
+        raise ConfigValueError(None, message=str(error)) from error
