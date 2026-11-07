@@ -5,11 +5,9 @@ from typing import Final, Literal
 
 from p2pwatch.domain.matching.identifiers import TargetId
 
-LOST: Final = "lost"
-FOUND = "found"
 # Closed set of target statuses (a found target is still downloaded: archival redundancy).
 TargetStatus = Literal["lost", "found"]
-TARGET_STATUSES: frozenset[str] = frozenset({LOST, FOUND})
+LOST: Final = "lost"
 
 
 @dataclass(kw_only=True, frozen=True)

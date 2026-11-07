@@ -12,11 +12,12 @@ The core is one layered, declarative matching engine under `packages/crawler/src
 
 ```
 load_yaml(path)                         # the crawler's adapters/driven/config/yaml_loader.py: the ONLY I/O
-  → parse_matcher_config / parse_targets   # validation.py: schema + fail-fast graph validation:
+  → parse_matcher_config                   # validation.py: schema + fail-fast graph validation:
   →                                        #   DAG/named-cycle, depth bound (32), regex compile-check,
-  →                                        #   unique target_id, closed tier/attr enums,
-  →                                        #   no control character (Cc) in a segment letter or a
-  →                                        #   rule name → MatchingConfigError
+  →                                        #   closed tier/attr enums,
+  →                                        #   no control character (Cc) in a rule name → MatchingConfigError
+  → targets_from_document                  # the config adapter's targets_schema.py (pydantic): every
+  →                                        #   problem listed, unique target_id by duplicate_targets
   → MatchingEngine(config, targets=..., max_filename_length=...)  # engine.py: one matcher tree PER TARGET
   → engine.evaluate_file(candidates)       #   one FileCandidate per filename of a file;
   →                                        #   brute-force over all targets (no funnel)

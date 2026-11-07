@@ -13,14 +13,16 @@ from p2pwatch.domain.matching.config import (
     TokenReference,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.matching.validation import (
     CycleError,
     DepthExceededError,
     MatchingConfigError,
+    TargetDuplicate,
     UnknownTokenError,
+    duplicate_targets,
     has_control_character,
     parse_matcher_config,
-    parse_targets,
     validate_config,
 )
 
@@ -365,130 +367,6 @@ def test_operand_wrong_type_raises() -> None:
         )
 
 
-def test_parse_targets_builds_segments_with_per_segment_status() -> None:
-    targets = parse_targets(
-        {
-            "episodes": [
-                {
-                    "season": 2,
-                    "seasonal_number": 11,
-                    "absolute_number": 62,
-                    "segments": [
-                        {"letter": "A", "title": "Les demoiselles", "status": "found"},
-                        {"letter": "B", "title": "Le grand combat"},
-                    ],
-                }
-            ]
-        }
-    )
-    assert len(targets) == 2
-    a, b = targets
-    assert a.target_id == "062A"
-    assert a.seasonal_number == 11
-    assert a.absolute_number == 62
-    assert a.status == "found"  # status SPECIFIC to segment A
-    assert b.target_id == "062B"
-    assert b.status == "lost"  # default, B not marked
-
-
-def test_parse_targets_requires_seasonal_number() -> None:
-    with pytest.raises(MatchingConfigError, match="seasonal_number"):
-        parse_targets(
-            {
-                "episodes": [
-                    {
-                        "season": 1,
-                        "absolute_number": 5,
-                        "segments": [{"letter": "a", "title": "x"}],
-                    }
-                ]
-            }
-        )
-
-
-def test_parse_targets_requires_absolute_number() -> None:
-    with pytest.raises(MatchingConfigError, match="absolute_number"):
-        parse_targets(
-            {
-                "episodes": [
-                    {
-                        "season": 1,
-                        "seasonal_number": 5,
-                        "segments": [{"letter": "a", "title": "x"}],
-                    }
-                ]
-            }
-        )
-
-
-def test_parse_targets_default_status_is_lost() -> None:
-    targets = parse_targets(
-        {
-            "episodes": [
-                {
-                    "season": 1,
-                    "seasonal_number": 5,
-                    "absolute_number": 5,
-                    "segments": [{"letter": "a", "title": "x"}],
-                }
-            ]
-        }
-    )
-    assert targets[0].status == "lost"
-
-
-@pytest.mark.parametrize("status", ["complete", "partial", ""])
-def test_parse_targets_rejects_a_status_outside_the_closed_set(status: str) -> None:
-    with pytest.raises(MatchingConfigError, match=f"status {status!r}"):
-        parse_targets(
-            {
-                "episodes": [
-                    {
-                        "season": 1,
-                        "seasonal_number": 5,
-                        "absolute_number": 5,
-                        "segments": [{"letter": "a", "title": "x", "status": status}],
-                    }
-                ]
-            }
-        )
-
-
-# Cc: the C0 controls, DEL and the C1 controls.
-@pytest.mark.parametrize("letter", ["a\x1fb", "\x85", "\x00", "\x7f", "a\tb"])
-def test_parse_targets_refuses_a_control_character_in_a_letter_and_names_it(letter: str) -> None:
-    with pytest.raises(MatchingConfigError) as raised:
-        parse_targets(
-            {
-                "episodes": [
-                    {
-                        "season": 1,
-                        "seasonal_number": 5,
-                        "absolute_number": 5,
-                        "segments": [{"letter": letter, "title": "x"}],
-                    }
-                ]
-            }
-        )
-    assert str(raised.value) == f"segment letter {letter!r} holds a control character"
-
-
-def test_parse_targets_accepts_a_letter_beyond_ascii_that_is_no_control_character() -> None:
-    targets = parse_targets(
-        {
-            "episodes": [
-                {
-                    "season": 1,
-                    "seasonal_number": 5,
-                    "absolute_number": 5,
-                    "segments": [{"letter": "\xe9\xa0", "title": "x"}],
-                }
-            ]
-        }
-    )
-    assert targets[0].letter == "\xe9\xa0"
-
-
 # A format character such as a zero width space is no control character.
 @pytest.mark.parametrize(
     ("text", "expected"),
@@ -505,92 +383,38 @@ def test_has_control_character_tells_a_text_holding_one(*, text: str, expected: 
     assert has_control_character(text) is expected
 
 
-def test_parse_targets_episode_without_segments() -> None:
-    targets = parse_targets(
-        {"episodes": [{"season": 1, "seasonal_number": 1, "absolute_number": 1}]}
+def _target(absolute_number: int, *, letter: str) -> TargetSegment:
+    return TargetSegment(
+        season=1, seasonal_number=1, absolute_number=absolute_number, letter=letter, title="x"
     )
-    assert targets == ()
 
 
-def test_parse_targets_duplicate_target_id_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="duplicate"):
-        parse_targets(
-            {
-                "episodes": [
-                    {
-                        "season": 2,
-                        "seasonal_number": 11,
-                        "absolute_number": 62,
-                        "segments": [
-                            {"letter": "a", "title": "x"},
-                            {"letter": "A", "title": "y"},
-                        ],
-                    }
-                ]
-            }
-        )
-
-
-def test_parse_targets_builds_mono_episode_target() -> None:
-    targets = parse_targets(
-        {
-            "episodes": [
-                {
-                    "season": 1,
-                    "seasonal_number": 10,
-                    "absolute_number": 10,
-                    "segments": [{"letter": "A", "title": "x"}],
-                }
-            ]
-        }
+def test_targets_of_distinct_ids_hold_no_duplicate() -> None:
+    assert (
+        duplicate_targets([_target(1, letter="A"), _target(1, letter="B"), _target(2, letter="A")])
+        == ()
     )
-    assert [t.target_id for t in targets] == ["010A"]
 
 
-def test_parse_targets_builds_two_segment_targets() -> None:
-    targets = parse_targets(
-        {
-            "episodes": [
-                {
-                    "season": 2,
-                    "seasonal_number": 11,
-                    "absolute_number": 62,
-                    "segments": [
-                        {"letter": "A", "title": "x"},
-                        {"letter": "B", "title": "y"},
-                    ],
-                }
-            ]
-        }
+def test_every_duplicate_target_names_its_first_holder_letters_upper_cased() -> None:
+    targets = [
+        _target(62, letter="a"),
+        _target(10, letter="A"),
+        _target(62, letter="A"),
+        _target(10, letter="A"),
+        _target(62, letter="a"),
+    ]
+    assert duplicate_targets(targets) == (
+        TargetDuplicate(index=2, first_index=0),
+        TargetDuplicate(index=3, first_index=1),
+        TargetDuplicate(index=4, first_index=0),
     )
-    assert [t.target_id for t in targets] == ["062A", "062B"]
 
 
 def test_regex_with_date_alt_placeholder_is_rejected() -> None:
     # {date_alt} removed: a token using it fails at load time (unknown placeholder).
     with pytest.raises(MatchingConfigError, match="date_alt"):
         parse_matcher_config({"tokens": {"air": {"regex": "{date_alt}"}}, "rules": []})
-
-
-def test_parse_targets_missing_episodes_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="episodes"):
-        parse_targets({})
-
-
-def test_parse_targets_missing_required_segment_field_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="title"):
-        parse_targets(
-            {
-                "episodes": [
-                    {
-                        "season": 1,
-                        "seasonal_number": 5,
-                        "absolute_number": 5,
-                        "segments": [{"letter": "a"}],
-                    }
-                ]
-            }
-        )
 
 
 # --- Branch-coverage leftovers ---
@@ -963,20 +787,3 @@ def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) ->
             {"tokens": {"cov": {"coverage": "title", "min_coverage": 0.5}}, "rules": [rule]}
         )
     assert str(raised.value) == f"'{override_key}' override of 'cov': number expected, got 'x'"
-
-
-@pytest.mark.parametrize(
-    ("key", "number", "shown"),
-    [
-        ("season", "abc", "'abc'"),
-        ("seasonal_number", None, "None"),
-        ("absolute_number", [1], "[1]"),
-    ],
-)
-def test_an_episode_number_that_is_no_integer_raises_and_names_its_key(
-    *, key: str, number: object, shown: str
-) -> None:
-    episode = {"season": 1, "seasonal_number": 1, "absolute_number": 1} | {key: number}
-    with pytest.raises(MatchingConfigError) as raised:
-        parse_targets({"episodes": [episode]})
-    assert str(raised.value) == f"episode: key '{key}': integer expected, got {shown}"

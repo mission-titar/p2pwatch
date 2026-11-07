@@ -1,4 +1,4 @@
-# SMOKE targets.yml: one minimal target (same schema as config/targets.yml / parse_targets).
+# SMOKE targets.yml: one minimal target (same schema as deploy/targets.yml).
 # Enough to build the MatchingEngine; the smoke checks the wiring, not the match quality.
 episodes:
   - season: 2
