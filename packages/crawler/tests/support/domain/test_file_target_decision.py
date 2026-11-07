@@ -1,7 +1,7 @@
 from random import Random
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecision
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,
     draw_decision_record,

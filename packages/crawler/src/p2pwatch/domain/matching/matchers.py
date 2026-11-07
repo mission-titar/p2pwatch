@@ -6,9 +6,9 @@ from typing import Protocol
 
 from rapidfuzz import fuzz
 
-from catalog_matching.domain.combinators import Matcher
-from catalog_matching.domain.models import FileCandidate
-from catalog_matching.domain.normalization import fold, split_words
+from p2pwatch.domain.matching.combinators import Matcher
+from p2pwatch.domain.matching.models import FileCandidate
+from p2pwatch.domain.matching.normalization import fold, split_words
 
 
 class KeywordMatcher(Matcher):

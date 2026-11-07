@@ -8,7 +8,7 @@ rules). PURE domain: no I/O, no YAML library import. Construction from parsed YA
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
-from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 # --- LEAF token definitions (4 types, cf. spec §8.2) ---
 

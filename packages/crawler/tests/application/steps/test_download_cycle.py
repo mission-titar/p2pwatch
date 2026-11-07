@@ -1,12 +1,12 @@
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.client_errors import (
     ClientUnreachableError,
     DownloadRejectedError,
     ReadRejectedError,
 )
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.matching.identifiers import TargetId
 from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient

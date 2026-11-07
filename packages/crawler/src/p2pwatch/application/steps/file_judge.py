@@ -15,9 +15,6 @@ researcher-notifications §2).
 
 from dataclasses import replace
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord, MatchingEngine, to_record
-from catalog_matching.domain.models import FileCandidate
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
@@ -27,6 +24,9 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import DatedDecision, records_to_write
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord, MatchingEngine, to_record
+from p2pwatch.domain.matching.models import FileCandidate
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.wake_subject import WakeSubject
 

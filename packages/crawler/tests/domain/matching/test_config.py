@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from catalog_matching.domain.config import (
+from p2pwatch.domain.matching.config import (
     SCOPES,
     AllDefinition,
     AnyDefinition,
@@ -15,7 +15,7 @@ from catalog_matching.domain.config import (
     Rule,
     TokenReference,
 )
-from catalog_matching.domain.decision_tier import DecisionTier
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 
 def test_keyword_definition_holds_phrase() -> None:

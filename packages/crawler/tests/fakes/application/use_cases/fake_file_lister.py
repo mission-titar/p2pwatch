@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.application.ports.driving.file_lister import FileLister, FileListing
 from p2pwatch.domain.catalog_entry import CatalogEntrySort, SortDirection
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 
 @dataclass(kw_only=True, frozen=True)

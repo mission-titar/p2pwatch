@@ -25,10 +25,6 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.ed2k_link import build_ed2k_link
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import TargetSegment
 from p2pwatch.adapters.driving.webui.displays import (
     BackoffStateDisplay,
     CatalogEntryDisplay,
@@ -89,6 +85,7 @@ from p2pwatch.application.ports.driving.source_lister import SourceLister
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescriber
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
+from p2pwatch.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.interval import (
@@ -97,6 +94,9 @@ from p2pwatch.domain.interval import (
     interval_ending,
 )
 from p2pwatch.domain.known_source import KnownSource
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.node_state import NodeState
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import SharingPeriod

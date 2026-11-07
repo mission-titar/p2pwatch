@@ -9,10 +9,10 @@ DOMAIN ring (pure). One FROZEN dataclass per salient observable fact; tagged uni
 from dataclasses import dataclass
 from typing import Literal
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.source import SourceKey
 
 

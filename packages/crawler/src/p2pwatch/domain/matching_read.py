@@ -7,9 +7,9 @@
 from collections.abc import Iterable
 from dataclasses import replace
 
-from catalog_matching.domain.engine import Explanation, MatchingEngine
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import FileCandidate
+from p2pwatch.domain.matching.engine import Explanation, MatchingEngine
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import FileCandidate
 from p2pwatch.domain.observation import candidate_from_fields
 
 

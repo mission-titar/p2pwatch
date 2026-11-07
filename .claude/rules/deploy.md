@@ -2,7 +2,7 @@
 paths:
   - "deploy/**"
   - "packages/crawler/src/p2pwatch/adapters/driven/config/**"
-  - "packages/matching/tests/**"
+  - "packages/crawler/tests/domain/matching/**"
 ---
 
 # Deployment config

@@ -1,11 +1,11 @@
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import (
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import (
     DecisionRecord,
     Explanation,
     MatchDecision,
     to_record,
 )
-from catalog_matching.domain.identifiers import TargetId
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 def _decision(tier: DecisionTier = DecisionTier.DOWNLOAD) -> MatchDecision:

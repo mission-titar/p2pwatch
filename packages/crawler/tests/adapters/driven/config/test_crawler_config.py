@@ -2,12 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.crawler_config import LoadedConfig, parse_crawler_config
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
 _DEPLOY = Path(__file__).resolve().parents[6] / "deploy"

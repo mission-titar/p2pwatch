@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 class TargetCoverageStatus(StrEnum):

@@ -2,12 +2,12 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.store_error import StoreError
 
 

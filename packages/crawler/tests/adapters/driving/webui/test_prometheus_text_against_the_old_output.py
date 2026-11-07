@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driving.webui.prometheus_text import prometheus_text
 from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import Channel, ClientName
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
     ClientLabels,

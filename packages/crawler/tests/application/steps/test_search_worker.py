@@ -3,7 +3,6 @@ from datetime import timedelta
 
 import pytest
 
-from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
@@ -20,6 +19,7 @@ from p2pwatch.application.steps.search_worker import (
 )
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.observability.node_metric import NodeCounter, NodeMetricSample
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey

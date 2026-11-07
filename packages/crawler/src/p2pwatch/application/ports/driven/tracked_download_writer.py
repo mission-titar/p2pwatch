@@ -5,10 +5,10 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 class TrackedDownloadWriter(ABC):

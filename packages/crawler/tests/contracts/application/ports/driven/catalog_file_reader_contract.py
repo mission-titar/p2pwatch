@@ -8,9 +8,6 @@ from random import Random
 
 import pytest
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
@@ -19,6 +16,9 @@ from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.identifiers import FileId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observation import FileObservation
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,

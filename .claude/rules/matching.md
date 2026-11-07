@@ -1,13 +1,14 @@
 ---
 paths:
-  - "packages/matching/**"
+  - "packages/crawler/src/p2pwatch/domain/matching/**"
+  - "packages/crawler/tests/domain/matching/**"
   - "deploy/matcher.yml"
   - "deploy/targets.yml"
 ---
 
 # Architecture: the matching engine
 
-The core is one layered, declarative matching engine under `packages/matching/src/catalog_matching/domain/`. **The matcher/rule policy is 100% in YAML config; the code is a minimal fixed engine.**
+The core is one layered, declarative matching engine under `packages/crawler/src/p2pwatch/domain/matching/`. **The matcher/rule policy is 100% in YAML config; the code is a minimal fixed engine.**
 
 ```
 load_yaml(path)                         # the crawler's adapters/driven/config/yaml_loader.py: the ONLY I/O

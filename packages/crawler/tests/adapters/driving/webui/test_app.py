@@ -14,11 +14,6 @@ from jinja2 import Environment, FileSystemLoader, UndefinedError, meta
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord, Explanation
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import TargetSegment
-from catalog_matching.domain.validation import parse_targets
 from p2pwatch.adapters.driving.webui.app import (
     _catalog_entry_displays,
     _normalize_direction,
@@ -52,6 +47,11 @@ from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.identifiers import Channel, ClientName, FileId, Keyword, NodeId, SourceId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord, Explanation
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import TargetSegment
+from p2pwatch.domain.matching.validation import parse_targets
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
 from p2pwatch.domain.observability.node_metric import NodeGauge, NodeMetricSample
 from p2pwatch.domain.observation import FileObservation, ReportedFile

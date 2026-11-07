@@ -2,8 +2,8 @@
 
 from dataclasses import dataclass
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 @dataclass(kw_only=True, frozen=True)

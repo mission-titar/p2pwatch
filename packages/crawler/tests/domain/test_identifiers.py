@@ -1,5 +1,5 @@
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.identifiers import Channel, ClientName, FileId, Keyword, NodeId, SourceId
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 def _node_id(node_id: NodeId) -> str:

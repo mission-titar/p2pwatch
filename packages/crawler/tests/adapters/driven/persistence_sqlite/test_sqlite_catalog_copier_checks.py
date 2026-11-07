@@ -9,9 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
@@ -26,6 +23,9 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.source import SourceKey, SourcePoint, SourceReading, SourceRole
 from tests.support.adapters.driven.persistence_sqlite.helpers import rows_without_id

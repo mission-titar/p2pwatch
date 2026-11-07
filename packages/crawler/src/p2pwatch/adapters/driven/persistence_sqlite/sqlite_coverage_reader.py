@@ -8,12 +8,12 @@ sentinel and per-target ``retracted`` rows are excluded.
 All SQL lives in module constants, parameterized; only the tiers are interpolated, from their enum.
 """
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
 
 # ---------------------------------------------------------------------------
 # Constants

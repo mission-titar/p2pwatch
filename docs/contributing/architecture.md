@@ -20,7 +20,7 @@ l'adresse réseau d'un pair.**
 
 ## 2. Vue d'ensemble des sous-systèmes
 
-Un **workspace uv** de huit paquets, plus des dépendances externes.
+Un **workspace uv** de sept paquets, plus des dépendances externes.
 
 **Contexte : le nœud et le monde extérieur.** Un nœud est **deux conteneurs**, de deux images. Le
 cœur, `p2pwatch`, ne porte que le crawler et sa webui : pas de superviseur, il tourne directement
@@ -84,8 +84,7 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
 Aucun conteneur Prometheus ou Grafana n'est livré avec la pile : la webui sert `/metrics` sur 8080
 et un opérateur qui veut des tableaux de bord y pointe son propre Prometheus.
 
-**Composants internes et données partagées** (le crawler écrit, la webui lit ; `matching` est une
-bibliothèque importée) :
+**Composants internes et données partagées** (le crawler écrit, la webui lit) :
 
 ```mermaid
 flowchart RL
@@ -93,30 +92,25 @@ flowchart RL
   webui["WebUI · in-process"]
   catalog[("catalog.db")]
   local[("local.db")]
-  matching(["matching · lib"])
 
   crawler -->|writes| catalog
   crawler -->|writes| local
-  crawler -->|imports| matching
   webui -->|"read-only"| catalog
-  webui -->|imports| matching
 ```
 
 | Paquet | Dist | Rôle |
 |---|---|---|
 | `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`), le port-sync (`python -m p2pwatch_amule port-sync`, §9) et le healthcheck (`python -m p2pwatch_amule health`, §13). |
-| `catalog_matching` | `catalog-matching` | **Moteur de matching** (bibliothèque partagée) : politique déclarative fichier vers épisode. Importé par le crawler et par la webui. |
 | `pytest_settings` | `pytest-settings` | **Configuration de test partagée**, un seul module et non un hexagone : les réglages de pytest que la suite de chaque paquet applique, chargés par son point d'entrée `pytest11`. Hors de la portée de vulture, comme les tests. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
 | `template_checks` | `template-checks` | **Outillage dev/CI** : vérifie que les templates de la webui ne portent aucune logique (`poe template-check`), et liste les noms qu'ils lisent, que `poe dead-code-check` ne doit pas signaler. Jamais livré dans une image de prod. |
 | `coverage_checks` | `coverage-checks` | **Outillage dev/CI** : vérifie que chaque module est couvert par ses propres tests, les fichiers de test qui portent son nom dans le miroir de `src` (lancé par `poe test`). Jamais livré dans une image de prod. |
 | `amule_bump` | `amule-bump` | **Outillage CI** : monte l'épingle d'aMule et rédige la PR ([Mettre à jour aMule](amule-bump.md)). Jamais livré dans une image de prod. |
 
-**Frontières strictes** (invariants) : `catalog_matching` est pur et n'importe jamais `p2pwatch` ;
-`p2pwatch_amule` et `p2pwatch` ne s'importent jamais l'un l'autre ; `pytest_settings`,
-`vex_checks`, `template_checks`, `coverage_checks` et `amule_bump` ne sont jamais
-importés par du code livré.
+**Frontières strictes** (invariants) : `p2pwatch_amule` et `p2pwatch` ne s'importent jamais l'un
+l'autre ; `pytest_settings`, `vex_checks`, `template_checks`, `coverage_checks` et `amule_bump` ne
+sont jamais importés par du code livré.
 
 ## 3. Deux modes d'exécution, une seule topologie
 
@@ -152,7 +146,7 @@ développement et en CI, jamais dans une image.
 
 | Hexagone | Paquet | Ports pilotants | Ce que pilotent ses adaptateurs |
 |---|---|---|---|
-| `p2pwatch` | `packages/crawler/`, avec `catalog_matching` (`packages/matching/`), son domaine dans une distribution à part | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise |
+| `p2pwatch` | `packages/crawler/` | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise |
 | `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner`, `ApiHealthChecker` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass-stdin`, le REST d'amuleapi (santé, préférences) |
 | `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `AppliedClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
 | `template_checks` | `packages/template_checks/` | `LogicFreeChecker`, `TemplateAttributeLister` | les gabarits de la webui |
@@ -766,9 +760,9 @@ démon sont
   (IP, port, pays), et ne relie jamais des identifiants d'un réseau à l'autre.
 - **Le crawler PROD ne lit jamais les octets et ne touche jamais au répertoire de sortie** ; la
   complétion est un signal positif.
-- **Frontières de paquets** : `catalog_matching` n'importe jamais `p2pwatch` ; `p2pwatch_amule` et
-  `p2pwatch` ne s'importent jamais ; `pytest_settings`, `vex_checks`, `template_checks`,
-  `coverage_checks` et `amule_bump` ne sont jamais importés par du code livré.
+- **Frontières de paquets** : `p2pwatch_amule` et `p2pwatch` ne s'importent jamais ;
+  `pytest_settings`, `vex_checks`, `template_checks`, `coverage_checks` et `amule_bump` ne sont
+  jamais importés par du code livré.
 - **Deux modes d'exécution** pilotés par la config (téléchargement / catalogue seul), une seule
   topologie compose par variante.
 - **Politique de matching 100 % en YAML** ; le moteur reste fixe et minimal.
@@ -790,7 +784,7 @@ démon sont
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`), `domain/crawler_config.py` (contrôle et construit `CrawlerConfig`) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
-| Matching | `packages/matching/src/catalog_matching/` (moteur + politique `deploy/matcher.yml`) |
+| Matching | `domain/matching/` (moteur + politique `deploy/matcher.yml`) |
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |

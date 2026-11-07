@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.engine import MatchingEngine
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_scan_reader import (
     SqliteCatalogScanReader,
@@ -16,6 +14,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
+from p2pwatch.domain.matching.engine import MatchingEngine
+from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
@@ -26,7 +26,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 # Matcher: single source of truth = deployment config. Targets: the §7 subset of the golden
 # corpus (matching fixture, distinct from the full prod catalog).
 _MATCHER = _REPOSITORY_ROOT / "deploy" / "matcher.yml"
-_FIXTURES = _REPOSITORY_ROOT / "packages" / "matching" / "tests" / "fixtures"
+_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 @pytest.fixture

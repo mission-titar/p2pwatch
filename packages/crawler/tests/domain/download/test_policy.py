@@ -1,5 +1,5 @@
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 
 def _verdict(

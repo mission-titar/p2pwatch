@@ -3,10 +3,10 @@
 
 from abc import ABC, abstractmethod
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision
+from p2pwatch.domain.matching.identifiers import TargetId
 
 
 class DecisionReader(ABC):

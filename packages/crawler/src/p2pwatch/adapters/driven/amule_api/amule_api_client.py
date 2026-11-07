@@ -17,7 +17,6 @@ from typing import Any, Protocol
 
 import httpx
 
-from catalog_matching.domain.ed2k_link import build_ed2k_link
 from p2pwatch.adapters.driven.amule_api.errors import (
     ApiAuthError,
     ApiKadExhaustedError,
@@ -48,6 +47,7 @@ from p2pwatch.domain.client_errors import (
 )
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
+from p2pwatch.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.monotonic_instant import MonotonicInstant

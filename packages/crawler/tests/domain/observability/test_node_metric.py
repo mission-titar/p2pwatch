@@ -2,9 +2,9 @@
 
 import pytest
 
-from catalog_matching.domain.decision_tier import DecisionTier
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import Channel, ClientName
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
     ClientLabels,

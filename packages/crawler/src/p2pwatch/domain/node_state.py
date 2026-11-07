@@ -4,10 +4,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 

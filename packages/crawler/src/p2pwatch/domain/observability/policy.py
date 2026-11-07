@@ -13,10 +13,10 @@ from datetime import timedelta
 from enum import Enum
 from typing import assert_never
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
     ChannelField,

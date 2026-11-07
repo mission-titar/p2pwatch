@@ -9,7 +9,6 @@ resolution-markers = [
 [manifest]
 members = [
     "amule-bump",
-    "catalog-matching",
     "coverage-checks",
     "p2pwatch",
     "p2pwatch-amule",
@@ -161,30 +160,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/66/83/6607060659998f00afdea0d8375c1e6e2b7d515ab905090d9a5a02f48851/ast_serialize-0.13.1-cp39-abi3-win32.whl", hash = "sha256:4f98da562e5901d69c7dd30885594c5438f859edf354e9ac7517d188fb026c3a", size = 1131889, upload-time = "2026-10-17T00:04:12.953Z" },
     { url = "https://files.pythonhosted.org/packages/9f/6f/bafd6490fe7b355627fabe95f4417e3d02da93102c8552550eb9a0774e1e/ast_serialize-0.13.1-cp39-abi3-win_amd64.whl", hash = "sha256:ddf7cbc9c8abf70102c4a088efe154bb86bfb825b0a10e556d2b15972cf99bd7", size = 1171153, upload-time = "2026-10-17T00:04:14.362Z" },
     { url = "https://files.pythonhosted.org/packages/11/25/4235f4b375a67a37ac595bf478a5407a744eaf7b64113c1c3a5432b8d954/ast_serialize-0.13.1-cp39-abi3-win_arm64.whl", hash = "sha256:48f11d96c9ec71119612f8e79a8c55c12f2b136716d68347433c561d27a25f43", size = 1139035, upload-time = "2026-10-17T00:04:15.767Z" },
-]
-
-[[package]]
-name = "catalog-matching"
-source = { editable = "packages/matching" }
-dependencies = [
-    { name = "rapidfuzz" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "rapidfuzz", specifier = ">=3.14.6" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.2.0" },
-    { name = "pytest-cov", specifier = ">=5" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]
@@ -917,10 +892,10 @@ name = "p2pwatch"
 source = { editable = "packages/crawler" }
 dependencies = [
     { name = "apprise" },
-    { name = "catalog-matching" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pyyaml" },
+    { name = "rapidfuzz" },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
@@ -936,10 +911,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "apprise", specifier = ">=2.0.0" },
-    { name = "catalog-matching", editable = "packages/matching" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "rapidfuzz", specifier = ">=3.14.6" },
     { name = "starlette", specifier = ">=1.3" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]

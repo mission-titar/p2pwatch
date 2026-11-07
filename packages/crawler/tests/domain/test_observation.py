@@ -3,10 +3,10 @@ from typing import Any
 
 import pytest
 
-from catalog_matching.domain.models import FileCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.matching.models import FileCandidate
 from p2pwatch.domain.observation import ReportedFile, candidate_from_fields, fold_raw_metadata
 from tests.support.domain.value_bounds import (
     NOT_QUANTITIES,

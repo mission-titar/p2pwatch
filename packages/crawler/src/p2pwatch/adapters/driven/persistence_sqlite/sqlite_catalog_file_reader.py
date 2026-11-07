@@ -11,9 +11,6 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from collections.abc import Mapping
 from datetime import datetime
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
@@ -31,6 +28,9 @@ from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.identifiers import FileId, NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 
 # ---------------------------------------------------------------------------
 # Constants

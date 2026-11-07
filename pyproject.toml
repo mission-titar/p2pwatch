@@ -2,7 +2,6 @@
 members = ["packages/*"]
 
 [tool.uv.sources]
-catalog-matching = { workspace = true }
 p2pwatch = { workspace = true }
 pytest-settings = { workspace = true }
 
@@ -32,7 +31,6 @@ extend-exclude = ["agents/**/*.md", "agents/reference/**"]
 src = [
   "packages/crawler/src",
   "packages/amule/src",
-  "packages/matching/src",
   "packages/vex_checks/src",
   "packages/template_checks/src",
   "packages/coverage_checks/src",
@@ -52,7 +50,6 @@ max-positional-args = 1
 known-first-party = [
   "p2pwatch",
   "p2pwatch_amule",
-  "catalog_matching",
   "vex_checks",
   "template_checks",
   "coverage_checks",
@@ -135,7 +132,6 @@ _gate-green    = { cmd = "echo GATE GREEN", help = "The line only a green gate p
 paths = [
   "packages/crawler/src",
   "packages/amule/src",
-  "packages/matching/src",
   "packages/vex_checks/src",
   "packages/template_checks/src",
   "packages/coverage_checks/src",
@@ -150,8 +146,6 @@ min_confidence = 60
 ignore_fail = "return_non_zero"
 help = "Check each package's declared dependencies against its imports (deptry)"
 sequence = [
-  { cmd = "deptry src", cwd = "packages/matching" },
-  { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/matching" },
   { cmd = "deptry src", cwd = "packages/crawler" },
   { cmd = "deptry --non-dev-dependency-groups dev src tests", cwd = "packages/crawler" },
   { cmd = "deptry src", cwd = "packages/amule" },
@@ -173,7 +167,6 @@ sequence = [
 ignore_fail = "return_non_zero"
 help = "Type-check each package with mypy (strict, src + tests)"
 sequence = [
-  { cmd = "mypy src tests", cwd = "packages/matching" },
   { cmd = "mypy src tests", cwd = "packages/crawler" },
   { cmd = "mypy src tests", cwd = "packages/amule" },
   { cmd = "mypy src tests", cwd = "packages/vex_checks" },
@@ -188,7 +181,6 @@ sequence = [
 ignore_fail = "return_non_zero"
 help = "Check each package's imports with pyrefly (src + tests), the resolution Serena's renames rely on"
 sequence = [
-  { cmd = "pyrefly check", cwd = "packages/matching" },
   { cmd = "pyrefly check", cwd = "packages/crawler" },
   { cmd = "pyrefly check", cwd = "packages/amule" },
   { cmd = "pyrefly check", cwd = "packages/vex_checks" },
@@ -204,7 +196,6 @@ sequence = [
 [tool.poe.tasks.test]
 help = "Run every package's unit suite (per-package 100% branch coverage) and the VEX source rules' tests, then each module's by its own tests"
 sequence = [
-  { cmd = "pytest", cwd = "packages/matching" },
   { cmd = "pytest", cwd = "packages/crawler" },
   { cmd = "pytest", cwd = "packages/amule" },
   { cmd = "pytest", cwd = "packages/vex_checks" },
@@ -221,7 +212,6 @@ sequence = [
 ignore_fail = "return_non_zero"
 help = "Check each module is covered by its own tests, the test files mirroring src"
 sequence = [
-  { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/matching" },
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/crawler" },
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/amule" },
   { cmd = "python -m coverage_checks unit-coverage", cwd = "packages/vex_checks" },

@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import CompletedDownload
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader

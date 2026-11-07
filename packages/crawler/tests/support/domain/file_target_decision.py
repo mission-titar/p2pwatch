@@ -3,12 +3,12 @@
 from datetime import datetime
 from random import Random
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecision
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 from tests.support.draws import draw_instant, draw_text
 
 

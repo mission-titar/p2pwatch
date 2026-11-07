@@ -2,9 +2,6 @@
 
 import sqlite3
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
@@ -15,6 +12,9 @@ from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision, FileTargetDecision, Retraction
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord
+from p2pwatch.domain.matching.identifiers import TargetId
 
 # The tier column's value on a retraction's row.
 _RETRACTED_TIER = "retracted"

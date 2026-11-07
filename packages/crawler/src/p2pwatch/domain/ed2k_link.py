@@ -8,11 +8,6 @@ So we escape the name with UTF-8 percent-encoding (``urllib.parse.quote``), keep
 readable safe set: a space becomes ``%20``, the ``|`` becomes ``%7C``, control characters
 and non-ASCII are neutralized. Only the 5 STRUCTURAL separators of the link
 (``|file|`` … ``|/``) stay as ``|``.
-
-PURE domain: no I/O. Lives in ``catalog_matching`` (shared package) rather than in
-``p2pwatch`` core or its webui because both must produce the SAME canonical
-link for a given file (regression webui-security#0: without this sharing, the webui
-reinvented the function and forgot the escaping).
 """
 
 from urllib.parse import quote

@@ -2,9 +2,6 @@
 
 from collections.abc import Sequence
 
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.models import TargetSegment
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.logger import Logger
@@ -17,6 +14,9 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 from p2pwatch.domain.edge_state import EdgeState
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.events import DiskSpaceLow, DownloadQueued, FreeSpaceSampled
 
 

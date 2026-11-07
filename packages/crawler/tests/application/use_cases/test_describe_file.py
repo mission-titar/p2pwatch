@@ -5,11 +5,6 @@ from datetime import UTC, datetime, timedelta
 
 import yaml
 
-from catalog_matching.domain.config import MatcherConfig
-from catalog_matching.domain.decision_tier import DecisionTier
-from catalog_matching.domain.engine import DecisionRecord, Explanation, MatchingEngine
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driven.source_reader import SourceReader
 from p2pwatch.application.ports.driving.file_describer import FileDescription
@@ -20,6 +15,11 @@ from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.identifiers import FileId, Keyword, NodeId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.matching.config import MatcherConfig
+from p2pwatch.domain.matching.decision_tier import DecisionTier
+from p2pwatch.domain.matching.engine import DecisionRecord, Explanation, MatchingEngine
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod

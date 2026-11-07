@@ -4,19 +4,19 @@ from typing import Any
 import pytest
 import yaml
 
-from catalog_matching.domain.config import RegexDefinition
-from catalog_matching.domain.engine import MatchingEngine
-from catalog_matching.domain.identifiers import TargetId
-from catalog_matching.domain.matchers import RegexMatcher
-from catalog_matching.domain.models import FileCandidate
-from catalog_matching.domain.validation import parse_matcher_config, parse_targets
+from p2pwatch.domain.matching.config import RegexDefinition
+from p2pwatch.domain.matching.engine import MatchingEngine
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.matching.matchers import RegexMatcher
+from p2pwatch.domain.matching.models import FileCandidate
+from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 
 _MAX_FILENAME_LENGTH = 4096
 
-_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 # The matcher policy has a single source of truth: the deployment config (operator-
 # editable). So the golden corpus validates the policy ACTUALLY shipped, not a copy.
-_MATCHER = Path(__file__).resolve().parents[3] / "deploy" / "matcher.yml"
+_MATCHER = Path(__file__).resolve().parents[5] / "deploy" / "matcher.yml"
 
 
 def _engine() -> MatchingEngine:

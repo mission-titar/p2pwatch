@@ -1,6 +1,5 @@
 """Summarizes the crawl from the catalog, local.db, the run state and the clients' readings."""
 
-from catalog_matching.domain.identifiers import TargetId
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
@@ -12,6 +11,7 @@ from p2pwatch.application.ports.driving.crawl_summarizer import (
     CrawlSummary,
 )
 from p2pwatch.domain.coverage import coverage_of
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.status_reading import is_reading_fresh
 
 

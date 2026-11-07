@@ -31,7 +31,6 @@ import apprise
 import httpx
 
 import p2pwatch.adapters.driving.webui
-from catalog_matching.domain.engine import MatchingEngine
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
@@ -124,6 +123,7 @@ from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _logger = logging.getLogger(__name__)
