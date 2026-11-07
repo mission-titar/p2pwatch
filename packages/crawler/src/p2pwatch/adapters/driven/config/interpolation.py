@@ -4,7 +4,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -43,13 +43,13 @@ def _interpolate_text(text: str, *, env: Mapping[str, str], key_path: str) -> st
     def _replace(match: re.Match[str]) -> str:
         name = match.group(1)
         if name not in env:
-            raise InvalidConfigError(
+            raise ConfigValueError(
                 key_path, message=f"environment variable {name!r} referenced but not set"
             )
         try:
             require_well_formed_text(env[name], error_label=f"environment variable {name!r}")
         except ValueError as error:
-            raise InvalidConfigError(key_path, message=str(error)) from error
+            raise ConfigValueError(key_path, message=str(error)) from error
         return env[name]
 
     return _ENV_REFERENCE.sub(_replace, text)

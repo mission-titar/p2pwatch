@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 
 
 def test_a_string_without_a_reference_is_unchanged() -> None:
@@ -66,7 +66,7 @@ def test_a_value_that_is_no_string_is_unchanged() -> None:
 def test_an_unset_variable_is_refused_under_its_key_path(
     *, document: dict[str, Any], key_path: str
 ) -> None:
-    with pytest.raises(InvalidConfigError) as error:
+    with pytest.raises(ConfigValueError) as error:
         interpolate_document(document, env={"SET": "x"})
     assert error.value.key == key_path
     assert error.value.message == "environment variable 'UNSET' referenced but not set"
@@ -75,7 +75,7 @@ def test_an_unset_variable_is_refused_under_its_key_path(
 # ``os.environ`` decodes a byte that is not UTF-8 as a lone surrogate (``surrogateescape``).
 @pytest.mark.parametrize("value", ["\udcff", "keroro\ud800"])
 def test_a_variable_that_is_not_utf8_is_refused_under_its_key_path_naming_it(value: str) -> None:
-    with pytest.raises(InvalidConfigError) as error:
+    with pytest.raises(ConfigValueError) as error:
         interpolate_document({"search": {"keywords": ["${KEYWORD}"]}}, env={"KEYWORD": value})
     assert error.value.key == "search.keywords[0]"
     assert error.value.message == "environment variable 'KEYWORD' is not valid UTF-8"

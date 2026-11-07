@@ -18,7 +18,7 @@ from p2pwatch.application.ports.driving.config_validator import (
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.held_database_error import HeldDatabaseError
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
@@ -68,7 +68,7 @@ def test_crawl_defaults_to_the_deploy_directory_under_the_working_directory_give
 
 
 def test_crawl_refuses_to_start_on_an_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
-    crawler_runner = FakeCrawlerRunner(InvalidConfigError(None, message="search: section missing"))
+    crawler_runner = FakeCrawlerRunner(ConfigValueError(None, message="search: section missing"))
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
 

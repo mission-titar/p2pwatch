@@ -12,7 +12,7 @@ from p2pwatch.adapters.driven.config.crawler_config import (
 from p2pwatch.application.ports.driven.config_checker import ConfigChecker
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_problem import ConfigProblem
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 
 
 class FileRead(Protocol):
@@ -41,7 +41,7 @@ def _problems_of(file_path: PurePath, *, read: FileRead) -> tuple[ConfigProblem,
     """``read``'s refusal as the one problem of ``file_path``, none when it returns."""
     try:
         read()
-    except InvalidConfigError as error:
+    except ConfigValueError as error:
         return (ConfigProblem(file_path=file_path, key=error.key, message=error.message),)
     except BrokenInputError as error:
         return (ConfigProblem(file_path=file_path, key=None, message=error.reason),)

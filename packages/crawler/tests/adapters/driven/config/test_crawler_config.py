@@ -6,7 +6,7 @@ from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.crawler_config import LoadedConfig, parse_crawler_config
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
 
@@ -85,7 +85,7 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
 ) -> None:
     config_path = _write_crawler_config(tmp_path, keywords=keywords, extra=extra)
     with pytest.raises(
-        InvalidConfigError,
+        ConfigValueError,
         match=rf"^{key_path}: environment variable 'P2PWATCH_UNSET' referenced but not set$",
     ):
         _load_with_the_shipped_policy(config_path, env=_env())
@@ -111,7 +111,7 @@ def test_an_invalid_file_is_an_invalid_config(
     paths[broken_file] = tmp_path / f"broken-{broken_file}"
     paths[broken_file].write_text(text, encoding="utf-8")
 
-    with pytest.raises(InvalidConfigError) as raised:
+    with pytest.raises(ConfigValueError) as raised:
         load_config(
             paths["crawler.yml"],
             targets_path=paths["targets.yml"],

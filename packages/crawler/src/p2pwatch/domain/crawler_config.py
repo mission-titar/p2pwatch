@@ -3,7 +3,7 @@
 Merges the former POLICY config (cadences, polling budgets, jitter, backoff, shutdown
 deadline) and the former LOCAL config (secrets + DB paths + download wiring). Parsed from the
 dict the config adapter's ``load_yaml`` returns into FROZEN dataclasses, with FAIL-FAST
-validation: a bound that does not hold or a missing field is an ``InvalidConfigError`` and the
+validation: a bound that does not hold or a missing field is a ``ConfigValueError`` and the
 crawler refuses to start.
 
 The adapter's ``load_config`` resolves ``${NAME}`` in every string value before the parse, which
@@ -30,7 +30,7 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_SOURCE_PERIOD_GAP,
     DEFAULT_SOURCES_INTERVAL,
 )
-from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.policy import Audience
@@ -162,7 +162,7 @@ class CrawlerConfig:
 
 def _require_mapping(node: Any, *, key_path: str) -> dict[str, Any]:
     if not isinstance(node, dict):
-        raise InvalidConfigError(key_path, message=f"mapping expected, got {type(node).__name__}")
+        raise ConfigValueError(key_path, message=f"mapping expected, got {type(node).__name__}")
     return node
 
 
@@ -177,17 +177,17 @@ def _key_path(error_label: str, *, key: str) -> str:
 def _required(section: dict[str, Any], *, key: str, error_label: str) -> Any:
     if key in section:
         return section[key]
-    raise InvalidConfigError(_key_path(error_label, key=key), message="missing")
+    raise ConfigValueError(_key_path(error_label, key=key), message="missing")
 
 
 def _number(section: dict[str, Any], *, key: str, error_label: str) -> float:
     setting = _required(section, key=key, error_label=error_label)
     if not isinstance(setting, int | float) or isinstance(setting, bool):
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key), message=f"number expected, got {setting!r}"
         )
     if not math.isfinite(setting):  # .inf makes a sleep endless, .nan passes every comparison
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key), message=f"finite number expected, got {setting!r}"
         )
     return float(setting)
@@ -196,7 +196,7 @@ def _number(section: dict[str, Any], *, key: str, error_label: str) -> float:
 def _positive(section: dict[str, Any], *, key: str, error_label: str) -> float:
     number = _number(section, key=key, error_label=error_label)
     if number <= 0:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key), message=f"strictly positive expected, got {number}"
         )
     return number
@@ -205,17 +205,17 @@ def _positive(section: dict[str, Any], *, key: str, error_label: str) -> float:
 def _non_negative(section: dict[str, Any], *, key: str, error_label: str) -> float:
     number = _number(section, key=key, error_label=error_label)
     if number < 0:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key), message=f"≥ 0 expected, got {number}"
         )
     return number
 
 
 def _positive_int(section: dict[str, Any], *, key: str, error_label: str) -> int:
-    """Strictly positive integer (bool refused), else ``InvalidConfigError`` (fail-fast §5/§14)."""
+    """Strictly positive integer (bool refused), else ``ConfigValueError`` (fail-fast §5/§14)."""
     setting = _required(section, key=key, error_label=error_label)
     if not isinstance(setting, int) or isinstance(setting, bool) or setting <= 0:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key),
             message=f"strictly positive integer expected, got {setting!r}",
         )
@@ -240,7 +240,7 @@ def _seconds(
         return default
     seconds = _positive(section, key=key, error_label=error_label)
     if seconds > at_most:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key),
             message=f"at most {at_most:.0f} seconds expected, got {seconds}",
         )
@@ -262,17 +262,17 @@ def _bool_default(section: dict[str, Any], *, key: str, error_label: str, defaul
         return default
     setting = section[key]
     if not isinstance(setting, bool):
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key), message=f"boolean expected, got {setting!r}"
         )
     return setting
 
 
 def _string(section: dict[str, Any], *, key: str, error_label: str) -> str:
-    """REQUIRED non-empty string, else ``InvalidConfigError`` (fail-fast §5/§14)."""
+    """REQUIRED non-empty string, else ``ConfigValueError`` (fail-fast §5/§14)."""
     setting = _required(section, key=key, error_label=error_label)
     if not isinstance(setting, str) or not setting:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             _key_path(error_label, key=key), message=f"non-empty string expected, got {setting!r}"
         )
     return setting
@@ -281,7 +281,7 @@ def _string(section: dict[str, Any], *, key: str, error_label: str) -> str:
 def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
     log_level = section.get("log_level", DEFAULT_LOG_LEVEL)
     if not isinstance(log_level, str) or log_level not in _LOG_LEVELS:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             "observability.log_level",
             message=f"one of {sorted(_LOG_LEVELS)} expected, got {log_level!r}",
         )
@@ -296,14 +296,14 @@ def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
         error_label = f"observability.notifications[{index}]"
         notification = _require_mapping(notification_node, key_path=error_label)
         if "tag" in notification:  # the 4.x name, refused like _MOVED_KEYS
-            raise InvalidConfigError(
+            raise ConfigValueError(
                 error_label, message="key 'tag' was renamed 'audience', rename it in crawler.yml"
             )
         audience_raw = _string(notification, key="audience", error_label=error_label)
         try:
             audience = Audience(audience_raw)
         except ValueError as error:
-            raise InvalidConfigError(
+            raise ConfigValueError(
                 f"{error_label}.audience",
                 message=f"'community' or 'operations' expected, got {audience_raw!r}",
             ) from error
@@ -334,7 +334,7 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
         return None  # laziness: we read NOTHING else (no wiring required)
     output_directory = section.get("output_dir", DEFAULT_OUTPUT_DIRECTORY)
     if not isinstance(output_directory, str) or not output_directory:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             "download.output_dir", message=f"non-empty string expected, got {output_directory!r}"
         )
     return DownloadConfig(
@@ -379,11 +379,11 @@ def _parse_search(document: dict[str, Any]) -> SearchConfig:
     section = _require_mapping(document.get("search", {}), key_path="search")
     keywords = _required(section, key="keywords", error_label="search")
     if not isinstance(keywords, list) or not keywords:
-        raise InvalidConfigError("search.keywords", message="non-empty list of strings expected")
+        raise ConfigValueError("search.keywords", message="non-empty list of strings expected")
     parsed_keywords: list[str] = []
     for keyword in keywords:
         if not isinstance(keyword, str) or not keyword:
-            raise InvalidConfigError(
+            raise ConfigValueError(
                 "search.keywords", message=f"non-empty string expected, got {keyword!r}"
             )
         parsed_keywords.append(keyword)
@@ -395,7 +395,7 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
     section = _require_mapping(search.get("backoff", {}), key_path="search.backoff")
     factor = _positive(section, key="factor", error_label="search.backoff")
     if factor < 1:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             "search.backoff.factor", message=f"must be ≥ 1 (growth), got {factor}"
         )
     backoff = BackoffConfig(
@@ -405,7 +405,7 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
         jitter_ratio=_non_negative(section, key="jitter_ratio", error_label="search.backoff"),
     )
     if backoff.cap_seconds < backoff.base_seconds:
-        raise InvalidConfigError(
+        raise ConfigValueError(
             "search.backoff.cap_seconds",
             message=f"{backoff.cap_seconds} < base_seconds ({backoff.base_seconds}): "
             "cap below floor",
@@ -447,13 +447,13 @@ def _holds_key_path(document: dict[str, Any], *, key_path: str) -> bool:
 
 def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     """Builds a validated ``CrawlerConfig`` from the parsed YAML dict, its ``${NAME}`` already
-    resolved. Fail-fast §5/§14: any inconsistency → ``InvalidConfigError``."""
+    resolved. Fail-fast §5/§14: any inconsistency → ``ConfigValueError``."""
     for key_path in _REMOVED_KEYS:
         if _holds_key_path(document, key_path=key_path):
-            raise InvalidConfigError(key_path, message="was removed, delete it from crawler.yml")
+            raise ConfigValueError(key_path, message="was removed, delete it from crawler.yml")
     for key, new_path in _MOVED_KEYS.items():
         if key in document:
-            raise InvalidConfigError(key, message=f"moved to '{new_path}', move it in crawler.yml")
+            raise ConfigValueError(key, message=f"moved to '{new_path}', move it in crawler.yml")
     observability = _parse_observability(
         _require_mapping(document.get("observability", {}), key_path="observability")
     )
