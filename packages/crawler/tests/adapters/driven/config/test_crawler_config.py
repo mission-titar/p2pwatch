@@ -3,10 +3,11 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.adapters.driven.config.crawler_config import load_config, read_crawler_config
+from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config_from_document
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.config_problem import ConfigProblem
-from p2pwatch.domain.crawler_config import LoadedConfig, parse_crawler_config
+from p2pwatch.domain.crawler_config import LoadedConfig
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.validation import parse_matcher_config, parse_targets
 from p2pwatch.domain.policy_fingerprint import policy_fingerprint
@@ -51,8 +52,11 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
     )
 
     assert loaded == LoadedConfig(
-        crawler_config=parse_crawler_config(
-            interpolate_document(load_yaml(config_path), env=_env(), file_path=config_path).document
+        crawler_config=crawler_config_from_document(
+            interpolate_document(
+                load_yaml(config_path), env=_env(), file_path=config_path
+            ).document,
+            file_path=config_path,
         ),
         targets=parse_targets(load_yaml(targets_path)),
         matcher_config=parse_matcher_config(load_yaml(matcher_path)),
@@ -128,7 +132,6 @@ def test_every_unset_variable_is_listed_beside_the_parses_problem(tmp_path: Path
     ("broken_file", "text", "key", "message"),
     [
         ("crawler.yml", "search: [unclosed\n", None, "invalid YAML: "),  # a broken file
-        ("crawler.yml", "search: {}\n", "search.keywords", "missing"),
         ("targets.yml", "episodes: nope\n", None, "'episodes' section: list expected"),
         ("matcher.yml", "tokens: {}\nrules: {}\n", None, "'rules' section: list expected"),
     ],

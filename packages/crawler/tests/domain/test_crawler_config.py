@@ -7,14 +7,10 @@ import pytest
 
 from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.crawler_config import (
-    BackoffConfig,
-    CrawlerConfig,
     DownloadConfig,
     NotificationTarget,
     ObservabilityConfig,
-    SearchConfig,
     WebuiConfig,
-    parse_crawler_config,
     parse_download,
     parse_observability,
     parse_search,
@@ -66,40 +62,26 @@ def _default_webui() -> WebuiConfig:
     )
 
 
-def _section(raw: dict[str, Any], *, path: str | None) -> dict[str, Any]:
-    """The mapping at the dotted ``path`` of ``raw``, ``raw`` itself for ``None``."""
-    for name in path.split(".") if path else ():
+def _section(raw: dict[str, Any], *, path: str) -> dict[str, Any]:
+    """The mapping at the dotted ``path`` of ``raw``."""
+    for name in path.split("."):
         raw = raw[name]
     return raw
 
 
-def _printed_path(section: str | None, *, key: str) -> str:
-    """The pattern of ``key``'s path in an error: a root key prints bare."""
-    return re.escape(f"{section}.{key}" if section else key)
+def _printed_path(section: str, *, key: str) -> str:
+    return re.escape(f"{section}.{key}")
+
+
+def _parse_sections(raw: dict[str, Any]) -> None:
+    """Each section of ``raw`` through its parse, as the config adapter hands it."""
+    parse_search(raw["search"])
+    parse_observability(raw["observability"])
+    parse_download(raw["download"])
+    parse_webui(raw.get("webui", {}))
 
 
 # --------------------------------------------------------------------- policy
-
-
-def test_parses_a_valid_config() -> None:
-    config = parse_crawler_config(_minimal_raw())
-    assert config == CrawlerConfig(
-        search=SearchConfig(
-            keywords=("keroro", "titar"),
-            backoff=BackoffConfig(
-                base_seconds=2.0, cap_seconds=300.0, factor=2.0, jitter_ratio=0.3
-            ),
-        ),
-        shutdown_deadline_seconds=10.0,
-        amule_api_password="secret",
-        catalog_db_path="/data/catalog.db",
-        local_db_path="/data/local.db",
-        observability=ObservabilityConfig(
-            log_level="INFO", notification_timeout_seconds=5.0, notifications=()
-        ),
-        download=None,
-        webui=_default_webui(),
-    )
 
 
 def _search() -> dict[str, Any]:
@@ -120,25 +102,12 @@ def test_negative_jitter_ratio_is_fatal() -> None:
         parse_search(search)
 
 
-def test_missing_key_is_fatal() -> None:
-    raw = _minimal_raw()
-    del raw["shutdown_deadline_seconds"]
-    with pytest.raises(ConfigValueError, match=r"^shutdown_deadline_seconds: missing$"):
-        parse_crawler_config(raw)
-
-
-def test_non_numeric_value_is_fatal() -> None:
-    raw = _minimal_raw()
-    raw["shutdown_deadline_seconds"] = "souvent"
-    with pytest.raises(ConfigValueError, match="number expected"):
-        parse_crawler_config(raw)
-
-
-def test_bool_is_not_accepted_as_a_number() -> None:
-    raw = _minimal_raw()
-    raw["shutdown_deadline_seconds"] = True
-    with pytest.raises(ConfigValueError, match="number expected"):
-        parse_crawler_config(raw)
+@pytest.mark.parametrize("value", ["souvent", True], ids=["text", "bool"])
+def test_a_number_of_a_section_is_a_number(value: object) -> None:
+    with pytest.raises(
+        ConfigValueError, match="observability.notification_timeout_seconds: number"
+    ):
+        parse_observability({"notification_timeout_seconds": value})
 
 
 @pytest.mark.parametrize("number", [float("inf"), float("nan")], ids=["inf", "nan"])
@@ -154,11 +123,10 @@ def test_bool_is_not_accepted_as_a_number() -> None:
         ("download", "lost_after_seconds"),
         ("download", "reappeared_after_seconds"),
         ("download", "sources_interval_seconds"),
-        (None, "shutdown_deadline_seconds"),
     ],
 )
 def test_a_number_that_is_not_finite_is_refused_by_name(
-    *, section: str | None, key: str, number: float
+    *, section: str, key: str, number: float
 ) -> None:
     # .inf would make a sleep endless and .nan passes every comparison.
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}}
@@ -166,10 +134,10 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
     with pytest.raises(
         ConfigValueError, match=rf"^{_printed_path(section, key=key)}: finite number expected"
     ):
-        parse_crawler_config(raw)
+        _parse_sections(raw)
 
 
-def _with_seconds(section: str | None, *, key: str, seconds: int) -> dict[str, Any]:
+def _with_seconds(section: str, *, key: str, seconds: int) -> dict[str, Any]:
     """A full config whose ``key`` holds ``seconds``, the backoff's cap above any floor."""
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}, "webui": {}}
     raw["search"]["backoff"]["cap_seconds"] = 86_400
@@ -186,32 +154,24 @@ def _with_seconds(section: str | None, *, key: str, seconds: int) -> dict[str, A
         ("search.backoff", "base_seconds"),
         ("search.backoff", "cap_seconds"),
         ("observability", "notification_timeout_seconds"),
-        (None, "shutdown_deadline_seconds"),
     ],
 )
-def test_a_duration_is_at_most_a_day(*, section: str | None, key: str) -> None:
-    parse_crawler_config(_with_seconds(section, key=key, seconds=86_400))
+def test_a_duration_is_at_most_a_day(*, section: str, key: str) -> None:
+    _parse_sections(_with_seconds(section, key=key, seconds=86_400))
     with pytest.raises(
         ConfigValueError,
         match=rf"^{_printed_path(section, key=key)}: at most 86400 seconds expected, got 86401",
     ):
-        parse_crawler_config(_with_seconds(section, key=key, seconds=86_401))
+        _parse_sections(_with_seconds(section, key=key, seconds=86_401))
 
 
 @pytest.mark.parametrize("key", ["lost_after_seconds", "reappeared_after_seconds"])
 def test_an_absence_is_at_most_thirty_days(key: str) -> None:
-    parse_crawler_config(_with_seconds("download", key=key, seconds=2_592_000))
+    _parse_sections(_with_seconds("download", key=key, seconds=2_592_000))
     with pytest.raises(
         ConfigValueError, match=rf"download\.{key}: at most 2592000 seconds expected, got 2592001"
     ):
-        parse_crawler_config(_with_seconds("download", key=key, seconds=2_592_001))
-
-
-def test_non_positive_value_is_fatal() -> None:
-    raw = _minimal_raw()
-    raw["shutdown_deadline_seconds"] = 0
-    with pytest.raises(ConfigValueError, match="strictly positive"):
-        parse_crawler_config(raw)
+        _parse_sections(_with_seconds("download", key=key, seconds=2_592_001))
 
 
 @pytest.mark.parametrize(
@@ -280,36 +240,6 @@ def test_backoff_cap_below_base_is_fatal() -> None:
 # ------------------------------------------------------------------------- the single amuled
 
 
-def test_missing_amule_api_password_is_fatal() -> None:
-    raw = _minimal_raw()
-    del raw["amule_api_password"]
-    with pytest.raises(ConfigValueError, match=r"^amule_api_password: missing$"):
-        parse_crawler_config(raw)
-
-
-def test_empty_amule_api_password_is_fatal() -> None:
-    raw = _minimal_raw() | {"amule_api_password": ""}
-    with pytest.raises(
-        ConfigValueError, match=r"^amule_api_password: non-empty string expected, got ''$"
-    ):
-        parse_crawler_config(raw)
-
-
-def test_non_string_amule_api_password_is_fatal() -> None:
-    raw = _minimal_raw() | {"amule_api_password": 1234}
-    with pytest.raises(
-        ConfigValueError, match=r"^amule_api_password: non-empty string expected, got 1234$"
-    ):
-        parse_crawler_config(raw)
-
-
-def test_missing_db_path_is_fatal() -> None:
-    raw = _minimal_raw()
-    del raw["catalog_db_path"]
-    with pytest.raises(ConfigValueError, match=r"^catalog_db_path: missing$"):
-        parse_crawler_config(raw)
-
-
 # ----------------------------------------------------------------- key path
 
 
@@ -327,7 +257,7 @@ def test_a_check_carries_the_key_path_it_names_apart_from_its_message() -> None:
 def test_a_notification_that_is_no_mapping_is_refused_under_its_key_path() -> None:
     raw = _minimal_raw() | {"observability": {"notifications": ["discord://a"]}}
     with pytest.raises(ConfigValueError) as error:
-        parse_crawler_config(raw)
+        parse_observability(raw["observability"])
     assert str(error.value) == "observability.notifications[0]: mapping expected, got str"
     assert error.value.key == "observability.notifications[0]"
 
@@ -352,12 +282,6 @@ def test_download_section_without_enabled_defaults_to_observer() -> None:
 def test_download_enabled_non_bool_is_fatal() -> None:
     with pytest.raises(ConfigValueError, match="boolean expected"):
         parse_download({"enabled": "oui"})
-
-
-def test_download_section_must_be_a_mapping() -> None:
-    raw = _minimal_raw() | {"download": [1, 2]}
-    with pytest.raises(ConfigValueError, match=r"^download: mapping expected, got list$"):
-        parse_crawler_config(raw)
 
 
 def test_download_enabled_true_requires_the_poll_interval() -> None:
@@ -453,13 +377,6 @@ def test_download_output_dir_must_be_a_string() -> None:
 
 
 # ------------------------------------------------------------------- search
-
-
-def test_a_missing_search_section_is_fatal() -> None:
-    raw = _minimal_raw()
-    del raw["search"]
-    with pytest.raises(ConfigValueError, match=r"^search\.keywords: missing$"):
-        parse_crawler_config(raw)
 
 
 def test_missing_search_keywords_are_fatal() -> None:
@@ -598,12 +515,6 @@ def test_webui_host_and_port_are_silently_ignored() -> None:
     assert config == _default_webui()
     # the type no longer carries a bind
     assert {field.name for field in dataclasses.fields(WebuiConfig)}.isdisjoint({"host", "port"})
-
-
-def test_webui_section_must_be_a_mapping() -> None:
-    raw = _minimal_raw() | {"webui": [1, 2]}
-    with pytest.raises(ConfigValueError, match=r"^webui: mapping expected, got list$"):
-        parse_crawler_config(raw)
 
 
 def test_webui_amule_url_defaults_to_the_published_port() -> None:

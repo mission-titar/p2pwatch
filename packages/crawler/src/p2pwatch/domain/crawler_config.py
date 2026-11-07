@@ -1,5 +1,5 @@
-"""``crawler.yml``'s objects and their parse, which raises a ``ConfigValueError`` on its first
-problem.
+"""``crawler.yml``'s objects, and the parses of the sections the config adapter's schema leaves as
+mappings, each raising a ``ConfigValueError`` on its first problem.
 
 The config adapter resolves ``${NAME}`` in every string value before the parse, which never sees
 the environment. ``download`` is ``None`` unless ``enabled: true``, its wiring keys required only
@@ -143,12 +143,8 @@ def _require_mapping(node: Any, *, key_path: str) -> dict[str, Any]:
     return node
 
 
-# The root's error label: crawler.yml has no section around its root keys, so they print bare.
-_ROOT = ""
-
-
 def _key_path(error_label: str, *, key: str) -> str:
-    return f"{error_label}.{key}" if error_label else key
+    return f"{error_label}.{key}"
 
 
 def _required(section: dict[str, Any], *, key: str, error_label: str) -> Any:
@@ -418,28 +414,6 @@ def parse_webui(section: dict[str, Any]) -> WebuiConfig:
         else DEFAULT_AMULE_URL
     )
     return WebuiConfig(amule_url=amule_url, source_period_gap=gap)
-
-
-def _section(document: dict[str, Any], *, key: str) -> dict[str, Any]:
-    return _require_mapping(document.get(key, {}), key_path=key)
-
-
-def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
-    """Builds a validated ``CrawlerConfig`` from the parsed YAML dict, its ``${NAME}`` already
-    resolved. Fail-fast §5/§14: any inconsistency → ``ConfigValueError``."""
-    observability = parse_observability(_section(document, key="observability"))
-    return CrawlerConfig(
-        search=parse_search(_section(document, key="search")),
-        shutdown_deadline_seconds=_seconds(
-            document, key="shutdown_deadline_seconds", error_label=_ROOT
-        ),
-        amule_api_password=_string(document, key="amule_api_password", error_label=_ROOT),
-        catalog_db_path=_string(document, key="catalog_db_path", error_label=_ROOT),
-        local_db_path=_string(document, key="local_db_path", error_label=_ROOT),
-        observability=observability,
-        download=parse_download(_section(document, key="download")),
-        webui=parse_webui(_section(document, key="webui")),
-    )
 
 
 @dataclass(kw_only=True, frozen=True)

@@ -45,8 +45,11 @@ def test_crawl_refuses_to_start_with_a_wrong_crawler_config_beside_a_wrong_match
     argv = ["crawl", *_paths_argv(config=broken, matcher=broken_matcher)]
     assert _run(argv, cwd=tmp_path) == 1
 
-    [crawler_line, matcher_line] = capsys.readouterr().err.splitlines()
-    assert crawler_line.startswith(f"Invalid config, refusing to start: {broken}: ")
+    *crawler_lines, matcher_line = capsys.readouterr().err.splitlines()
+    assert len(crawler_lines) == 3  # two root keys and the search keywords missing
+    assert all(
+        line.startswith(f"Invalid config, refusing to start: {broken}: ") for line in crawler_lines
+    )
     assert matcher_line.startswith(f"Invalid config, refusing to start: {broken_matcher}: ")
 
 
