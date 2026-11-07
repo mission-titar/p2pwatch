@@ -16,7 +16,6 @@ from p2pwatch.application.ports.driving.config_validator import (
     ConfigValidator,
 )
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
-from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
@@ -165,16 +164,26 @@ def test_validate_config_words_the_problem_of_a_wrong_config(
     assert capsys.readouterr() == ("", line)
 
 
-def test_validate_config_prints_a_broken_file_on_one_line(
+def test_validate_config_prints_one_line_per_problem_of_every_file(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_validator = FakeConfigValidator(
-        BrokenInputError("/srv/c.yml: No such file or directory")
+    config_report = ConfigReport(
+        problems=(
+            ConfigProblem(file_path=PurePath("/srv/c.yml"), key="a", message="list expected"),
+            ConfigProblem(file_path=PurePath("/srv/c.yml"), key="b", message="text expected"),
+            ConfigProblem(file_path=PurePath("/srv/t.yml"), key=None, message="not UTF-8"),
+        )
     )
+    config_validator = FakeConfigValidator(config_report)
 
     assert _command_line(config_validator=config_validator).run(["validate-config"]) == 1
 
-    assert capsys.readouterr() == ("", "error: /srv/c.yml: No such file or directory\n")
+    assert capsys.readouterr() == (
+        "",
+        "Invalid config: /srv/c.yml: a: list expected\n"
+        "Invalid config: /srv/c.yml: b: text expected\n"
+        "Invalid config: /srv/t.yml: not UTF-8\n",
+    )
 
 
 def test_the_bare_invocation_is_refused_with_a_usage_line(

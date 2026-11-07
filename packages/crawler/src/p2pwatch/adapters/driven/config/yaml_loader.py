@@ -15,19 +15,21 @@ def load_yaml(path: Path) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
-        raise BrokenInputError(f"{path}: {error.strerror}") from error
+        raise BrokenInputError(path, reason=str(error.strerror)) from error
     except UnicodeDecodeError as error:
-        raise BrokenInputError(f"{path}: not UTF-8") from error
+        raise BrokenInputError(path, reason="not UTF-8") from error
     try:
         root = yaml.safe_load(text)
     except yaml.YAMLError as error:
-        raise BrokenInputError(f"{path}: invalid YAML: {_on_one_line(error)}") from error
+        raise BrokenInputError(path, reason=f"invalid YAML: {_on_one_line(error)}") from error
     if not isinstance(root, dict):
-        raise BrokenInputError(f"{path}: mapping expected at its root, got {type(root).__name__}")
+        raise BrokenInputError(
+            path, reason=f"mapping expected at its root, got {type(root).__name__}"
+        )
     try:
         _require_well_formed_tree(root, key_path="", enclosing_ids=frozenset())
     except ValueError as error:
-        raise BrokenInputError(f"{path}: {error}") from error
+        raise BrokenInputError(path, reason=str(error)) from error
     return root
 
 

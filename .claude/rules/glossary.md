@@ -65,6 +65,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `notification` | `Notification`, what a `Notifier` sends an audience, carrying its node: a `RelayedLogLine` relays an event's log line unchanged; a community one is a typed kind, a `TierRise`, a `SourceAlert` or a `CompletedDownload`, which the notifier writes out | a log line, which an operations notification only relays |
 | `node metric` | a measurement of the node's own running (searches done, free disk, the crawler up), which Prometheus reads: a `NodeCounter` or a `NodeGauge` names one, with its description and its label class (`ChannelLabels`, `ClientLabels`, `DecisionLabels`, `SourceAlertLabels`, or none); `CounterIncrement` and `GaugeSetting` are what the policy writes, `NodeMetricSample` is one series and its current value | a bare `metric`; a file's or a source's figures |
+| `config problem` | `ConfigProblem`, one problem of a config file: the file, the key or none, the message | a refusal, an error |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
 | `wall clock` | `WallClock`, the UTC time of day: every stamp a row, an event or a display carries | an interval or a deadline kept in memory |
 | `monotonic clock` | `MonotonicClock`, its `MonotonicInstant`s: every interval and deadline kept in memory; `p2pwatch_amule`'s only sleeps | a stamp, anything persisted |
