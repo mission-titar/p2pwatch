@@ -93,10 +93,11 @@ class SqliteDatabaseOpener:
         self, path: Path, *, scripts: tuple[Migration, ...], exclusive: bool = False
     ) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
-        copy, then opens it again, gives back its free pages and releases the memory the block
-        took; a database newer than the ``scripts`` raises ``MigrationError``, a lack of disk space
-        ``OutOfSpaceError``. ``exclusive``, each connection holds ``path`` until it closes, and
-        another one raises ``HeldDatabaseError``, at the reopen too, the database then migrated."""
+        copy, then opens it again and releases the memory the block took; gives back its free
+        pages once they are a quarter of the file. A database newer than the ``scripts`` raises
+        ``MigrationError``, a lack of disk space ``OutOfSpaceError``. ``exclusive``, each
+        connection holds ``path`` until it closes, and another one raises ``HeldDatabaseError``, at
+        the reopen too, the database then migrated."""
         failures = SqlFunctionFailures()
         connection = _connect(path, exclusive=exclusive, failures=failures)
         try:
@@ -122,7 +123,7 @@ class SqliteDatabaseOpener:
                 connection = _connect(path, exclusive=exclusive, failures=failures)
                 with wrap_sqlite_errors():
                     connection.execute("PRAGMA temp_store=FILE")
-            _reclaim(connection, path=path, pending=pending, free_bytes=self._free_bytes)
+            _reclaim(connection, path=path, ticker=self._ticker, free_bytes=self._free_bytes)
             with wrap_sqlite_errors():
                 connection.execute("PRAGMA temp_store=DEFAULT")
                 remove_migration_sql_functions(connection)
@@ -259,7 +260,10 @@ def _apply_migrations(
 
     def report_running(*, elapsed: timedelta) -> None:
         _logger.info(
-            "migrations of %s: %s running, %d s elapsed", path, step.name, elapsed.total_seconds()
+            "migrations of %s: %s running, %d s since the block began",
+            path,
+            step.name,
+            elapsed.total_seconds(),
         )
 
     # No finally: a failed block fails the open, which closes the connection.
@@ -317,19 +321,19 @@ def _reclaim(
     connection: sqlite3.Connection,
     *,
     path: Path,
-    pending: PendingMigrations,
+    ticker: Ticker,
     free_bytes: FreeBytesMeter,
 ) -> None:
-    """Gives back the free pages after a block of migrations, or once a quarter of the file is
-    free pages, which replays a reclaim a stop interrupted."""
-    after_block = bool(pending.migrations)
+    """Gives back the free pages once they are a quarter of the file: an upgrade frees that much,
+    an ordinary catalog, which only grows, never does, and an interrupted reclaim runs again."""
     with wrap_sqlite_errors():
         page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
         page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
         freelist_count = int(
             connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"]
         )
-    if not after_block and freelist_count * 4 < page_count:
+        version = int(connection.execute("PRAGMA user_version").fetchone()["user_version"])
+    if freelist_count * 4 < page_count:
         return
     _logger.info(
         "reclaim of %s: giving back %s of free pages, %d %% of the file; "
@@ -338,13 +342,15 @@ def _reclaim(
         gigabytes(freelist_count * page_size),
         freelist_count * 100 // page_count,
     )
+
+    def report_running(*, elapsed: timedelta) -> None:
+        _logger.info(
+            "reclaim of %s: giving back free pages, %d s elapsed", path, elapsed.total_seconds()
+        )
+
     try:
-        # Outside any transaction, which VACUUM requires.
-        connection.execute("VACUUM")
-        # The crawler holds its connection for good, so the WAL the VACUUM grew would never shrink.
-        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        ticker.run(lambda: _vacuum(connection), tick=report_running, period=_PROGRESS_PERIOD)
     except sqlite3.Error as error:
-        version = pending.migrations[-1].version if after_block else pending.current_version
         raise _migration_error(
             error,
             connection=connection,
@@ -354,6 +360,13 @@ def _reclaim(
             path=path,
             free_bytes=free_bytes,
         ) from error
+
+
+def _vacuum(connection: sqlite3.Connection) -> None:
+    # Outside any transaction, which VACUUM requires.
+    connection.execute("VACUUM")
+    # The crawler holds its connection for good, so the WAL the VACUUM grew would never shrink.
+    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
 
 def _migration_error(  # noqa: PLR0913

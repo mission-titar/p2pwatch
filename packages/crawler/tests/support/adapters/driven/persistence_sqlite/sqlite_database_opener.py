@@ -88,6 +88,17 @@ def database_opener_ticked_by(ticker: FakeTicker) -> SqliteDatabaseOpener:
     )
 
 
+def database_opener_ticked_by_progress(ticker: FakeTicker) -> SqliteDatabaseOpener:
+    """The same, ticked by ``ticker`` at each of SQLite's virtual machine instructions, a
+    ``VACUUM``'s included."""
+    return SqliteDatabaseOpener(
+        _PreparingCopier(lambda connection: connection.set_progress_handler(ticker.tick, 1)),
+        ticker=ticker,
+        free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
+    )
+
+
 def database_opener_registering(function_name: str) -> SqliteDatabaseOpener:
     """The same, the SQL function ``function_name`` registered on each connection before its
     migrations, so that a test tells the connection that migrated from one opened after."""
