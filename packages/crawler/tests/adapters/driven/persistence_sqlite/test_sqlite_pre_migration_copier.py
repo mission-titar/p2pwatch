@@ -1,3 +1,4 @@
+import errno
 import os
 import sqlite3
 from contextlib import closing
@@ -16,7 +17,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    Linker,
     SqlitePreMigrationCopier,
+    _rename_without_replacing,
 )
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
@@ -353,6 +356,36 @@ def test_a_link_the_filesystem_refuses_raises_a_migration_error(tmp_path: Path) 
             connection, path=path, pending=_pending(scripts), open_reader=open_reader
         )
     assert _copy_names(path.parent) == []
+
+
+def _link_refused_with(code: int) -> Linker:
+    def refused_link(source: Path, destination: Path) -> None:  # noqa: PLR0917
+        raise OSError(code, os.strerror(code), str(source), None, str(destination))
+
+    return refused_link
+
+
+@pytest.mark.parametrize("code", [errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP])
+def test_a_copy_where_hard_links_are_refused_is_published_by_a_rename(
+    *, tmp_path: Path, code: int
+) -> None:
+    partial = tmp_path / "catalog.db.pre-0003.partial"
+    partial.write_bytes(b"the copy")
+    final = tmp_path / _COPY_NAME
+    _rename_without_replacing(partial, final=final, link=_link_refused_with(code))
+    assert final.read_bytes() == b"the copy"
+    assert _copy_names(tmp_path) == [_COPY_NAME]
+
+
+def test_a_taken_name_refuses_a_rename_where_hard_links_are_refused(tmp_path: Path) -> None:
+    partial = tmp_path / "catalog.db.pre-0003.partial"
+    partial.write_bytes(b"the copy")
+    taken = tmp_path / _COPY_NAME
+    taken.write_bytes(b"taken")
+    with pytest.raises(MigrationError, match=rf"{_COPY_NAME} not created: File exists$"):
+        _rename_without_replacing(partial, final=taken, link=_link_refused_with(errno.EPERM))
+    assert taken.read_bytes() == b"taken"
+    assert _copy_names(tmp_path) == [_COPY_NAME]
 
 
 def test_a_copy_of_a_database_named_by_a_relative_path_is_reused(tmp_path: Path) -> None:
