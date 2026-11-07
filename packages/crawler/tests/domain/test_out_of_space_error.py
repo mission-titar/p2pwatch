@@ -28,6 +28,29 @@ def test_the_space_to_free_is_rounded_up() -> None:
     assert "0.1 GB to free" in str(error)
 
 
+def test_the_three_figures_agree_as_the_operator_reads_them() -> None:
+    """The need rounded up, the free space down: freeing the difference they read is enough."""
+    error = OutOfSpaceError(
+        step="pre-migration copy of /data/catalog.db",
+        directory=PurePath("/data"),
+        free_bytes=151_000_000,
+        need_bytes=840_000_000,
+        outcome="nothing written",
+    )
+    assert "0.9 GB needed in /data, 0.1 GB free, 0.8 GB to free;" in str(error)
+
+
+def test_an_unknown_need_reads_the_free_space_rounded_down() -> None:
+    error = OutOfSpaceError(
+        step="reclaim of /data/catalog.db",
+        directory=PurePath("/data"),
+        free_bytes=199_999_999,
+        need_bytes=None,
+        outcome="the database at version 15, its free pages not given back",
+    )
+    assert "out of space in /data, 0.1 GB free;" in str(error)
+
+
 def test_an_unknown_need_reads_the_free_space_alone() -> None:
     error = OutOfSpaceError(
         step="migrations of /data/catalog.db (migration 7)",

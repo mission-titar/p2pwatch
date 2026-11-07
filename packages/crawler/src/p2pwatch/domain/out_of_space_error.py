@@ -3,7 +3,11 @@ one line."""
 
 from pathlib import PurePath
 
-from p2pwatch.domain.gigabytes import gigabytes, gigabytes_rounded_up
+from p2pwatch.domain.gigabytes import (
+    gigabyte_tenths_rounded_down,
+    gigabyte_tenths_rounded_up,
+    gigabytes_from_tenths,
+)
 
 
 class OutOfSpaceError(Exception):
@@ -19,11 +23,14 @@ class OutOfSpaceError(Exception):
         need_bytes: int | None,
         outcome: str,
     ) -> None:
+        # The free space rounded down, the need up: freeing the difference they read is enough.
+        free = gigabyte_tenths_rounded_down(free_bytes)
         if need_bytes is None:
-            space = f"out of space in {directory}, {gigabytes(free_bytes)} free"
+            space = f"out of space in {directory}, {gigabytes_from_tenths(free)} free"
         else:
+            need = gigabyte_tenths_rounded_up(need_bytes)
             space = (
-                f"{gigabytes(need_bytes)} needed in {directory}, {gigabytes(free_bytes)} free, "
-                f"{gigabytes_rounded_up(need_bytes - free_bytes)} to free"
+                f"{gigabytes_from_tenths(need)} needed in {directory}, "
+                f"{gigabytes_from_tenths(free)} free, {gigabytes_from_tenths(need - free)} to free"
             )
         super().__init__(f"{step}: {space}; {outcome}")
