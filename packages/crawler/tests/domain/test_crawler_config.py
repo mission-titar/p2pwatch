@@ -1,7 +1,7 @@
 import re
 from datetime import timedelta
 from pathlib import PurePath
-from typing import Any, Protocol
+from typing import Any
 
 import pytest
 
@@ -11,21 +11,14 @@ from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
     DownloadConfig,
-    NotificationTarget,
     ObservabilityConfig,
     SearchConfig,
     WebuiConfig,
     cross_value_problems,
     parse_download,
-    parse_observability,
 )
-from p2pwatch.domain.observability.policy import Audience
 
 _FILE = PurePath("/srv/crawler.yml")
-
-
-class SectionParse(Protocol):
-    def __call__(self, section: dict[str, Any], /) -> object: ...
 
 
 def _minimal_raw() -> dict[str, Any]:
@@ -80,7 +73,6 @@ def _printed_path(section: str, *, key: str) -> str:
 
 def _parse_sections(raw: dict[str, Any]) -> None:
     """Each section of ``raw`` through its parse, as the config adapter hands it."""
-    parse_observability(raw["observability"])
     parse_download(raw["download"])
 
 
@@ -89,17 +81,14 @@ def _parse_sections(raw: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("value", ["souvent", True], ids=["text", "bool"])
 def test_a_number_of_a_section_is_a_number(value: object) -> None:
-    with pytest.raises(
-        ConfigValueError, match="observability.notification_timeout_seconds: number"
-    ):
-        parse_observability({"notification_timeout_seconds": value})
+    with pytest.raises(ConfigValueError, match="download.poll_interval_seconds: number"):
+        parse_download(_full_download_section() | {"poll_interval_seconds": value})
 
 
 @pytest.mark.parametrize("number", [float("inf"), float("nan")], ids=["inf", "nan"])
 @pytest.mark.parametrize(
     ("section", "key"),
     [
-        ("observability", "notification_timeout_seconds"),
         ("download", "poll_interval_seconds"),
         ("download", "lost_after_seconds"),
         ("download", "reappeared_after_seconds"),
@@ -130,7 +119,6 @@ def _with_seconds(section: str, *, key: str, seconds: int) -> dict[str, Any]:
     [
         ("download", "poll_interval_seconds"),
         ("download", "sources_interval_seconds"),
-        ("observability", "notification_timeout_seconds"),
     ],
 )
 def test_a_duration_is_at_most_a_day(*, section: str, key: str) -> None:
@@ -151,27 +139,6 @@ def test_an_absence_is_at_most_thirty_days(key: str) -> None:
         _parse_sections(_with_seconds("download", key=key, seconds=2_592_001))
 
 
-@pytest.mark.parametrize(
-    ("parse", "section", "key_path"),
-    [
-        (
-            parse_observability,
-            {"metrics": {"enabled": True, "port": 9090}},
-            "observability.metrics",
-        ),
-    ],
-)
-def test_a_removed_key_of_a_section_is_refused_by_its_path(
-    *, parse: SectionParse, section: dict[str, Any], key_path: str
-) -> None:
-    with pytest.raises(ConfigValueError) as raised:
-        parse(section)
-    assert (raised.value.key, raised.value.message) == (
-        key_path,
-        "was removed, delete it from crawler.yml",
-    )
-
-
 def _with_backoff(*, base_seconds: float, cap_seconds: float) -> CrawlerConfig:
     backoff = BackoffConfig(
         base_seconds=base_seconds, cap_seconds=cap_seconds, factor=2.0, jitter_ratio=0.3
@@ -182,7 +149,9 @@ def _with_backoff(*, base_seconds: float, cap_seconds: float) -> CrawlerConfig:
         amule_api_password="secret",
         catalog_db_path="/data/catalog.db",
         local_db_path="/data/local.db",
-        observability=parse_observability({}),
+        observability=ObservabilityConfig(
+            log_level="INFO", notification_timeout_seconds=5.0, notifications=()
+        ),
         download=None,
         webui=_default_webui(),
     )
@@ -202,20 +171,6 @@ def test_a_backoff_cap_below_its_base_is_a_problem() -> None:
             message="should be at least base_seconds",
         ),
     )
-
-
-# ------------------------------------------------------------------------- the single amuled
-
-
-# ----------------------------------------------------------------- key path
-
-
-def test_a_notification_that_is_no_mapping_is_refused_under_its_key_path() -> None:
-    raw = _minimal_raw() | {"observability": {"notifications": ["discord://a"]}}
-    with pytest.raises(ConfigValueError) as error:
-        parse_observability(raw["observability"])
-    assert str(error.value) == "observability.notifications[0]: mapping expected, got str"
-    assert error.value.key == "observability.notifications[0]"
 
 
 # ----------------------------------------------------------------- download
@@ -330,104 +285,3 @@ def test_download_output_dir_must_be_a_string() -> None:
     section = _full_download_section() | {"output_dir": 42}
     with pytest.raises(ConfigValueError, match="output_dir"):
         parse_download(section)
-
-
-# ----------------------------------------------------------- observability
-
-
-def test_an_absent_observability_logs_at_info_with_no_notification() -> None:
-    assert parse_observability({}) == ObservabilityConfig(
-        log_level="INFO", notification_timeout_seconds=5.0, notifications=()
-    )
-
-
-def test_observability_parsed() -> None:
-    raw = _minimal_raw() | {
-        "observability": {
-            "log_level": "DEBUG",
-            "notification_timeout_seconds": 3.0,
-        }
-    }
-    config = parse_observability(raw["observability"])
-    assert config == ObservabilityConfig(
-        log_level="DEBUG",
-        notification_timeout_seconds=3.0,
-        notifications=(),
-    )
-
-
-def test_observability_bad_log_level_rejected() -> None:
-    raw = _minimal_raw() | {"observability": {"log_level": "LOUD"}}
-    with pytest.raises(ConfigValueError, match="log_level"):
-        parse_observability(raw["observability"])
-
-
-def test_notifications_absent_is_empty() -> None:
-    raw = _minimal_raw() | {"observability": {"log_level": "INFO"}}
-    config = parse_observability(raw["observability"])
-    assert config.notifications == ()
-
-
-def test_notifications_parsed() -> None:
-    raw = _minimal_raw() | {
-        "observability": {
-            "log_level": "INFO",
-            "notifications": [
-                {"url": "discord://a", "audience": "community", "node_prefix": False},
-                {"url": "discord://b", "audience": "operations"},
-            ],
-        }
-    }
-    config = parse_observability(raw["observability"])
-    assert config.notifications == (
-        NotificationTarget(url="discord://a", audience=Audience.COMMUNITY, node_prefix=False),
-        NotificationTarget(url="discord://b", audience=Audience.OPERATIONS, node_prefix=True),
-    )
-
-
-def test_notification_node_prefix_non_bool_rejected() -> None:
-    raw = _minimal_raw() | {
-        "observability": {
-            "log_level": "INFO",
-            "notifications": [{"url": "x", "audience": "community", "node_prefix": "no"}],
-        }
-    }
-    with pytest.raises(
-        ConfigValueError, match=r"notifications\[0\]\.node_prefix: boolean expected"
-    ):
-        parse_observability(raw["observability"])
-
-
-def test_a_notification_url_empty_is_refused() -> None:
-    section = {"notifications": [{"url": "", "audience": "community"}]}
-    with pytest.raises(ConfigValueError, match=r"notifications\[0\]\.url: non-empty string"):
-        parse_observability(section)
-
-
-def test_notifications_bad_audience_rejected() -> None:
-    raw = _minimal_raw() | {
-        "observability": {
-            "log_level": "INFO",
-            "notifications": [{"url": "x", "audience": "nope"}],
-        }
-    }
-    with pytest.raises(
-        ConfigValueError,
-        match=r"notifications\[0\]\.audience: 'community' or 'operations' expected",
-    ):
-        parse_observability(raw["observability"])
-
-
-@pytest.mark.parametrize(
-    "target",
-    [
-        {"url": "x", "tag": "community"},
-        {"url": "x", "tag": "community", "audience": "community"},
-    ],
-)
-def test_a_notification_tag_is_refused_with_its_new_name(target: dict[str, str]) -> None:
-    raw = _minimal_raw() | {"observability": {"log_level": "INFO", "notifications": [target]}}
-    with pytest.raises(
-        ConfigValueError, match=r"notifications\[0\]: key 'tag' was renamed 'audience'"
-    ):
-        parse_observability(raw["observability"])

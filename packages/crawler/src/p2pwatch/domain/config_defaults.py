@@ -2,13 +2,14 @@
 
 from datetime import timedelta
 from pathlib import PurePath
+from typing import Final
 
 # The config files a command reads when no option names them, under the working directory.
 DEFAULT_CONFIG_PATH = PurePath("deploy/crawler.yml")
 DEFAULT_TARGETS_PATH = PurePath("deploy/targets.yml")
 DEFAULT_MATCHER_PATH = PurePath("deploy/matcher.yml")
 
-DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_LOG_LEVEL: Final = "INFO"
 DEFAULT_NOTIFICATION_TIMEOUT_SECONDS = 5.0
 DEFAULT_NODE_PREFIX = True
 

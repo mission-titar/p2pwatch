@@ -1,5 +1,5 @@
-"""``crawler.yml``'s objects, the parses of the sections the config adapter's schema leaves as
-mappings, each raising a ``ConfigValueError`` on its first problem, and its rules across values.
+"""``crawler.yml``'s objects, the parse of ``download``, which the config adapter's schema leaves
+as a mapping, raising a ``ConfigValueError`` on its first problem, and its rules across values.
 
 The config adapter resolves ``${NAME}`` in every string value before the parse, which never sees
 the environment. ``download`` is ``None`` unless ``enabled: true``, its wiring keys required only
@@ -14,11 +14,8 @@ from typing import Any
 
 from p2pwatch.domain.config_defaults import (
     DEFAULT_DOWNLOAD_ENABLED,
-    DEFAULT_LOG_LEVEL,
     DEFAULT_LOST_AFTER,
     DEFAULT_MIN_FREE_BYTES,
-    DEFAULT_NODE_PREFIX,
-    DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
     DEFAULT_OUTPUT_DIRECTORY,
     DEFAULT_REAPPEARED_AFTER,
     DEFAULT_SOURCES_INTERVAL,
@@ -101,9 +98,6 @@ class WebuiConfig:
     source_period_gap: timedelta
 
 
-_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
-
-
 @dataclass(kw_only=True, frozen=True)
 class ObservabilityConfig:
     """Observability settings (``crawler.yml``). ``log_level`` drives the global logging
@@ -135,12 +129,6 @@ class CrawlerConfig:
     observability: ObservabilityConfig
     download: DownloadConfig | None
     webui: WebuiConfig
-
-
-def _require_mapping(node: Any, *, key_path: str) -> dict[str, Any]:
-    if not isinstance(node, dict):
-        raise ConfigValueError(key_path, message=f"mapping expected, got {type(node).__name__}")
-    return node
 
 
 def _key_path(error_label: str, *, key: str) -> str:
@@ -230,73 +218,6 @@ def _bool_default(section: dict[str, Any], *, key: str, error_label: str, defaul
             _key_path(error_label, key=key), message=f"boolean expected, got {setting!r}"
         )
     return setting
-
-
-def _string(section: dict[str, Any], *, key: str, error_label: str) -> str:
-    """REQUIRED non-empty string, else ``ConfigValueError`` (fail-fast §5/§14)."""
-    setting = _required(section, key=key, error_label=error_label)
-    if not isinstance(setting, str) or not setting:
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message=f"non-empty string expected, got {setting!r}"
-        )
-    return setting
-
-
-def _refuse_removed(section: dict[str, Any], *, key: str, error_label: str) -> None:
-    if key in section:
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message="was removed, delete it from crawler.yml"
-        )
-
-
-def parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
-    """The ``observability`` section: an absent key takes the domain's default."""
-    _refuse_removed(section, key="metrics", error_label="observability")
-    log_level = section.get("log_level", DEFAULT_LOG_LEVEL)
-    if not isinstance(log_level, str) or log_level not in _LOG_LEVELS:
-        raise ConfigValueError(
-            "observability.log_level",
-            message=f"one of {sorted(_LOG_LEVELS)} expected, got {log_level!r}",
-        )
-    timeout = _seconds(
-        section,
-        key="notification_timeout_seconds",
-        error_label="observability",
-        default=DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
-    )
-    notifications: list[NotificationTarget] = []
-    for index, notification_node in enumerate(section.get("notifications", [])):
-        error_label = f"observability.notifications[{index}]"
-        notification = _require_mapping(notification_node, key_path=error_label)
-        if "tag" in notification:  # the 4.x name
-            raise ConfigValueError(
-                error_label, message="key 'tag' was renamed 'audience', rename it in crawler.yml"
-            )
-        audience_raw = _string(notification, key="audience", error_label=error_label)
-        try:
-            audience = Audience(audience_raw)
-        except ValueError as error:
-            raise ConfigValueError(
-                f"{error_label}.audience",
-                message=f"'community' or 'operations' expected, got {audience_raw!r}",
-            ) from error
-        notifications.append(
-            NotificationTarget(
-                url=_string(notification, key="url", error_label=error_label),
-                audience=audience,
-                node_prefix=_bool_default(
-                    notification,
-                    key="node_prefix",
-                    error_label=error_label,
-                    default=DEFAULT_NODE_PREFIX,
-                ),
-            )
-        )
-    return ObservabilityConfig(
-        log_level=log_level,
-        notification_timeout_seconds=timeout,
-        notifications=tuple(notifications),
-    )
 
 
 def parse_download(section: dict[str, Any]) -> DownloadConfig | None:
