@@ -25,6 +25,7 @@ from typing import Any
 from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    HeldDatabaseError,
     MigrationError,
     PersistenceError,
     wrap_sqlite_errors,
@@ -54,6 +55,7 @@ _logger = logging.getLogger(__name__)
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
 # Under a minute between two lines: a silent start is one an operator restarts.
 _PROGRESS_PERIOD = timedelta(seconds=30)
+_BUSY_TIMEOUT_SECONDS = 5.0  # Python's default, which the crawler has always had
 
 
 class SqliteDatabaseOpener:
@@ -73,9 +75,10 @@ class SqliteDatabaseOpener:
         self._free_bytes = free_bytes
         self._memory_releaser = memory_releaser
 
-    def open_catalog(self, path: Path) -> sqlite3.Connection:
-        """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
-        return self.open(path, scripts=load_scripts(_MIGRATIONS / "catalog"))
+    def open_catalog(self, path: Path, *, exclusive: bool = False) -> sqlite3.Connection:
+        """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema);
+        ``exclusive``, see ``open``."""
+        return self.open(path, scripts=load_scripts(_MIGRATIONS / "catalog"), exclusive=exclusive)
 
     def open_local(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``local.db``."""
@@ -85,12 +88,15 @@ class SqliteDatabaseOpener:
         """The schema version ``open_catalog`` brings a catalog to."""
         return _latest_version(load_scripts(_MIGRATIONS / "catalog"))
 
-    def open(self, path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
+    def open(
+        self, path: Path, *, scripts: tuple[Migration, ...], exclusive: bool = False
+    ) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
         copy, then opens it again, gives back its free pages and releases the memory the block
         took; a database newer than the ``scripts`` raises ``MigrationError``, a lack of disk space
-        ``OutOfSpaceError``."""
-        connection = _connect(path)
+        ``OutOfSpaceError``. ``exclusive``, each connection holds ``path`` until it closes, and
+        another one raises ``HeldDatabaseError``, at the reopen too, the database then migrated."""
+        connection = _connect(path, exclusive=exclusive)
         try:
             pending = _pending_migrations(connection, scripts=scripts)
             self._pre_migration_copier.ensure_copy(
@@ -110,7 +116,7 @@ class SqliteDatabaseOpener:
             if pending.migrations:
                 # Closed, it drops the memos, the page cache and the pragmas the scripts set.
                 connection.close()
-                connection = _connect(path)
+                connection = _connect(path, exclusive=exclusive)
                 with wrap_sqlite_errors():
                     connection.execute("PRAGMA temp_store=FILE")
             _reclaim(connection, path=path, pending=pending, free_bytes=self._free_bytes)
@@ -151,15 +157,25 @@ def read_only_uri(path: Path) -> str:
     return f"file:{quote(str(path))}?mode=ro"
 
 
-def _connect(path: Path) -> sqlite3.Connection:
+def _connect(path: Path, *, exclusive: bool) -> sqlite3.Connection:
     """A connection to ``path`` in WAL, its rows read by column name, its pragmas set and the SQL
-    functions registered."""
+    functions registered; ``exclusive``, it holds ``path`` from its first access until it closes,
+    refused at once beside another connection."""
     with wrap_sqlite_errors():
-        connection = sqlite3.connect(f"file:{quote(str(path))}", autocommit=True, uri=True)
+        connection = sqlite3.connect(
+            f"file:{quote(str(path))}",
+            autocommit=True,
+            uri=True,
+            timeout=0 if exclusive else _BUSY_TIMEOUT_SECONDS,
+        )
     connection.row_factory = _build_named_row
     try:
+        if exclusive:
+            with wrap_sqlite_errors():
+                # main alone: a bare locking_mode also holds every database attached later.
+                connection.execute("PRAGMA main.locking_mode=EXCLUSIVE")
+        _configure(connection, path=path)
         with wrap_sqlite_errors():
-            _configure(connection)
             register_sql_functions(connection)
     except BaseException:
         # Unconditional close: whatever fails, the connection must not leak.
@@ -177,14 +193,21 @@ def _build_named_row(cursor: sqlite3.Cursor, values: tuple[Any, ...]) -> NamedRo
     return NamedRow(zip(names, values, strict=True))
 
 
-def _configure(connection: sqlite3.Connection) -> None:
-    journal_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()["journal_mode"]
+def _configure(connection: sqlite3.Connection, *, path: Path) -> None:
+    try:
+        # The first access, where another connection's hold refuses an exclusive one.
+        journal_mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()["journal_mode"]
+    except sqlite3.Error as error:
+        if error.sqlite_errorcode == sqlite3.SQLITE_BUSY:
+            raise HeldDatabaseError(f"{path} is held by another connection") from error
+        raise PersistenceError(str(error)) from error
     if journal_mode != "wal":
         raise PersistenceError(
             f"journal_mode={journal_mode!r}: WAL required (spec §3), file-backed db only"
         )
-    connection.execute("PRAGMA foreign_keys=ON")
-    connection.execute("PRAGMA recursive_triggers=ON")
+    with wrap_sqlite_errors():
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA recursive_triggers=ON")
 
 
 def _pending_migrations(

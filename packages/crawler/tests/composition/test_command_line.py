@@ -1,6 +1,7 @@
 """The command line, wired to the real adapters and composition."""
 
 import logging
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     make_catalog,
 )
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
+from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     pre_migration_copies,
 )
@@ -82,13 +84,29 @@ def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     assert done.name == "p2pwatch.application.use_cases.merge_catalogs"
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["merge", "--into", "a.db", "a.db", "b.db"],
-        ["merge", "--output", "a.db", "--force", "b.db"],
-    ],
-)
+_MERGES_INTO_A = [
+    ["merge", "--into", "a.db", "a.db", "b.db"],
+    ["merge", "--output", "a.db", "--force", "b.db"],
+]
+
+
+@pytest.mark.parametrize("argv", _MERGES_INTO_A)
+def test_merge_refuses_a_destination_another_connection_holds_in_one_line(
+    *, tmp_path: Path, argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    destination = make_catalog(tmp_path / "a.db", content={})
+    make_catalog(tmp_path / "b.db", content={"files": [{"native_id": HASH_B, "size_bytes": 100}]})
+
+    with closing(open_catalog(destination)):
+        assert _run(argv, cwd=tmp_path) == 2
+
+    assert capsys.readouterr().err == (
+        f"Merge failed: destination {destination} is held by another process: stop the node first\n"
+    )
+    assert count(destination, table="files") == 0
+
+
+@pytest.mark.parametrize("argv", _MERGES_INTO_A)
 def test_merge_copies_a_version_5_destination(*, tmp_path: Path, argv: list[str]) -> None:
     open_catalog_at(tmp_path / "a.db", version=5).close()
     make_catalog(tmp_path / "b.db", content={"files": [{"native_id": HASH_B, "size_bytes": 100}]})

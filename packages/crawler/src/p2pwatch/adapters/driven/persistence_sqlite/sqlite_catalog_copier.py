@@ -38,7 +38,10 @@ from dataclasses import dataclass
 from pathlib import Path, PurePath
 
 from catalog_matching.domain.validation import has_control_character
-from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    HeldDatabaseError,
+    PersistenceError,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
     read_only_uri,
@@ -275,7 +278,11 @@ def _copy_catalogs(
     """
     is_new = not destination.exists()
     try:
-        connection = database_opener.open_catalog(destination)
+        connection = database_opener.open_catalog(destination, exclusive=True)
+    except HeldDatabaseError as error:
+        raise CatalogCopyError(
+            f"destination {destination} is held by another process: stop the node first"
+        ) from error
     except (PersistenceError, OutOfSpaceError) as error:
         raise CatalogCopyError(f"cannot open output {destination}: {error}") from error
     merged_catalogs: list[str] = []
