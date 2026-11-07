@@ -149,6 +149,7 @@ appendix B.)
 | 50 | `fix/migration-memory-release` | the connection reopened, the memory released, the memo bounded | D5 |
 | 60 | `feat/merge-refuses-held-catalog` | a merge refuses a held destination | D4 |
 | 70 | `fix/migration-small-findings` | the refused value named, the copy without hard links, the dead statement | D7 |
+| 75 | `fix/migration-holistic-findings` | the free-space refusal's figures agreeing, a held catalog refused in one line by the crawl (Corrected: split from block 80 for the file bound, the holistic review's code fixes that touch no reclaim) | D1, D4 |
 | 80 | `docs/v5-migration-first-start-wrap` | closing block | |
 
 Sizes: appendix A, estimated by a Sonnet agent on this cut (`.reviews/v5-lot2-estimate.md`, about 25 % either way).
@@ -329,6 +330,8 @@ caller lands in a later block.
 
 - The holistic review's fixes, `BACKLOG.md` reconciled, the handoff; the umbrella's lot 2 rows marked done or
   corrected.
+  (Corrected: split for the file bound; block 75 holds the free-space figures and the held catalog's line, block 80
+  the reclaim's rule and lines and the records.)
 
 ## Appendix B. Acceptance, in detail
 
