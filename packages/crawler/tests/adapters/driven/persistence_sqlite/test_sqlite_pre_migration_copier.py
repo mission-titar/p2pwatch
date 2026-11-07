@@ -18,6 +18,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
 )
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
 from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -276,10 +277,19 @@ def test_one_byte_short_refuses_before_any_write(tmp_path: Path) -> None:
     ):
         need_bytes = _need_bytes(connection, path=path)
         free_bytes = FakeFreeBytes(need_bytes - 1)
-        with pytest.raises(MigrationError, match=rf"\b{need_bytes}\b.*\b{need_bytes - 1}\b"):
+        with pytest.raises(OutOfSpaceError) as refusal:
             _copier(free_bytes).ensure_copy(
                 connection, path=path, pending=_pending(scripts), open_reader=open_reader
             )
+        assert str(refusal.value) == str(
+            OutOfSpaceError(
+                step=f"pre-migration copy of {path}",
+                directory=path.parent,
+                free_bytes=need_bytes - 1,
+                need_bytes=need_bytes,
+                outcome="nothing written",
+            )
+        )
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 2}]
     assert _copy_names(path.parent) == []
     assert free_bytes.directories == [path.parent]
@@ -390,7 +400,9 @@ _FAILING = _COPY_BEFORE + "DELETE FROM t;\nINSERT INTO absent VALUES (1);"
 
 def _open(path: Path, *, scripts: tuple[Migration, ...], copier: SqlitePreMigrationCopier) -> None:
     """An open over the scripts through ``copier``, then the connection closed."""
-    SqliteDatabaseOpener(copier, ticker=FakeTicker()).open(path, scripts=scripts).close()
+    SqliteDatabaseOpener(
+        copier, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
+    ).open(path, scripts=scripts).close()
 
 
 def test_a_block_failing_after_a_migration_succeeded_is_retried_on_the_same_copy(

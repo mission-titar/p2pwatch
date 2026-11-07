@@ -340,6 +340,7 @@ class CrawlerComposition(CrawlerRunner):
                     free_bytes=lambda directory: disk_usage(directory).free,
                 ),
                 ticker=ticker,
+                free_bytes=lambda directory: disk_usage(directory).free,
             )
             catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
             stack.callback(catalog_connection.close)

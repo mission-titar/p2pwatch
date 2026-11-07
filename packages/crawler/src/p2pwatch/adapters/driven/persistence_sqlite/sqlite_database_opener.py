@@ -26,11 +26,9 @@ from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     MigrationError,
-    OutOfSpaceError,
     PersistenceError,
     wrap_sqlite_errors,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.gigabytes import gigabytes
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
     Migration,
     PendingMigrations,
@@ -39,6 +37,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.search_fold import fold_for_search
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    FreeBytesMeter,
     SqlitePreMigrationCopier,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.variants import (
@@ -46,6 +45,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     remove_migration_sql_functions,
 )
 from p2pwatch.application.ports.driven.ticker import Ticker
+from p2pwatch.domain.gigabytes import gigabytes
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)
 
@@ -60,9 +61,16 @@ class SqliteDatabaseOpener:
     """Opens a database and applies its pending migrations, the one way the code migrates one, or
     opens a reader of it."""
 
-    def __init__(self, pre_migration_copier: SqlitePreMigrationCopier, *, ticker: Ticker) -> None:
+    def __init__(
+        self,
+        pre_migration_copier: SqlitePreMigrationCopier,
+        *,
+        ticker: Ticker,
+        free_bytes: FreeBytesMeter,
+    ) -> None:
         self._pre_migration_copier = pre_migration_copier
         self._ticker = ticker
+        self._free_bytes = free_bytes
 
     def open_catalog(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
@@ -79,7 +87,7 @@ class SqliteDatabaseOpener:
     def open(self, path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
         copy, then gives back its free pages; a database newer than the ``scripts`` raises
-        ``MigrationError``."""
+        ``MigrationError``, a lack of disk space ``OutOfSpaceError``."""
         connection = _connect(path)
         try:
             pending = _pending_migrations(connection, scripts=scripts)
@@ -90,8 +98,14 @@ class SqliteDatabaseOpener:
                 # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows), and
                 # VACUUM builds its whole copy in a temporary database.
                 connection.execute("PRAGMA temp_store=FILE")
-            _apply_migrations(connection, path=path, pending=pending, ticker=self._ticker)
-            _reclaim(connection, path=path, after_block=bool(pending.migrations))
+            _apply_migrations(
+                connection,
+                path=path,
+                pending=pending,
+                ticker=self._ticker,
+                free_bytes=self._free_bytes,
+            )
+            _reclaim(connection, path=path, pending=pending, free_bytes=self._free_bytes)
             with wrap_sqlite_errors():
                 connection.execute("PRAGMA temp_store=DEFAULT")
                 remove_migration_sql_functions(connection)
@@ -184,7 +198,12 @@ def _latest_version(scripts: tuple[Migration, ...]) -> int:
 
 
 def _apply_migrations(
-    connection: sqlite3.Connection, *, path: Path, pending: PendingMigrations, ticker: Ticker
+    connection: sqlite3.Connection,
+    *,
+    path: Path,
+    pending: PendingMigrations,
+    ticker: Ticker,
+    free_bytes: FreeBytesMeter,
 ) -> None:
     """Applies the pending scripts in order in one transaction, the schema version written once,
     at its end; the rules for writing one: ``docs/contributing/architecture.md``, "Écrire une
@@ -209,11 +228,22 @@ def _apply_migrations(
         )
 
     # No finally: a failed block fails the open, which closes the connection.
-    ticker.run(
-        lambda: _run_in_one_transaction(connection, migrations=pending.migrations, step=step),
-        tick=report_running,
-        period=_PROGRESS_PERIOD,
-    )
+    try:
+        ticker.run(
+            lambda: _run_in_one_transaction(connection, migrations=pending.migrations, step=step),
+            tick=report_running,
+            period=_PROGRESS_PERIOD,
+        )
+    except sqlite3.Error as error:
+        raise _migration_error(
+            error,
+            connection=connection,
+            message=f"{step.name} failed: {error}",
+            step=f"migrations of {path} ({step.name})",
+            outcome=f"the database left at version {pending.current_version}",
+            path=path,
+            free_bytes=free_bytes,
+        ) from error
     with wrap_sqlite_errors():
         connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
         connection.execute(f"PRAGMA cache_size = {cache_size}")
@@ -244,15 +274,22 @@ def _run_in_one_transaction(
         step.name = f"the commit at version {migrations[-1].version}"
         connection.execute(f"PRAGMA user_version = {migrations[-1].version}")
         connection.execute("COMMIT")
-    except sqlite3.Error as error:
+    except sqlite3.Error:
         with suppress(sqlite3.Error):
             connection.execute("ROLLBACK")
-        raise _migration_error(f"{step.name} failed: {error}", cause=error) from error
+        raise
 
 
-def _reclaim(connection: sqlite3.Connection, *, path: Path, after_block: bool) -> None:
+def _reclaim(
+    connection: sqlite3.Connection,
+    *,
+    path: Path,
+    pending: PendingMigrations,
+    free_bytes: FreeBytesMeter,
+) -> None:
     """Gives back the free pages after a block of migrations, or once a quarter of the file is
     free pages, which replays a reclaim a stop interrupted."""
+    after_block = bool(pending.migrations)
     with wrap_sqlite_errors():
         page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
         page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
@@ -274,10 +311,38 @@ def _reclaim(connection: sqlite3.Connection, *, path: Path, after_block: bool) -
         # The crawler holds its connection for good, so the WAL the VACUUM grew would never shrink.
         connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except sqlite3.Error as error:
-        raise _migration_error(f"reclaim failed: {error}", cause=error) from error
+        version = pending.migrations[-1].version if after_block else pending.current_version
+        raise _migration_error(
+            error,
+            connection=connection,
+            message=f"reclaim failed: {error}",
+            step=f"reclaim of {path}",
+            outcome=f"the database at version {version}, its free pages not given back",
+            path=path,
+            free_bytes=free_bytes,
+        ) from error
 
 
-def _migration_error(message: str, *, cause: sqlite3.Error) -> MigrationError:
+def _migration_error(  # noqa: PLR0913
+    cause: sqlite3.Error,
+    *,
+    connection: sqlite3.Connection,
+    message: str,
+    step: str,
+    outcome: str,
+    path: Path,
+    free_bytes: FreeBytesMeter,
+) -> MigrationError | OutOfSpaceError:
+    """``OutOfSpaceError`` for a full disk, ``message``'s ``MigrationError`` otherwise."""
     if cause.sqlite_errorcode == sqlite3.SQLITE_FULL:
-        return OutOfSpaceError(message)
+        # The rolled-back frames would count as space taken until the connection closes.
+        with suppress(sqlite3.Error):
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        return OutOfSpaceError(
+            step=step,
+            directory=path.parent,
+            free_bytes=free_bytes(path.parent),
+            need_bytes=None,
+            outcome=outcome,
+        )
     return MigrationError(message)

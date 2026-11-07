@@ -54,6 +54,7 @@ from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyErro
 from p2pwatch.domain.file_key import Network
 from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.json_object_text import JsonObjectText
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)
 
@@ -267,14 +268,15 @@ def _copy_catalogs(
     ``destination`` is opened via ``open_catalog``: a new file gets the schema + the triggers, an
     existing older catalog is first migrated in place, and the copy APPENDS (never a truncate).
 
-    ``open_catalog``'s ``PersistenceError`` raises ``CatalogCopyError``, and so does the first
-    source whose copy fails (a row the destination's schema refuses, FK…), a new ``destination``
-    then removed; a later one raises ``PartialCopyError``, naming the sources merged, which stay.
+    ``open_catalog``'s ``PersistenceError`` or ``OutOfSpaceError`` raises ``CatalogCopyError``, and
+    so does the first source whose copy fails (a row the destination's schema refuses, FK…), a new
+    ``destination`` then removed; a later one raises ``PartialCopyError``, naming the sources
+    merged, which stay.
     """
     is_new = not destination.exists()
     try:
         connection = database_opener.open_catalog(destination)
-    except PersistenceError as error:
+    except (PersistenceError, OutOfSpaceError) as error:
         raise CatalogCopyError(f"cannot open output {destination}: {error}") from error
     merged_catalogs: list[str] = []
     try:

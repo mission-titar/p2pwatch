@@ -26,10 +26,6 @@ class MigrationError(PersistenceError):
     """Database newer than the code, or a script that fails (fail-fast, MVP spec §14)."""
 
 
-class OutOfSpaceError(MigrationError):
-    """The disk filled during the migrations or the reclaim (``SQLITE_FULL``)."""
-
-
 @contextmanager
 def wrap_sqlite_errors() -> Iterator[None]:
     """Wraps any ``sqlite3.Error`` as ``PersistenceError`` (chained cause)."""

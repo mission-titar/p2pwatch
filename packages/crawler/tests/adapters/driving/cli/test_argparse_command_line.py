@@ -20,6 +20,7 @@ from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
 from tests.fakes.application.use_cases.fake_config_validator import FakeConfigValidator
 from tests.fakes.composition.fake_crawler_runner import FakeCrawlerRunner
@@ -72,6 +73,23 @@ def test_crawl_refuses_to_start_on_an_invalid_config(capsys: pytest.CaptureFixtu
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
 
     assert capsys.readouterr().err == "Invalid config, refusing to start: search: section missing\n"
+
+
+def test_crawl_refuses_to_start_short_of_disk_space_in_one_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    refusal = OutOfSpaceError(
+        step="pre-migration copy of /data/catalog.db",
+        directory=PurePath("/data"),
+        free_bytes=9_200_000_000,
+        need_bytes=15_300_000_000,
+        outcome="nothing written",
+    )
+    crawler_runner = FakeCrawlerRunner(refusal)
+
+    assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
+
+    assert capsys.readouterr().err == f"Out of disk space, refusing to start: {refusal}\n"
 
 
 def test_crawl_exits_zero_when_the_shutdown_deadline_fires(

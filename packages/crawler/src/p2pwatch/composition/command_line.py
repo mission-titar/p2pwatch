@@ -54,6 +54,7 @@ def build_command_line(
                         free_bytes=lambda directory: disk_usage(directory).free,
                     ),
                     ticker=ticker,
+                    free_bytes=lambda directory: disk_usage(directory).free,
                 )
             ),
             logger=StdlibLogger(MergeCatalogs.__module__),

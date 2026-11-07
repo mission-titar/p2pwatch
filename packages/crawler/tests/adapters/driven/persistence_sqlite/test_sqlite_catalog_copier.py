@@ -15,6 +15,7 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
+from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_A,
     HASH_B,
@@ -27,6 +28,7 @@ from tests.support.adapters.driven.persistence_sqlite.helpers import (
     variant_ids,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
     open_catalog,
@@ -441,6 +443,26 @@ def test_an_output_open_catalog_refuses_raises_a_merge_error(tmp_path: Path) -> 
 
     with pytest.raises(CatalogCopyError, match=f"cannot open output {destination}"):
         _copy_catalogs(destination, source_catalogs=[src])
+
+
+def test_an_output_short_of_space_for_its_copy_raises_the_refusal_in_gigabytes(
+    tmp_path: Path,
+) -> None:
+    src = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    destination = tmp_path / "out.db"
+    open_catalog_at(destination, version=5).close()
+    copier = SqliteCatalogCopier(database_opener(free_bytes=FakeFreeBytes(0).free_bytes))
+
+    with pytest.raises(CatalogCopyError) as refusal:
+        copier.copy_catalogs(destination, source_catalogs=[src])
+
+    line = str(refusal.value)
+    assert line.startswith(
+        f"cannot open output {destination}: pre-migration copy of {destination}: "
+    )
+    assert line.endswith(f" GB needed in {tmp_path}, 0.0 GB free, 0.1 GB to free; nothing written")
+    with closing(open_reader(destination)) as connection:
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 5}]
 
 
 @pytest.mark.parametrize("user_hash", [HASH_B, None])
