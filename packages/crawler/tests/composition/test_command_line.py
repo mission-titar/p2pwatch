@@ -65,6 +65,21 @@ def test_validate_config_refuses_a_broken_matcher(
     assert capsys.readouterr().err.startswith("Invalid config: ")
 
 
+def test_validate_config_lists_an_absent_targets_beside_a_wrong_matcher(
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    targets = tmp_path / "targets.yml"
+    matcher = tmp_path / "matcher.yml"
+    matcher.write_text("rules: {}\n", encoding="utf-8")
+    argv = ["--config", str(_DEPLOY / "crawler.yml"), "--targets", str(targets)]
+
+    assert _run(["validate-config", *argv, "--matcher", str(matcher)], cwd=tmp_path) == 1
+
+    [targets_line, matcher_line] = capsys.readouterr().err.splitlines()
+    assert targets_line == f"Invalid config: {targets}: No such file or directory"
+    assert matcher_line.startswith(f"Invalid config: {matcher}: 'rules' section: ")
+
+
 def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
