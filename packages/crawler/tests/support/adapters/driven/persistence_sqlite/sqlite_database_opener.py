@@ -13,6 +13,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
     SqlitePreMigrationCopier,
 )
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
+from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 _AMPLE_BYTES = 1 << 62
@@ -23,7 +24,9 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
     the migrations."""
 
     def __init__(self, pragma: str) -> None:
-        super().__init__(FakeTime().wall, free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes)
+        super().__init__(
+            FakeTime().wall, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
+        )
         self._pragma = pragma
 
     def ensure_copy(
@@ -39,10 +42,12 @@ class _PragmaSettingCopier(SqlitePreMigrationCopier):
 
 
 def database_opener() -> SqliteDatabaseOpener:
-    """An opener whose pre-migration copies are named from a ``FakeTime`` and never short of
-    space."""
+    """An opener whose pre-migration copies are named from a ``FakeTime``, ticked by a
+    ``FakeTicker`` and never short of space."""
     return SqliteDatabaseOpener(
-        SqlitePreMigrationCopier(FakeTime().wall, free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes)
+        SqlitePreMigrationCopier(
+            FakeTime().wall, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
+        )
     )
 
 

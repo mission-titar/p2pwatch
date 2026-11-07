@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from shutil import disk_usage
 
+from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.config.filesystem_config_checker import FilesystemConfigChecker
 from p2pwatch.adapters.driven.filesystem_catalog_finder import FilesystemCatalogFinder
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_copier import SqliteCatalogCopier
@@ -16,6 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
 )
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
+from p2pwatch.adapters.driven.threading_ticker import ThreadingTicker
 from p2pwatch.adapters.driving.cli.argparse_command_line import ArgparseCommandLine
 from p2pwatch.application.use_cases.merge_catalogs import MergeCatalogs
 from p2pwatch.application.use_cases.validate_config import ValidateConfig
@@ -46,7 +48,9 @@ def build_command_line(
             catalog_copier=SqliteCatalogCopier(
                 SqliteDatabaseOpener(
                     SqlitePreMigrationCopier(
-                        SystemWallClock(), free_bytes=lambda directory: disk_usage(directory).free
+                        SystemWallClock(),
+                        ticker=ThreadingTicker(AsyncioMonotonicClock()),
+                        free_bytes=lambda directory: disk_usage(directory).free,
                     )
                 )
             ),
