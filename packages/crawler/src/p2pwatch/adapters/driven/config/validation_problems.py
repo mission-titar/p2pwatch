@@ -10,6 +10,9 @@ from p2pwatch.domain.config_problem import ConfigProblem
 
 _REPLACED = "config_key_replaced"
 
+# Begins a tagged union's tag, which pydantic puts in an error's location and no key is named.
+TAG_MARK = "~"
+
 
 def removed_key(file_name: str) -> object:
     """The type of a key nothing reads since 4.x: present, even empty, it is refused."""
@@ -57,7 +60,8 @@ def validation_problems(
 
 
 def _key_path(location: tuple[int | str, ...]) -> str:
-    parts = (f"[{part}]" if isinstance(part, int) else f".{part}" for part in location)
+    keys = (part for part in location if not str(part).startswith(TAG_MARK))
+    parts = (f"[{part}]" if isinstance(part, int) else f".{part}" for part in keys)
     return "".join(parts).removeprefix(".")
 
 

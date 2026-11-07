@@ -1,10 +1,11 @@
 from pathlib import PurePath
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError, create_model
+from pydantic import BaseModel, Discriminator, Field, Tag, ValidationError, create_model
 
 from p2pwatch.adapters.driven.config.validation_problems import (
+    TAG_MARK,
     moved_key,
     removed_key,
     renamed_key,
@@ -88,3 +89,34 @@ def test_no_message_prints_the_value_received() -> None:
     problems = _problems({"count": "SECRET", "unread": "SECRET"})
     assert [problem.key for problem in problems] == ["count", "unread"]
     assert all("SECRET" not in problem.message for problem in problems)
+
+
+class _Circle(BaseModel, extra="forbid", strict=True):
+    radius: int
+
+
+class _Square(BaseModel, extra="forbid", strict=True):
+    side: int
+
+
+def _shape(value: object) -> str:
+    return (
+        f"{TAG_MARK}circle"
+        if isinstance(value, dict) and "radius" in value
+        else f"{TAG_MARK}square"
+    )
+
+
+class _Drawing(BaseModel, extra="forbid", strict=True):
+    shape: Annotated[
+        Annotated[_Circle, Tag(f"{TAG_MARK}circle")] | Annotated[_Square, Tag(f"{TAG_MARK}square")],
+        Discriminator(_shape),
+    ]
+
+
+def test_a_tagged_union_s_tag_is_no_part_of_a_key_path() -> None:
+    with pytest.raises(ValidationError) as raised:
+        _Drawing.model_validate({"shape": {"radius": "2"}})
+    assert validation_problems(raised.value, file_path=_FILE) == (
+        _problem("shape.radius", message="Input should be a valid integer"),
+    )
