@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
@@ -15,7 +16,6 @@ from p2pwatch.domain.crawler_config import (
     WebuiConfig,
     parse_crawler_config,
 )
-from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.observability.policy import Audience
 
 

@@ -34,15 +34,20 @@ def _paths_argv(*, config: Path, matcher: Path = _DEPLOY / "matcher.yml") -> lis
     return ["--config", str(config), "--targets", str(targets), "--matcher", str(matcher)]
 
 
-def test_crawl_exits_one_on_a_broken_config(
+def test_crawl_refuses_to_start_with_a_wrong_crawler_config_beside_a_wrong_matcher(
     *, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     broken = tmp_path / "crawler.yml"
     broken.write_text("catalog_db_path: c\nlocal_db_path: l\n", encoding="utf-8")
+    broken_matcher = tmp_path / "matcher.yml"
+    broken_matcher.write_text("tokens: {}\nrules: {}\n", encoding="utf-8")
 
-    assert _run(["crawl", *_paths_argv(config=broken)], cwd=tmp_path) == 1
+    argv = ["crawl", *_paths_argv(config=broken, matcher=broken_matcher)]
+    assert _run(argv, cwd=tmp_path) == 1
 
-    assert capsys.readouterr().err.startswith("Invalid config, refusing to start: ")
+    [crawler_line, matcher_line] = capsys.readouterr().err.splitlines()
+    assert crawler_line.startswith(f"Invalid config, refusing to start: {broken}: ")
+    assert matcher_line.startswith(f"Invalid config, refusing to start: {broken_matcher}: ")
 
 
 def test_validate_config_from_the_repository_root_accepts_the_shipped_config(

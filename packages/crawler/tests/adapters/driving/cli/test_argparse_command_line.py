@@ -18,7 +18,7 @@ from p2pwatch.application.ports.driving.config_validator import (
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.held_database_error import HeldDatabaseError
-from p2pwatch.domain.config_value_error import ConfigValueError
+from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
@@ -67,12 +67,21 @@ def test_crawl_defaults_to_the_deploy_directory_under_the_working_directory_give
     assert crawler_runner.crawled_paths == [_DEFAULT_PATHS]
 
 
-def test_crawl_refuses_to_start_on_an_invalid_config(capsys: pytest.CaptureFixture[str]) -> None:
-    crawler_runner = FakeCrawlerRunner(ConfigValueError(None, message="search: section missing"))
+def test_crawl_refuses_to_start_with_one_line_per_problem_of_the_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    problems = (
+        ConfigProblem(file_path=PurePath("/srv/c.yml"), key="search", message="missing"),
+        ConfigProblem(file_path=PurePath("/srv/m.yml"), key=None, message="'rules' section"),
+    )
+    crawler_runner = FakeCrawlerRunner(InvalidConfigError(problems))
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
 
-    assert capsys.readouterr().err == "Invalid config, refusing to start: search: section missing\n"
+    assert capsys.readouterr().err == (
+        "Invalid config, refusing to start: /srv/c.yml: search: missing\n"
+        "Invalid config, refusing to start: /srv/m.yml: 'rules' section\n"
+    )
 
 
 def test_crawl_refuses_to_start_short_of_disk_space_in_one_line(
