@@ -235,6 +235,14 @@ layer = "adapters"
 depends_on = ["p2pwatch.domain", "p2pwatch.application.ports.driven.monotonic_clock"]
 
 [[modules]]
+path = "p2pwatch.adapters.driven.threading_ticker"
+layer = "adapters"
+depends_on = [
+  "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.ticker",
+]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.amule_api"
 layer = "adapters"
 depends_on = [
@@ -286,6 +294,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.source_point_writer",
   "p2pwatch.application.ports.driven.source_reader",
   "p2pwatch.application.ports.driven.sql_executor",
+  "p2pwatch.application.ports.driven.ticker",
   "p2pwatch.application.ports.driven.wall_clock",
 ]
 
@@ -450,6 +459,7 @@ depends_on = [
   "p2pwatch.adapters.driven.stdlib_logger",
   "p2pwatch.adapters.driven.uuid4_node_id_generator",
   "p2pwatch.adapters.driven.system_wall_clock",
+  "p2pwatch.adapters.driven.threading_ticker",
   "p2pwatch.adapters.driving.cli",
   "p2pwatch.adapters.driving.process",
   "p2pwatch.adapters.driving.webui",
@@ -571,6 +581,11 @@ depends_on = ["p2pwatch.domain"]
 path = "p2pwatch.application.ports.driven.monotonic_clock"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.ticker"
+layer = "ports"
+depends_on = []
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.node_id_generator"

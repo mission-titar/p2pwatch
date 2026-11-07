@@ -81,6 +81,7 @@ from p2pwatch.adapters.driven.random_jitter_generator import RandomJitterGenerat
 from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
+from p2pwatch.adapters.driven.threading_ticker import ThreadingTicker
 from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerator
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
@@ -333,7 +334,9 @@ class CrawlerComposition(CrawlerRunner):
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
             database_opener = SqliteDatabaseOpener(
                 SqlitePreMigrationCopier(
-                    wall_clock, free_bytes=lambda directory: disk_usage(directory).free
+                    wall_clock,
+                    ticker=ThreadingTicker(monotonic_clock),
+                    free_bytes=lambda directory: disk_usage(directory).free,
                 )
             )
             catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))

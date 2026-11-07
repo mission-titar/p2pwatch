@@ -4,7 +4,7 @@ import logging
 import os
 import sqlite3
 from contextlib import closing
-from datetime import UTC
+from datetime import UTC, timedelta
 from glob import escape
 from pathlib import Path
 from typing import Protocol
@@ -13,9 +13,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
+from p2pwatch.application.ports.driven.ticker import Ticker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 
 _logger = logging.getLogger(__name__)
+# Under a minute between two lines: a silent start is one an operator restarts.
+_PROGRESS_PERIOD = timedelta(seconds=30)
 
 
 class FreeBytesMeter(Protocol):
@@ -26,8 +29,11 @@ class SqlitePreMigrationCopier:
     """Makes the pre-migration copy of a database, ``<file>.pre-<NNNN>.<stamp>_UTC``, ``NNNN``
     its first pending version, and never deletes one."""
 
-    def __init__(self, wall_clock: WallClock, *, free_bytes: FreeBytesMeter) -> None:
+    def __init__(
+        self, wall_clock: WallClock, *, ticker: Ticker, free_bytes: FreeBytesMeter
+    ) -> None:
         self._wall_clock = wall_clock
+        self._ticker = ticker
         self._free_bytes = free_bytes
 
     def ensure_copy(
@@ -53,24 +59,40 @@ class SqlitePreMigrationCopier:
                 connection, path=path, prefix=prefix, open_reader=open_reader
             ):
                 return
-            self._check_free_space(connection, path=path)
+            live_bytes = _live_bytes(connection)
+            self._check_free_space(path=path, live_bytes=live_bytes)
             partial = path.with_name(f"{prefix}.partial")
-            _logger.info("pre-migration copy of %s: writing %s", path, partial)
-            # Outside any transaction, which VACUUM INTO refuses.
-            connection.execute("VACUUM INTO ?", (str(partial),))
+            _logger.info(
+                "pre-migration copy of %s: writing %s to %s; a stop now costs only the time spent",
+                path,
+                _gigabytes(live_bytes),
+                partial,
+            )
+
+            def report_written(*, elapsed: timedelta) -> None:
+                written_bytes = _size_or_zero(partial)
+                _logger.info(
+                    "pre-migration copy of %s: %s of %s written (%d %%)",
+                    path,
+                    _gigabytes(written_bytes),
+                    _gigabytes(live_bytes),
+                    written_bytes * 100 // live_bytes,
+                )
+
+            self._ticker.run(
+                # Outside any transaction, which VACUUM INTO refuses.
+                lambda: connection.execute("VACUUM INTO ?", (str(partial),)),
+                tick=report_written,
+                period=_PROGRESS_PERIOD,
+            )
         stamp = self._wall_clock.now().astimezone(UTC).strftime("%Y-%m-%d_%H-%M-%S")
         _rename_without_replacing(partial, final=path.with_name(f"{prefix}.{stamp}_UTC"))
 
-    def _check_free_space(self, connection: sqlite3.Connection, *, path: Path) -> None:
+    def _check_free_space(self, *, path: Path, live_bytes: int) -> None:
         # The copy holds the live pages only; the migrations need the file's size again.
-        page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
-        page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
-        freelist_count = int(
-            connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"]
-        )
         # A connection in WAL mode keeps its -wal while it is open.
         wal_bytes = Path(f"{path}-wal").stat().st_size
-        copy_bytes = (page_count - freelist_count) * page_size + wal_bytes
+        copy_bytes = live_bytes + wal_bytes
         need_bytes = copy_bytes + path.stat().st_size + wal_bytes
         free_bytes = self._free_bytes(path.parent)
         if free_bytes < need_bytes:
@@ -106,12 +128,39 @@ def _matches_its_latest_copy(
     return True
 
 
+def _live_bytes(connection: sqlite3.Connection) -> int:
+    """The bytes of the pages the database uses, which its copy holds."""
+    page_size = int(connection.execute("PRAGMA page_size").fetchone()["page_size"])
+    page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
+    freelist_count = int(connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"])
+    return (page_count - freelist_count) * page_size
+
+
+def _gigabytes(size_bytes: int) -> str:
+    return f"{size_bytes / 1e9:.1f} GB"
+
+
+def _size_or_zero(path: Path) -> int:
+    """``path``'s size, 0 before it exists."""
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
 def _delete_leftovers(path: Path) -> None:
     """Deletes the copies a stop interrupted, and their journals: ``VACUUM INTO`` refuses an
     existing file."""
-    for pattern in (".pre-*.partial", ".pre-*.partial-journal"):
-        for leftover in path.parent.glob(escape(path.name) + pattern):
-            leftover.unlink()
+    for partial in path.parent.glob(escape(path.name) + ".pre-*.partial"):
+        _logger.info(
+            "pre-migration copy of %s: the previous start's copy was interrupted, deleting %s; "
+            "the copy starts over",
+            path,
+            partial,
+        )
+        partial.unlink()
+    for journal in path.parent.glob(escape(path.name) + ".pre-*.partial-journal"):
+        journal.unlink()
 
 
 def _rename_without_replacing(partial: Path, *, final: Path) -> None:
