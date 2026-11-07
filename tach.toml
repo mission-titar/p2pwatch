@@ -235,6 +235,11 @@ layer = "adapters"
 depends_on = ["p2pwatch.domain", "p2pwatch.application.ports.driven.monotonic_clock"]
 
 [[modules]]
+path = "p2pwatch.adapters.driven.glibc_memory_releaser"
+layer = "adapters"
+depends_on = ["p2pwatch.application.ports.driven.memory_releaser"]
+
+[[modules]]
 path = "p2pwatch.adapters.driven.threading_ticker"
 layer = "adapters"
 depends_on = [
@@ -293,6 +298,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.source_point_reader",
   "p2pwatch.application.ports.driven.source_point_writer",
   "p2pwatch.application.ports.driven.source_reader",
+  "p2pwatch.application.ports.driven.memory_releaser",
   "p2pwatch.application.ports.driven.sql_executor",
   "p2pwatch.application.ports.driven.ticker",
   "p2pwatch.application.ports.driven.wall_clock",
@@ -448,6 +454,7 @@ depends_on = [
   "p2pwatch.adapters.driven.asyncio_waker",
   "p2pwatch.adapters.driven.config",
   "p2pwatch.adapters.driven.filesystem_catalog_finder",
+  "p2pwatch.adapters.driven.glibc_memory_releaser",
   "p2pwatch.adapters.driven.in_memory_node_metric_store",
   "p2pwatch.adapters.driven.in_memory_status_reading_store",
   "p2pwatch.adapters.driven.asyncio_monotonic_clock",
@@ -584,6 +591,11 @@ depends_on = ["p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.ticker"
+layer = "ports"
+depends_on = []
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.memory_releaser"
 layer = "ports"
 depends_on = []
 

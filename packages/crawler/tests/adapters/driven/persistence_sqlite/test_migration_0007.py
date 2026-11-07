@@ -3,6 +3,7 @@
 import gc
 import sqlite3
 import warnings
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -239,14 +240,18 @@ def test_a_mapped_result_reuses_the_variant_0007_migrated_from_its_old_row(
         connection.close()
 
 
-def test_migrating_restores_the_pragmas_0007_sets(tmp_path: Path) -> None:
+def test_migrating_leaves_none_of_the_pragmas_0007_sets(tmp_path: Path) -> None:
+    with closing(sqlite3.connect(":memory:")) as fresh:
+        build_pragmas = rows(fresh, sql="SELECT * FROM pragma_secure_delete, pragma_cache_size")
     path = tmp_path / "catalog.db"
     _old_catalog(path, _BARE)
-    connection = open_catalog_forcing_secure_delete_at(path, version=7)
+    connection = open_catalog_at(path, version=7)
     try:
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 7}]
-        assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 1}]
-        assert rows(connection, sql="PRAGMA cache_size") == [{"cache_size": -2000}]
+        assert (
+            rows(connection, sql="SELECT * FROM pragma_secure_delete, pragma_cache_size")
+            == build_pragmas
+        )
     finally:
         connection.close()
 

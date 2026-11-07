@@ -119,6 +119,32 @@ def test_a_memoized_sql_function_calls_its_function_once_per_distinct_arguments(
     assert calls == [("a", 2), ("b", 2)]
 
 
+def _echo(value: int) -> str:
+    return str(value)
+
+
+def test_a_memoized_sql_function_keeps_at_most_65_536_entries() -> None:
+    connection = sqlite3.connect(":memory:", autocommit=True)
+    memo = create_memoized_function(connection, name="echo", argument_count=1, function=_echo)
+    connection.execute(
+        "WITH RECURSIVE n(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM n"
+        " WHERE value < 65537) SELECT count(echo(value)) FROM n"
+    ).fetchall()
+    connection.close()
+    assert memo.cache_info().currsize == 65_536
+
+
+def test_each_registration_memoizes_apart() -> None:
+    first = sqlite3.connect(":memory:", autocommit=True)
+    second = sqlite3.connect(":memory:", autocommit=True)
+    first_memo = create_memoized_function(first, name="echo", argument_count=1, function=_echo)
+    second_memo = create_memoized_function(second, name="echo", argument_count=1, function=_echo)
+    first.execute("SELECT echo(1)").fetchall()
+    first.close()
+    second.close()
+    assert (first_memo.cache_info().currsize, second_memo.cache_info().currsize) == (1, 0)
+
+
 def test_iso_to_micros_sql_function_matches_the_python_one(connection: sqlite3.Connection) -> None:
     [row] = rows(
         connection, sql="SELECT iso_to_micros('1970-01-01T00:00:00.000001+00:00') AS micros"

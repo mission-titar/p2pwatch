@@ -2,6 +2,7 @@
 
 import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,10 +16,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Keyword, NodeId
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
-from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
-    open_catalog_at,
-    open_catalog_forcing_secure_delete_at,
-)
+from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 
 _A, _B = "a" * 32, "b" * 32
@@ -194,12 +192,16 @@ def test_a_new_observation_reuses_the_variant_0008_rekeyed(tmp_path: Path) -> No
         migrated.close()
 
 
-def test_migrating_restores_the_pragmas_0008_sets(tmp_path: Path) -> None:
+def test_migrating_leaves_none_of_the_pragmas_0008_sets(tmp_path: Path) -> None:
+    with closing(sqlite3.connect(":memory:")) as fresh:
+        build_pragmas = rows(fresh, sql="SELECT * FROM pragma_secure_delete, pragma_cache_size")
     _catalog_at_7(tmp_path / "catalog.db")
-    connection = open_catalog_forcing_secure_delete_at(tmp_path / "catalog.db", version=8)
+    connection = open_catalog_at(tmp_path / "catalog.db", version=8)
     try:
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 8}]
-        assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 1}]
-        assert rows(connection, sql="PRAGMA cache_size") == [{"cache_size": -2000}]
+        assert (
+            rows(connection, sql="SELECT * FROM pragma_secure_delete, pragma_cache_size")
+            == build_pragmas
+        )
     finally:
         connection.close()

@@ -8,7 +8,7 @@ import hashlib
 import json
 import sqlite3
 from collections.abc import Sequence
-from functools import cache
+from functools import _lru_cache_wrapper, lru_cache
 from typing import Any, Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite import micros
@@ -124,7 +124,7 @@ def register_sql_functions(connection: sqlite3.Connection) -> None:
             complete_source_count=complete,
         ).text
 
-    # Memoized for the connection's life, the crawler's included: one entry per variant 0007 wrote.
+    # Memoized up to a bound: the opening reopens the connection after migrating, which drops it.
     create_memoized_function(
         connection, name="content_hash", argument_count=7, function=content_hash_by_position
     )
@@ -164,6 +164,14 @@ def remove_migration_sql_functions(connection: sqlite3.Connection) -> None:
     connection.create_window_function("iso_to_micros", 1, None)
 
 
+# The operator's catalog holds 14 237 variants; one sharing none took the migration to 2.1 GB.
+_MEMO_BOUND = 65_536
+
+
+# A ``type`` statement, evaluated lazily: the runtime's ``_lru_cache_wrapper`` takes no parameter.
+type Memo = _lru_cache_wrapper[str | bytes]
+
+
 class SqlFunction(Protocol):
     def __call__(self, *arguments: Any, **keywords: Any) -> str | bytes: ...
 
@@ -174,6 +182,9 @@ def create_memoized_function(
     name: str,
     argument_count: int,
     function: SqlFunction,
-) -> None:
-    """Registers ``function`` as the SQL function ``name``, called once per distinct arguments."""
-    connection.create_function(name, argument_count, cache(function), deterministic=True)
+) -> Memo:
+    """Registers ``function`` as the SQL function ``name``, called once per distinct arguments
+    among the latest ``_MEMO_BOUND``, and returns its memo."""
+    memo = lru_cache(maxsize=_MEMO_BOUND)(function)
+    connection.create_function(name, argument_count, memo, deterministic=True)
+    return memo

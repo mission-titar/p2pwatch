@@ -17,6 +17,7 @@ the loops (no worker can write anymore), all within ``shutdown_deadline_seconds`
 """
 
 import asyncio
+import ctypes
 import logging
 import sys
 from collections.abc import AsyncIterator, Mapping
@@ -36,6 +37,7 @@ from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClo
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import load_config
+from p2pwatch.adapters.driven.glibc_memory_releaser import GlibcMemoryReleaser
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
@@ -341,6 +343,8 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 ticker=ticker,
                 free_bytes=lambda directory: disk_usage(directory).free,
+                # None: the process's own symbols, the C library's included.
+                memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
             )
             catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
             stack.callback(catalog_connection.close)

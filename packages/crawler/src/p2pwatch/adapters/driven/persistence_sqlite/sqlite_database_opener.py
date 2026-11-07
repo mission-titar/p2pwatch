@@ -44,6 +44,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
     register_sql_functions,
     remove_migration_sql_functions,
 )
+from p2pwatch.application.ports.driven.memory_releaser import MemoryReleaser
 from p2pwatch.application.ports.driven.ticker import Ticker
 from p2pwatch.domain.gigabytes import gigabytes
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
@@ -51,8 +52,6 @@ from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 _logger = logging.getLogger(__name__)
 
 _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "migrations"
-# Index = the value ``PRAGMA secure_delete`` reads; ``= 2`` would set ON, not FAST.
-_SECURE_DELETE_MODES = ("OFF", "ON", "FAST")
 # Under a minute between two lines: a silent start is one an operator restarts.
 _PROGRESS_PERIOD = timedelta(seconds=30)
 
@@ -67,10 +66,12 @@ class SqliteDatabaseOpener:
         *,
         ticker: Ticker,
         free_bytes: FreeBytesMeter,
+        memory_releaser: MemoryReleaser,
     ) -> None:
         self._pre_migration_copier = pre_migration_copier
         self._ticker = ticker
         self._free_bytes = free_bytes
+        self._memory_releaser = memory_releaser
 
     def open_catalog(self, path: Path) -> sqlite3.Connection:
         """Opens/migrates ``catalog.db`` (the append-only triggers are part of the schema)."""
@@ -86,8 +87,9 @@ class SqliteDatabaseOpener:
 
     def open(self, path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
-        copy, then gives back its free pages; a database newer than the ``scripts`` raises
-        ``MigrationError``, a lack of disk space ``OutOfSpaceError``."""
+        copy, then opens it again, gives back its free pages and releases the memory the block
+        took; a database newer than the ``scripts`` raises ``MigrationError``, a lack of disk space
+        ``OutOfSpaceError``."""
         connection = _connect(path)
         try:
             pending = _pending_migrations(connection, scripts=scripts)
@@ -105,10 +107,19 @@ class SqliteDatabaseOpener:
                 ticker=self._ticker,
                 free_bytes=self._free_bytes,
             )
+            if pending.migrations:
+                # Closed, it drops the memos, the page cache and the pragmas the scripts set.
+                connection.close()
+                connection = _connect(path)
+                with wrap_sqlite_errors():
+                    connection.execute("PRAGMA temp_store=FILE")
             _reclaim(connection, path=path, pending=pending, free_bytes=self._free_bytes)
             with wrap_sqlite_errors():
                 connection.execute("PRAGMA temp_store=DEFAULT")
                 remove_migration_sql_functions(connection)
+            if pending.migrations:
+                # The C library keeps what the closed connection freed: 280 MB after a 4.x upgrade.
+                self._memory_releaser.release()
         except BaseException:
             # Unconditional close: whatever fails, the connection must not leak.
             connection.close()
@@ -210,9 +221,6 @@ def _apply_migrations(
     migration"."""
     if not pending.migrations:
         return
-    with wrap_sqlite_errors():
-        secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()["secure_delete"])
-        cache_size = int(connection.execute("PRAGMA cache_size").fetchone()["cache_size"])
     _logger.info(
         "migrations of %s: from version %d to version %d in one step; "
         "a stop now rolls them back, costing only the time spent",
@@ -244,9 +252,6 @@ def _apply_migrations(
             path=path,
             free_bytes=free_bytes,
         ) from error
-    with wrap_sqlite_errors():
-        connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
-        connection.execute(f"PRAGMA cache_size = {cache_size}")
 
 
 @dataclass(kw_only=True)
