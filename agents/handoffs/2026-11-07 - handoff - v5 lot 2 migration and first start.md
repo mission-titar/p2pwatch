@@ -56,8 +56,8 @@ Drafted by block 70's teammate from the block reports, corrected by the closing 
 | 50 | #656 | the connection reopened, the memory released, the memo bounded | 354, 19 |
 | 60 | #657 | a merge refuses a held destination | 248, 8 |
 | 70 | #658 | the refused value named, the copy without hard links, the dead statement | 234, 10 |
-| 75 | the one after #658 | the free-space figures agreeing, the crawl's held catalog in one line | 111, 13 |
-| 80 | the closing one | the reclaim at a quarter free alone and ticked, the review's other fixes, the records | 129, 8 |
+| 75 | #659 | the free-space figures agreeing, the crawl's held catalog in one line | 111, 13 |
+| 80 | #660 | the reclaim at a quarter free alone and ticked, the review's other fixes, the records | 129, 8 |
 
 - **Three splits, each for a bound**: block 20 into 20 and 25 (519 lines with the comparison's lines, which moved to
   25); block 40 into 40 and 45 (the file bound; 45 holds the image's `SQLITE_TMPDIR=/data`, the operator's option (b)
@@ -171,9 +171,9 @@ The spec's section 6 lists what the pages must say; the blocks found these stale
 - Fix-backs: 2 (block 10, run 42359879136 cancelled by 42360225043; block 20, run 42361713620 cancelled by
   42361966386).
 - Cascaded rebases: 0, both fix-backs having landed before any block above existed.
-- Runs re-triggered by them: 2, fewer than the lot's 11 blocks; one more run cancelled by a docs-only push (block 70,
-  42383551762).
-- Rebases onto `main`: by the lead, after the closing blocks.
+- Runs re-triggered by them: 2, fewer than the lot's 11 blocks; two more runs cancelled by docs-only pushes (block 70,
+  42383551762; block 80, 42390199838, to name #659 and #660 here).
+- Rebases onto `main`: none: `main` did not move during the lot (still `fe691fbc`).
 - Splits: 3 (20 into 20 and 25, 40 into 40 and 45, the closing block into 75 and 80). Class 2 questions: 1 (block
   40, SQLite's temporary files). Bodies the operator called unreadable: none so far.
 
