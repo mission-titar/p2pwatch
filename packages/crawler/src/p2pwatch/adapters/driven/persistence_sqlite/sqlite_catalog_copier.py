@@ -39,7 +39,6 @@ from pathlib import Path, PurePath
 
 from catalog_matching.domain.validation import has_control_character
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
-    HeldDatabaseError,
     PersistenceError,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
@@ -55,6 +54,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.variants import (
 from p2pwatch.application.ports.driven.catalog_copier import CatalogCopier
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.identifiers import SourceId
 from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError

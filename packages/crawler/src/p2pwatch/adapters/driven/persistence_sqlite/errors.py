@@ -22,10 +22,6 @@ class PersistenceError(StoreError):
     """Base of all persistence adapter errors, each a ``StoreError``."""
 
 
-class HeldDatabaseError(PersistenceError):
-    """A database another connection holds, which an exclusive opening refuses."""
-
-
 class MigrationError(PersistenceError):
     """Database newer than the code, or a script that fails (fail-fast, MVP spec §14)."""
 
