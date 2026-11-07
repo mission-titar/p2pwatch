@@ -1,15 +1,9 @@
-"""UNIFIED crawler config (``crawler.yml``, versioned, deploy-simplification design).
+"""``crawler.yml``'s objects and their parse, which raises a ``ConfigValueError`` on its first
+problem.
 
-Merges the former POLICY config (cadences, polling budgets, jitter, backoff, shutdown
-deadline) and the former LOCAL config (secrets + DB paths + download wiring). Parsed from the
-dict the config adapter's ``load_yaml`` returns into FROZEN dataclasses, with FAIL-FAST
-validation: a bound that does not hold or a missing field is a ``ConfigValueError`` and the
-crawler refuses to start.
-
-The adapter's ``load_config`` resolves ``${NAME}`` in every string value before the parse, which
-never sees the environment. The ``download`` section is present ⟺ enabled (``enabled: true``, D5):
-``enabled`` absent/``false`` ⇒ section ``None`` (we don't descend into the rest); ``enabled:
-true`` ⇒ all wiring fields required.
+The config adapter resolves ``${NAME}`` in every string value before the parse, which never sees
+the environment. ``download`` is ``None`` unless ``enabled: true``, its wiring keys required only
+then.
 """
 
 import math
@@ -109,18 +103,16 @@ class WebuiConfig:
 
 _LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
-# Keys no longer read, by dotted path: refused, so an operator never believes they still apply.
+# Root keys no longer read: refused, so an operator never believes they still apply.
 _REMOVED_KEYS = (
     "cycle_interval_seconds",
     "decision_poll_interval_seconds",
     "keyword_pause_max_seconds",
     "keyword_pause_min_seconds",
     "node_id",
-    "observability.metrics",
     "port_sync",
     "search_poll_budget_seconds",
     "search_poll_interval_seconds",
-    "webui.enabled",
 )
 
 # Keys read elsewhere now: refused with their new place, so an operator never edits a dead one.
@@ -278,7 +270,16 @@ def _string(section: dict[str, Any], *, key: str, error_label: str) -> str:
     return setting
 
 
-def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
+def _refuse_removed(section: dict[str, Any], *, key: str, error_label: str) -> None:
+    if key in section:
+        raise ConfigValueError(
+            _key_path(error_label, key=key), message="was removed, delete it from crawler.yml"
+        )
+
+
+def parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
+    """The ``observability`` section: an absent key takes the domain's default."""
+    _refuse_removed(section, key="metrics", error_label="observability")
     log_level = section.get("log_level", DEFAULT_LOG_LEVEL)
     if not isinstance(log_level, str) or log_level not in _LOG_LEVELS:
         raise ConfigValueError(
@@ -295,7 +296,7 @@ def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
     for index, notification_node in enumerate(section.get("notifications", [])):
         error_label = f"observability.notifications[{index}]"
         notification = _require_mapping(notification_node, key_path=error_label)
-        if "tag" in notification:  # the 4.x name, refused like _MOVED_KEYS
+        if "tag" in notification:  # the 4.x name
             raise ConfigValueError(
                 error_label, message="key 'tag' was renamed 'audience', rename it in crawler.yml"
             )
@@ -326,8 +327,8 @@ def _parse_observability(section: dict[str, Any]) -> ObservabilityConfig:
     )
 
 
-def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
-    section = _require_mapping(document.get("download", {}), key_path="download")
+def parse_download(section: dict[str, Any]) -> DownloadConfig | None:
+    """The ``download`` section, ``None`` unless ``enabled``."""
     if not _bool_default(
         section, key="enabled", error_label="download", default=DEFAULT_DOWNLOAD_ENABLED
     ):
@@ -374,9 +375,8 @@ def _parse_download(document: dict[str, Any]) -> DownloadConfig | None:
     )
 
 
-def _parse_search(document: dict[str, Any]) -> SearchConfig:
-    """`search` section, required: its non-empty keywords and its backoff."""
-    section = _require_mapping(document.get("search", {}), key_path="search")
+def parse_search(section: dict[str, Any]) -> SearchConfig:
+    """The ``search`` section: its non-empty keywords and its backoff, both required."""
     keywords = _required(section, key="keywords", error_label="search")
     if not isinstance(keywords, list) or not keywords:
         raise ConfigValueError("search.keywords", message="non-empty list of strings expected")
@@ -413,12 +413,12 @@ def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
     return backoff
 
 
-def _parse_webui(document: dict[str, Any]) -> WebuiConfig:
-    """`webui` section (optional): an absent section or key takes the domain's default.
+def parse_webui(section: dict[str, Any]) -> WebuiConfig:
+    """The ``webui`` section: an absent key takes the domain's default.
 
     The bind is FIXED at 0.0.0.0:8080 in the composition ring, so this reads no host/port: an
     unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
-    section = _require_mapping(document.get("webui", {}), key_path="webui")
+    _refuse_removed(section, key="enabled", error_label="webui")
     gap = timedelta(
         seconds=_seconds(
             section,
@@ -435,30 +435,22 @@ def _parse_webui(document: dict[str, Any]) -> WebuiConfig:
     return WebuiConfig(amule_url=amule_url, source_period_gap=gap)
 
 
-def _holds_key_path(document: dict[str, Any], *, key_path: str) -> bool:
-    """Whether ``document`` holds the dotted ``key_path``, each section on the way a mapping."""
-    node: Any = document
-    for key in key_path.split("."):
-        if not isinstance(node, dict) or key not in node:
-            return False
-        node = node[key]
-    return True
+def _section(document: dict[str, Any], *, key: str) -> dict[str, Any]:
+    return _require_mapping(document.get(key, {}), key_path=key)
 
 
 def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
     """Builds a validated ``CrawlerConfig`` from the parsed YAML dict, its ``${NAME}`` already
     resolved. Fail-fast §5/§14: any inconsistency → ``ConfigValueError``."""
-    for key_path in _REMOVED_KEYS:
-        if _holds_key_path(document, key_path=key_path):
-            raise ConfigValueError(key_path, message="was removed, delete it from crawler.yml")
+    for key in _REMOVED_KEYS:
+        if key in document:
+            raise ConfigValueError(key, message="was removed, delete it from crawler.yml")
     for key, new_path in _MOVED_KEYS.items():
         if key in document:
             raise ConfigValueError(key, message=f"moved to '{new_path}', move it in crawler.yml")
-    observability = _parse_observability(
-        _require_mapping(document.get("observability", {}), key_path="observability")
-    )
+    observability = parse_observability(_section(document, key="observability"))
     return CrawlerConfig(
-        search=_parse_search(document),
+        search=parse_search(_section(document, key="search")),
         shutdown_deadline_seconds=_seconds(
             document, key="shutdown_deadline_seconds", error_label=_ROOT
         ),
@@ -466,8 +458,8 @@ def parse_crawler_config(document: dict[str, Any]) -> CrawlerConfig:
         catalog_db_path=_string(document, key="catalog_db_path", error_label=_ROOT),
         local_db_path=_string(document, key="local_db_path", error_label=_ROOT),
         observability=observability,
-        download=_parse_download(document),
-        webui=_parse_webui(document),
+        download=parse_download(_section(document, key="download")),
+        webui=parse_webui(_section(document, key="webui")),
     )
 
 
