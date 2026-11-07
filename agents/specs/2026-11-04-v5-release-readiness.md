@@ -57,16 +57,17 @@ one or more release candidates tested on the operator's own node.
   larger journal that one block writes, measured on the real catalog. *Today each migration commits on its own, so a
   stop mid-way leaves an intermediate version and the restart writes a second full copy that no release can read,
   enough to refuse a node whose disk is sized as the docs say; a refusal must come before the copy, never in the
-  middle of the block.*
+  middle of the block.* (Corrected: an out-of-space during the block refuses after the copy, rolled back whole, lot 2's D1.)
 - **D5. The final space reclaim (`VACUUM`) runs after that block, takes no copy, and runs again at the next start if
   it was interrupted.** *SQLite refuses it inside a transaction, and an interrupted one leaves the database intact
   but still oversized.*
 - **D6. The first start says what it does in the log**: before the copy, its size, the expected wait and not to
   restart; progress during the copy and the migrations; a one-line free-space refusal naming what to free. The guide
-  states the duration. *Ten silent minutes with the webui unreachable are when an operator restarts, and a traceback
+  states the duration. (Corrected: the copy's share written in place of an expected wait, lot 2's D3.) *Ten silent minutes with the webui unreachable are when an operator restarts, and a traceback
   in bytes helps nobody.* No waiting page in the webui: *it would serve once per upgrade.*
 - **D7. `merge` runs on a stopped node only**: the docs say to stop the crawler first, and `merge` refuses a catalog a
-  crawler holds. *Merging into a live node is not a use case the operator wants to support now; today the crawler
+  crawler holds. (Corrected: refined by lot 2's D4: a merge refuses a held destination, `--output` still reads a running
+  node's catalog.) *Merging into a live node is not a use case the operator wants to support now; today the crawler
   loses its writes during the merge's lock.*
 - **D8. After applying migrations, the crawler gives back to the system the memory the migrations used.** *It holds
   several hundred megabytes for nothing until its next restart, and the fix is simple.*

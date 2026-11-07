@@ -46,13 +46,10 @@ def test_load_scripts_rejects_non_padded_prefixes_that_misorder(tmp_path: Path) 
 # --- The directives (stage 1 spec, D8) ---
 
 
-def test_load_scripts_reads_the_no_transaction_directive(tmp_path: Path) -> None:
-    (tmp_path / "0001_plain.sql").write_text("A", encoding="utf-8")
-    (tmp_path / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
-    assert load_scripts(tmp_path) == (
-        Migration(version=1, script="A", transactional=True),
-        Migration(version=2, script=_NO_TRANSACTION + "VACUUM;", transactional=False),
-    )
+def test_load_scripts_refuses_the_no_transaction_directive(tmp_path: Path) -> None:
+    (tmp_path / "0001_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
+    with pytest.raises(MigrationError, match="0001_vacuum.sql: unknown directive"):
+        load_scripts(tmp_path)
 
 
 def test_load_scripts_reads_the_copy_before_directive(tmp_path: Path) -> None:
@@ -69,12 +66,4 @@ def test_load_scripts_rejects_a_misspelled_copy_before_directive(tmp_path: Path)
         "-- migration: copy-befor\nDROP TABLE t;", encoding="utf-8"
     )
     with pytest.raises(MigrationError, match="0001_typo.sql.*copy-befor'"):
-        load_scripts(tmp_path)
-
-
-def test_load_scripts_rejects_a_misspelled_directive(tmp_path: Path) -> None:
-    (tmp_path / "0001_typo.sql").write_text(
-        "-- migration: no-transction\nVACUUM;", encoding="utf-8"
-    )
-    with pytest.raises(MigrationError, match="0001_typo.sql.*no-transction"):
         load_scripts(tmp_path)
