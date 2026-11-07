@@ -4,9 +4,10 @@ from pathlib import PurePath
 
 import pytest
 
-from p2pwatch.application.ports.driving.config_validator import ConfigProblem, ConfigReport
+from p2pwatch.application.ports.driving.config_validator import ConfigReport
 from p2pwatch.application.use_cases.validate_config import ValidateConfig
 from p2pwatch.domain.broken_input_error import BrokenInputError
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from tests.fakes.adapters.driven.fake_config_checker import FakeConfigChecker
 
