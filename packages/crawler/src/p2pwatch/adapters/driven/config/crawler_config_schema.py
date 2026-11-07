@@ -36,7 +36,6 @@ from p2pwatch.domain.crawler_config import (
     SearchConfig,
     WebuiConfig,
     cross_value_problems,
-    parse_download,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.observability.policy import Audience
@@ -228,17 +227,13 @@ def _observability(observability: _ObservabilityKeys) -> ObservabilityConfig:
 def _download(download: _DownloadOn | _DownloadOff) -> DownloadConfig | None:
     match download:
         case _DownloadOn(enabled=True):
-            # Built by the domain's parse, which refuses none of the values the schema holds.
-            return parse_download(
-                {
-                    "enabled": True,
-                    "poll_interval_seconds": download.poll_interval_seconds,
-                    "min_free_bytes": download.min_free_bytes,
-                    "lost_after_seconds": download.lost_after_seconds,
-                    "output_dir": download.output_dir,
-                    "reappeared_after_seconds": download.reappeared_after_seconds,
-                    "sources_interval_seconds": download.sources_interval_seconds,
-                }
+            return DownloadConfig(
+                poll_interval_seconds=download.poll_interval_seconds,
+                min_free_bytes=download.min_free_bytes,
+                lost_after=timedelta(seconds=download.lost_after_seconds),
+                output_directory=download.output_dir,
+                reappeared_after=timedelta(seconds=download.reappeared_after_seconds),
+                sources_interval=timedelta(seconds=download.sources_interval_seconds),
             )
         case _:
             return None
