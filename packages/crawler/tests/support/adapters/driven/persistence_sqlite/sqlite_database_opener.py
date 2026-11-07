@@ -2,8 +2,10 @@
 ``SqliteDatabaseOpener``, for a test that only needs an open database."""
 
 import sqlite3
+from functools import partial
 from pathlib import Path
 from typing import Protocol
+from weakref import finalize
 
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
@@ -91,6 +93,37 @@ def database_opener_registering(function_name: str) -> SqliteDatabaseOpener:
     migrations, so that a test tells the connection that migrated from one opened after."""
     return SqliteDatabaseOpener(
         _PreparingCopier(lambda connection: connection.create_function(function_name, 0, int)),
+        ticker=FakeTicker(),
+        free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
+    )
+
+
+def _register_opening_on_release(
+    connection: sqlite3.Connection, *, path: Path, holders: list[sqlite3.Connection]
+) -> None:
+    """Registers a SQL function on ``connection`` whose release opens a reader of ``path`` into
+    ``holders``."""
+    function = partial(int)
+    finalize(function, _open_holder, path, holders=holders)
+    connection.create_function("open_on_release", 0, function)
+
+
+def _open_holder(path: Path, *, holders: list[sqlite3.Connection]) -> None:
+    holder = open_reader(path)
+    holder.execute("SELECT count(*) FROM sqlite_schema").fetchone()
+    holders.append(holder)
+
+
+def database_opener_held_at_reopen(
+    path: Path, *, holders: list[sqlite3.Connection]
+) -> SqliteDatabaseOpener:
+    """The same, another connection reading ``path`` in the instant between the first connection's
+    close and the reopen: SQLite releases a closed connection's functions once its file is."""
+    return SqliteDatabaseOpener(
+        _PreparingCopier(
+            lambda connection: _register_opening_on_release(connection, path=path, holders=holders)
+        ),
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),

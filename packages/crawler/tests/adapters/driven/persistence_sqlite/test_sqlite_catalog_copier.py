@@ -465,6 +465,32 @@ def test_an_output_short_of_space_for_its_copy_raises_the_refusal_in_gigabytes(
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 5}]
 
 
+def test_an_output_another_connection_holds_is_refused_unchanged(tmp_path: Path) -> None:
+    src = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    destination = make_catalog(tmp_path / "out.db", content=_full_catalog("b", node_id="node-b"))
+    before = [rows_without_id(destination, table=table) for table in _ALL_TABLES]
+
+    with closing(open_catalog(destination)), pytest.raises(CatalogCopyError) as refusal:
+        _copy_catalogs(destination, source_catalogs=[src])
+
+    assert str(refusal.value) == (
+        f"destination {destination} is held by another process: stop the node first"
+    )
+    assert [rows_without_id(destination, table=table) for table in _ALL_TABLES] == before
+
+
+def test_a_source_another_connection_holds_merges(tmp_path: Path) -> None:
+    # merge --output beside a running node: its catalog is read, never held.
+    src = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    destination = tmp_path / "out.db"
+
+    with closing(open_catalog(src)):
+        _copy_catalogs(destination, source_catalogs=[src])
+
+    for table in _ALL_TABLES:
+        assert rows_without_id(destination, table=table) == rows_without_id(src, table=table)
+
+
 @pytest.mark.parametrize("user_hash", [HASH_B, None])
 @pytest.mark.parametrize("first_first", [True, False])
 def test_two_catalogs_sharing_a_variant_merge_into_the_union_of_their_points(
