@@ -181,8 +181,8 @@ def test_a_connection_attaches_a_database_read_only_by_its_uri(
 
 def test_catalog_version_is_the_one_open_catalog_brings_a_catalog_to(tmp_path: Path) -> None:
     with closing(open_catalog(tmp_path / "catalog.db")) as connection:
-        [stamped] = rows(connection, sql="PRAGMA user_version")
-    assert database_opener().catalog_version() == stamped["user_version"]
+        [written] = rows(connection, sql="PRAGMA user_version")
+    assert database_opener().catalog_version() == written["user_version"]
 
 
 def test_open_reader_refuses_writes(tmp_path: Path) -> None:
@@ -639,9 +639,11 @@ def test_each_applied_script_logs_one_line_before_it_runs(
     assert caplog.messages == ["migration 2: applying"]
 
 
-def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) -> None:
-    # A COMMIT inside a script commits the block so far, unstamped: the version stays the starting
-    # one, and the earlier scripts' work cannot be taken back.
+def test_stray_commit_in_a_script_is_detected_before_the_version_is_written(
+    tmp_path: Path,
+) -> None:
+    # A COMMIT inside a script commits the block so far without its schema version: the version
+    # stays the starting one, and the earlier scripts' work cannot be taken back.
     path = tmp_path / "commit.db"
     with pytest.raises(
         MigrationError, match=r"^migration 2: the script closed the migrations' transaction"
@@ -656,10 +658,10 @@ def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) ->
     assert _version_and_tables(path) == (0, {"survit"})
 
 
-def test_stray_commit_followed_by_a_failure_keeps_the_version_unstamped(tmp_path: Path) -> None:
+def test_stray_commit_followed_by_a_failure_keeps_the_starting_version(tmp_path: Path) -> None:
     # Attack variant 2: a stray COMMIT THEN a statement that fails. The work
     # committed by the stray COMMIT is unrecoverable, but the version MUST NOT
-    # be stamped (otherwise the migration would be marked applied even though it failed).
+    # be written (otherwise the migration would be marked applied even though it failed).
     path = tmp_path / "commit2.db"
     script = "CREATE TABLE t (x INTEGER);\nCOMMIT;\nINSERT INTO inexistante VALUES (1);"
     with pytest.raises(MigrationError, match="migration 1"):

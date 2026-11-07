@@ -177,8 +177,9 @@ def _latest_version(scripts: tuple[Migration, ...]) -> int:
 
 
 def _apply_migrations(connection: sqlite3.Connection, *, pending: PendingMigrations) -> None:
-    """Applies the pending scripts in order in one transaction, the version stamped at its end; the
-    rules for writing one: ``docs/contributing/architecture.md``, "Écrire une migration"."""
+    """Applies the pending scripts in order in one transaction, the schema version written once,
+    at its end; the rules for writing one: ``docs/contributing/architecture.md``, "Écrire une
+    migration"."""
     if not pending.migrations:
         return
     with wrap_sqlite_errors():
