@@ -164,7 +164,7 @@ def test_every_unset_variable_is_listed_beside_the_parses_problem(tmp_path: Path
     ("broken_file", "text", "key", "message"),
     [
         ("crawler.yml", "search: [unclosed\n", None, "invalid YAML: "),  # a broken file
-        ("targets.yml", "episodes: nope\n", None, "'episodes' section: list expected"),
+        ("targets.yml", "episodes: nope\n", "episodes", "Input should be a valid list"),
         ("matcher.yml", "tokens: {}\nrules: {}\n", None, "'rules' section: list expected"),
     ],
 )

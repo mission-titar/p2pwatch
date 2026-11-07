@@ -33,18 +33,29 @@ def test_a_variable_missing_from_the_env_given_is_a_problem_naming_its_key() -> 
 
 
 @pytest.mark.parametrize(
-    ("check", "text", "message"),
+    ("check", "text", "key", "message"),
     [
-        (FilesystemConfigChecker(_ENV).check_targets, "episodes: nope\n", "'episodes' section: "),
-        (FilesystemConfigChecker(_ENV).check_matcher_config, "rules: {}\n", "'rules' section: "),
+        (
+            FilesystemConfigChecker(_ENV).check_targets,
+            "episodes: nope\n",
+            "episodes",
+            "Input should be a valid list",
+        ),
+        (
+            FilesystemConfigChecker(_ENV).check_matcher_config,
+            "rules: {}\n",
+            None,
+            "'rules' section: ",
+        ),
     ],
     ids=["targets", "matcher"],
 )
-def test_a_wrong_policy_file_is_a_problem_naming_no_key_apart(
+def test_a_wrong_policy_file_is_a_problem_of_it(
     *,
     tmp_path: Path,
     check: ConfigCheck,
     text: str,
+    key: str | None,
     message: str,
 ) -> None:
     path = tmp_path / "policy.yml"
@@ -52,7 +63,7 @@ def test_a_wrong_policy_file_is_a_problem_naming_no_key_apart(
 
     [problem] = check(PurePath(path))
 
-    assert (problem.file_path, problem.key) == (path, None)
+    assert (problem.file_path, problem.key) == (path, key)
     assert problem.message.startswith(message)
 
 

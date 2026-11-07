@@ -1,12 +1,14 @@
 """Matching engine models (cf. spec §7, §8)."""
 
 from dataclasses import dataclass
+from typing import Final, Literal
 
 from p2pwatch.domain.matching.identifiers import TargetId
 
-LOST = "lost"
+LOST: Final = "lost"
 FOUND = "found"
 # Closed set of target statuses (a found target is still downloaded: archival redundancy).
+TargetStatus = Literal["lost", "found"]
 TARGET_STATUSES: frozenset[str] = frozenset({LOST, FOUND})
 
 
