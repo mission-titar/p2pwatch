@@ -1,3 +1,4 @@
+# Written for main before v5 lot 2 (fe691fbc): lot 2's opener and copier also take ticker, free_bytes, memory_releaser.
 """Opens <dir>/catalog.db then <dir>/local.db with main's opener, logging each step to stderr."""
 
 import logging

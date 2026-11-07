@@ -1,3 +1,4 @@
+# Written for main before v5 lot 2 (fe691fbc): lot 2's opener and copier also take ticker, free_bytes, memory_releaser.
 """Memory after the crawler's database open, and what each candidate fix gives back.
 
 Run in the p2pwatch image: python memprobe.py DATA_DIR STEPS [--tracemalloc]
