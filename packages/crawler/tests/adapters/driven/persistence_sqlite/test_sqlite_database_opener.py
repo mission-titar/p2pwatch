@@ -31,6 +31,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
     database_opener_registering,
     database_opener_setting,
     database_opener_ticked_by,
+    database_opener_ticked_by_progress,
     open_catalog,
     open_local,
 )
@@ -716,16 +717,14 @@ def test_the_block_is_announced_then_the_migration_running_every_30_s(
     caplog.clear()
     with caplog.at_level("INFO"):
         database_opener_ticked_by(ticker).open(path, scripts=scripts).close()
-    *block_lines, reclaim_line = caplog.messages
-    assert block_lines == [
+    assert caplog.messages == [
         f"migrations of {path}: from version 1 to version 3 in one step; "
         "a stop now rolls them back, costing only the time spent",
         "migration 2: applying",
-        f"migrations of {path}: migration 2 running, 30 s elapsed",
+        f"migrations of {path}: migration 2 running, 30 s since the block began",
         "migration 3: applying",
-        f"migrations of {path}: migration 3 running, 60 s elapsed",
+        f"migrations of {path}: migration 3 running, 60 s since the block began",
     ]
-    assert reclaim_line.startswith(f"reclaim of {path}: ")
     assert ticker.periods == [timedelta(seconds=30)]
 
 
@@ -791,7 +790,7 @@ def test_the_pragmas_a_script_sets_end_with_the_block(tmp_path: Path) -> None:
     assert pragmas == build_pragmas
 
 
-# --- The reclaim: after a block of migrations, or at a quarter of free pages ---
+# --- The reclaim: at a quarter of free pages, after a block of migrations as at any opening ---
 
 
 def _page_and_free_counts(path: Path) -> tuple[int, int]:
@@ -818,26 +817,41 @@ def _with_free_pages(path: Path, *, kept_pages: int, freed_pages: int) -> tuple[
     return _page_and_free_counts(path)
 
 
-def test_a_block_of_migrations_is_compacted_after_it(tmp_path: Path) -> None:
-    path = tmp_path / "block.db"
-    scripts = (
+def _block_freeing(pages: int) -> tuple[Migration, ...]:
+    """A block of migrations that keeps a table and frees ``pages`` pages."""
+    return (
         Migration(version=1, script="CREATE TABLE kept (b BLOB);"),
-        Migration(version=2, script="INSERT INTO kept VALUES (zeroblob(16 * 4092));"),
+        Migration(version=2, script="INSERT INTO kept VALUES (zeroblob(14 * 4092));"),
         Migration(
             version=3,
             script="CREATE TABLE freed (b BLOB);\n"
-            "INSERT INTO freed VALUES (zeroblob(4092));\nDROP TABLE freed;",
+            f"INSERT INTO freed VALUES (zeroblob({pages - 1} * 4092));\nDROP TABLE freed;",
         ),
     )
-    _open(path, scripts=scripts).close()
+
+
+def test_a_block_of_migrations_leaving_a_quarter_free_is_compacted_after_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "block.db"
+    _open(path, scripts=_block_freeing(6)).close()
     assert _page_and_free_counts(path)[1] == 0
+
+
+def test_a_block_of_migrations_leaving_less_than_a_quarter_free_is_not_compacted(
+    tmp_path: Path,
+) -> None:
+    """A block that frees nothing, a column added, rewrites no catalog."""
+    path = tmp_path / "block.db"
+    _open(path, scripts=_block_freeing(5)).close()
+    assert _page_and_free_counts(path) == (21, 5)
 
 
 def test_the_reclaim_leaves_the_wal_empty(tmp_path: Path) -> None:
     """The crawler holds its connection for good, so a WAL the reclaim grew would never shrink."""
     path = tmp_path / "wal.db"
-    scripts = (Migration(version=1, script="CREATE TABLE t (b BLOB);"),)
-    with closing(_open(path, scripts=scripts)):
+    _with_free_pages(path, kept_pages=10, freed_pages=4)
+    with closing(_open(path, scripts=())):
         assert Path(f"{path}-wal").stat().st_size == 0
 
 
@@ -859,6 +873,21 @@ def test_the_reclaim_is_announced_with_the_space_it_gives_back(
         f"reclaim of {path}: giving back {gigabytes(4 * 4096)} of free pages, 25 % of the file; "
         "a stop now costs only the time spent"
     ]
+
+
+def test_the_reclaim_reports_every_30_s_while_it_runs(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "ticked.db"
+    _with_free_pages(path, kept_pages=10, freed_pages=4)
+    ticker = FakeTicker()
+    with caplog.at_level("INFO"):
+        database_opener_ticked_by_progress(ticker).open(path, scripts=()).close()
+    assert caplog.messages[1:3] == [
+        f"reclaim of {path}: giving back free pages, 30 s elapsed",
+        f"reclaim of {path}: giving back free pages, 60 s elapsed",
+    ]
+    assert ticker.periods == [timedelta(seconds=30)]
 
 
 def test_an_opening_with_nothing_pending_leaves_less_than_a_quarter_free(tmp_path: Path) -> None:

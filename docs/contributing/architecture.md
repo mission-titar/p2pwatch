@@ -586,9 +586,10 @@ récente que le code est refusée. Les règles d'écriture :
   au système ce qu'elle garde de libre (`malloc_trim` de la glibc, via `GlibcMemoryReleaser`).
 - **Pas de `VACUUM`**, que SQLite refuse dans une transaction. L'ouvreur rend la place libérée
   lui-même, après la transaction, sur la connexion neuve : un `VACUUM` puis un
-  `PRAGMA wal_checkpoint(TRUNCATE)`, après toute migration, et à toute ouverture où les pages
-  libres font au moins le quart du fichier. Une mise à niveau libère au moins ses anciennes tables,
-  si bien qu'un arrêt pendant ce compactage le fait reprendre au démarrage suivant ; un catalogue
+  `PRAGMA wal_checkpoint(TRUNCATE)`, à toute ouverture où les pages libres font au moins le quart
+  du fichier, après des migrations comme sans. Une mise à niveau libère au moins ses anciennes
+  tables, si bien qu'un arrêt pendant ce compactage le fait reprendre au démarrage suivant ; une
+  migration qui ne libère rien (une colonne ajoutée) ne réécrit pas le catalogue, et un catalogue
   ordinaire, qui ne fait que grandir, n'atteint jamais ce quart.
 - **La directive `-- migration: copy-before`**, seule et exacte en première ligne, marque un script
   qui supprime ou réécrit des lignes : un `DELETE`, un `UPDATE`, un `DROP TABLE`, un

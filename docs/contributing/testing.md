@@ -426,6 +426,11 @@ Outils ponctuels destinés au **développeur** (mesure et diagnostic, pas exploi
   application/json' -d '{"password":"…"}'`, puis se présente en `Authorization: Bearer`. Pensez à
   `limit=1000000000` sur les routes de liste : sans lui, elles ne rendent que les 100 premières
   lignes.
+- **Un disque plein pendant le compactage.** Un `VACUUM` ne fait jamais grandir le fichier, si bien
+  que `max_page_count`, qui fait échouer une migration dans les tests de l'ouvreur, ne le fait pas
+  échouer : la ligne de refus du compactage faute de place (`reclaim of ...: out of space in ...`)
+  n'est montrée par aucun test du gate, seulement sur un tmpfs à la taille voulue, que
+  `unshare -rm` monte sans droits élevés.
 
 ---
 
