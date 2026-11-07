@@ -1,5 +1,5 @@
 import ctypes
-from typing import NoReturn
+from typing import NoReturn, cast
 
 import pytest
 
@@ -27,6 +27,26 @@ class _ResolvingCLibrary(ctypes.CDLL):
         return super().__getitem__(name)
 
 
+_MallocTrimType = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_size_t)
+
+
+class _RecordingCLibrary(ctypes.CDLL):
+    """A C library whose ``malloc_trim`` keeps each pad it is called with."""
+
+    def __init__(self) -> None:
+        super().__init__(None)
+        self.pads: list[int] = []
+        self._malloc_trim = _MallocTrimType(self._record)
+
+    def _record(self, pad: int) -> int:
+        self.pads.append(pad)
+        return 1
+
+    def __getitem__(self, name: str) -> "ctypes._NamedFuncPointer":
+        assert name == "malloc_trim"
+        return cast("ctypes._NamedFuncPointer", self._malloc_trim)
+
+
 class _CLibraryWithoutMallocTrim(ctypes.CDLL):
     """A C library lacking ``malloc_trim``, as musl does."""
 
@@ -41,6 +61,12 @@ def test_resolves_malloc_trim_in_the_process_s_c_library() -> None:
     c_library = _ResolvingCLibrary()
     GlibcMemoryReleaser(c_library).release()
     assert c_library.looked_up == ["malloc_trim"]
+
+
+def test_release_calls_malloc_trim_once_with_a_pad_of_0() -> None:
+    c_library = _RecordingCLibrary()
+    GlibcMemoryReleaser(c_library).release()
+    assert c_library.pads == [0]
 
 
 def test_releases_nothing_from_a_c_library_without_malloc_trim() -> None:
