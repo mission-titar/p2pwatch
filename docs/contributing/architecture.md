@@ -576,8 +576,9 @@ récente que le code est refusée. Les règles d'écriture :
   mémoire, jusqu'au manque de mémoire ; le cache plus grand accélère une copie limitée par les
   entrées-sorties. L'ouvreur relit ces deux pragmas avant la transaction et les rétablit après elle :
   un script règle ce dont il a besoin et ne remet jamais rien en place.
-- **Les tris passent par des fichiers temporaires** (`temp_store = FILE`) dans le dossier temporaire
-  du conteneur, pas dans `/data` : un tri en mémoire n'a pas de plafond.
+- **Les tris passent par des fichiers temporaires** (`temp_store = FILE`) : un tri en mémoire n'a pas
+  de plafond. L'image les met dans `/data` (`SQLITE_TMPDIR`), sur le disque que mesure la
+  vérification de place libre.
 - **Pas de `VACUUM`**, que SQLite refuse dans une transaction. L'ouvreur rend la place libérée
   lui-même, après la transaction : un `VACUUM` puis un `PRAGMA wal_checkpoint(TRUNCATE)`, après
   toute migration, et à toute ouverture où les pages libres font au moins le quart du fichier. Une

@@ -356,6 +356,7 @@ def test_the_two_containers_work_together(project_files: tuple[Path, ...]) -> No
     # Read in the container: Docker Desktop's file sharing shows every file as the host user's.
     owner = _exec(_CORE, "stat", "-c", "%u", "/data/catalog.db", files=project_files)
     assert owner == str(os.getuid())
+    assert _exec(_CORE, "printenv", "SQLITE_TMPDIR", files=project_files) == "/data"
 
 
 _PORT_SYNC_SERVICE = "/etc/services.d/port-sync"
