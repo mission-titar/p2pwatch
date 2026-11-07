@@ -497,7 +497,8 @@ microsecondes, et le nombre de sources. `raw_meta` devient un objet JSON : `code
 et `complete_source_count` à son premier niveau, le reste sous `unmapped`.
 `catalog/0008` identifie un fichier par `(network, native_id)`, avec pour
 clé `file_id`, un UUID v5 de ce couple, identique sur tous les nœuds ; `aich_hash` disparaît.
-`catalog/0009` rend au disque, par un `VACUUM`, la place que ces réécritures ont libérée.
+`catalog/0009` est vide depuis la v5 : l'ouverture rend au disque la place que ces réécritures
+ont libérée (§8.1).
 `catalog/0010` crée l'historique des sources en plages de présence. `catalog/0011` le refait en
 points (§8.3) : il supprime `source_ranges` et `source_variants`, et recrée la seconde avec
 `node_id`, vide, à côté de `source_observations`. Aucune version livrée n'avait écrit ces plages.
@@ -539,15 +540,18 @@ de `local.db` est désormais `STRICT`. Chaque table du catalogue l'est aussi, d�
 À chaque ouverture d'une base, au démarrage du crawler comme pour la destination de `merge`,
 l'ouvreur (`SqliteDatabaseOpener`, dans `adapters/driven/persistence_sqlite/sqlite_database_opener.py`)
 applique dans l'ordre chaque script `NNNN_*.sql` de `migrations/catalog/` ou `migrations/local/` dont
-le numéro dépasse le `PRAGMA user_version` de la base, puis y inscrit ce numéro. Une base plus récente
-que le code est refusée. Les règles d'écriture :
+le numéro dépasse le `PRAGMA user_version` de la base, puis y inscrit le dernier numéro. Une base plus
+récente que le code est refusée. Les règles d'écriture :
 
 - **Le nom.** Un préfixe à quatre chiffres, strictement croissant ; les trous sont permis. Une
   migration ne s'insère jamais sous un numéro déjà livré : une base inscrite plus haut ne la verrait
   pas.
-- **Une transaction par script.** L'ouvreur ouvre la transaction, inscrit la version dedans et la
-  valide : un échec annule le script entier et laisse la version inchangée. Le script n'écrit donc ni
-  `BEGIN`, ni `COMMIT`, ni `ROLLBACK` ; un `COMMIT` égaré lève `MigrationError`.
+- **Une transaction par ouverture, pas par script.** L'ouvreur ouvre la transaction, y exécute
+  chaque script, inscrit la dernière version et la valide : un échec, un disque plein compris,
+  annule tous les scripts et laisse la base à sa version de départ, dont le démarrage suivant
+  retrouve la copie d'avant migration au lieu d'en écrire une seconde. Le script n'écrit donc ni
+  `BEGIN`, ni `COMMIT`, ni `ROLLBACK` ; un `COMMIT` égaré lève `MigrationError`, mais a déjà validé
+  ce qui le précède.
 - **Pas de `CREATE TEMP TABLE`.** L'ouvreur change `temp_store` autour des migrations, ce qui
   détruit toute table temporaire.
 - **`foreign_keys` reste actif.** `PRAGMA foreign_keys = OFF` est ignoré dans une transaction, sans
@@ -570,14 +574,16 @@ que le code est refusée. Les règles d'écriture :
   `PRAGMA cache_size = -262144` (256 Mo). Là où SQLite est compilé avec `SECURE_DELETE`, comme dans
   l'image, le `DROP` d'une grosse table garde tout son contenu dans le journal de l'instruction, en
   mémoire, jusqu'au manque de mémoire ; le cache plus grand accélère une copie limitée par les
-  entrées-sorties. L'ouvreur relit ces deux pragmas avant chaque script et les rétablit après : un
-  script règle ce dont il a besoin et ne remet jamais rien en place.
+  entrées-sorties. L'ouvreur relit ces deux pragmas avant la transaction et les rétablit après elle :
+  un script règle ce dont il a besoin et ne remet jamais rien en place.
 - **Les tris passent par des fichiers temporaires** (`temp_store = FILE`) dans le dossier temporaire
   du conteneur, pas dans `/data` : un tri en mémoire n'a pas de plafond.
-- **La directive `-- migration: no-transaction`**, seule et exacte en première ligne, fait exécuter
-  le script hors transaction, pour ce qui l'exige comme `VACUUM` ; la version est inscrite après son
-  succès. Le script doit alors pouvoir être rejoué, car un arrêt entre sa fin et l'inscription le
-  relance au démarrage suivant.
+- **Pas de `VACUUM`**, que SQLite refuse dans une transaction. L'ouvreur rend la place libérée
+  lui-même, après la transaction : un `VACUUM` puis un `PRAGMA wal_checkpoint(TRUNCATE)`, après
+  toute migration, et à toute ouverture où les pages libres font au moins le quart du fichier. Une
+  mise à niveau libère au moins ses anciennes tables, si bien qu'un arrêt pendant ce compactage le
+  fait reprendre au démarrage suivant ; un catalogue ordinaire, qui ne fait que grandir, n'atteint
+  jamais ce quart.
 - **La directive `-- migration: copy-before`**, seule et exacte en première ligne, marque un script
   qui supprime ou réécrit des lignes : un `DELETE`, un `UPDATE`, un `DROP TABLE`, un
   `INSERT ... SELECT`, un `INSERT OR REPLACE`, un `REPLACE INTO`, un
@@ -587,8 +593,8 @@ que le code est refusée. Les règles d'écriture :
   ([la copie d'avant migration](../operate.md#la-copie-davant-migration)). `test_migration_directives.py`
   analyse chaque script livré avec sqlfluff et exige la directive exactement quand le script contient
   l'une de ces instructions : un script qui l'oublie fait échouer la gate.
-- **Une directive au plus par script**, aucun n'ayant besoin des deux. Toute autre première ligne
-  commençant par `-- migration:` est refusée au chargement des scripts.
+- **Toute autre première ligne commençant par `-- migration:`** est refusée au chargement des
+  scripts.
 
 ### 8.2 Ce qui mérite un `CHECK`
 

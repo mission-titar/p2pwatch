@@ -24,6 +24,7 @@ from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     MigrationError,
+    OutOfSpaceError,
     PersistenceError,
     wrap_sqlite_errors,
 )
@@ -70,15 +71,22 @@ class SqliteDatabaseOpener:
 
     def open(self, path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
-        copy; a database newer than the ``scripts`` raises ``MigrationError``."""
+        copy, then gives back its free pages; a database newer than the ``scripts`` raises
+        ``MigrationError``."""
         connection = _connect(path)
         try:
             pending = _pending_migrations(connection, scripts=scripts)
             self._pre_migration_copier.ensure_copy(
                 connection, path=path, pending=pending, open_reader=self.open_reader
             )
-            _apply_migrations(connection, pending=pending)
             with wrap_sqlite_errors():
+                # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows), and
+                # VACUUM builds its whole copy in a temporary database.
+                connection.execute("PRAGMA temp_store=FILE")
+            _apply_migrations(connection, pending=pending)
+            _reclaim(connection, after_block=bool(pending.migrations))
+            with wrap_sqlite_errors():
+                connection.execute("PRAGMA temp_store=DEFAULT")
                 remove_migration_sql_functions(connection)
         except BaseException:
             # Unconditional close: whatever fails, the connection must not leak.
@@ -169,51 +177,65 @@ def _latest_version(scripts: tuple[Migration, ...]) -> int:
 
 
 def _apply_migrations(connection: sqlite3.Connection, *, pending: PendingMigrations) -> None:
-    """Applies the pending scripts in order, each stamped once it succeeds; the rules for
-    writing one: ``docs/contributing/architecture.md``, "Écrire une migration"."""
+    """Applies the pending scripts in order in one transaction, the version stamped at its end; the
+    rules for writing one: ``docs/contributing/architecture.md``, "Écrire une migration"."""
+    if not pending.migrations:
+        return
     with wrap_sqlite_errors():
-        # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows).
-        connection.execute("PRAGMA temp_store=FILE")
-        # No finally: a failed migration fails the open, which closes the connection.
-        for migration in pending.migrations:
-            _logger.info("migration %d: applying", migration.version)
-            _run_restoring_pragmas(connection, migration=migration)
-        connection.execute("PRAGMA temp_store=DEFAULT")
+        secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()["secure_delete"])
+        cache_size = int(connection.execute("PRAGMA cache_size").fetchone()["cache_size"])
+    # No finally: a failed block fails the open, which closes the connection.
+    _run_in_one_transaction(connection, migrations=pending.migrations)
+    with wrap_sqlite_errors():
+        connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
+        connection.execute(f"PRAGMA cache_size = {cache_size}")
 
 
-def _run_restoring_pragmas(connection: sqlite3.Connection, *, migration: Migration) -> None:
-    secure_delete = int(connection.execute("PRAGMA secure_delete").fetchone()["secure_delete"])
-    cache_size = int(connection.execute("PRAGMA cache_size").fetchone()["cache_size"])
-    if migration.transactional:
-        _run_in_transaction(connection, migration=migration)
-    else:
-        _run_outside_transaction(connection, migration=migration)
-    connection.execute(f"PRAGMA secure_delete = {_SECURE_DELETE_MODES[secure_delete]}")
-    connection.execute(f"PRAGMA cache_size = {cache_size}")
-
-
-def _run_in_transaction(connection: sqlite3.Connection, *, migration: Migration) -> None:
+def _run_in_one_transaction(
+    connection: sqlite3.Connection, *, migrations: tuple[Migration, ...]
+) -> None:
     # Two concurrent opens: the loser fails cleanly, single writer by doctrine.
+    step = "the block's start"
     try:
         connection.execute("BEGIN")
-        connection.executescript(migration.script)
-        if not connection.in_transaction:
-            raise MigrationError(
-                f"migration {migration.version}: the script closed its migration's transaction "
-                "(COMMIT/ROLLBACK forbidden inside a migration script)"
-            )
-        connection.execute(f"PRAGMA user_version = {migration.version}")
+        for migration in migrations:
+            step = f"migration {migration.version}"
+            _logger.info("migration %d: applying", migration.version)
+            connection.executescript(migration.script)
+            if not connection.in_transaction:
+                raise MigrationError(
+                    f"{step}: the script closed the migrations' transaction "
+                    "(COMMIT/ROLLBACK forbidden inside a migration script)"
+                )
+        step = f"the commit at version {migrations[-1].version}"
+        connection.execute(f"PRAGMA user_version = {migrations[-1].version}")
         connection.execute("COMMIT")
     except sqlite3.Error as error:
         with suppress(sqlite3.Error):
             connection.execute("ROLLBACK")
-        raise MigrationError(f"migration {migration.version} failed: {error}") from error
+        raise _migration_error(f"{step} failed: {error}", cause=error) from error
 
 
-def _run_outside_transaction(connection: sqlite3.Connection, *, migration: Migration) -> None:
-    # A stop between the script and the stamp replays the script: it must be safe to replay.
+def _reclaim(connection: sqlite3.Connection, *, after_block: bool) -> None:
+    """Gives back the free pages after a block of migrations, or once a quarter of the file is
+    free pages, which replays a reclaim a stop interrupted."""
+    with wrap_sqlite_errors():
+        page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
+        freelist_count = int(
+            connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"]
+        )
+    if not after_block and freelist_count * 4 < page_count:
+        return
     try:
-        connection.executescript(migration.script)
-        connection.execute(f"PRAGMA user_version = {migration.version}")
+        # Outside any transaction, which VACUUM requires.
+        connection.execute("VACUUM")
+        # The crawler holds its connection for good, so the WAL the VACUUM grew would never shrink.
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     except sqlite3.Error as error:
-        raise MigrationError(f"migration {migration.version} failed: {error}") from error
+        raise _migration_error(f"reclaim failed: {error}", cause=error) from error
+
+
+def _migration_error(message: str, *, cause: sqlite3.Error) -> MigrationError:
+    if cause.sqlite_errorcode == sqlite3.SQLITE_FULL:
+        return OutOfSpaceError(message)
+    return MigrationError(message)

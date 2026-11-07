@@ -7,7 +7,6 @@ from itertools import pairwise
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
 
 _DIRECTIVE = "-- migration:"
-_NO_TRANSACTION = "-- migration: no-transaction"
 _COPY_BEFORE = "-- migration: copy-before"
 
 
@@ -15,7 +14,6 @@ _COPY_BEFORE = "-- migration: copy-before"
 class Migration:
     version: int
     script: str
-    transactional: bool = True
     copy_before: bool = False
 
 
@@ -51,13 +49,8 @@ def load_scripts(directory: Traversable) -> tuple[Migration, ...]:
 
 def _read_directive(version: int, *, name: str, script: str) -> Migration:
     first_line = script.partition("\n")[0]
-    if first_line == _NO_TRANSACTION:
-        return Migration(version=version, script=script, transactional=False)
     if first_line == _COPY_BEFORE:
         return Migration(version=version, script=script, copy_before=True)
     if first_line.startswith(_DIRECTIVE):
-        raise MigrationError(
-            f"{name}: unknown directive {first_line!r}, "
-            f"only {_NO_TRANSACTION!r} or {_COPY_BEFORE!r}"
-        )
+        raise MigrationError(f"{name}: unknown directive {first_line!r}, only {_COPY_BEFORE!r}")
     return Migration(version=version, script=script)

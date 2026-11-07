@@ -255,18 +255,20 @@ def _open(path: Path, *, scripts: tuple[Migration, ...], copier: SqlitePreMigrat
     SqliteDatabaseOpener(copier).open(path, scripts=scripts).close()
 
 
-def test_a_failed_migration_is_retried_on_the_same_copy(tmp_path: Path) -> None:
-    scripts = _scripts(tmp_path / "scripts", _FAILING)
+def test_a_block_failing_after_a_migration_succeeded_is_retried_on_the_same_copy(
+    tmp_path: Path,
+) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;", _FAILING)
     path = tmp_path / "data" / "catalog.db"
     _seeded(path, scripts=scripts).close()
     time = FakeTime()
     copier = _copier(time=time)
-    with pytest.raises(MigrationError, match="migration 3"):
+    with pytest.raises(MigrationError, match="migration 4"):
         _open(path, scripts=scripts, copier=copier)
     first = (path.parent / _COPY_NAME).stat()
     time.advance(timedelta(minutes=1))
     (path.parent / "catalog.db.pre-0003.partial").write_bytes(b"a copy a stop interrupted")
-    with pytest.raises(MigrationError, match="migration 3"):
+    with pytest.raises(MigrationError, match="migration 4"):
         _open(path, scripts=scripts, copier=copier)
     assert _copy_names(path.parent) == [_COPY_NAME]
     again = (path.parent / _COPY_NAME).stat()
