@@ -1,22 +1,29 @@
 import dataclasses
 import re
 from datetime import timedelta
+from pathlib import PurePath
 from typing import Any, Protocol
 
 import pytest
 
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.crawler_config import (
+    BackoffConfig,
+    CrawlerConfig,
     DownloadConfig,
     NotificationTarget,
     ObservabilityConfig,
+    SearchConfig,
     WebuiConfig,
+    cross_value_problems,
     parse_download,
     parse_observability,
-    parse_search,
     parse_webui,
 )
 from p2pwatch.domain.observability.policy import Audience
+
+_FILE = PurePath("/srv/crawler.yml")
 
 
 class SectionParse(Protocol):
@@ -75,31 +82,12 @@ def _printed_path(section: str, *, key: str) -> str:
 
 def _parse_sections(raw: dict[str, Any]) -> None:
     """Each section of ``raw`` through its parse, as the config adapter hands it."""
-    parse_search(raw["search"])
     parse_observability(raw["observability"])
     parse_download(raw["download"])
     parse_webui(raw.get("webui", {}))
 
 
 # --------------------------------------------------------------------- policy
-
-
-def _search() -> dict[str, Any]:
-    search: dict[str, Any] = _minimal_raw()["search"]
-    return search
-
-
-def test_jitter_ratio_zero_is_accepted() -> None:
-    search = _search()
-    search["backoff"]["jitter_ratio"] = 0.0  # 0 = no jitter (≥ 0 allowed)
-    assert parse_search(search).backoff.jitter_ratio == 0.0
-
-
-def test_negative_jitter_ratio_is_fatal() -> None:
-    search = _search()
-    search["backoff"]["jitter_ratio"] = -0.1
-    with pytest.raises(ConfigValueError, match="≥ 0 expected"):
-        parse_search(search)
 
 
 @pytest.mark.parametrize("value", ["souvent", True], ids=["text", "bool"])
@@ -114,10 +102,6 @@ def test_a_number_of_a_section_is_a_number(value: object) -> None:
 @pytest.mark.parametrize(
     ("section", "key"),
     [
-        ("search.backoff", "base_seconds"),
-        ("search.backoff", "cap_seconds"),
-        ("search.backoff", "factor"),
-        ("search.backoff", "jitter_ratio"),
         ("observability", "notification_timeout_seconds"),
         ("download", "poll_interval_seconds"),
         ("download", "lost_after_seconds"),
@@ -140,7 +124,6 @@ def test_a_number_that_is_not_finite_is_refused_by_name(
 def _with_seconds(section: str, *, key: str, seconds: int) -> dict[str, Any]:
     """A full config whose ``key`` holds ``seconds``, the backoff's cap above any floor."""
     raw = _minimal_raw() | {"download": _full_download_section(), "observability": {}, "webui": {}}
-    raw["search"]["backoff"]["cap_seconds"] = 86_400
     _section(raw, path=section)[key] = seconds
     return raw
 
@@ -151,8 +134,6 @@ def _with_seconds(section: str, *, key: str, seconds: int) -> dict[str, Any]:
         ("download", "poll_interval_seconds"),
         ("download", "sources_interval_seconds"),
         ("webui", "source_period_gap_seconds"),
-        ("search.backoff", "base_seconds"),
-        ("search.backoff", "cap_seconds"),
         ("observability", "notification_timeout_seconds"),
     ],
 )
@@ -196,44 +177,35 @@ def test_a_removed_key_of_a_section_is_refused_by_its_path(
     )
 
 
-def test_a_missing_backoff_is_fatal() -> None:
-    search = _search()
-    del search["backoff"]
-    with pytest.raises(ConfigValueError, match=r"^search\.backoff\.factor: missing$"):
-        parse_search(search)
-
-
-def test_backoff_section_must_be_a_mapping() -> None:
-    search = _search()
-    search["backoff"] = [1, 2, 3]
-    with pytest.raises(ConfigValueError) as raised:
-        parse_search(search)
-    assert (raised.value.key, raised.value.message) == (
-        "search.backoff",
-        "mapping expected, got list",
+def _with_backoff(*, base_seconds: float, cap_seconds: float) -> CrawlerConfig:
+    backoff = BackoffConfig(
+        base_seconds=base_seconds, cap_seconds=cap_seconds, factor=2.0, jitter_ratio=0.3
+    )
+    return CrawlerConfig(
+        search=SearchConfig(keywords=("keroro",), backoff=backoff),
+        shutdown_deadline_seconds=10.0,
+        amule_api_password="secret",
+        catalog_db_path="/data/catalog.db",
+        local_db_path="/data/local.db",
+        observability=parse_observability({}),
+        download=None,
+        webui=parse_webui({}),
     )
 
 
-def test_backoff_factor_below_one_is_fatal() -> None:
-    search = _search()
-    search["backoff"]["factor"] = 0.5
-    with pytest.raises(ConfigValueError) as raised:
-        parse_search(search)
-    assert (raised.value.key, raised.value.message) == (
-        "search.backoff.factor",
-        "must be ≥ 1 (growth), got 0.5",
-    )
+def test_a_backoff_cap_at_its_base_is_no_problem() -> None:
+    config = _with_backoff(base_seconds=10.0, cap_seconds=10.0)
+    assert cross_value_problems(config, file_path=_FILE) == ()
 
 
-def test_backoff_cap_below_base_is_fatal() -> None:
-    search = _search()
-    search["backoff"]["cap_seconds"] = 1.0
-    search["backoff"]["base_seconds"] = 10.0
-    with pytest.raises(ConfigValueError) as raised:
-        parse_search(search)
-    assert (raised.value.key, raised.value.message) == (
-        "search.backoff.cap_seconds",
-        "1.0 < base_seconds (10.0): cap below floor",
+def test_a_backoff_cap_below_its_base_is_a_problem() -> None:
+    config = _with_backoff(base_seconds=10.0, cap_seconds=9.5)
+    assert cross_value_problems(config, file_path=_FILE) == (
+        ConfigProblem(
+            file_path=_FILE,
+            key="search.backoff.cap_seconds",
+            message="should be at least base_seconds",
+        ),
     )
 
 
@@ -241,17 +213,6 @@ def test_backoff_cap_below_base_is_fatal() -> None:
 
 
 # ----------------------------------------------------------------- key path
-
-
-def test_a_check_carries_the_key_path_it_names_apart_from_its_message() -> None:
-    search = _search()
-    search["keywords"] = []
-    with pytest.raises(ConfigValueError) as error:
-        parse_search(search)
-    assert (error.value.key, error.value.message) == (
-        "search.keywords",
-        "non-empty list of strings expected",
-    )
 
 
 def test_a_notification_that_is_no_mapping_is_refused_under_its_key_path() -> None:
@@ -374,39 +335,6 @@ def test_download_output_dir_must_be_a_string() -> None:
     section = _full_download_section() | {"output_dir": 42}
     with pytest.raises(ConfigValueError, match="output_dir"):
         parse_download(section)
-
-
-# ------------------------------------------------------------------- search
-
-
-def test_missing_search_keywords_are_fatal() -> None:
-    search = _search()
-    del search["keywords"]
-    with pytest.raises(ConfigValueError, match=r"^search\.keywords: missing$"):
-        parse_search(search)
-
-
-def test_search_keywords_read_from_section() -> None:
-    search = _search()
-    search["keywords"] = ["keroro", "titar", "mission titar"]
-    config = parse_search(search)
-    assert config.keywords == ("keroro", "titar", "mission titar")
-
-
-def test_search_keywords_rejects_empty_list() -> None:
-    search = _search()
-    search["keywords"] = []
-    with pytest.raises(ConfigValueError, match=r"search\.keywords: non-empty list"):
-        parse_search(search)
-
-
-def test_search_keywords_rejects_non_string_entry() -> None:
-    search = _search()
-    search["keywords"] = ["keroro", 42]
-    with pytest.raises(
-        ConfigValueError, match=r"search\.keywords: non-empty string expected, got 42"
-    ):
-        parse_search(search)
 
 
 # ----------------------------------------------------------- observability

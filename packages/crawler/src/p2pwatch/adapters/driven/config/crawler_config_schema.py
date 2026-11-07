@@ -14,10 +14,12 @@ from p2pwatch.adapters.driven.config.validation_problems import (
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.crawler_config import (
+    BackoffConfig,
     CrawlerConfig,
+    SearchConfig,
+    cross_value_problems,
     parse_download,
     parse_observability,
-    parse_search,
     parse_webui,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
@@ -31,15 +33,28 @@ _Seconds = Annotated[float, Field(gt=0, le=_A_DAY_SECONDS)]
 _Text = Annotated[str, Field(min_length=1)]
 
 
+class _BackoffSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+    base_seconds: _Seconds
+    cap_seconds: _Seconds
+    factor: Annotated[float, Field(ge=1)]
+    jitter_ratio: Annotated[float, Field(ge=0)]
+
+
+class _SearchSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+    keywords: Annotated[list[_Text], Field(min_length=1)]
+    backoff: _BackoffSchema
+
+
 class _RootKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
     shutdown_deadline_seconds: _Seconds
     amule_api_password: _Text
     catalog_db_path: _Text
     local_db_path: _Text
+    search: _SearchSchema
 
 
 # Read by the domain's section parses, until each section has its schema.
-_SECTIONS = ("download", "observability", "search", "webui")
+_SECTIONS = ("download", "observability", "webui")
 
 _REMOVED_KEYS = (
     "cycle_interval_seconds",
@@ -63,7 +78,7 @@ CrawlerConfigSchema = create_model("CrawlerConfigSchema", __base__=_RootKeys, **
 
 def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePath) -> CrawlerConfig:
     """``document``'s ``CrawlerConfig``; ``InvalidConfigError`` with every problem of its root and
-    the first of each section."""
+    the first of each section, or once they hold, every problem across its values."""
     problems: list[ConfigProblem] = []
     try:
         root = CrawlerConfigSchema.model_validate(document)
@@ -71,14 +86,22 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
         problems.extend(validation_problems(error, file_path=file_path))
         root = None
     sections = _Sections(document, file_path=file_path, problems=problems)
-    search = sections.parse("search", parse=parse_search)
     observability = sections.parse("observability", parse=parse_observability)
     download = sections.parse("download", parse=parse_download)
     webui = sections.parse("webui", parse=parse_webui)
-    if root is None or search is None or observability is None or download is None or webui is None:
+    if root is None or observability is None or download is None or webui is None:
         raise InvalidConfigError(tuple(problems))
-    return CrawlerConfig(
-        search=search.value,
+    backoff = root.search.backoff
+    crawler_config = CrawlerConfig(
+        search=SearchConfig(
+            keywords=tuple(root.search.keywords),
+            backoff=BackoffConfig(
+                base_seconds=backoff.base_seconds,
+                cap_seconds=backoff.cap_seconds,
+                factor=backoff.factor,
+                jitter_ratio=backoff.jitter_ratio,
+            ),
+        ),
         shutdown_deadline_seconds=root.shutdown_deadline_seconds,
         amule_api_password=root.amule_api_password,
         catalog_db_path=root.catalog_db_path,
@@ -87,6 +110,9 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
         download=download.value,
         webui=webui.value,
     )
+    if rule_problems := cross_value_problems(crawler_config, file_path=file_path):
+        raise InvalidConfigError(rule_problems)
+    return crawler_config
 
 
 class _SectionParse[T](Protocol):
