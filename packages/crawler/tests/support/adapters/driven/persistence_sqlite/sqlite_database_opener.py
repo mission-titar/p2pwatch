@@ -11,6 +11,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
+    FreeBytesMeter,
     SqlitePreMigrationCopier,
 )
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
@@ -46,21 +47,25 @@ class _PreparingCopier(SqlitePreMigrationCopier):
         super().ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
 
 
-def database_opener() -> SqliteDatabaseOpener:
+def database_opener(*, free_bytes: FreeBytesMeter | None = None) -> SqliteDatabaseOpener:
     """An opener whose pre-migration copies are named from a ``FakeTime``, ticked by a
-    ``FakeTicker`` and never short of space."""
+    ``FakeTicker`` and never short of space, unless ``free_bytes`` measures otherwise."""
+    free_bytes = free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes
     return SqliteDatabaseOpener(
-        SqlitePreMigrationCopier(
-            FakeTime().wall, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
-        ),
+        SqlitePreMigrationCopier(FakeTime().wall, ticker=FakeTicker(), free_bytes=free_bytes),
         ticker=FakeTicker(),
+        free_bytes=free_bytes,
     )
 
 
-def database_opener_setting(pragma: str) -> SqliteDatabaseOpener:
+def database_opener_setting(
+    pragma: str, *, free_bytes: FreeBytesMeter | None = None
+) -> SqliteDatabaseOpener:
     """The same, ``pragma`` run on each connection before its migrations."""
     return SqliteDatabaseOpener(
-        _PreparingCopier(lambda connection: connection.execute(pragma)), ticker=FakeTicker()
+        _PreparingCopier(lambda connection: connection.execute(pragma)),
+        ticker=FakeTicker(),
+        free_bytes=free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes,
     )
 
 
@@ -69,6 +74,7 @@ def database_opener_ticked_by(ticker: FakeTicker) -> SqliteDatabaseOpener:
     return SqliteDatabaseOpener(
         _PreparingCopier(lambda connection: connection.create_function("tick", 0, ticker.tick)),
         ticker=ticker,
+        free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
     )
 
 

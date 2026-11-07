@@ -11,11 +11,12 @@ from typing import Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
-from p2pwatch.adapters.driven.persistence_sqlite.gigabytes import gigabytes
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.application.ports.driven.ticker import Ticker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.domain.gigabytes import gigabytes
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)
 # Under a minute between two lines: a silent start is one an operator restarts.
@@ -48,7 +49,7 @@ class SqlitePreMigrationCopier:
         """On return, a pre-migration copy matching ``path``'s content exists, reused or made, or
         none was needed: no pending migration is marked ``copy-before``, or the database is new.
         The latest copy is read through ``open_reader``. Short of free space, it raises
-        ``MigrationError`` before writing anything."""
+        ``OutOfSpaceError`` before writing anything."""
         _delete_leftovers(path)
         if pending.current_version == 0 or not any(
             migration.copy_before for migration in pending.migrations
@@ -97,9 +98,12 @@ class SqlitePreMigrationCopier:
         need_bytes = copy_bytes + path.stat().st_size + wal_bytes
         free_bytes = self._free_bytes(path.parent)
         if free_bytes < need_bytes:
-            raise MigrationError(
-                f"pre-migration copy of {path}: {need_bytes} bytes needed in {path.parent}, "
-                f"{free_bytes} free"
+            raise OutOfSpaceError(
+                step=f"pre-migration copy of {path}",
+                directory=path.parent,
+                free_bytes=free_bytes,
+                need_bytes=need_bytes,
+                outcome="nothing written",
             )
 
     def _matches_its_latest_copy(

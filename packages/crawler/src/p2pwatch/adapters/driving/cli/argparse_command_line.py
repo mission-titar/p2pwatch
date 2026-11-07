@@ -23,6 +23,7 @@ from p2pwatch.domain.config_defaults import (
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
@@ -143,6 +144,9 @@ class ArgparseCommandLine:
             )
         except InvalidConfigError as error:
             print(f"Invalid config, refusing to start: {error}", file=sys.stderr, flush=True)
+            return 1
+        except OutOfSpaceError as error:
+            print(f"Out of disk space, refusing to start: {error}", file=sys.stderr, flush=True)
             return 1
         except TimeoutError:
             # The deadline firing is the crawler keeping its promise not to hang; a worker timing

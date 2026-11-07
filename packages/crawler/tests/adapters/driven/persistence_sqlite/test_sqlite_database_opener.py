@@ -10,17 +10,15 @@ from typing import Any
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
-from p2pwatch.adapters.driven.persistence_sqlite.errors import (
-    MigrationError,
-    OutOfSpaceError,
-    PersistenceError,
-)
-from p2pwatch.adapters.driven.persistence_sqlite.gigabytes import gigabytes
+from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import read_only_uri
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.gigabytes import gigabytes
+from p2pwatch.domain.out_of_space_error import OutOfSpaceError
+from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
 from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
@@ -613,9 +611,10 @@ def test_a_full_disk_during_the_block_rolls_it_back_and_raises_out_of_space(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "full.db"
-    opener = database_opener_setting("PRAGMA max_page_count = 8")
+    free_bytes = FakeFreeBytes(123_000_000)
+    opener = database_opener_setting("PRAGMA max_page_count = 8", free_bytes=free_bytes.free_bytes)
     fill = "INSERT INTO t VALUES (zeroblob(64 * 4096));"
-    with pytest.raises(OutOfSpaceError, match="^migration 2 failed: database or disk is full"):
+    with pytest.raises(OutOfSpaceError) as refusal:
         opener.open(
             path,
             scripts=(
@@ -623,7 +622,36 @@ def test_a_full_disk_during_the_block_rolls_it_back_and_raises_out_of_space(
                 Migration(version=2, script=fill),
             ),
         )
+    assert str(refusal.value) == (
+        f"migrations of {path} (migration 2): out of space in {tmp_path}, 0.1 GB free; "
+        "the database left at version 0"
+    )
+    assert free_bytes.directories == [tmp_path]
     assert _version_and_tables(path) == (0, set())
+
+
+def test_the_free_space_after_a_full_disk_is_measured_once_the_wal_is_emptied(
+    tmp_path: Path,
+) -> None:
+    """The rolled-back block's frames would count as used space the operator does not hold."""
+    path = tmp_path / "full.db"
+    wal_bytes_measured: list[int] = []
+
+    def free_bytes(directory: Path) -> int:
+        wal_bytes_measured.append(Path(f"{path}-wal").stat().st_size)
+        return 0
+
+    opener = database_opener_setting("PRAGMA max_page_count = 8", free_bytes=free_bytes)
+    fill = "PRAGMA cache_size = 1;\nINSERT INTO t VALUES (zeroblob(64 * 4096));"
+    with pytest.raises(OutOfSpaceError):
+        opener.open(
+            path,
+            scripts=(
+                Migration(version=1, script="CREATE TABLE t (b BLOB);"),
+                Migration(version=2, script=fill),
+            ),
+        )
+    assert wal_bytes_measured == [0]
 
 
 def test_each_applied_script_logs_one_line_before_it_runs(
