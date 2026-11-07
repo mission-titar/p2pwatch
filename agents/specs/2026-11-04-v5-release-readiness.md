@@ -271,7 +271,7 @@ re-measures what it acts on.
 ### Lot 3
 
 - MINOR: `validate-config` returns the first problem of the first wrong file; up to 11 refusals in a 4.x
-  `crawler.yml` and 2 in `matcher.yml`.
+  `crawler.yml` and 2 in `matcher.yml`. (Corrected: 13 in the operator's crawler.yml, lot 3's appendix C.)
 
 ### Lot 4
 
@@ -362,7 +362,7 @@ a test can hold them.
 | Stop during `VACUUM` | `docker kill` during the reclaim, restart, file size; fails if the catalog stays oversized |
 | Short of space | `migration-e2e/freespace.sh`; fails on a traceback or on a line in bytes |
 | First start's log | `docker compose logs -t p2pwatch`; fails on a gap over 60 s before `crawler started` |
-| Unmigrated config | `validate-config` on the 4.x files; fails if any of the 13 refusals is missing from one run |
+| Unmigrated config | `validate-config` on the 4.x files; fails if any of the 13 refusals is missing from one run (Corrected: the 15 problems of lot 3's appendix C) |
 | `merge` on a running node | `docker compose exec p2pwatch python -m p2pwatch merge --into /data/catalog.db ...`; fails if it runs |
 | amuleapi stopped | kill amuleapi inside `ed2k`, `docker inspect` health after the interval; fails on `healthy` |
 | Port-sync killed | kill the port-sync inside `ed2k`; `docker inspect -f '{{.RestartCount}}'` rises and `ed2k` is healthy again; fails if the container stays up without a port-sync (Corrected: held by lot 1's CI rows) |

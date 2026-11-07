@@ -99,7 +99,7 @@ it relies on.
   is what lets D6 refuse a route that calls a repository past its use case.
 - **D3. Six hexagons, which never import one another**: `p2pwatch` (the crawler, its webui, `merge`, and
   `catalog_matching`, which is its domain ring in its own distribution package, under
-  `catalog_matching/domain/`), `p2pwatch_amule`, `vex_checks`, `template_checks`, `coverage_checks` and
+  `catalog_matching/domain/`; Corrected: folded into p2pwatch's domain, v5 lot 3's D1), `p2pwatch_amule`, `vex_checks`, `template_checks`, `coverage_checks` and
   `amule_bump`. Tests and `p2pwatch_testing` are outside the ring rules (not D4's ban). (Corrected 2026-10-19:
   no tool refuses a cross-hexagon import its package declares, so a test holds the workspace's internal
   dependencies to `p2pwatch` on `catalog_matching` and on its test support; lot 1b's spec, "The check".) Why: a hexagon is
