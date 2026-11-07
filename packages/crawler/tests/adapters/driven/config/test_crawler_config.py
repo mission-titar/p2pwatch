@@ -113,6 +113,37 @@ def test_no_line_prints_a_resolved_variable(tmp_path: Path) -> None:
     assert all("hunter2" not in line for line in lines)
 
 
+@pytest.mark.parametrize(
+    ("notification", "key", "message"),
+    [
+        (
+            "{url: 'discord://${HOOK}', audience: community, tga: '${HOOK}'}",
+            "observability.notifications[0].tga",
+            "Extra inputs are not permitted",
+        ),
+        (
+            "'discord://${HOOK}'",
+            "observability.notifications[0]",
+            "Input should be a valid dictionary",
+        ),
+    ],
+    ids=["unknown-key", "plain-string"],
+)
+def test_no_line_prints_a_resolved_notification_url(
+    *, tmp_path: Path, notification: str, key: str, message: str
+) -> None:
+    config_path = _write_crawler_config(
+        tmp_path, extra=f"observability:\n  notifications: [{notification}]\n"
+    )
+
+    with pytest.raises(InvalidConfigError) as raised:
+        read_crawler_config(config_path, env=_env() | {"HOOK": "1234/webhook-token"})
+
+    [problem] = raised.value.problems
+    assert (problem.key, problem.message) == (key, message)
+    assert "webhook-token" not in f"{problem.key}: {problem.message}"
+
+
 def test_every_unset_variable_is_listed_beside_the_parses_problem(tmp_path: Path) -> None:
     config_path = _write_crawler_config(
         tmp_path, keywords="['${KEYWORD}']", extra="webui: {amule_url: ''}\n"

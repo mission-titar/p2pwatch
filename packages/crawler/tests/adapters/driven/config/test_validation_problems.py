@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, ValidationError, create_model
 from p2pwatch.adapters.driven.config.validation_problems import (
     moved_key,
     removed_key,
+    renamed_key,
     validation_problems,
 )
 from p2pwatch.domain.config_problem import ConfigProblem
@@ -26,9 +27,12 @@ class _Fields(BaseModel, extra="forbid", strict=True):
 
 def _problems(document: dict[str, Any]) -> tuple[ConfigProblem, ...]:
     # Built in the test: a type made at import is credited to none of the module's own tests.
+    renamed: dict[str, Any] = {"sum": (renamed_key("total", file_name="crawler.yml"), None)}
+    section = create_model("Section", __base__=_Section, **renamed)
     refused: dict[str, Any] = {
         "old_count": (removed_key("crawler.yml"), None),
         "total": (moved_key("section.total", file_name="crawler.yml"), None),
+        "section": (section, Field(default_factory=lambda: section(total=0))),
     }
     with pytest.raises(ValidationError) as raised:
         create_model("Document", __base__=_Fields, **refused).model_validate(document)
@@ -72,6 +76,12 @@ def test_a_moved_key_is_one_problem_its_new_place_not_required_beside_it() -> No
 
 def test_the_new_place_of_a_moved_key_is_required_without_it() -> None:
     assert _problems({"section": {}}) == (_problem("section.total", message="Field required"),)
+
+
+def test_a_renamed_key_is_one_problem_its_new_name_not_required_beside_it() -> None:
+    assert _problems({"section": {"sum": 3}}) == (
+        _problem("section.sum", message="was renamed 'total', rename it in crawler.yml"),
+    )
 
 
 def test_no_message_prints_the_value_received() -> None:

@@ -8,11 +8,13 @@ from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config
 from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
+    NotificationTarget,
     ObservabilityConfig,
     SearchConfig,
     WebuiConfig,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
+from p2pwatch.domain.observability.policy import Audience
 
 _FILE = PurePath("/srv/crawler.yml")
 
@@ -224,6 +226,103 @@ def test_a_webui_value_out_of_its_type_is_refused(*, key: str, value: object, me
     assert _problems(_with(f"webui.{key}", value=value)) == [(f"webui.{key}", message)]
 
 
+def test_the_observability_values_build_its_config() -> None:
+    observability = {
+        "log_level": "DEBUG",
+        "notification_timeout_seconds": 86_400,
+        "notifications": [
+            {"url": "discord://a", "audience": "community", "node_prefix": False},
+            {"url": "discord://b", "audience": "operations"},
+        ],
+    }
+    document = _document() | {"observability": observability}
+    assert crawler_config_from_document(document, file_path=_FILE).observability == (
+        ObservabilityConfig(
+            log_level="DEBUG",
+            notification_timeout_seconds=86_400,
+            notifications=(
+                NotificationTarget(
+                    url="discord://a", audience=Audience.COMMUNITY, node_prefix=False
+                ),
+                NotificationTarget(
+                    url="discord://b", audience=Audience.OPERATIONS, node_prefix=True
+                ),
+            ),
+        )
+    )
+
+
+_LOG_LEVELS = "'DEBUG', 'INFO', 'WARNING', 'ERROR' or 'CRITICAL'"
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        ("log_level", "LOUD", f"Input should be {_LOG_LEVELS}"),
+        ("log_level", 10, f"Input should be {_LOG_LEVELS}"),
+        ("notification_timeout_seconds", 0, "Input should be greater than 0"),
+        ("notification_timeout_seconds", 86_401, "Input should be less than or equal to 86400"),
+        ("notification_timeout_seconds", float("inf"), "Input should be a finite number"),
+        ("notification_timeout_seconds", float("nan"), "Input should be a finite number"),
+        ("notification_timeout_seconds", True, "Input should be a valid number"),
+        ("notifications", "discord://a", "Input should be a valid list"),
+        ("unread", 1, "Extra inputs are not permitted"),
+        ("metrics", {"enabled": True}, "was removed, delete it from crawler.yml"),
+    ],
+)
+def test_an_observability_value_out_of_its_type_is_refused(
+    *, key: str, value: object, message: str
+) -> None:
+    document = _with(f"observability.{key}", value=value)
+    assert _problems(document) == [(f"observability.{key}", message)]
+
+
+def _with_notification(notification: object) -> dict[str, Any]:
+    return _with("observability.notifications", value=[notification])
+
+
+@pytest.mark.parametrize(
+    ("notification", "key", "message"),
+    [
+        ("discord://a", "", "Input should be a valid dictionary"),
+        ({"url": "", "audience": "community"}, ".url", "String should have at least 1 character"),
+        ({"url": 42, "audience": "community"}, ".url", "Input should be a valid string"),
+        ({"audience": "community"}, ".url", "Field required"),
+        (
+            {"url": "x", "audience": "nope"},
+            ".audience",
+            "Input should be 'community' or 'operations'",
+        ),
+        ({"url": "x"}, ".audience", "Field required"),
+        (
+            {"url": "x", "audience": "community", "node_prefix": "no"},
+            ".node_prefix",
+            "Input should be a valid boolean",
+        ),
+        (
+            {"url": "x", "audience": "community", "unread": 1},
+            ".unread",
+            "Extra inputs are not permitted",
+        ),
+    ],
+)
+def test_a_notification_value_out_of_its_type_is_refused(
+    *, notification: object, key: str, message: str
+) -> None:
+    problems = _problems(_with_notification(notification))
+    assert problems == [(f"observability.notifications[0]{key}", message)]
+
+
+@pytest.mark.parametrize(
+    "notification",
+    [{"url": "x", "tag": "community"}, {"url": "x", "tag": "community", "audience": "community"}],
+)
+def test_a_notification_tag_is_one_problem_naming_its_new_name(notification: object) -> None:
+    assert _problems(_with_notification(notification)) == [
+        ("observability.notifications[0].tag", "was renamed 'audience', rename it in crawler.yml")
+    ]
+
+
 def test_a_root_key_nothing_reads_is_refused() -> None:
     document = _document() | {"amules": [{"name": "amule-1", "password": "x"}]}
     assert _problems(document) == [("amules", "Extra inputs are not permitted")]
@@ -272,9 +371,9 @@ def test_every_problem_of_the_root_and_of_each_section_is_listed() -> None:
     }
     assert [key for key, _ in _problems(document)] == [
         "shutdown_deadline_seconds",
+        "observability.log_level",
         "webui.amule_url",
         "port_sync",
         "amules",
-        "observability.log_level",
         "download.enabled",
     ]
