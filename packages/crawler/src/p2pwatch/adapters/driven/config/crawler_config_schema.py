@@ -1,6 +1,7 @@
 """``crawler.yml`` as written, its root read by pydantic, and the ``CrawlerConfig`` it builds."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import PurePath
 from typing import Annotated, Any, Protocol
 
@@ -11,16 +12,17 @@ from p2pwatch.adapters.driven.config.validation_problems import (
     removed_key,
     validation_problems,
 )
+from p2pwatch.domain.config_defaults import DEFAULT_AMULE_URL, DEFAULT_SOURCE_PERIOD_GAP
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.crawler_config import (
     BackoffConfig,
     CrawlerConfig,
     SearchConfig,
+    WebuiConfig,
     cross_value_problems,
     parse_download,
     parse_observability,
-    parse_webui,
 )
 from p2pwatch.domain.invalid_config import InvalidConfigError
 
@@ -45,16 +47,31 @@ class _SearchSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False)
     backoff: _BackoffSchema
 
 
+# Every refusing field is built, since vulture reads a field nothing reads as dead code.
+_REMOVED = removed_key(_FILE_NAME)
+
+
+class _WebuiKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+    amule_url: _Text = DEFAULT_AMULE_URL
+    source_period_gap_seconds: _Seconds = DEFAULT_SOURCE_PERIOD_GAP.total_seconds()
+
+
+# The bind is fixed in the composition ring: 4.x's host and port were ignored.
+_WEBUI_REFUSED: dict[str, Any] = {key: (_REMOVED, None) for key in ("enabled", "host", "port")}
+_WebuiSchema = create_model("_WebuiSchema", __base__=_WebuiKeys, **_WEBUI_REFUSED)
+
+
 class _RootKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
     shutdown_deadline_seconds: _Seconds
     amule_api_password: _Text
     catalog_db_path: _Text
     local_db_path: _Text
     search: _SearchSchema
+    webui: _WebuiKeys  # its schema in CrawlerConfigSchema, which adds the refusing keys
 
 
 # Read by the domain's section parses, until each section has its schema.
-_SECTIONS = ("download", "observability", "webui")
+_SECTIONS = ("download", "observability")
 
 _REMOVED_KEYS = (
     "cycle_interval_seconds",
@@ -67,10 +84,10 @@ _REMOVED_KEYS = (
     "search_poll_interval_seconds",
 )
 
-# Built, since a field nothing reads would be dead code to vulture.
 _FIELDS: dict[str, Any] = (
     {key: (dict[str, Any], Field(default_factory=dict)) for key in _SECTIONS}
-    | {key: (removed_key(_FILE_NAME), None) for key in _REMOVED_KEYS}
+    | {"webui": (_WebuiSchema, Field(default_factory=_WebuiSchema))}
+    | {key: (_REMOVED, None) for key in _REMOVED_KEYS}
     | {"backoff": (moved_key("search.backoff", file_name=_FILE_NAME), None)}
 )
 CrawlerConfigSchema = create_model("CrawlerConfigSchema", __base__=_RootKeys, **_FIELDS)
@@ -88,8 +105,7 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
     sections = _Sections(document, file_path=file_path, problems=problems)
     observability = sections.parse("observability", parse=parse_observability)
     download = sections.parse("download", parse=parse_download)
-    webui = sections.parse("webui", parse=parse_webui)
-    if root is None or observability is None or download is None or webui is None:
+    if root is None or observability is None or download is None:
         raise InvalidConfigError(tuple(problems))
     backoff = root.search.backoff
     crawler_config = CrawlerConfig(
@@ -108,7 +124,10 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
         local_db_path=root.local_db_path,
         observability=observability.value,
         download=download.value,
-        webui=webui.value,
+        webui=WebuiConfig(
+            amule_url=root.webui.amule_url,
+            source_period_gap=timedelta(seconds=root.webui.source_period_gap_seconds),
+        ),
     )
     if rule_problems := cross_value_problems(crawler_config, file_path=file_path):
         raise InvalidConfigError(rule_problems)

@@ -13,7 +13,6 @@ from pathlib import PurePath
 from typing import Any
 
 from p2pwatch.domain.config_defaults import (
-    DEFAULT_AMULE_URL,
     DEFAULT_DOWNLOAD_ENABLED,
     DEFAULT_LOG_LEVEL,
     DEFAULT_LOST_AFTER,
@@ -22,7 +21,6 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_NOTIFICATION_TIMEOUT_SECONDS,
     DEFAULT_OUTPUT_DIRECTORY,
     DEFAULT_REAPPEARED_AFTER,
-    DEFAULT_SOURCE_PERIOD_GAP,
     DEFAULT_SOURCES_INTERVAL,
 )
 from p2pwatch.domain.config_problem import ConfigProblem
@@ -347,28 +345,6 @@ def parse_download(section: dict[str, Any]) -> DownloadConfig | None:
             )
         ),
     )
-
-
-def parse_webui(section: dict[str, Any]) -> WebuiConfig:
-    """The ``webui`` section: an absent key takes the domain's default.
-
-    The bind is FIXED at 0.0.0.0:8080 in the composition ring, so this reads no host/port: an
-    unknown key (a legacy ``host``/``port``) is ignored silently, no fail-fast."""
-    _refuse_removed(section, key="enabled", error_label="webui")
-    gap = timedelta(
-        seconds=_seconds(
-            section,
-            key="source_period_gap_seconds",
-            error_label="webui",
-            default=DEFAULT_SOURCE_PERIOD_GAP.total_seconds(),
-        )
-    )
-    amule_url = (
-        _string(section, key="amule_url", error_label="webui")
-        if "amule_url" in section
-        else DEFAULT_AMULE_URL
-    )
-    return WebuiConfig(amule_url=amule_url, source_period_gap=gap)
 
 
 def cross_value_problems(
