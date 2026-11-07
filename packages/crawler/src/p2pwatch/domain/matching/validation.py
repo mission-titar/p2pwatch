@@ -8,6 +8,8 @@ validation (DAG/depth) and the regex compile-check are added in Task 6.
 
 import re
 import unicodedata
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from p2pwatch.domain.matching.config import (
@@ -35,7 +37,7 @@ from p2pwatch.domain.matching.interpolation import (
     interpolate,
 )
 from p2pwatch.domain.matching.matchers import READERS_BY_ATTR
-from p2pwatch.domain.matching.models import LOST, TARGET_STATUSES, TargetSegment
+from p2pwatch.domain.matching.models import TargetSegment
 
 _CONDITION_KEYS = ("all", "any", "not")
 # 4.x names, refused at load with their 5.0 name (``{segment}`` too, in _check_regexes_compile).
@@ -63,12 +65,6 @@ def _require_mapping(node: Any, *, error_label: str) -> dict[str, Any]:
     if not isinstance(node, dict):
         raise MatchingConfigError(f"{error_label}: mapping expected, got {type(node).__name__}")
     return node
-
-
-def _require_key(mapping: dict[str, Any], *, key: str, error_label: str) -> Any:
-    if key not in mapping:
-        raise MatchingConfigError(f"{error_label}: key {key!r} missing")
-    return mapping[key]
 
 
 def has_control_character(text: str) -> bool:
@@ -102,13 +98,6 @@ def _number(raw: Any, *, error_label: str) -> float:
         return float(raw)
     except (TypeError, ValueError) as error:
         raise MatchingConfigError(f"{error_label}: number expected, got {raw!r}") from error
-
-
-def _integer(raw: Any, *, error_label: str) -> int:
-    try:
-        return int(raw)
-    except (TypeError, ValueError) as error:
-        raise MatchingConfigError(f"{error_label}: integer expected, got {raw!r}") from error
 
 
 def _require_unit_fraction(fraction: float, *, error_label: str) -> float:
@@ -548,50 +537,20 @@ def validate_config(config: MatcherConfig, *, max_depth: int = _DEFAULT_MAX_DEPT
     _check_regexes_compile(config)
 
 
-def parse_targets(raw: dict[str, Any]) -> tuple[TargetSegment, ...]:
-    """Builds the :class:`TargetSegment`s from parsed ``targets.yaml`` (cf. spec §7)."""
-    episodes = raw.get("episodes")
-    if not isinstance(episodes, list):
-        raise MatchingConfigError("'episodes' section: list expected")
-    segments: list[TargetSegment] = []
-    for episode in episodes:
-        episode_mapping = _require_mapping(episode, error_label="episode")
-        season, seasonal_number, absolute_number = (
-            _integer(
-                _require_key(episode_mapping, key=key, error_label="episode"),
-                error_label=f"episode: key {key!r}",
-            )
-            for key in ("season", "seasonal_number", "absolute_number")
-        )
-        segment_entries = episode_mapping.get("segments", [])
-        for segment_entry in segment_entries:
-            segment_mapping = _require_mapping(segment_entry, error_label="segment")
-            status = str(segment_mapping.get("status", LOST))
-            if status not in TARGET_STATUSES:
-                raise MatchingConfigError(
-                    f"segment status {status!r} unknown (expected one of {sorted(TARGET_STATUSES)})"
-                )
-            segments.append(
-                TargetSegment(
-                    season=season,
-                    seasonal_number=seasonal_number,
-                    absolute_number=absolute_number,
-                    letter=_refuse_control_characters(
-                        str(_require_key(segment_mapping, key="letter", error_label="segment")),
-                        error_label="segment letter",
-                    ),
-                    title=str(_require_key(segment_mapping, key="title", error_label="segment")),
-                    status=status,
-                )
-            )
-    parsed_segments = tuple(segments)
-    seen: set[TargetId] = set()
-    for segment in parsed_segments:
-        if segment.target_id in seen:
-            raise MatchingConfigError(
-                f"duplicate target_id: {segment.target_id!r}. Target segments must be "
-                f"unique (note: the segment letter is uppercased by target_id, so 'a' and 'A' "
-                f"collide). The evaluation engine depends on it (deterministic tie-break)."
-            )
-        seen.add(segment.target_id)
-    return parsed_segments
+@dataclass(kw_only=True, frozen=True)
+class TargetDuplicate:
+    """A target at ``index`` whose ``target_id`` the target at ``first_index`` holds first."""
+
+    index: int
+    first_index: int
+
+
+def duplicate_targets(targets: Sequence[TargetSegment]) -> tuple[TargetDuplicate, ...]:
+    """Each target of ``targets`` whose id an earlier one holds (``target_id`` upper-cases the
+    letter): the engine's tie-break needs unique ids."""
+    first_indexes: dict[TargetId, int] = {}
+    return tuple(
+        TargetDuplicate(index=index, first_index=first_index)
+        for index, target in enumerate(targets)
+        if (first_index := first_indexes.setdefault(target.target_id, index)) != index
+    )

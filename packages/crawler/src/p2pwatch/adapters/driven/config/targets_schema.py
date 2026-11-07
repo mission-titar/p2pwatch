@@ -10,11 +10,7 @@ from p2pwatch.adapters.driven.config.validation_problems import validation_probl
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.models import LOST, TargetSegment, TargetStatus
-from p2pwatch.domain.matching.validation import (
-    MatchingConfigError,
-    has_control_character,
-    parse_targets,
-)
+from p2pwatch.domain.matching.validation import duplicate_targets, has_control_character
 
 
 def _refuse_control_character(letter: str) -> str:
@@ -44,28 +40,38 @@ def targets_from_document(
     document: dict[str, Any], *, file_path: PurePath
 ) -> tuple[TargetSegment, ...]:
     """``document``'s targets; ``InvalidConfigError`` with every problem of its values, or once
-    they hold, its first duplicate target."""
+    they hold, every duplicate target."""
     try:
         schema = TargetsSchema.model_validate(document)
     except ValidationError as error:
         raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
-    # The domain builds the targets until the next block, from the checked values.
-    checked = {
-        "episodes": [
-            {
-                "season": episode.season,
-                "seasonal_number": episode.seasonal_number,
-                "absolute_number": episode.absolute_number,
-                "segments": [
-                    {"letter": segment.letter, "title": segment.title, "status": segment.status}
-                    for segment in episode.segments
-                ],
-            }
-            for episode in schema.episodes
-        ]
-    }
-    try:
-        return parse_targets(checked)
-    except MatchingConfigError as error:
-        problem = ConfigProblem(file_path=file_path, key=None, message=str(error))
-        raise InvalidConfigError((problem,)) from error
+    located = [
+        (
+            f"episodes[{episode_index}].segments[{segment_index}]",
+            TargetSegment(
+                season=episode.season,
+                seasonal_number=episode.seasonal_number,
+                absolute_number=episode.absolute_number,
+                letter=segment.letter,
+                title=segment.title,
+                status=segment.status,
+            ),
+        )
+        for episode_index, episode in enumerate(schema.episodes)
+        for segment_index, segment in enumerate(episode.segments)
+    ]
+    locations = [location for location, _ in located]
+    targets = tuple(target for _, target in located)
+    if duplicates := duplicate_targets(targets):
+        raise InvalidConfigError(
+            tuple(
+                ConfigProblem(
+                    file_path=file_path,
+                    key=locations[duplicate.index],
+                    message=f"same target_id as {locations[duplicate.first_index]}, "
+                    "letters compared upper-cased",
+                )
+                for duplicate in duplicates
+            )
+        )
+    return targets

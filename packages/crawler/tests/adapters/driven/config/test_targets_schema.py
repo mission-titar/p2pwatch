@@ -171,11 +171,29 @@ def test_every_problem_of_the_file_is_listed() -> None:
     ]
 
 
-def test_a_duplicate_target_is_refused() -> None:
-    segments = [{"letter": "a", "title": "x"}, {"letter": "A", "title": "y"}]
-    [(key, message)] = _problems({"episodes": [_episode(segments=segments)]})
-    assert key is None
-    assert message.startswith("duplicate target_id: '062A'")
+def test_every_duplicate_target_is_listed_naming_its_first_holder() -> None:
+    document = {
+        "episodes": [
+            _episode(segments=[{"letter": "a", "title": "x"}, {"letter": "A", "title": "y"}]),
+            _episode(season=1, absolute_number=10),
+            _episode(season=2, segments=[{"letter": "A", "title": "z"}]),
+            _episode(season=1, absolute_number=10),
+        ]
+    }
+    assert _problems(document) == [
+        (
+            "episodes[0].segments[1]",
+            "same target_id as episodes[0].segments[0], letters compared upper-cased",
+        ),
+        (
+            "episodes[2].segments[0]",
+            "same target_id as episodes[0].segments[0], letters compared upper-cased",
+        ),
+        (
+            "episodes[3].segments[0]",
+            "same target_id as episodes[1].segments[0], letters compared upper-cased",
+        ),
+    ]
 
 
 def test_the_duplicates_wait_for_the_file_to_hold() -> None:
