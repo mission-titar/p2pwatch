@@ -173,7 +173,7 @@ def test_every_wrong_file_is_listed_in_the_crawls_order(tmp_path: Path) -> None:
         ConfigProblem(
             file_path=config_path,
             key="search.keywords",
-            message="non-empty list of strings expected",
+            message="List should have at least 1 item after validation, not 0",
         ),
         ConfigProblem(file_path=targets_path, key=None, message="No such file or directory"),
         ConfigProblem(

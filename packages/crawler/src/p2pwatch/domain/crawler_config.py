@@ -1,5 +1,5 @@
-"""``crawler.yml``'s objects, and the parses of the sections the config adapter's schema leaves as
-mappings, each raising a ``ConfigValueError`` on its first problem.
+"""``crawler.yml``'s objects, the parses of the sections the config adapter's schema leaves as
+mappings, each raising a ``ConfigValueError`` on its first problem, and its rules across values.
 
 The config adapter resolves ``${NAME}`` in every string value before the parse, which never sees
 the environment. ``download`` is ``None`` unless ``enabled: true``, its wiring keys required only
@@ -9,6 +9,7 @@ then.
 import math
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import PurePath
 from typing import Any
 
 from p2pwatch.domain.config_defaults import (
@@ -24,6 +25,7 @@ from p2pwatch.domain.config_defaults import (
     DEFAULT_SOURCE_PERIOD_GAP,
     DEFAULT_SOURCES_INTERVAL,
 )
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.models import TargetSegment
@@ -171,15 +173,6 @@ def _positive(section: dict[str, Any], *, key: str, error_label: str) -> float:
     if number <= 0:
         raise ConfigValueError(
             _key_path(error_label, key=key), message=f"strictly positive expected, got {number}"
-        )
-    return number
-
-
-def _non_negative(section: dict[str, Any], *, key: str, error_label: str) -> float:
-    number = _number(section, key=key, error_label=error_label)
-    if number < 0:
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message=f"≥ 0 expected, got {number}"
         )
     return number
 
@@ -356,44 +349,6 @@ def parse_download(section: dict[str, Any]) -> DownloadConfig | None:
     )
 
 
-def parse_search(section: dict[str, Any]) -> SearchConfig:
-    """The ``search`` section: its non-empty keywords and its backoff, both required."""
-    keywords = _required(section, key="keywords", error_label="search")
-    if not isinstance(keywords, list) or not keywords:
-        raise ConfigValueError("search.keywords", message="non-empty list of strings expected")
-    parsed_keywords: list[str] = []
-    for keyword in keywords:
-        if not isinstance(keyword, str) or not keyword:
-            raise ConfigValueError(
-                "search.keywords", message=f"non-empty string expected, got {keyword!r}"
-            )
-        parsed_keywords.append(keyword)
-    return SearchConfig(keywords=tuple(parsed_keywords), backoff=_parse_backoff(section))
-
-
-def _parse_backoff(search: dict[str, Any]) -> BackoffConfig:
-    """`search.backoff`, required: a factor that grows, a cap at least the base."""
-    section = _require_mapping(search.get("backoff", {}), key_path="search.backoff")
-    factor = _positive(section, key="factor", error_label="search.backoff")
-    if factor < 1:
-        raise ConfigValueError(
-            "search.backoff.factor", message=f"must be ≥ 1 (growth), got {factor}"
-        )
-    backoff = BackoffConfig(
-        base_seconds=_seconds(section, key="base_seconds", error_label="search.backoff"),
-        cap_seconds=_seconds(section, key="cap_seconds", error_label="search.backoff"),
-        factor=factor,
-        jitter_ratio=_non_negative(section, key="jitter_ratio", error_label="search.backoff"),
-    )
-    if backoff.cap_seconds < backoff.base_seconds:
-        raise ConfigValueError(
-            "search.backoff.cap_seconds",
-            message=f"{backoff.cap_seconds} < base_seconds ({backoff.base_seconds}): "
-            "cap below floor",
-        )
-    return backoff
-
-
 def parse_webui(section: dict[str, Any]) -> WebuiConfig:
     """The ``webui`` section: an absent key takes the domain's default.
 
@@ -414,6 +369,22 @@ def parse_webui(section: dict[str, Any]) -> WebuiConfig:
         else DEFAULT_AMULE_URL
     )
     return WebuiConfig(amule_url=amule_url, source_period_gap=gap)
+
+
+def cross_value_problems(
+    config: CrawlerConfig, *, file_path: PurePath
+) -> tuple[ConfigProblem, ...]:
+    """The problems of ``config`` no single value shows, once each value of its file holds."""
+    backoff = config.search.backoff
+    if backoff.cap_seconds < backoff.base_seconds:
+        return (
+            ConfigProblem(
+                file_path=file_path,
+                key="search.backoff.cap_seconds",
+                message="should be at least base_seconds",
+            ),
+        )
+    return ()
 
 
 @dataclass(kw_only=True, frozen=True)

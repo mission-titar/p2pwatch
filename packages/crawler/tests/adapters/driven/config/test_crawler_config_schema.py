@@ -78,7 +78,14 @@ def test_an_absent_section_takes_its_defaults(section: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "key", ["shutdown_deadline_seconds", "amule_api_password", "catalog_db_path", "local_db_path"]
+    "key",
+    [
+        "shutdown_deadline_seconds",
+        "amule_api_password",
+        "catalog_db_path",
+        "local_db_path",
+        "search",
+    ],
 )
 def test_a_root_key_absent_is_required(key: str) -> None:
     document = _document()
@@ -111,6 +118,84 @@ def test_a_deadline_of_a_day_is_accepted() -> None:
     assert config.shutdown_deadline_seconds == 86_400
 
 
+def _with_search(path: str, *, value: object) -> dict[str, Any]:
+    """``_document()`` whose search section holds ``value`` at the dotted ``path``."""
+    document = _document()
+    *sections, key = path.split(".")
+    mapping = document["search"]
+    for section in sections:
+        mapping = mapping[section]
+    mapping[key] = value
+    return document
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        ("keywords", [], "List should have at least 1 item after validation, not 0"),
+        ("keywords", "keroro", "Input should be a valid list"),
+        ("backoff", [1, 2], "Input should be a valid dictionary"),
+        ("backoff.base_seconds", float("inf"), "Input should be a finite number"),
+        ("backoff.cap_seconds", float("nan"), "Input should be a finite number"),
+        ("backoff.factor", float("inf"), "Input should be a finite number"),
+        ("backoff.jitter_ratio", float("nan"), "Input should be a finite number"),
+        ("backoff.base_seconds", 86_401, "Input should be less than or equal to 86400"),
+        ("backoff.cap_seconds", 0, "Input should be greater than 0"),
+        ("backoff.factor", 0.5, "Input should be greater than or equal to 1"),
+        ("backoff.factor", "2", "Input should be a valid number"),
+        ("backoff.jitter_ratio", -0.1, "Input should be greater than or equal to 0"),
+        ("unread", 1, "Extra inputs are not permitted"),
+        ("backoff.unread", 1, "Extra inputs are not permitted"),
+    ],
+)
+def test_a_search_value_out_of_its_type_is_refused(
+    *, path: str, value: object, message: str
+) -> None:
+    assert _problems(_with_search(path, value=value)) == [(f"search.{path}", message)]
+
+
+@pytest.mark.parametrize(
+    ("keywords", "key", "message"),
+    [
+        (["keroro", 42], "search.keywords[1]", "Input should be a valid string"),
+        ([""], "search.keywords[0]", "String should have at least 1 character"),
+    ],
+)
+def test_a_keyword_is_a_non_empty_string(*, keywords: list[object], key: str, message: str) -> None:
+    assert _problems(_with_search("keywords", value=keywords)) == [(key, message)]
+
+
+@pytest.mark.parametrize("key", ["keywords", "backoff", "backoff.factor"])
+def test_a_search_key_absent_is_required(key: str) -> None:
+    document = _document()
+    *sections, name = key.split(".")
+    mapping = document["search"]
+    for section in sections:
+        mapping = mapping[section]
+    del mapping[name]
+    assert _problems(document) == [(f"search.{key}", "Field required")]
+
+
+def test_a_backoff_of_a_day_without_jitter_is_accepted() -> None:
+    backoff = {"base_seconds": 86_400, "cap_seconds": 86_400, "factor": 1, "jitter_ratio": 0}
+    config = crawler_config_from_document(_with_search("backoff", value=backoff), file_path=_FILE)
+    assert config.search.backoff == BackoffConfig(
+        base_seconds=86_400, cap_seconds=86_400, factor=1, jitter_ratio=0
+    )
+
+
+def test_a_backoff_cap_below_its_base_is_refused() -> None:
+    document = _with_search("backoff.cap_seconds", value=1.0)
+    assert _problems(document) == [
+        ("search.backoff.cap_seconds", "should be at least base_seconds")
+    ]
+
+
+def test_the_rules_across_values_wait_for_the_file_to_hold() -> None:
+    document = _with_search("backoff.cap_seconds", value=1.0) | {"shutdown_deadline_seconds": 0}
+    assert _problems(document) == [("shutdown_deadline_seconds", "Input should be greater than 0")]
+
+
 def test_a_root_key_nothing_reads_is_refused() -> None:
     document = _document() | {"amules": [{"name": "amule-1", "password": "x"}]}
     assert _problems(document) == [("amules", "Extra inputs are not permitted")]
@@ -135,8 +220,9 @@ def test_a_removed_root_key_is_refused_by_name(key: str) -> None:
     ]
 
 
-def test_the_root_backoff_is_refused_with_its_new_place() -> None:
-    document = _document() | {"backoff": _document()["search"]["backoff"]}
+def test_the_root_backoff_is_one_problem_naming_its_new_place() -> None:
+    document = _document() | {"backoff": _document()["search"].pop("backoff")}
+    del document["search"]["backoff"]
     assert _problems(document) == [("backoff", "moved to 'search.backoff', move it in crawler.yml")]
 
 
