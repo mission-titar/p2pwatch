@@ -1,28 +1,10 @@
-"""``crawler.yml``'s objects, the parse of ``download``, which builds the section the config
-adapter's schema checked, raising a ``ConfigValueError`` on its first problem, and its rules
-across values.
+"""``crawler.yml``'s objects, which the config adapter builds, and its rules across values."""
 
-The config adapter resolves ``${NAME}`` in every string value before the parse, which never sees
-the environment. ``download`` is ``None`` unless ``enabled: true``, its wiring keys required only
-then.
-"""
-
-import math
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import PurePath
-from typing import Any
 
-from p2pwatch.domain.config_defaults import (
-    DEFAULT_DOWNLOAD_ENABLED,
-    DEFAULT_LOST_AFTER,
-    DEFAULT_MIN_FREE_BYTES,
-    DEFAULT_OUTPUT_DIRECTORY,
-    DEFAULT_REAPPEARED_AFTER,
-    DEFAULT_SOURCES_INTERVAL,
-)
 from p2pwatch.domain.config_problem import ConfigProblem
-from p2pwatch.domain.config_value_error import ConfigValueError
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.policy import Audience
@@ -130,143 +112,6 @@ class CrawlerConfig:
     observability: ObservabilityConfig
     download: DownloadConfig | None
     webui: WebuiConfig
-
-
-def _key_path(error_label: str, *, key: str) -> str:
-    return f"{error_label}.{key}"
-
-
-def _required(section: dict[str, Any], *, key: str, error_label: str) -> Any:
-    if key in section:
-        return section[key]
-    raise ConfigValueError(_key_path(error_label, key=key), message="missing")
-
-
-def _number(section: dict[str, Any], *, key: str, error_label: str) -> float:
-    setting = _required(section, key=key, error_label=error_label)
-    if not isinstance(setting, int | float) or isinstance(setting, bool):
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message=f"number expected, got {setting!r}"
-        )
-    if not math.isfinite(setting):  # .inf makes a sleep endless, .nan passes every comparison
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message=f"finite number expected, got {setting!r}"
-        )
-    return float(setting)
-
-
-def _positive(section: dict[str, Any], *, key: str, error_label: str) -> float:
-    number = _number(section, key=key, error_label=error_label)
-    if number <= 0:
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message=f"strictly positive expected, got {number}"
-        )
-    return number
-
-
-def _positive_int(section: dict[str, Any], *, key: str, error_label: str) -> int:
-    """Strictly positive integer (bool refused), else ``ConfigValueError`` (fail-fast §5/§14)."""
-    setting = _required(section, key=key, error_label=error_label)
-    if not isinstance(setting, int) or isinstance(setting, bool) or setting <= 0:
-        raise ConfigValueError(
-            _key_path(error_label, key=key),
-            message=f"strictly positive integer expected, got {setting!r}",
-        )
-    return setting
-
-
-# Coherent bounds for a P2P watch: a day for a delay, 30 days for an absence (operator, 2026-10-13).
-_A_DAY_SECONDS = 86_400.0
-_THIRTY_DAYS_SECONDS = 2_592_000.0
-
-
-def _seconds(
-    section: dict[str, Any],
-    *,
-    key: str,
-    error_label: str,
-    default: float | None = None,
-    at_most: float = _A_DAY_SECONDS,
-) -> float:
-    """Strictly positive seconds up to ``at_most``; OPTIONAL when given a ``default``."""
-    if default is not None and key not in section:
-        return default
-    seconds = _positive(section, key=key, error_label=error_label)
-    if seconds > at_most:
-        raise ConfigValueError(
-            _key_path(error_label, key=key),
-            message=f"at most {at_most:.0f} seconds expected, got {seconds}",
-        )
-    return seconds
-
-
-def _positive_int_default(
-    section: dict[str, Any], *, key: str, error_label: str, default: int
-) -> int:
-    """OPTIONAL strictly positive integer (default ``default``)."""
-    if key not in section:
-        return default
-    return _positive_int(section, key=key, error_label=error_label)
-
-
-def _bool_default(section: dict[str, Any], *, key: str, error_label: str, default: bool) -> bool:
-    """OPTIONAL boolean (default ``default``); refuses a non-bool, fail-fast (§5/§14)."""
-    if key not in section:
-        return default
-    setting = section[key]
-    if not isinstance(setting, bool):
-        raise ConfigValueError(
-            _key_path(error_label, key=key), message=f"boolean expected, got {setting!r}"
-        )
-    return setting
-
-
-def parse_download(section: dict[str, Any]) -> DownloadConfig | None:
-    """The ``download`` section, ``None`` unless ``enabled``."""
-    if not _bool_default(
-        section, key="enabled", error_label="download", default=DEFAULT_DOWNLOAD_ENABLED
-    ):
-        return None  # laziness: we read NOTHING else (no wiring required)
-    output_directory = section.get("output_dir", DEFAULT_OUTPUT_DIRECTORY)
-    if not isinstance(output_directory, str) or not output_directory:
-        raise ConfigValueError(
-            "download.output_dir", message=f"non-empty string expected, got {output_directory!r}"
-        )
-    return DownloadConfig(
-        poll_interval_seconds=_seconds(
-            section, key="poll_interval_seconds", error_label="download"
-        ),
-        min_free_bytes=_positive_int_default(
-            section, key="min_free_bytes", error_label="download", default=DEFAULT_MIN_FREE_BYTES
-        ),
-        lost_after=timedelta(
-            seconds=_seconds(
-                section,
-                key="lost_after_seconds",
-                error_label="download",
-                default=DEFAULT_LOST_AFTER.total_seconds(),
-                at_most=_THIRTY_DAYS_SECONDS,
-            )
-        ),
-        output_directory=output_directory,
-        reappeared_after=timedelta(
-            seconds=_seconds(
-                section,
-                key="reappeared_after_seconds",
-                error_label="download",
-                default=DEFAULT_REAPPEARED_AFTER.total_seconds(),
-                at_most=_THIRTY_DAYS_SECONDS,
-            )
-        ),
-        sources_interval=timedelta(
-            seconds=_seconds(
-                section,
-                key="sources_interval_seconds",
-                error_label="download",
-                default=DEFAULT_SOURCES_INTERVAL.total_seconds(),
-            )
-        ),
-    )
 
 
 def cross_value_problems(
