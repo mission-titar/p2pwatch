@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
-from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    MigrationError,
+    OutOfSpaceError,
+    PersistenceError,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
@@ -500,8 +504,6 @@ def test_insert_or_replace_on_existing_hash_raises_integrity_error(tmp_path: Pat
 _TEMP_STORE_DEFAULT = 0
 _TEMP_STORE_FILE = 1
 
-_NO_TRANSACTION = "-- migration: no-transaction\n"
-
 
 def _open(path: Path, *, scripts: tuple[Migration, ...]) -> sqlite3.Connection:
     return database_opener().open(path, scripts=scripts)
@@ -588,19 +590,37 @@ def test_temp_store_is_restored_after_migrations(tmp_path: Path) -> None:
         assert rows(connection, sql="PRAGMA temp_store") == [{"temp_store": _TEMP_STORE_DEFAULT}]
 
 
-def test_failed_script_is_rolled_back_and_version_unchanged(tmp_path: Path) -> None:
+def test_a_failing_second_script_rolls_back_the_first_and_keeps_the_starting_version(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "echec.db"
     bad_script = "CREATE TABLE disparait (x INTEGER);\nINSERT INTO inexistante VALUES (1);"
-    with pytest.raises(MigrationError, match="migration 2"):
+    with pytest.raises(MigrationError, match="^migration 2 failed: no such table: inexistante"):
         _open(
             path,
             scripts=(
-                Migration(version=1, script="CREATE TABLE survit (x INTEGER);"),
+                Migration(version=1, script="CREATE TABLE annulee (x INTEGER);"),
                 Migration(version=2, script=bad_script),
             ),
         )
-    # Migration 1 has ITS OWN transaction (applied); migration 2 is ENTIRELY rolled back.
-    assert _version_and_tables(path) == (1, {"survit"})
+    assert _version_and_tables(path) == (0, set())
+
+
+def test_a_full_disk_during_the_block_rolls_it_back_and_raises_out_of_space(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "full.db"
+    opener = database_opener_setting("PRAGMA max_page_count = 8")
+    fill = "INSERT INTO t VALUES (zeroblob(64 * 4096));"
+    with pytest.raises(OutOfSpaceError, match="^migration 2 failed: database or disk is full"):
+        opener.open(
+            path,
+            scripts=(
+                Migration(version=1, script="CREATE TABLE t (b BLOB);"),
+                Migration(version=2, script=fill),
+            ),
+        )
+    assert _version_and_tables(path) == (0, set())
 
 
 def test_each_applied_script_logs_one_line_before_it_runs(
@@ -620,11 +640,11 @@ def test_each_applied_script_logs_one_line_before_it_runs(
 
 
 def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) -> None:
-    # A COMMIT inside a script closes its migration's transaction: detection BEFORE the stamp,
-    # version unchanged, NO partial state (the attack script only does COMMIT).
+    # A COMMIT inside a script commits the block so far, unstamped: the version stays the starting
+    # one, and the earlier scripts' work cannot be taken back.
     path = tmp_path / "commit.db"
     with pytest.raises(
-        MigrationError, match=r"^migration 2: the script closed its migration's transaction"
+        MigrationError, match=r"^migration 2: the script closed the migrations' transaction"
     ):
         _open(
             path,
@@ -633,7 +653,7 @@ def test_stray_commit_in_a_script_is_detected_before_stamping(tmp_path: Path) ->
                 Migration(version=2, script="COMMIT;"),
             ),
         )
-    assert _version_and_tables(path) == (1, {"survit"})
+    assert _version_and_tables(path) == (0, {"survit"})
 
 
 def test_stray_commit_followed_by_a_failure_keeps_the_version_unstamped(tmp_path: Path) -> None:
@@ -659,9 +679,7 @@ def test_open_closes_the_connection_when_configuring_fails(tmp_path: Path) -> No
     assert [w for w in caught if issubclass(w.category, ResourceWarning)] == []
 
 
-def test_vacuum_without_the_directive_fails_inside_its_migration_transaction(
-    tmp_path: Path,
-) -> None:
+def test_a_vacuum_in_a_script_fails_inside_the_block(tmp_path: Path) -> None:
     scripts = tmp_path / "scripts"
     scripts.mkdir()
     (scripts / "0001_vacuum.sql").write_text("VACUUM;", encoding="utf-8")
@@ -671,38 +689,14 @@ def test_vacuum_without_the_directive_fails_inside_its_migration_transaction(
     assert _version_and_tables(path)[0] == 0
 
 
-def test_vacuum_with_the_directive_runs_and_stamps_its_version(tmp_path: Path) -> None:
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    (scripts / "0001_table.sql").write_text("CREATE TABLE t (x INTEGER);", encoding="utf-8")
-    (scripts / "0002_vacuum.sql").write_text(_NO_TRANSACTION + "VACUUM;", encoding="utf-8")
-    with closing(_open(tmp_path / "vacuum.db", scripts=load_scripts(scripts))) as connection:
-        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 2}]
-        assert not connection.in_transaction
-
-
-def test_failing_script_with_the_directive_leaves_the_version_unchanged(tmp_path: Path) -> None:
-    scripts = tmp_path / "scripts"
-    scripts.mkdir()
-    (scripts / "0001_table.sql").write_text("CREATE TABLE t (x INTEGER);", encoding="utf-8")
-    (scripts / "0002_broken.sql").write_text(
-        _NO_TRANSACTION + "INSERT INTO inexistante VALUES (1);", encoding="utf-8"
-    )
-    path = tmp_path / "broken.db"
-    with pytest.raises(MigrationError, match="migration 2"):
-        _open(path, scripts=load_scripts(scripts))
-    assert _version_and_tables(path)[0] == 1
-
-
 _LARGE_REWRITE_PRAGMAS = "PRAGMA secure_delete = OFF;\nPRAGMA cache_size = -262144;\n"
 
 
-@pytest.mark.parametrize("transactional", [True, False])
-def test_a_script_pragmas_are_restored_after_it(*, tmp_path: Path, transactional: bool) -> None:
+def test_a_script_pragmas_are_restored_after_the_block(tmp_path: Path) -> None:
     """``secure_delete = 1`` stands for the image's build, which compiles ``SECURE_DELETE`` in."""
     opener = database_opener_setting("PRAGMA secure_delete = ON")
     script = _LARGE_REWRITE_PRAGMAS + "CREATE TABLE t (x INTEGER);"
-    scripts = (Migration(version=1, script=script, transactional=transactional),)
+    scripts = (Migration(version=1, script=script),)
     with closing(opener.open(tmp_path / "pragmas.db", scripts=scripts)) as connection:
         assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 1}]
         assert rows(connection, sql="PRAGMA cache_size") == [{"cache_size": -2000}]
@@ -713,3 +707,77 @@ def test_a_fast_secure_delete_is_restored_as_fast(tmp_path: Path) -> None:
     scripts = (Migration(version=1, script=_LARGE_REWRITE_PRAGMAS),)
     with closing(opener.open(tmp_path / "fast.db", scripts=scripts)) as connection:
         assert rows(connection, sql="PRAGMA secure_delete") == [{"secure_delete": 2}]
+
+
+# --- The reclaim: after a block of migrations, or at a quarter of free pages ---
+
+
+def _page_and_free_counts(path: Path) -> tuple[int, int]:
+    with closing(sqlite3.connect(path)) as connection:
+        (row,) = rows(
+            connection,
+            sql="SELECT page_count, freelist_count"
+            " FROM pragma_page_count(), pragma_freelist_count()",
+        )
+        return row["page_count"], row["freelist_count"]
+
+
+def _with_free_pages(path: Path, *, kept_pages: int, freed_pages: int) -> tuple[int, int]:
+    """A database at version 0 in WAL, its ``kept`` table, then ``freed_pages`` free once its
+    ``freed`` table dropped; its page and free counts."""
+    with closing(sqlite3.connect(path, autocommit=True)) as connection:
+        connection.execute("PRAGMA journal_mode=WAL")
+        # Each 4092 bytes of a blob past the first fills one overflow page.
+        connection.execute("CREATE TABLE kept (b BLOB)")
+        connection.execute("INSERT INTO kept VALUES (zeroblob(?))", (kept_pages * 4092,))
+        connection.execute("CREATE TABLE freed (b BLOB)")
+        connection.execute("INSERT INTO freed VALUES (zeroblob(?))", ((freed_pages - 1) * 4092,))
+        connection.execute("DROP TABLE freed")
+    return _page_and_free_counts(path)
+
+
+def test_a_block_of_migrations_is_compacted_after_it(tmp_path: Path) -> None:
+    path = tmp_path / "block.db"
+    scripts = (
+        Migration(version=1, script="CREATE TABLE kept (b BLOB);"),
+        Migration(version=2, script="INSERT INTO kept VALUES (zeroblob(16 * 4092));"),
+        Migration(
+            version=3,
+            script="CREATE TABLE freed (b BLOB);\n"
+            "INSERT INTO freed VALUES (zeroblob(4092));\nDROP TABLE freed;",
+        ),
+    )
+    _open(path, scripts=scripts).close()
+    assert _page_and_free_counts(path)[1] == 0
+
+
+def test_the_reclaim_leaves_the_wal_empty(tmp_path: Path) -> None:
+    """The crawler holds its connection for good, so a WAL the reclaim grew would never shrink."""
+    path = tmp_path / "wal.db"
+    scripts = (Migration(version=1, script="CREATE TABLE t (b BLOB);"),)
+    with closing(_open(path, scripts=scripts)):
+        assert Path(f"{path}-wal").stat().st_size == 0
+
+
+def test_an_opening_with_nothing_pending_compacts_a_quarter_free(tmp_path: Path) -> None:
+    path = tmp_path / "quarter.db"
+    assert _with_free_pages(path, kept_pages=10, freed_pages=4) == (16, 4)
+    _open(path, scripts=()).close()
+    assert _page_and_free_counts(path)[1] == 0
+
+
+def test_an_opening_with_nothing_pending_leaves_less_than_a_quarter_free(tmp_path: Path) -> None:
+    path = tmp_path / "below.db"
+    assert _with_free_pages(path, kept_pages=11, freed_pages=4) == (17, 4)
+    _open(path, scripts=()).close()
+    assert _page_and_free_counts(path) == (17, 4)
+
+
+def test_a_failed_reclaim_raises_a_migration_error(tmp_path: Path) -> None:
+    path = tmp_path / "held.db"
+    _with_free_pages(path, kept_pages=4, freed_pages=4)
+    opener = database_opener_setting("PRAGMA busy_timeout = 0")
+    with closing(sqlite3.connect(path, autocommit=True)) as holder:
+        holder.execute("BEGIN IMMEDIATE")
+        with pytest.raises(MigrationError, match="^reclaim failed: database is locked"):
+            opener.open(path, scripts=())
