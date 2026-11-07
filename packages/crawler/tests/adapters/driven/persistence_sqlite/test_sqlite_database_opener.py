@@ -3,7 +3,7 @@ import sqlite3
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +15,13 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     OutOfSpaceError,
     PersistenceError,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.gigabytes import gigabytes
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import read_only_uri
 from p2pwatch.domain.file_key import FileKey, Network
+from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_catalog_at,
@@ -28,6 +30,7 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     database_opener,
     database_opener_setting,
+    database_opener_ticked_by,
     open_catalog,
     open_local,
 )
@@ -636,7 +639,36 @@ def test_each_applied_script_logs_one_line_before_it_runs(
     caplog.clear()
     with caplog.at_level("INFO"):
         _open(path, scripts=scripts).close()
-    assert caplog.messages == ["migration 2: applying"]
+    assert [message for message in caplog.messages if message.endswith(": applying")] == [
+        "migration 2: applying"
+    ]
+
+
+def test_the_block_is_announced_then_the_migration_running_every_30_s(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "ticked.db"
+    scripts = (
+        Migration(version=1, script="CREATE TABLE a (x INTEGER);"),
+        Migration(version=2, script="CREATE TABLE b (x INTEGER);\nSELECT tick();"),
+        Migration(version=3, script="CREATE TABLE c (x INTEGER);\nSELECT tick();"),
+    )
+    _open(path, scripts=scripts[:1]).close()
+    ticker = FakeTicker()
+    caplog.clear()
+    with caplog.at_level("INFO"):
+        database_opener_ticked_by(ticker).open(path, scripts=scripts).close()
+    *block_lines, reclaim_line = caplog.messages
+    assert block_lines == [
+        f"migrations of {path}: from version 1 to version 3 in one step; "
+        "a stop now rolls them back, costing only the time spent",
+        "migration 2: applying",
+        f"migrations of {path}: migration 2 running, 30 s elapsed",
+        "migration 3: applying",
+        f"migrations of {path}: migration 3 running, 60 s elapsed",
+    ]
+    assert reclaim_line.startswith(f"reclaim of {path}: ")
+    assert ticker.periods == [timedelta(seconds=30)]
 
 
 def test_stray_commit_in_a_script_is_detected_before_the_version_is_written(
@@ -766,6 +798,19 @@ def test_an_opening_with_nothing_pending_compacts_a_quarter_free(tmp_path: Path)
     assert _with_free_pages(path, kept_pages=10, freed_pages=4) == (16, 4)
     _open(path, scripts=()).close()
     assert _page_and_free_counts(path)[1] == 0
+
+
+def test_the_reclaim_is_announced_with_the_space_it_gives_back(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "announced.db"
+    assert _with_free_pages(path, kept_pages=10, freed_pages=4) == (16, 4)
+    with caplog.at_level("INFO"):
+        _open(path, scripts=()).close()
+    assert caplog.messages == [
+        f"reclaim of {path}: giving back {gigabytes(4 * 4096)} of free pages, 25 % of the file; "
+        "a stop now costs only the time spent"
+    ]
 
 
 def test_an_opening_with_nothing_pending_leaves_less_than_a_quarter_free(tmp_path: Path) -> None:

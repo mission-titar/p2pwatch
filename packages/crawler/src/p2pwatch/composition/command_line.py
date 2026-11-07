@@ -35,6 +35,7 @@ def build_command_line(
 ) -> ArgparseCommandLine:
     """The command line run in the environment ``env`` and the directory ``cwd``, logging through
     ``root_logger``."""
+    ticker = ThreadingTicker(AsyncioMonotonicClock())
     return ArgparseCommandLine(
         crawler_runner=CrawlerComposition(
             webui_address=_WEBUI_ADDRESS,
@@ -49,9 +50,10 @@ def build_command_line(
                 SqliteDatabaseOpener(
                     SqlitePreMigrationCopier(
                         SystemWallClock(),
-                        ticker=ThreadingTicker(AsyncioMonotonicClock()),
+                        ticker=ticker,
                         free_bytes=lambda directory: disk_usage(directory).free,
-                    )
+                    ),
+                    ticker=ticker,
                 )
             ),
             logger=StdlibLogger(MergeCatalogs.__module__),

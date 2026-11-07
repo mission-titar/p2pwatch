@@ -11,6 +11,7 @@ from typing import Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.gigabytes import gigabytes
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.application.ports.driven.ticker import Ticker
@@ -65,7 +66,7 @@ class SqlitePreMigrationCopier:
             _logger.info(
                 "pre-migration copy of %s: writing %s to %s; a stop now costs only the time spent",
                 path,
-                _gigabytes(live_bytes),
+                gigabytes(live_bytes),
                 partial,
             )
 
@@ -74,8 +75,8 @@ class SqlitePreMigrationCopier:
                 _logger.info(
                     "pre-migration copy of %s: %s of %s written (%d %%)",
                     path,
-                    _gigabytes(written_bytes),
-                    _gigabytes(live_bytes),
+                    gigabytes(written_bytes),
+                    gigabytes(live_bytes),
                     written_bytes * 100 // live_bytes,
                 )
 
@@ -154,10 +155,6 @@ def _live_bytes(connection: sqlite3.Connection) -> int:
     page_count = int(connection.execute("PRAGMA page_count").fetchone()["page_count"])
     freelist_count = int(connection.execute("PRAGMA freelist_count").fetchone()["freelist_count"])
     return (page_count - freelist_count) * page_size
-
-
-def _gigabytes(size_bytes: int) -> str:
-    return f"{size_bytes / 1e9:.1f} GB"
 
 
 def _size_or_zero(path: Path) -> int:
