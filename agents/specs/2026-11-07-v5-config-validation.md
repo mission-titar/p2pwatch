@@ -71,6 +71,10 @@ written twice; and, first, folds the matching engine back into p2pwatch, the sep
   not listed, since the one edit fixes both. No message prints the value received: `${NAME}` is resolved before the
   parse, so an unknown key or a type error would print a resolved password or webhook token, which `main` never
   does; the key and the expected type name the problem, and the operator has the file in hand. Blocks 40 to 120.
+  (Corrected: the rule holds for `crawler.yml`, the one file a `${NAME}` resolves into, whose backoff rule prints no
+  number either; `matcher.yml`'s messages name the tokens and placeholders the operator wrote and give `re`'s reason,
+  the operator's decision of 2026-11-08 on the holistic review's finding; an unset `${NAME}` is one problem, its
+  key's type refusing it beside it dropped, since setting the variable fixes both; the closing block.)
 - **D8. No command rewrites a 4.x configuration** (umbrella D11). *D7 already names each key with its action.* No
   block.
 
@@ -130,11 +134,15 @@ Commands and tests in appendix B.
 | 130 | `feat/yaml-duplicate-keys-refused` | a key written twice refused | D5 | 160 to 270, 7 to 12 |
 | 140 | `docs/v5-config-validation-wrap` | closing block | | |
 
+(Corrected: 22 blocks and the closing one, not 13: 40 split in four (40 to 46), 100 in three (100 to 104), 50, 60, 80
+and 110 in two (52, 62, 82, 112), and the closing block in two (140, 142): 24, the bound the operator extended to on
+2026-11-08.)
+
 Estimates by a Sonnet agent (`.reviews/v5-lot3-estimate.md`) on a first cut of eight blocks, which it split into this
 one; it counted every rewritten test as deleted then added. Seven rows reach the line bound on that count (40, 50,
 60, 80, 100, 110, 120), each splitting once more if it passes, which would take the stack to 21 blocks. The
 operator accepted on 2026-11-07 a stack past the workflow's 19 in one lot rather than two lots: each split takes a free
-number, and the lead asks again only past 21.
+number, and the lead asks again only past 21. (Corrected: past 21, the operator accepted about 24 on 2026-11-08.)
 
 ## 6. Limits and scope
 
@@ -212,7 +220,8 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
 
 - `InvalidConfigError` carries a non-empty tuple of `ConfigProblem`s in place of one key and message. The domain's
   parses, which do not know their file, raise in its place a domain `ConfigValueError(key, message)`, which the
-  adapter turns into a problem of its file; it goes with the last parse, in block 110.
+  adapter turns into a problem of its file; it goes with the last parse, in block 110. (Corrected: in block 62, its
+  last user being the download parse.)
 - `load_config` checks the three files, raises `InvalidConfigError` with every problem, and builds the config only
   when there is none.
 - `${NAME}` interpolation lists every unset or ill-formed variable, then the file's parse runs on the document.
@@ -227,9 +236,11 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
   section parses read: `_parse_observability`, `_parse_download` and `_parse_webui` become public until their block
   replaces them, and keep refusing the 4.x keys under them (`observability.metrics`, `webui.enabled`, a
   notification's `tag`). They run whether or not the root model holds, so each section still gives its first problem
-  beside the root's.
+  beside the root's. (Corrected: a section that is no mapping is refused by the root schema, its domain parse not
+  run.)
 - Block 50 models `observability` and `webui`, block 60 `download`; block 60 deletes `parse_crawler_config` and its
-  helpers, `crawler_config.py` keeping the dataclasses.
+  helpers, `crawler_config.py` keeping the dataclasses. (Corrected: `parse_crawler_config` went in block 44, once the
+  adapter built the config.)
 - `pydantic` and `pydantic-core` join the crawler's dependencies (the latest 2.x, which the probe ran: 2.14.3, core
   2.50.4; `PydanticCustomError` is `pydantic_core`'s, so deptry needs both declared); an ast-grep rule refuses either
   import outside `packages/crawler/src/p2pwatch/adapters/driven/config/`, on the model of `no-sqlite-connect`.
@@ -247,7 +258,8 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
   returning its problems, which the adapter runs once the model is valid (D3).
 - `validation_problems.py` turns a pydantic `ValidationError` into `ConfigProblem`s for the three schemas: the key
   from the error's location, each tagged union's tag carrying a mark no key can take (`~regex`) and dropped; the
-  message pydantic's, without the value received (D7), ours as written for our errors.
+  message pydantic's, without the value received (D7), ours as written for our errors. (Corrected: the tag mark
+  arrived in block 60, with the first tagged union.)
 - Tests: the domain's `test_crawler_config.py` cases that test the parse move to the adapter's tests, each refusal
   still refused (`test_a_number_that_is_not_finite_is_refused_by_name` included); every problem of one file listed;
   an unknown key at each level; the removed, moved and renamed keys, one problem each; `download` disabled with a
@@ -258,7 +270,8 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
 
 - Block 70: `targets_from_document`, called by `read_targets`, still through `parse_targets`; the call sites in the
   tests read through it (`git grep -c "parse_targets(" -- 'packages/*/tests'` outside `test_validation.py`: 14 lines
-  in 9 files), so that block 80 changes the parse alone.
+  in 9 files), so that block 80 changes the parse alone. (Corrected: a call site reading a file goes through
+  `read_targets`; the function lives in `targets_schema.py`.)
 - Block 80: a schema per level (the file, an episode, a segment), strict, `extra="forbid"`; `status` a `Literal`
   defaulting to `lost`; a control character in a letter refused through the domain's `has_control_character`, as
   today. The adapter builds the `TargetSegment`s.
@@ -272,7 +285,8 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
 
 - Block 90: `matcher_config_from_document`, called by `read_matcher_config`, still through `parse_matcher_config`;
   the call sites in the tests read through it (`git grep -c "parse_matcher_config(" -- 'packages/*/tests'` outside
-  `test_validation.py`: 29 lines in 9 files).
+  `test_validation.py`: 29 lines in 9 files). (Corrected: a call site reading a file goes through
+  `read_matcher_config`; the function lives in `matcher_config_schema.py`.)
 - Block 100 models the fragments, the leaf tokens and the 4.x names; the conditions, rules and vetoes are typed as
   plain values that the domain's parse still reads, its condition and rule parses public until block 110, which models
   them and deletes the structural half of `validation.py`.
@@ -280,12 +294,14 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
   discriminator is a function that returns the shape's tag, or a refusing tag for no shape or two, whose model refuses
   in a `mode="before"` validator with today's words and keys (`unknown token shape: keys [...]`, `a leaf token has
   exactly one type-key, got [...]`): a discriminator that raises drops every other problem, and its static
-  `custom_error_message` cannot name the keys.
+  `custom_error_message` cannot name the keys. (Corrected: the refusing tag is an `Any` type with a
+  `BeforeValidator`, not a model.)
 - A condition (`all`, `any`, `not`) is recursive; an operand is a token name, a `{token: ...}` reference or a
   condition; a rule's `tier` and `scope` are `Literal`s, its name refuses a control character.
 - The 4.x names, each refused with its 5.0 name in the shape (D3): `min` and `fuzz` on a coverage token or reference,
   `size_mb` and `duration_sec` in `attr_between`, and a regex holding `{segment}` (a validator on the regex field);
-  the new name's "Field required" beside them dropped.
+  the new name's "Field required" beside them dropped. (Corrected: `{segment}` is refused in a fragment's text too,
+  which `main` did not check when no regex cited the fragment.)
 - The adapter builds `MatcherConfig`; fragment expansion and its two checks (a fragment named after a target
   placeholder, a fragment citing a fragment) stay domain functions it calls. Until block 120 the adapter calls the
   domain's `validate_config` on the built config, first problem only.
@@ -295,7 +311,9 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
 
 - `validate_config` becomes a domain function returning every problem: unknown references (in a token, a rule, a
   veto), a duplicate veto, an override on a token that is not a coverage one, each cycle, the depth bound (checked only
-  when no cycle was found), each regex that does not interpolate or compile. `UnknownTokenError`, `CycleError` and
+  when no cycle was found), each regex that does not interpolate or compile. (Corrected: the function is
+  `cross_value_problems`, its keys pydantic's locations, by index; since the closing block it checks the fragments
+  too, a fragment problem leaving only the regexes unchecked.) `UnknownTokenError`, `CycleError` and
   `DepthExceededError` go with the exceptions.
 - Tests: the graph cases of `test_validation.py`, a config breaking two checks listed whole.
 
@@ -314,7 +332,7 @@ translator `validation_problems.py` in `adapters/driven/config/`; `targets_from_
 
 | Row | Command or test, and the output that fails it |
 |---|---|
-| 4.1.0's files | a test over `git show v4.1.0:deploy/{crawler,matcher,targets}.yml` committed as fixtures, its two notifications uncommented: exactly the 14 problems of appendix C, each by file and key; fails on a missing or an extra one |
+| 4.1.0's files | a test over `git show v4.1.0:deploy/{crawler,matcher,targets}.yml` committed as fixtures, its two notifications uncommented: exactly the 14 problems of appendix C, each by file and key; fails on a missing or an extra one (Corrected: `crawler.yml` and `matcher.yml` committed, `targets.yml` read from `deploy/`, byte-identical to 4.1.0's; the closing block) |
 | The start | the command line's test over the same fixtures: one `Invalid config, refusing to start:` line per problem, exit 1 |
 | A broken file beside a wrong one, two and three wrong values, two unset variables | block 20's and 30's tests of the adapter and the command line |
 | An unknown key, `.inf`, strict values | blocks 40 to 110's schema tests, one case each |
