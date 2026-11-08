@@ -16,8 +16,8 @@ load_yaml(path)                         # the crawler's adapters/driven/config/y
   →                                        #   fragments, tokens, conditions and rules (closed tier and
   →                                        #   scope, no control character (Cc) in a rule name), every
   →                                        #   problem listed, then validation.py: fragment_problems,
-  →                                        #   fail-fast graph validation: DAG/named-cycle,
-  →                                        #   depth bound (32), regex compile-check → MatchingConfigError
+  →                                        #   then cross_value_problems: every unknown reference,
+  →                                        #   veto, override, cycle, depth bound (32), regex
   → targets_from_document                  # the config adapter's targets_schema.py (pydantic): every
   →                                        #   problem listed, unique target_id by duplicate_targets
   → MatchingEngine(config, targets=..., max_filename_length=...)  # engine.py: one matcher tree PER TARGET
@@ -30,6 +30,6 @@ Invariants: the decision is order-independent (target_ids are unique); `MatchDec
 
 ## Gotchas
 
-- Regex tokens compile with `re.compile(pattern, re.ASCII)` (`matchers.py`, `validation.py`). `re.ASCII` keeps `\b \d \s \w` ASCII: matching the pre-2026-07-03 RE2 default the existing policy relies on (`fold()` does not reduce non-Latin scripts to ASCII). Case-insensitivity is a leading `(?i)` prefix (not a flag arg). An invalid pattern raises **`re.error`** (caught in `validation.py` → `MatchingConfigError` "not compilable").
-- Don't validate config order-dependently (parse pass = structural; graph pass = full table). Recursive validators need an explicit depth guard → a clean `DepthExceededError`, not `RecursionError` (which is a Python runtime artifact, not a domain error).
+- Regex tokens compile with `re.compile(pattern, re.ASCII)` (`matchers.py`, `validation.py`). `re.ASCII` keeps `\b \d \s \w` ASCII: matching the pre-2026-07-03 RE2 default the existing policy relies on (`fold()` does not reduce non-Latin scripts to ASCII). Case-insensitivity is a leading `(?i)` prefix (not a flag arg). An invalid pattern raises **`re.error`** (caught in `validation.py`: "does not compile as a regex").
+- Don't validate config order-dependently (parse pass = structural; graph pass = full table). The token graph is walked with an explicit stack: a chain past the interpreter's recursion limit is a depth problem, never a `RecursionError`. The depth is checked only when no cycle was found.
 - `golden_targets.yaml` is shared by this package's golden corpus and the crawler's `tests/application/conftest.py`: a change to it can break the crawler's tests too, so run both packages' suites.
