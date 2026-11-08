@@ -44,8 +44,8 @@ def test_a_variable_missing_from_the_env_given_is_a_problem_naming_its_key() -> 
         (
             FilesystemConfigChecker(_ENV).check_matcher_config,
             "rules: {}\n",
-            None,
-            "'rules' section: ",
+            "rules",
+            "Input should be a valid list",
         ),
     ],
     ids=["targets", "matcher"],
