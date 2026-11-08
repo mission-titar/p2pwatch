@@ -747,41 +747,65 @@ def _exec_python(script: str, *args: str, files: tuple[Path, ...]) -> str:
     return compose_run.stdout.strip()
 
 
-def _shared_hashes(files: tuple[Path, ...]) -> frozenset[str] | None:
-    """Hashes amuled currently shares, read over the API from the core.
+def _shared_hashes_output(files: tuple[Path, ...]) -> str:
+    return _exec(_CORE, "python", "-c", _SHARED_HASHES, files=files)
 
-    `None` means the call itself did not complete. That is a READINESS state, not a result:
-    while `ed2k` restarts, the API answers `503 ec_unavailable` or nothing at all. Callers poll
-    on it.
+
+def _parsed_hashes(output: str) -> frozenset[str] | None:
+    """Hashes amuled shares, or `None` when the amuleapi call itself did not complete.
+
+    `None` is a READINESS state, not a result: while `ed2k` restarts, the API answers
+    `503 ec_unavailable` or nothing at all. Callers poll on it.
     """
-    output = _exec(_CORE, "python", "-c", _SHARED_HASHES, files=files)
     try:
         return frozenset(json.loads(output))
     except json.JSONDecodeError:
         return None
 
 
+def _shared_hashes(files: tuple[Path, ...]) -> frozenset[str] | None:
+    """Hashes amuled currently shares, read over the API from the core."""
+    return _parsed_hashes(_shared_hashes_output(files))
+
+
+# An `ed2k` restart: s6 stopping amuled, the boot step, amuled's start, its hashing of IncomingDir.
+_RESTART_DEADLINE_SECONDS = 180.0
+
+
 def _wait_new_shared_hash(
-    before: frozenset[str], *, files: tuple[Path, ...], attempts: int = 20, delay: float = 2.0
+    before: frozenset[str],
+    *,
+    files: tuple[Path, ...],
+    deadline_seconds: float = _RESTART_DEADLINE_SECONDS,
+    delay: float = 2.0,
 ) -> str:
     """Poll until exactly one hash appeared in amuled's shared list, and return it.
 
     Called right after `ed2k`'s restart, so it is the readiness probe for the restart TOO: amuled
-    is still starting for the first attempts (amuleapi refuses or resets), then hashes the
+    is still starting for the first polls (amuleapi refuses or resets), then hashes the
     IncomingDir asynchronously. A failed amuleapi call is therefore a poll iteration,
-    not a failure.
+    not a failure. Bounded by time, not by polls: one poll lasts up to the exec's timeout.
     The "exactly one" bound is what identifies OUR file: the smoke amuled shares nothing else at
     that point (its only queue entry has no sources and no bytes, so it is not shared yet).
     """
-    appeared: frozenset[str] = frozenset()
-    for _ in range(attempts):
-        current = _shared_hashes(files)
-        if current is not None:
-            appeared = current - before
-            if len(appeared) == 1:
-                return next(iter(appeared))
+    deadline = time.monotonic() + deadline_seconds  # noqa: TID251
+    last = "<never ran>"
+    while True:
+        last = _shared_hashes_output(files)
+        current = _parsed_hashes(last)
+        if current is not None and len(current - before) == 1:
+            return next(iter(current - before))
+        if time.monotonic() >= deadline:  # noqa: TID251
+            break
         time.sleep(delay)  # noqa: TID251
-    raise AssertionError(f"expected exactly one new shared hash, got {sorted(appeared)}")
+    state = _ps_field(_AMULE, field="State", files=files)
+    health = _ps_field(_AMULE, field="Health", files=files)
+    logs = _run("logs", "--no-color", "--tail", "80", _AMULE, files=files, timeout=60)
+    raise AssertionError(
+        f"expected exactly one new shared hash within {deadline_seconds:.0f}s, last reading"
+        f" {last!r} (before: {sorted(before)}), {_AMULE} {state}/{health}\n"
+        f"--- {_AMULE} logs ---\n{logs.stdout}{logs.stderr}"
+    )
 
 
 def test_a_file_amuled_shares_is_recorded_completed(project_files: tuple[Path, ...]) -> None:
