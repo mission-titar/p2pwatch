@@ -46,7 +46,7 @@ def _problems(document: dict[str, Any]) -> tuple[ConfigProblem, ...]:
     }
     with pytest.raises(ValidationError) as raised:
         create_model("Document", __base__=_Fields, **refused).model_validate(document)
-    return validation_problems(raised.value, file_path=_FILE)
+    return validation_problems(raised.value, document=document, file_path=_FILE)
 
 
 def _problem(key: str, *, message: str) -> ConfigProblem:
@@ -63,6 +63,26 @@ def test_each_error_is_a_problem_of_the_file_named_by_its_key() -> None:
 def test_a_key_under_a_mapping_or_a_list_is_named_by_its_path() -> None:
     assert _problems({"section": {"total": 1, "counts": [1, "2"]}}) == (
         _problem("section.counts[1]", message="Input should be a valid integer"),
+    )
+
+
+def test_a_key_holding_a_character_a_terminal_would_not_print_is_named_escaped() -> None:
+    assert _problems({"un\x1bread": 1}) == (
+        _problem("un\\x1bread", message="Extra inputs are not permitted"),
+    )
+
+
+class _Scores(BaseModel, extra="forbid", strict=True):
+    scores: dict[str, int]
+
+
+def test_a_key_that_is_no_string_is_named_as_a_key_both_it_and_its_value_refused() -> None:
+    document = {"scores": {1: "2"}}
+    with pytest.raises(ValidationError) as raised:
+        _Scores.model_validate(document)
+    assert validation_problems(raised.value, document=document, file_path=_FILE) == (
+        _problem("scores.1", message="Key should be a valid string"),
+        _problem("scores.1", message="Input should be a valid integer"),
     )
 
 
@@ -124,9 +144,10 @@ class _Drawing(BaseModel, extra="forbid", strict=True):
 
 
 def test_a_tagged_union_s_tag_is_no_part_of_a_key_path() -> None:
+    document = {"shape": {"radius": "2"}}
     with pytest.raises(ValidationError) as raised:
-        _Drawing.model_validate({"shape": {"radius": "2"}})
-    assert validation_problems(raised.value, file_path=_FILE) == (
+        _Drawing.model_validate(document)
+    assert validation_problems(raised.value, document=document, file_path=_FILE) == (
         _problem("shape.radius", message="Input should be a valid integer"),
     )
 
@@ -138,9 +159,10 @@ class _Named(BaseModel, extra="forbid", strict=True):
 # Cc: the C0 controls, DEL and the C1 controls.
 @pytest.mark.parametrize("name", ["a\x1fb", "\x85", "\x7f"])
 def test_a_text_holding_a_control_character_is_refused(name: str) -> None:
+    document = {"name": name}
     with pytest.raises(ValidationError) as raised:
-        _Named.model_validate({"name": name})
-    assert validation_problems(raised.value, file_path=_FILE) == (
+        _Named.model_validate(document)
+    assert validation_problems(raised.value, document=document, file_path=_FILE) == (
         _problem("name", message="holds a control character"),
     )
 

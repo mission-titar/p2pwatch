@@ -10,7 +10,7 @@ from p2pwatch.adapters.driven.config.validation_problems import (
     refuse_control_character,
     validation_problems,
 )
-from p2pwatch.domain.config_problem import ConfigProblem
+from p2pwatch.domain.config_problem import ConfigProblem, key_path
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.models import LOST, TargetSegment, TargetStatus
 from p2pwatch.domain.matching.validation import duplicate_targets
@@ -41,10 +41,12 @@ def targets_from_document(
     try:
         schema = TargetsSchema.model_validate(document)
     except ValidationError as error:
-        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
+        raise InvalidConfigError(
+            validation_problems(error, document=document, file_path=file_path)
+        ) from None
     located = [
         (
-            f"episodes[{episode_index}].segments[{segment_index}]",
+            key_path("episodes", episode_index, "segments", segment_index),
             TargetSegment(
                 season=episode.season,
                 seasonal_number=episode.seasonal_number,

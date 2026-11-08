@@ -356,3 +356,24 @@ def test_each_duplicate_veto_names_its_first_place() -> None:
         ("vetoes[1]", "same token as vetoes[0]"),
         ("vetoes[2]", "same token as vetoes[0]"),
     ]
+
+
+def test_a_name_holding_a_character_a_terminal_would_not_print_is_named_escaped() -> None:
+    tokens: dict[str, TokenDefinition] = {
+        "un\x1bknown": AnyDefinition(operands=("ghost",)),
+        "dee\x1bp": RegexDefinition(pattern="[a"),
+    }
+    assert _problems(MatcherConfig(tokens=tokens), fragments={"title\x1b": "{x}", "x": ""}) == [
+        ("fragments.title\\x1b", "references fragment 'x'"),
+        ("tokens.un\\x1bknown.any[0]", _unknown("ghost")),
+    ]
+    assert _problems(MatcherConfig(tokens=tokens)) == [
+        ("tokens.un\\x1bknown.any[0]", _unknown("ghost")),
+        (
+            "tokens.dee\\x1bp.regex",
+            "does not compile as a regex: unterminated character set at position 0",
+        ),
+    ]
+    assert _problems(
+        MatcherConfig(tokens=_chain(3) | {"t\x1b": AnyDefinition(operands=("t2",))}), max_depth=3
+    ) == [("tokens.t\\x1b", "resolves through 4 levels of tokens, past the bound 3")]

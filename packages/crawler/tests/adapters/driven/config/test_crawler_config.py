@@ -1,3 +1,4 @@
+import traceback
 from pathlib import Path
 
 import pytest
@@ -79,7 +80,7 @@ def test_a_reference_under_any_key_is_resolved_before_the_parse(tmp_path: Path) 
     ("keywords", "extra", "key_path"),
     [
         ("['${P2PWATCH_UNSET}']", "", "search.keywords[0]"),
-        # Resolved everywhere, so even a section the parse skips needs its variable.
+        # Resolved everywhere, a disabled section included.
         (
             "[keroro]",
             "download: {enabled: false, output_dir: '${P2PWATCH_UNSET}'}\n",
@@ -101,6 +102,32 @@ def test_an_unset_variable_under_any_key_is_an_invalid_config_naming_its_key_pat
             message="environment variable 'P2PWATCH_UNSET' referenced but not set",
         ),
     )
+
+
+def test_an_unset_variable_is_one_problem_its_value_as_written_not_refused_beside_it(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_crawler_config(
+        tmp_path, extra="observability: {log_level: '${LEVEL}', notification_timeout_seconds: 0}\n"
+    )
+
+    with pytest.raises(InvalidConfigError) as raised:
+        read_crawler_config(config_path, env=_env())
+
+    assert [(problem.key, problem.message) for problem in raised.value.problems] == [
+        ("observability.log_level", "environment variable 'LEVEL' referenced but not set"),
+        ("observability.notification_timeout_seconds", "Input should be greater than 0"),
+    ]
+
+
+def test_no_traceback_prints_a_resolved_variable(tmp_path: Path) -> None:
+    config_path = _write_crawler_config(tmp_path, extra="webui: ${SECRET}\n")
+    env = _env() | {"SECRET": "hunter2"}  # on its own line: a traceback quotes the call's
+
+    with pytest.raises(InvalidConfigError) as raised:
+        read_crawler_config(config_path, env=env)
+
+    assert "hunter2" not in "".join(traceback.format_exception(raised.value))
 
 
 def test_no_line_prints_a_resolved_variable(tmp_path: Path) -> None:
