@@ -1,7 +1,6 @@
 """``matcher.yml`` as written, read by pydantic, and the matcher config it builds."""
 
 from pathlib import PurePath
-from types import GenericAlias
 from typing import Annotated, Any, Literal, NoReturn
 
 from pydantic import (
@@ -10,6 +9,7 @@ from pydantic import (
     BeforeValidator,
     Discriminator,
     Field,
+    GetPydanticSchema,
     Tag,
     ValidationError,
     create_model,
@@ -27,21 +27,26 @@ from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import (
     DEFAULT_MIN_SIMILARITY,
     DEFAULT_REGEX_FLAGS,
+    AllDefinition,
+    AnyDefinition,
     AttributeBetweenDefinition,
+    Condition,
     CoverageDefinition,
     KeywordDefinition,
     MatcherConfig,
+    NotDefinition,
+    Operand,
     RegexDefinition,
     Rule,
     Scope,
     TokenDefinition,
+    TokenReference,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.validation import (
     MatchingConfigError,
     expand_fragments,
     fragment_problems,
-    parse_condition,
     validate_config,
 )
 
@@ -76,12 +81,24 @@ class _CoverageKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False)
     min_similarity: _Fraction = DEFAULT_MIN_SIMILARITY
 
 
+class _TokenReferenceKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+    token: str
+    min_coverage: _Fraction | None = None
+    min_similarity: _Fraction | None = None
+
+
 # Every refusing field is built, since vulture reads a field nothing reads as dead code.
 _COVERAGE_RENAMED: dict[str, Any] = {
     "min": (renamed_key("min_coverage", file_name=_FILE_NAME), None),
     "fuzz": (renamed_key("min_similarity", file_name=_FILE_NAME), None),
 }
 _CoverageSchema = create_model("_CoverageSchema", __base__=_CoverageKeys, **_COVERAGE_RENAMED)
+_TokenReferenceSchema = create_model(
+    "_TokenReferenceSchema", __base__=_TokenReferenceKeys, **_COVERAGE_RENAMED
+)
+# mypy reads the keys' class, which a built schema extends: pydantic validates by the schema.
+_AS_COVERAGE_SCHEMA = GetPydanticSchema(lambda _source, handler: handler(_CoverageSchema))
+_AS_REFERENCE_SCHEMA = GetPydanticSchema(lambda _source, handler: handler(_TokenReferenceSchema))
 
 _RENAMED_ATTRIBUTES = {"size_mb": "size_mib", "duration_sec": "duration_seconds"}
 
@@ -114,17 +131,16 @@ def _refuse_an_empty_range(token: _AttributeBetweenSchema) -> _AttributeBetweenS
 
 _CONDITION_KEYS = ("all", "any", "not")
 _LEAF_KEYS = ("keyword", "regex", "coverage", "attr_between")
-_CONDITION = f"{TAG_MARK}condition"
 _NO_SHAPE = f"{TAG_MARK}no_shape"
 
 
 def _token_shape(token: object) -> str | None:
-    """The tag of ``token``'s shape: a condition first, as the domain reads it, then its one leaf
-    key; ``_NO_SHAPE`` for none or two, ``None`` for no mapping."""
+    """The tag of ``token``'s shape: a condition first, as 4.x read it, then its one leaf key;
+    ``_NO_SHAPE`` for none or two, ``None`` for no mapping."""
     if not isinstance(token, dict):
         return None
-    if any(key in token for key in _CONDITION_KEYS):
-        return _CONDITION
+    if condition := _condition_shape(token):
+        return condition
     leaf_keys = [key for key in _LEAF_KEYS if key in token]
     return f"{TAG_MARK}{leaf_keys[0]}" if len(leaf_keys) == 1 else _NO_SHAPE
 
@@ -147,6 +163,8 @@ def _refuse_the_shape(token: dict[Any, Any]) -> NoReturn:
 _ALL = f"{TAG_MARK}all"
 _ANY = f"{TAG_MARK}any"
 _NOT = f"{TAG_MARK}not"
+_NAME = f"{TAG_MARK}name"
+_REFERENCE = f"{TAG_MARK}reference"
 _NOT_ONE_CONDITION = f"{TAG_MARK}not_one_condition"
 
 
@@ -164,6 +182,16 @@ def _rule_shape(rule: object) -> str | None:
     return _condition_shape(rule) or _NOT_ONE_CONDITION
 
 
+def _operand_shape(operand: object) -> str | None:
+    """A token name, a condition, else a ``{token: ...}`` reference; ``None`` for no string
+    and no mapping."""
+    if isinstance(operand, str):
+        return _NAME
+    if not isinstance(operand, dict):
+        return None
+    return _condition_shape(operand) or _REFERENCE
+
+
 def _refuse_the_conditions(mapping: dict[Any, Any]) -> NoReturn:
     raise PydanticCustomError(
         "condition_shape",
@@ -176,6 +204,34 @@ def _refuse_the_conditions(mapping: dict[Any, Any]) -> NoReturn:
 _NotOneCondition = Annotated[Any, BeforeValidator(_refuse_the_conditions), Tag(_NOT_ONE_CONDITION)]
 
 
+# Lazy, so that the conditions below can hold it.
+type _Operand = Annotated[
+    Annotated[str, Tag(_NAME)]
+    | Annotated[_TokenReferenceKeys, _AS_REFERENCE_SCHEMA, Tag(_REFERENCE)]
+    | Annotated[_AllSchema, Tag(_ALL)]
+    | Annotated[_AnySchema, Tag(_ANY)]
+    | Annotated[_NotSchema, Tag(_NOT)]
+    | _NotOneCondition,
+    Discriminator(
+        _operand_shape,
+        custom_error_type="operand_type",
+        custom_error_message="Input should be a valid string or dictionary",
+    ),
+]
+
+
+class _AllSchema(BaseModel, extra="forbid", strict=True):
+    operands: list[_Operand] = Field(alias="all", min_length=1)
+
+
+class _AnySchema(BaseModel, extra="forbid", strict=True):
+    operands: list[_Operand] = Field(alias="any", min_length=1)
+
+
+class _NotSchema(BaseModel, extra="forbid", strict=True):
+    operand: _Operand = Field(alias="not")
+
+
 class _RuleKeys(BaseModel, extra="forbid", strict=True):
     name: Annotated[str, Field(min_length=1), AfterValidator(refuse_control_character)]
     # DecisionTier's values, which its own tests compare: strict, pydantic refuses a str for it.
@@ -183,23 +239,16 @@ class _RuleKeys(BaseModel, extra="forbid", strict=True):
     scope: Scope
 
 
-# Their condition read by the domain's parse until it is modelled.
-class _AllRule(_RuleKeys):
+class _AllRule(_AllSchema, _RuleKeys):
     """A rule whose condition is ``all``."""
 
-    operands: Any = Field(alias="all")
 
-
-class _AnyRule(_RuleKeys):
+class _AnyRule(_AnySchema, _RuleKeys):
     """A rule whose condition is ``any``."""
 
-    operands: Any = Field(alias="any")
 
-
-class _NotRule(_RuleKeys):
+class _NotRule(_NotSchema, _RuleKeys):
     """A rule whose condition is ``not``."""
-
-    operand: Any = Field(alias="not")
 
 
 type _Rule = Annotated[
@@ -215,19 +264,20 @@ type _Rule = Annotated[
 ]
 
 
-# Typed Any, since mypy refuses a variable schema in a type.
-_TOKEN_SCHEMA: Any = Annotated[
+type _Token = Annotated[
     Annotated[_KeywordSchema, Tag(f"{TAG_MARK}keyword")]
     | Annotated[_RegexSchema, Tag(f"{TAG_MARK}regex")]
-    | Annotated[_CoverageSchema, Tag(f"{TAG_MARK}coverage")]
+    | Annotated[_CoverageKeys, _AS_COVERAGE_SCHEMA, Tag(f"{TAG_MARK}coverage")]
     | Annotated[
         _AttributeBetweenSchema,
         AfterValidator(_refuse_an_empty_range),
         Tag(f"{TAG_MARK}attr_between"),
     ]
-    # Read by the domain's parse until it is modelled.
-    | Annotated[dict[str, Any], Tag(_CONDITION)]
-    | Annotated[dict[str, Any], BeforeValidator(_refuse_the_shape), Tag(_NO_SHAPE)],
+    | Annotated[_AllSchema, Tag(_ALL)]
+    | Annotated[_AnySchema, Tag(_ANY)]
+    | Annotated[_NotSchema, Tag(_NOT)]
+    | _NotOneCondition
+    | Annotated[Any, BeforeValidator(_refuse_the_shape), Tag(_NO_SHAPE)],
     Discriminator(
         _token_shape,
         custom_error_type="token_type",
@@ -236,44 +286,31 @@ _TOKEN_SCHEMA: Any = Annotated[
 ]
 
 
-_TokenKeys = (
-    _KeywordSchema | _RegexSchema | _CoverageKeys | _AttributeBetweenSchema | dict[str, Any]
-)
-
-
-class _MatcherKeys(BaseModel, extra="forbid", strict=True):
+class MatcherConfigSchema(BaseModel, extra="forbid", strict=True):
     fragments: dict[str, _Pattern] = Field(default_factory=dict)
-    # Its schema in MatcherConfigSchema, whose coverage token adds the refusing keys.
-    tokens: dict[str, _TokenKeys] = Field(default_factory=dict)
+    tokens: dict[str, _Token] = Field(default_factory=dict)
     rules: list[_Rule] = Field(default_factory=list)
     vetoes: list[str] = Field(default_factory=list)
 
 
-_TOKENS: dict[str, Any] = {
-    # dict[str, _TOKEN_SCHEMA], which mypy refuses since the schema is a variable.
-    "tokens": (GenericAlias(dict, (str, _TOKEN_SCHEMA)), Field(default_factory=dict))
-}
-MatcherConfigSchema = create_model("MatcherConfigSchema", __base__=_MatcherKeys, **_TOKENS)
-
-
 def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePath) -> MatcherConfig:
-    """``document``'s matcher config; ``InvalidConfigError`` with every problem of its fragments
-    and tokens, or once they hold, its first other problem."""
+    """``document``'s matcher config; ``InvalidConfigError`` with every problem of its values,
+    or once they hold, its first other problem."""
     try:
         schema = MatcherConfigSchema.model_validate(document)
     except ValidationError as error:
         raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
     if problems := fragment_problems(schema.fragments, file_path=file_path):
         raise InvalidConfigError(problems)
+    matcher_config = MatcherConfig(
+        tokens={
+            name: _token_definition(token, fragments=schema.fragments)
+            for name, token in schema.tokens.items()
+        },
+        rules=tuple(_rule(rule) for rule in schema.rules),
+        vetoes=tuple(schema.vetoes),
+    )
     try:
-        matcher_config = MatcherConfig(
-            tokens={
-                name: _token_definition(token, fragments=schema.fragments)
-                for name, token in schema.tokens.items()
-            },
-            rules=tuple(_rule(rule) for rule in schema.rules),
-            vetoes=tuple(schema.vetoes),
-        )
         validate_config(matcher_config)
     except MatchingConfigError as error:
         problem = ConfigProblem(file_path=file_path, key=None, message=str(error))
@@ -281,7 +318,7 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
     return matcher_config
 
 
-def _token_definition(token: _TokenKeys, *, fragments: dict[str, str]) -> TokenDefinition:
+def _token_definition(token: _Token, *, fragments: dict[str, str]) -> TokenDefinition:
     match token:
         case _KeywordSchema():
             return KeywordDefinition(phrase=token.keyword)
@@ -299,9 +336,38 @@ def _token_definition(token: _TokenKeys, *, fragments: dict[str, str]) -> TokenD
                 attr=token.attr_between, min_bound=token.min, max_bound=token.max
             )
         case _:
-            return parse_condition(token)
+            return _condition(token)
 
 
 def _rule(rule: _Rule) -> Rule:
-    condition = parse_condition(rule.model_dump(by_alias=True, exclude={"name", "tier", "scope"}))
-    return Rule(name=rule.name, tier=DecisionTier(rule.tier), scope=rule.scope, condition=condition)
+    return Rule(
+        name=rule.name, tier=DecisionTier(rule.tier), scope=rule.scope, condition=_condition(rule)
+    )
+
+
+def _condition(condition: _AllSchema | _AnySchema | _NotSchema) -> Condition:
+    match condition:
+        case _AllSchema():
+            return AllDefinition(
+                operands=tuple(_operand(operand) for operand in condition.operands)
+            )
+        case _AnySchema():
+            return AnyDefinition(
+                operands=tuple(_operand(operand) for operand in condition.operands)
+            )
+        case _:
+            return NotDefinition(operand=_operand(condition.operand))
+
+
+def _operand(operand: _Operand) -> Operand:
+    match operand:
+        case str():
+            return operand
+        case _TokenReferenceKeys():
+            return TokenReference(
+                name=operand.token,
+                min_coverage=operand.min_coverage,
+                min_similarity=operand.min_similarity,
+            )
+        case _:
+            return _condition(operand)
