@@ -1,7 +1,9 @@
+from pathlib import PurePath
+
+from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
 from p2pwatch.domain.matching.matchers import AttributeBetweenMatcher, CoverageMatcher, RegexMatcher
 from p2pwatch.domain.matching.models import FileCandidate, TargetSegment
 from p2pwatch.domain.matching.resolver import MatcherResolver
-from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _TARGET = TargetSegment(
     season=2,
@@ -13,7 +15,7 @@ _TARGET = TargetSegment(
 
 
 def _resolver_from(raw: dict[str, object]) -> MatcherResolver:
-    return MatcherResolver(parse_matcher_config(raw))
+    return MatcherResolver(matcher_config_from_document(raw, file_path=PurePath("matcher.yml")))
 
 
 def test_resolve_keyword_token() -> None:

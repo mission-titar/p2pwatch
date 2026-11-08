@@ -1,9 +1,10 @@
 import dataclasses
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import pytest
 import yaml
 
+from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import (
@@ -15,9 +16,9 @@ from p2pwatch.domain.matching.engine import (
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import FileCandidate, TargetSegment
 from p2pwatch.domain.matching.resolver import MatcherResolver, ResolvedTarget
-from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _MAX_FILENAME_LENGTH = 4096
+_MATCHER_FILE = PurePath("matcher.yml")
 
 
 def test_explanation_is_frozen_and_holds_fields() -> None:
@@ -84,7 +85,7 @@ _TWO_RULE_RAW: dict[str, object] = {
 def _resolve(
     raw: dict[str, object], *, target: TargetSegment
 ) -> tuple[MatcherConfig, ResolvedTarget]:
-    config = parse_matcher_config(raw)
+    config = matcher_config_from_document(raw, file_path=_MATCHER_FILE)
     resolved = MatcherResolver(config).resolve_target(target)
     return config, resolved
 
@@ -138,7 +139,7 @@ _REAL_62A_FILENAME = (
 
 
 def _canonical_engine() -> MatchingEngine:
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     return MatchingEngine(
         config, targets=(_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
     )
@@ -227,7 +228,7 @@ _INDEX_TIEBREAK_RAW: dict[str, object] = {
 
 
 def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> None:
-    config = parse_matcher_config(_INDEX_TIEBREAK_RAW)
+    config = matcher_config_from_document(_INDEX_TIEBREAK_RAW, file_path=_MATCHER_FILE)
     # target_high: large target_id (099Z), matches by_segment (index 0).
     target_high = TargetSegment(
         season=2, seasonal_number=99, absolute_number=99, letter="z", title="zzz unrelated"
@@ -254,13 +255,13 @@ def test_evaluate_tiebreak_same_tier_lowest_rule_index_wins_over_target_id() -> 
 
 
 def test_evaluate_rejects_filename_over_max_length() -> None:
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     engine = MatchingEngine(config, targets=(_TARGET_62A,), max_filename_length=16)
     assert engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),)) == []
 
 
 def test_evaluate_accepts_filename_at_or_below_max_length() -> None:
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     engine = MatchingEngine(config, targets=(_TARGET_62A,), max_filename_length=4096)
     decisions = engine.evaluate_file((FileCandidate(filename="Keroro N°062A.avi"),))
     assert len(decisions) == 1
@@ -269,7 +270,7 @@ def test_evaluate_accepts_filename_at_or_below_max_length() -> None:
 
 def test_engine_resolves_each_target_once_at_construction() -> None:
     # Pre-resolution happens at construction: evaluate_file does not rebuild a tree.
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     engine = MatchingEngine(
         config, targets=(_TARGET_62A, _TARGET_62B), max_filename_length=_MAX_FILENAME_LENGTH
     )
@@ -325,7 +326,9 @@ def test_explanation_single_rule_fired_and_no_coverage_token() -> None:
         ],
     }
     engine = MatchingEngine(
-        parse_matcher_config(raw), targets=(_TARGET_62A,), max_filename_length=_MAX_FILENAME_LENGTH
+        matcher_config_from_document(raw, file_path=_MATCHER_FILE),
+        targets=(_TARGET_62A,),
+        max_filename_length=_MAX_FILENAME_LENGTH,
     )
     decisions = engine.evaluate_file((FileCandidate(filename="N°062A.avi"),))
     assert len(decisions) == 1
@@ -347,7 +350,7 @@ _TARGET_94A = TargetSegment(
 def _fanout_engine() -> MatchingEngine:
     # Canonical prod policy over a bi-segment episode (62A/62B) plus a mono episode (94A):
     # enough to exercise every §3/§11 fan-out branch against the shipped matcher.yml.
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     return MatchingEngine(
         config,
         targets=(_TARGET_62A, _TARGET_62B, _TARGET_94A),
@@ -466,7 +469,7 @@ def test_evaluate_all_segment_signal_of_one_name_cuts_the_fan_out_of_another() -
 
 
 def test_evaluate_all_skips_an_over_long_name_but_keeps_the_others() -> None:
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     engine = MatchingEngine(config, targets=(_TARGET_62A,), max_filename_length=20)
     decisions = engine.evaluate_file(
         [FileCandidate(filename="Keroro N°062A.avi"), FileCandidate(filename="x" * 21)]
@@ -506,7 +509,7 @@ _SCOPE_RAW: dict[str, object] = {
 
 def _scope_triples(filename: str) -> list[tuple[str, str, str]]:
     engine = MatchingEngine(
-        parse_matcher_config(_SCOPE_RAW),
+        matcher_config_from_document(_SCOPE_RAW, file_path=_MATCHER_FILE),
         targets=(_TARGET_62A, _TARGET_62B),
         max_filename_length=_MAX_FILENAME_LENGTH,
     )
@@ -553,7 +556,7 @@ _VETO_RAW: dict[str, object] = {
 
 def _veto_targets(*names: str, max_filename_length: int = 4096) -> list[str]:
     engine = MatchingEngine(
-        parse_matcher_config(_VETO_RAW),
+        matcher_config_from_document(_VETO_RAW, file_path=_MATCHER_FILE),
         targets=(_TARGET_62A, _TARGET_62B, _TARGET_94A),
         max_filename_length=max_filename_length,
     )

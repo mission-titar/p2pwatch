@@ -4,13 +4,12 @@ from typing import Any
 import pytest
 import yaml
 
-from p2pwatch.adapters.driven.config.crawler_config import read_targets
+from p2pwatch.adapters.driven.config.crawler_config import read_matcher_config, read_targets
 from p2pwatch.domain.matching.config import RegexDefinition
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.matchers import RegexMatcher
 from p2pwatch.domain.matching.models import FileCandidate
-from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _MAX_FILENAME_LENGTH = 4096
 
@@ -21,7 +20,7 @@ _MATCHER = Path(__file__).resolve().parents[5] / "deploy" / "matcher.yml"
 
 
 def _engine() -> MatchingEngine:
-    config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
+    config = read_matcher_config(_MATCHER)
     targets = read_targets(_FIXTURES / "golden_targets.yaml")
     return MatchingEngine(config, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH)
 
@@ -93,7 +92,7 @@ def test_corpus_has_a_multi_decision_fan_out_case() -> None:
 
 
 def _is_archive_matcher() -> RegexMatcher:
-    config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
+    config = read_matcher_config(_MATCHER)
     token = config.tokens["is_archive"]
     assert isinstance(token, RegexDefinition)  # the shipped is_archive is a plain regex token
     return RegexMatcher(token.pattern, flags=token.flags)
@@ -123,7 +122,7 @@ def test_is_archive_rejects_comic_book_formats(filename: str) -> None:
 
 
 def test_prod_policy_has_exactly_one_catalog_tier_rule_named_keroro_large() -> None:
-    config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
+    config = read_matcher_config(_MATCHER)
     catalog_rules = [rule for rule in config.rules if rule.tier == "catalog"]
     assert len(catalog_rules) == 1, (
         "expected exactly one catalog-tier rule (webui's tier=='catalog' -> 'unidentified' "
@@ -142,7 +141,7 @@ def test_prod_policy_has_exactly_one_catalog_tier_rule_named_keroro_large() -> N
 
 
 def _episode_number_matcher() -> RegexMatcher:
-    config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
+    config = read_matcher_config(_MATCHER)
     token = config.tokens["episode_number"]
     assert isinstance(token, RegexDefinition)
     return RegexMatcher(token.pattern, flags=token.flags)
@@ -172,7 +171,7 @@ def test_episode_number_ignores_non_episode_numbers(filename: str) -> None:
 
 
 def _shipped_token(name: str) -> RegexMatcher:
-    config = parse_matcher_config(yaml.safe_load(_MATCHER.read_text(encoding="utf-8")))
+    config = read_matcher_config(_MATCHER)
     token = config.tokens[name]
     assert isinstance(token, RegexDefinition)
     return RegexMatcher(token.pattern, flags=token.flags)

@@ -4,15 +4,16 @@ from pathlib import PurePath
 
 import yaml
 
+from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
 from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.engine import Explanation, MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.matching.validation import parse_matcher_config
 from p2pwatch.domain.matching_read import MatchingExplainer
 
 _MAX_FILENAME_LENGTH = 4096
+_MATCHER_FILE = PurePath("matcher.yml")
 
 # ---------------------------------------------------------------------------
 # Parsed-config minimal helpers
@@ -38,7 +39,7 @@ episodes:
 
 def _minimal_matcher() -> MatcherConfig:
     """Minimal matcher: keyword token 'keroro' + catalog rule."""
-    return parse_matcher_config(
+    return matcher_config_from_document(
         yaml.safe_load(
             """\
 tokens:
@@ -51,7 +52,8 @@ rules:
     any:
       - keroro
 """
-        )
+        ),
+        file_path=_MATCHER_FILE,
     )
 
 
@@ -103,7 +105,7 @@ def test_explainer_size_bytes_converted_to_mb() -> None:
     An attr_between matcher on size_mib lets us verify the passed value.
     """
     # Matcher with an attr_between token on size_mib: exactly 100 MiB
-    matcher_config = parse_matcher_config(
+    matcher_config = matcher_config_from_document(
         yaml.safe_load(
             """\
 tokens:
@@ -121,7 +123,8 @@ rules:
       - keroro
       - size_ok
 """
-        )
+        ),
+        file_path=_MATCHER_FILE,
     )
 
     explainer = MatchingExplainer(
@@ -144,7 +147,7 @@ rules:
 def test_explainer_media_length_and_bitrate_forwarded() -> None:
     """duration_seconds and bitrate_kbps are forwarded as-is to the FileCandidate."""
     # Matcher with attr_between on duration_seconds and bitrate_kbps
-    matcher_config = parse_matcher_config(
+    matcher_config = matcher_config_from_document(
         yaml.safe_load(
             """\
 tokens:
@@ -167,7 +170,8 @@ rules:
       - dur_ok
       - bit_ok
 """
-        )
+        ),
+        file_path=_MATCHER_FILE,
     )
 
     explainer = MatchingExplainer(
@@ -188,7 +192,7 @@ rules:
 
 def test_explainer_judges_every_name_and_lists_the_vetoes_fired() -> None:
     """A veto fired by one name of the file shows up, with the rules fired by another name."""
-    matcher_config = parse_matcher_config(
+    matcher_config = matcher_config_from_document(
         yaml.safe_load(
             """\
 tokens:
@@ -206,7 +210,8 @@ rules:
     scope: unattributed
     all: [keroro, big]
 """
-        )
+        ),
+        file_path=_MATCHER_FILE,
     )
     explainer = MatchingExplainer(
         engine=MatchingEngine(
