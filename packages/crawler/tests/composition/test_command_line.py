@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from p2pwatch.composition.command_line import build_command_line
+from tests.support.adapters.driven.config import shipped_4_1_0
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_A,
     HASH_B,
@@ -51,6 +52,33 @@ def test_crawl_refuses_to_start_with_a_wrong_crawler_config_beside_a_wrong_match
         line.startswith(f"Invalid config, refusing to start: {broken}: ") for line in crawler_lines
     )
     assert matcher_line.startswith(f"Invalid config, refusing to start: {broken_matcher}: ")
+
+
+@pytest.mark.parametrize(
+    ("command", "refusal"),
+    [("validate-config", "Invalid config"), ("crawl", "Invalid config, refusing to start")],
+)
+def test_the_files_4_1_0_shipped_give_exactly_their_14_problems_one_line_each(
+    *, tmp_path: Path, capsys: pytest.CaptureFixture[str], command: str, refusal: str
+) -> None:
+    argv = [
+        command,
+        "--config",
+        str(shipped_4_1_0.CRAWLER_PATH),
+        "--targets",
+        str(shipped_4_1_0.TARGETS_PATH),
+        "--matcher",
+        str(shipped_4_1_0.MATCHER_PATH),
+    ]
+    command_line = build_command_line(
+        env=shipped_4_1_0.ENV, cwd=tmp_path, root_logger=logging.getLogger()
+    )
+
+    assert command_line.run(argv) == 1
+
+    assert capsys.readouterr().err.splitlines() == [
+        f"{refusal}: {path}: {key}: {message}" for path, key, message in shipped_4_1_0.PROBLEMS
+    ]
 
 
 def test_validate_config_from_the_repository_root_accepts_the_shipped_config(
