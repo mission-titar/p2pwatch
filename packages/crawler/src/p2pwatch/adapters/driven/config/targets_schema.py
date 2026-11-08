@@ -4,23 +4,19 @@ from pathlib import PurePath
 from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, Field, ValidationError
-from pydantic_core import PydanticCustomError
 
-from p2pwatch.adapters.driven.config.validation_problems import validation_problems
+from p2pwatch.adapters.driven.config.validation_problems import (
+    refuse_control_character,
+    validation_problems,
+)
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.models import LOST, TargetSegment, TargetStatus
-from p2pwatch.domain.matching.validation import duplicate_targets, has_control_character
-
-
-def _refuse_control_character(letter: str) -> str:
-    if has_control_character(letter):
-        raise PydanticCustomError("control_character", "holds a control character")
-    return letter
+from p2pwatch.domain.matching.validation import duplicate_targets
 
 
 class _SegmentSchema(BaseModel, extra="forbid", strict=True):
-    letter: Annotated[str, AfterValidator(_refuse_control_character)]
+    letter: Annotated[str, AfterValidator(refuse_control_character)]
     title: str
     status: TargetStatus = LOST
 

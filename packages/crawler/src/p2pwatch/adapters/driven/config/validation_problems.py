@@ -1,4 +1,5 @@
-"""A pydantic ``ValidationError`` as its file's ``ConfigProblem``s, and our 4.x key refusals."""
+"""A pydantic ``ValidationError`` as its file's ``ConfigProblem``s, our 4.x key refusals and
+the identifiers' one."""
 
 from pathlib import PurePath
 from typing import Annotated, Any, NoReturn
@@ -7,11 +8,20 @@ from pydantic import AfterValidator, ValidationError
 from pydantic_core import ErrorDetails, PydanticCustomError
 
 from p2pwatch.domain.config_problem import ConfigProblem
+from p2pwatch.domain.matching.validation import has_control_character
 
 _REPLACED = "config_key_replaced"
 
 # Begins a tagged union's tag, which pydantic puts in an error's location and no key is named.
 TAG_MARK = "~"
+
+
+def refuse_control_character(text: str) -> str:
+    """``text``, refused when it holds a control character, as no identifier does: a target's
+    letter, a rule's name."""
+    if has_control_character(text):
+        raise PydanticCustomError("control_character", "holds a control character")
+    return text
 
 
 def removed_key(file_name: str) -> object:

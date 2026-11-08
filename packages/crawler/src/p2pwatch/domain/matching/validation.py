@@ -1,4 +1,4 @@
-"""The matcher config's conditions and rules parsed, its fragments and its graph checked.
+"""The matcher config's conditions parsed, its fragments and its graph checked.
 
 PURE domain: receives already-parsed structures (``dict``/``list``), does not import
 ``yaml``, does not touch the disk.
@@ -13,7 +13,6 @@ from typing import Any
 
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.matching.config import (
-    SCOPES,
     AllDefinition,
     AnyDefinition,
     Condition,
@@ -22,11 +21,9 @@ from p2pwatch.domain.matching.config import (
     NotDefinition,
     Operand,
     RegexDefinition,
-    Rule,
     TokenDefinition,
     TokenReference,
 )
-from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.interpolation import (
     PLACEHOLDER,
@@ -42,7 +39,7 @@ _RENAMED_COVERAGE_KEYS = {"min": "min_coverage", "fuzz": "min_similarity"}
 
 
 class MatchingConfigError(Exception):
-    """Fatal configuration error at load time (schema, tier, enum, override)."""
+    """A matcher config refused at load: a condition's shape, or its graph."""
 
 
 class UnknownTokenError(MatchingConfigError):
@@ -57,23 +54,10 @@ class DepthExceededError(MatchingConfigError):
     """The resolution depth exceeds the bound (default 32)."""
 
 
-def _require_mapping(node: Any, *, error_label: str) -> dict[str, Any]:
-    if not isinstance(node, dict):
-        raise MatchingConfigError(f"{error_label}: mapping expected, got {type(node).__name__}")
-    return node
-
-
 def has_control_character(text: str) -> bool:
     """Whether ``text`` holds a control character (``Cc``: C0, DEL, C1), which no identifier
     holds: the files page splits target ids and rule names on U+001F."""
     return any(unicodedata.category(char) == "Cc" for char in text)
-
-
-def _refuse_control_characters(text: str, *, error_label: str) -> str:
-    """``text``, unless it holds a control character."""
-    if has_control_character(text):
-        raise MatchingConfigError(f"{error_label} {text!r} holds a control character")
-    return text
 
 
 def _parse_operand(raw: Any) -> Operand:
@@ -195,41 +179,6 @@ def _fragment_messages(name: str, *, text: str, fragments: Mapping[str, str]) ->
 def expand_fragments(pattern: str, *, fragments: Mapping[str, str]) -> str:
     """Substitutes ``{fragment}``; target placeholders are left for per-target interpolation."""
     return PLACEHOLDER.sub(lambda m: fragments.get(m.group(1), m.group(0)), pattern)
-
-
-def parse_rule(raw: Any) -> Rule:
-    """The rule ``raw`` holds: its name, tier, scope and condition."""
-    mapping = _require_mapping(raw, error_label="rule")
-    name = str(mapping.get("name", ""))
-    if not name:
-        raise MatchingConfigError(f"rule without 'name': {raw!r}")
-    _refuse_control_characters(name, error_label="rule name")
-    tier = mapping.get("tier")
-    if tier not in DecisionTier:
-        known_tiers = sorted(member.value for member in DecisionTier)
-        raise MatchingConfigError(
-            f"unknown tier for rule {name!r}: {tier!r} (expected {known_tiers})"
-        )
-    if "scope" not in mapping:
-        raise MatchingConfigError(
-            f"rule {name!r} without 'scope' (expected one of {sorted(SCOPES)})"
-        )
-    scope = mapping["scope"]
-    if scope not in SCOPES:
-        raise MatchingConfigError(
-            f"unknown scope for rule {name!r}: {scope!r} (expected {sorted(SCOPES)})"
-        )
-    present = [key for key in _CONDITION_KEYS if key in mapping]
-    if not present:
-        raise MatchingConfigError(f"rule {name!r} without a condition (all/any/not)")
-    if len(present) != 1:
-        raise MatchingConfigError(f"rule {name!r}: exactly one condition expected, got {present!r}")
-    return Rule(
-        name=name,
-        tier=DecisionTier(str(tier)),
-        scope=str(scope),
-        condition=parse_condition(mapping),
-    )
 
 
 _DEFAULT_MAX_DEPTH = 32

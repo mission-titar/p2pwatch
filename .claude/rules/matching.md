@@ -13,10 +13,10 @@ The core is one layered, declarative matching engine under `packages/crawler/src
 ```
 load_yaml(path)                         # the crawler's adapters/driven/config/yaml_loader.py: the ONLY I/O
   → matcher_config_from_document           # the config adapter's matcher_config_schema.py (pydantic):
-  →                                        #   fragments and leaf tokens, every problem listed, then
-  →                                        #   validation.py: fragment_problems, parse_condition,
-  →                                        #   parse_rule (closed tier, no control character (Cc) in a
-  →                                        #   rule name), fail-fast graph validation: DAG/named-cycle,
+  →                                        #   fragments, leaf tokens and rules (closed tier and scope,
+  →                                        #   no control character (Cc) in a rule name), every problem
+  →                                        #   listed, then validation.py: fragment_problems,
+  →                                        #   parse_condition, fail-fast graph validation: DAG/named-cycle,
   →                                        #   depth bound (32), regex compile-check → MatchingConfigError
   → targets_from_document                  # the config adapter's targets_schema.py (pydantic): every
   →                                        #   problem listed, unique target_id by duplicate_targets

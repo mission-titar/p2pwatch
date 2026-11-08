@@ -1,12 +1,13 @@
 """Matching-engine config model: tagged union of frozen dataclasses.
 
 Represents the §8.3 grammar (named leaf + composite tokens, operands at point of use,
-rules). PURE domain: no I/O, no YAML library import. Construction from parsed YAML
-(dict/list) is done by ``validation.py``.
+rules). PURE domain: no I/O, no YAML library import. Built from ``matcher.yml`` by the config
+adapter.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Literal
 
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 
@@ -112,8 +113,8 @@ TokenDefinition = (
 # A rule body / inline operand `{condition}` is a composite condition.
 Condition = AllDefinition | AnyDefinition | NotDefinition
 
-# Closed set of rule scopes: what a rule's win pins (one segment, the whole episode, nothing).
-SCOPES: frozenset[str] = frozenset({"segment", "episode", "unattributed"})
+# What a rule's win pins: one segment, the whole episode, nothing.
+type Scope = Literal["segment", "episode", "unattributed"]
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -122,7 +123,7 @@ class Rule:
 
     name: str
     tier: DecisionTier
-    scope: str
+    scope: Scope
     condition: Condition
 
 

@@ -2,11 +2,20 @@ from pathlib import PurePath
 from typing import Annotated, Any
 
 import pytest
-from pydantic import BaseModel, Discriminator, Field, Tag, ValidationError, create_model
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    Discriminator,
+    Field,
+    Tag,
+    ValidationError,
+    create_model,
+)
 
 from p2pwatch.adapters.driven.config.validation_problems import (
     TAG_MARK,
     moved_key,
+    refuse_control_character,
     removed_key,
     renamed_key,
     validation_problems,
@@ -120,3 +129,23 @@ def test_a_tagged_union_s_tag_is_no_part_of_a_key_path() -> None:
     assert validation_problems(raised.value, file_path=_FILE) == (
         _problem("shape.radius", message="Input should be a valid integer"),
     )
+
+
+class _Named(BaseModel, extra="forbid", strict=True):
+    name: Annotated[str, AfterValidator(refuse_control_character)]
+
+
+# Cc: the C0 controls, DEL and the C1 controls.
+@pytest.mark.parametrize("name", ["a\x1fb", "\x85", "\x7f"])
+def test_a_text_holding_a_control_character_is_refused(name: str) -> None:
+    with pytest.raises(ValidationError) as raised:
+        _Named.model_validate({"name": name})
+    assert validation_problems(raised.value, file_path=_FILE) == (
+        _problem("name", message="holds a control character"),
+    )
+
+
+# A zero width space is a format character, no control character.
+@pytest.mark.parametrize("name", ["\xe9\xa0", "\N{ZERO WIDTH SPACE}"])
+def test_a_text_beyond_ascii_that_holds_no_control_character_is_accepted(name: str) -> None:
+    assert _Named.model_validate({"name": name}).name == name
