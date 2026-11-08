@@ -78,7 +78,21 @@ def test_every_problem_of_the_fragments_is_listed() -> None:
 def test_a_placeholder_neither_fragment_nor_target_field_is_refused() -> None:
     document = {"fragments": {"known": "x"}, "tokens": {"t": {"regex": "{unknown}"}}}
     assert _problems(document) == [
-        ("tokens.t.regex", "cites a placeholder neither a fragment nor a target field")
+        (
+            "tokens.t.regex",
+            "cites the placeholder '{unknown}', neither a fragment nor a target field",
+        )
+    ]
+
+
+def test_a_fragment_problem_hides_the_regex_checks_alone() -> None:
+    document = {
+        "fragments": {"outer": "a{inner}", "inner": "b"},
+        "tokens": {"r": {"regex": "{outer}"}, "t": {"any": ["ghost"]}},
+    }
+    assert _problems(document) == [
+        ("fragments.outer", "references fragment 'inner'"),
+        ("tokens.t.any[0]", "references the unknown token 'ghost'"),
     ]
 
 
@@ -286,7 +300,7 @@ def test_every_problem_across_values_is_listed_once_the_shape_holds() -> None:
         "vetoes": ["t", "t"],
     }
     assert _problems(document) == [
-        ("tokens.t.any[1]", "references an unknown token"),
+        ("tokens.t.any[1]", "references the unknown token 'ghost'"),
         ("rules[0].all[0].min_coverage", "can only override a coverage token"),
         ("vetoes[1]", "same token as vetoes[0]"),
     ]
