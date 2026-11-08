@@ -4,7 +4,7 @@ the identifiers' one."""
 from pathlib import PurePath
 from typing import Annotated, Any, NoReturn
 
-from pydantic import AfterValidator, ValidationError
+from pydantic import AfterValidator, BaseModel, ValidationError
 from pydantic_core import ErrorDetails, PydanticCustomError
 
 from p2pwatch.domain.config_problem import ConfigProblem
@@ -14,6 +14,10 @@ _REPLACED = "config_key_replaced"
 
 # Begins a tagged union's tag, which pydantic puts in an error's location and no key is named.
 TAG_MARK = "~"
+
+
+class StrictSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+    """The base of every schema: a key nothing reads refused, no value converted, no infinity."""
 
 
 def refuse_control_character(text: str) -> str:

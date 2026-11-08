@@ -5,7 +5,6 @@ from typing import Annotated, Any, Literal, NoReturn
 
 from pydantic import (
     AfterValidator,
-    BaseModel,
     BeforeValidator,
     Discriminator,
     Field,
@@ -18,6 +17,7 @@ from pydantic_core import PydanticCustomError
 
 from p2pwatch.adapters.driven.config.validation_problems import (
     TAG_MARK,
+    StrictSchema,
     refuse_control_character,
     renamed_key,
     validation_problems,
@@ -64,22 +64,22 @@ _Pattern = Annotated[str, AfterValidator(_refuse_segment_placeholder)]
 _Fraction = Annotated[float, Field(ge=0, le=1)]
 
 
-class _KeywordSchema(BaseModel, extra="forbid", strict=True):
+class _KeywordSchema(StrictSchema):
     keyword: str
 
 
-class _RegexSchema(BaseModel, extra="forbid", strict=True):
+class _RegexSchema(StrictSchema):
     regex: _Pattern
     flags: str = DEFAULT_REGEX_FLAGS
 
 
-class _CoverageKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _CoverageKeysSchema(StrictSchema):
     coverage: str
     min_coverage: _Fraction
     min_similarity: _Fraction = DEFAULT_MIN_SIMILARITY
 
 
-class _TokenReferenceKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _TokenReferenceKeysSchema(StrictSchema):
     token: str
     min_coverage: _Fraction | None = None
     min_similarity: _Fraction | None = None
@@ -90,9 +90,9 @@ _COVERAGE_RENAMED: dict[str, Any] = {
     "min": (renamed_key("min_coverage", file_name=_FILE_NAME), None),
     "fuzz": (renamed_key("min_similarity", file_name=_FILE_NAME), None),
 }
-_CoverageSchema = create_model("_CoverageSchema", __base__=_CoverageKeys, **_COVERAGE_RENAMED)
+_CoverageSchema = create_model("_CoverageSchema", __base__=_CoverageKeysSchema, **_COVERAGE_RENAMED)
 _TokenReferenceSchema = create_model(
-    "_TokenReferenceSchema", __base__=_TokenReferenceKeys, **_COVERAGE_RENAMED
+    "_TokenReferenceSchema", __base__=_TokenReferenceKeysSchema, **_COVERAGE_RENAMED
 )
 # mypy reads the keys' class, which a built schema extends: pydantic validates by the schema.
 _AS_COVERAGE_SCHEMA = GetPydanticSchema(lambda _source, handler: handler(_CoverageSchema))
@@ -111,7 +111,7 @@ def _refuse_renamed_attribute(attribute: object) -> object:
     return attribute
 
 
-class _AttributeBetweenSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _AttributeBetweenSchema(StrictSchema):
     # The engine's READERS_BY_ATTR, which its own tests compare.
     attr_between: Annotated[
         Literal["size_mib", "duration_seconds", "bitrate_kbps"],
@@ -199,17 +199,19 @@ def _refuse_the_conditions(mapping: dict[Any, Any]) -> NoReturn:
 
 
 # Any, since its validator refuses every value: pydantic has no schema for Never.
-_NotOneCondition = Annotated[Any, BeforeValidator(_refuse_the_conditions), Tag(_NOT_ONE_CONDITION)]
+_NotOneConditionSchema = Annotated[
+    Any, BeforeValidator(_refuse_the_conditions), Tag(_NOT_ONE_CONDITION)
+]
 
 
 # Lazy, so that the conditions below can hold it.
-type _Operand = Annotated[
+type _OperandSchema = Annotated[
     Annotated[str, Tag(_NAME)]
-    | Annotated[_TokenReferenceKeys, _AS_REFERENCE_SCHEMA, Tag(_REFERENCE)]
+    | Annotated[_TokenReferenceKeysSchema, _AS_REFERENCE_SCHEMA, Tag(_REFERENCE)]
     | Annotated[_AllSchema, Tag(_ALL)]
     | Annotated[_AnySchema, Tag(_ANY)]
     | Annotated[_NotSchema, Tag(_NOT)]
-    | _NotOneCondition,
+    | _NotOneConditionSchema,
     Discriminator(
         _operand_shape,
         custom_error_type="operand_type",
@@ -218,42 +220,42 @@ type _Operand = Annotated[
 ]
 
 
-class _AllSchema(BaseModel, extra="forbid", strict=True):
-    operands: list[_Operand] = Field(alias="all", min_length=1)
+class _AllSchema(StrictSchema):
+    operands: list[_OperandSchema] = Field(alias="all", min_length=1)
 
 
-class _AnySchema(BaseModel, extra="forbid", strict=True):
-    operands: list[_Operand] = Field(alias="any", min_length=1)
+class _AnySchema(StrictSchema):
+    operands: list[_OperandSchema] = Field(alias="any", min_length=1)
 
 
-class _NotSchema(BaseModel, extra="forbid", strict=True):
-    operand: _Operand = Field(alias="not")
+class _NotSchema(StrictSchema):
+    operand: _OperandSchema = Field(alias="not")
 
 
-class _RuleKeys(BaseModel, extra="forbid", strict=True):
+class _RuleKeysSchema(StrictSchema):
     name: Annotated[str, Field(min_length=1), AfterValidator(refuse_control_character)]
     # DecisionTier's values, which its own tests compare: strict, pydantic refuses a str for it.
     tier: Literal["catalog", "notify", "download"]
     scope: Scope
 
 
-class _AllRule(_AllSchema, _RuleKeys):
+class _AllRuleSchema(_AllSchema, _RuleKeysSchema):
     """A rule whose condition is ``all``."""
 
 
-class _AnyRule(_AnySchema, _RuleKeys):
+class _AnyRuleSchema(_AnySchema, _RuleKeysSchema):
     """A rule whose condition is ``any``."""
 
 
-class _NotRule(_NotSchema, _RuleKeys):
+class _NotRuleSchema(_NotSchema, _RuleKeysSchema):
     """A rule whose condition is ``not``."""
 
 
-type _Rule = Annotated[
-    Annotated[_AllRule, Tag(_ALL)]
-    | Annotated[_AnyRule, Tag(_ANY)]
-    | Annotated[_NotRule, Tag(_NOT)]
-    | _NotOneCondition,
+type _RuleSchema = Annotated[
+    Annotated[_AllRuleSchema, Tag(_ALL)]
+    | Annotated[_AnyRuleSchema, Tag(_ANY)]
+    | Annotated[_NotRuleSchema, Tag(_NOT)]
+    | _NotOneConditionSchema,
     Discriminator(
         _rule_shape,
         custom_error_type="rule_type",
@@ -262,10 +264,10 @@ type _Rule = Annotated[
 ]
 
 
-type _Token = Annotated[
+type _TokenSchema = Annotated[
     Annotated[_KeywordSchema, Tag(f"{TAG_MARK}keyword")]
     | Annotated[_RegexSchema, Tag(f"{TAG_MARK}regex")]
-    | Annotated[_CoverageKeys, _AS_COVERAGE_SCHEMA, Tag(f"{TAG_MARK}coverage")]
+    | Annotated[_CoverageKeysSchema, _AS_COVERAGE_SCHEMA, Tag(f"{TAG_MARK}coverage")]
     | Annotated[
         _AttributeBetweenSchema,
         AfterValidator(_refuse_an_empty_range),
@@ -274,7 +276,7 @@ type _Token = Annotated[
     | Annotated[_AllSchema, Tag(_ALL)]
     | Annotated[_AnySchema, Tag(_ANY)]
     | Annotated[_NotSchema, Tag(_NOT)]
-    | _NotOneCondition
+    | _NotOneConditionSchema
     | Annotated[Any, BeforeValidator(_refuse_the_shape), Tag(_NO_SHAPE)],
     Discriminator(
         _token_shape,
@@ -284,10 +286,10 @@ type _Token = Annotated[
 ]
 
 
-class MatcherConfigSchema(BaseModel, extra="forbid", strict=True):
+class MatcherConfigSchema(StrictSchema):
     fragments: dict[str, _Pattern] = Field(default_factory=dict)
-    tokens: dict[str, _Token] = Field(default_factory=dict)
-    rules: list[_Rule] = Field(default_factory=list)
+    tokens: dict[str, _TokenSchema] = Field(default_factory=dict)
+    rules: list[_RuleSchema] = Field(default_factory=list)
     vetoes: list[str] = Field(default_factory=list)
 
 
@@ -297,7 +299,7 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
     try:
         schema = MatcherConfigSchema.model_validate(document)
     except ValidationError as error:
-        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
+        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
     if problems := fragment_problems(schema.fragments, file_path=file_path):
         raise InvalidConfigError(problems)
     matcher_config = MatcherConfig(
@@ -313,14 +315,14 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
     return matcher_config
 
 
-def _token_definition(token: _Token, *, fragments: dict[str, str]) -> TokenDefinition:
+def _token_definition(token: _TokenSchema, *, fragments: dict[str, str]) -> TokenDefinition:
     match token:
         case _KeywordSchema():
             return KeywordDefinition(phrase=token.keyword)
         case _RegexSchema():
             pattern = expand_fragments(token.regex, fragments=fragments)
             return RegexDefinition(pattern=pattern, flags=token.flags)
-        case _CoverageKeys():
+        case _CoverageKeysSchema():
             return CoverageDefinition(
                 reference=token.coverage,
                 min_coverage=token.min_coverage,
@@ -334,7 +336,7 @@ def _token_definition(token: _Token, *, fragments: dict[str, str]) -> TokenDefin
             return _condition(token)
 
 
-def _rule(rule: _Rule) -> Rule:
+def _rule(rule: _RuleSchema) -> Rule:
     return Rule(
         name=rule.name, tier=DecisionTier(rule.tier), scope=rule.scope, condition=_condition(rule)
     )
@@ -354,11 +356,11 @@ def _condition(condition: _AllSchema | _AnySchema | _NotSchema) -> Condition:
             return NotDefinition(operand=_operand(condition.operand))
 
 
-def _operand(operand: _Operand) -> Operand:
+def _operand(operand: _OperandSchema) -> Operand:
     match operand:
         case str():
             return operand
-        case _TokenReferenceKeys():
+        case _TokenReferenceKeysSchema():
             return TokenReference(
                 name=operand.token,
                 min_coverage=operand.min_coverage,

@@ -38,7 +38,7 @@ class TargetSegment:
     absolute_number: int
     letter: str
     title: str
-    status: str = LOST
+    status: TargetStatus = LOST
 
     @property
     def target_id(self) -> TargetId:

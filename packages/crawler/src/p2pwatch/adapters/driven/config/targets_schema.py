@@ -3,9 +3,10 @@
 from pathlib import PurePath
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, Field, ValidationError
+from pydantic import AfterValidator, Field, ValidationError
 
 from p2pwatch.adapters.driven.config.validation_problems import (
+    StrictSchema,
     refuse_control_character,
     validation_problems,
 )
@@ -15,20 +16,20 @@ from p2pwatch.domain.matching.models import LOST, TargetSegment, TargetStatus
 from p2pwatch.domain.matching.validation import duplicate_targets
 
 
-class _SegmentSchema(BaseModel, extra="forbid", strict=True):
+class _SegmentSchema(StrictSchema):
     letter: Annotated[str, AfterValidator(refuse_control_character)]
     title: str
     status: TargetStatus = LOST
 
 
-class _EpisodeSchema(BaseModel, extra="forbid", strict=True):
+class _EpisodeSchema(StrictSchema):
     season: int
     seasonal_number: int
     absolute_number: int
     segments: list[_SegmentSchema] = Field(default_factory=list)
 
 
-class TargetsSchema(BaseModel, extra="forbid", strict=True):
+class TargetsSchema(StrictSchema):
     episodes: list[_EpisodeSchema]
 
 
@@ -40,7 +41,7 @@ def targets_from_document(
     try:
         schema = TargetsSchema.model_validate(document)
     except ValidationError as error:
-        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
+        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
     located = [
         (
             f"episodes[{episode_index}].segments[{segment_index}]",

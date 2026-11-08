@@ -2,13 +2,13 @@
 
 from datetime import timedelta
 from pathlib import PurePath
-from types import GenericAlias
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Discriminator, Field, Tag, ValidationError, create_model
+from pydantic import Discriminator, Field, GetPydanticSchema, Tag, ValidationError, create_model
 
 from p2pwatch.adapters.driven.config.validation_problems import (
     TAG_MARK,
+    StrictSchema,
     moved_key,
     removed_key,
     renamed_key,
@@ -51,19 +51,19 @@ _Absence = Annotated[float, Field(gt=0, le=_THIRTY_DAYS_SECONDS)]
 _Text = Annotated[str, Field(min_length=1)]
 
 
-class _BackoffSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _BackoffSchema(StrictSchema):
     base_seconds: _Seconds
     cap_seconds: _Seconds
     factor: Annotated[float, Field(ge=1)]
     jitter_ratio: Annotated[float, Field(ge=0)]
 
 
-class _SearchSchema(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _SearchSchema(StrictSchema):
     keywords: Annotated[list[_Text], Field(min_length=1)]
     backoff: _BackoffSchema
 
 
-class _DownloadKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _DownloadKeysSchema(StrictSchema):
     min_free_bytes: Annotated[int, Field(gt=0)] = DEFAULT_MIN_FREE_BYTES
     lost_after_seconds: _Absence = DEFAULT_LOST_AFTER.total_seconds()
     output_dir: _Text = DEFAULT_OUTPUT_DIRECTORY
@@ -72,12 +72,13 @@ class _DownloadKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False)
 
 
 # Two schemas, so that only a download on requires its wiring and every key is checked either way.
-class _DownloadOff(_DownloadKeys):
+class _DownloadOffSchema(_DownloadKeysSchema):
     enabled: bool = DEFAULT_DOWNLOAD_ENABLED
-    poll_interval_seconds: _Seconds | None = None
+    # Never read when off: pydantic validates no default, so the key stays optional, a null refused.
+    poll_interval_seconds: _Seconds = 0.0
 
 
-class _DownloadOn(_DownloadKeys):
+class _DownloadOnSchema(_DownloadKeysSchema):
     enabled: Literal[True]
     poll_interval_seconds: _Seconds
 
@@ -94,7 +95,7 @@ def _download_tag(download: object) -> str:
 
 
 _DownloadSchema = Annotated[
-    Annotated[_DownloadOn, Tag(_ON)] | Annotated[_DownloadOff, Tag(_OFF)],
+    Annotated[_DownloadOnSchema, Tag(_ON)] | Annotated[_DownloadOffSchema, Tag(_OFF)],
     Discriminator(_download_tag),
 ]
 
@@ -103,17 +104,17 @@ _DownloadSchema = Annotated[
 _REMOVED = removed_key(_FILE_NAME)
 
 
-class _WebuiKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _WebuiKeysSchema(StrictSchema):
     amule_url: _Text = DEFAULT_AMULE_URL
     source_period_gap_seconds: _Seconds = DEFAULT_SOURCE_PERIOD_GAP.total_seconds()
 
 
 # The bind is fixed in the composition ring: 4.x's host and port were ignored.
 _WEBUI_REFUSED: dict[str, Any] = {key: (_REMOVED, None) for key in ("enabled", "host", "port")}
-_WebuiSchema = create_model("_WebuiSchema", __base__=_WebuiKeys, **_WEBUI_REFUSED)
+_WebuiSchema = create_model("_WebuiSchema", __base__=_WebuiKeysSchema, **_WEBUI_REFUSED)
 
 
-class _NotificationKeys(BaseModel, extra="forbid", strict=True):
+class _NotificationKeysSchema(StrictSchema):
     url: _Text
     audience: Literal["community", "operations"]
     node_prefix: bool = DEFAULT_NODE_PREFIX
@@ -123,36 +124,42 @@ _NOTIFICATION_RENAMED: dict[str, Any] = {
     "tag": (renamed_key("audience", file_name=_FILE_NAME), None)
 }
 _NotificationSchema = create_model(
-    "_NotificationSchema", __base__=_NotificationKeys, **_NOTIFICATION_RENAMED
+    "_NotificationSchema", __base__=_NotificationKeysSchema, **_NOTIFICATION_RENAMED
 )
 
 
-class _ObservabilityKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+class _ObservabilityKeysSchema(StrictSchema):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = DEFAULT_LOG_LEVEL
     notification_timeout_seconds: _Seconds = DEFAULT_NOTIFICATION_TIMEOUT_SECONDS
-    notifications: list[_NotificationKeys] = Field(default_factory=list)
+    notifications: list[
+        Annotated[
+            _NotificationKeysSchema,
+            GetPydanticSchema(lambda _source, handler: handler(_NotificationSchema)),
+        ]
+    ] = Field(default_factory=list)
 
 
-_OBSERVABILITY_REFUSED: dict[str, Any] = {
-    "metrics": (_REMOVED, None),
-    # list[_NotificationSchema], which mypy refuses since the schema is a variable.
-    "notifications": (GenericAlias(list, _NotificationSchema), Field(default_factory=list)),
-}
+_OBSERVABILITY_REFUSED: dict[str, Any] = {"metrics": (_REMOVED, None)}
 _ObservabilitySchema = create_model(
-    "_ObservabilitySchema", __base__=_ObservabilityKeys, **_OBSERVABILITY_REFUSED
+    "_ObservabilitySchema", __base__=_ObservabilityKeysSchema, **_OBSERVABILITY_REFUSED
 )
 
 
-class _RootKeys(BaseModel, extra="forbid", strict=True, allow_inf_nan=False):
+# mypy reads the keys' class, which a built schema extends: pydantic validates by the schema.
+class _RootKeysSchema(StrictSchema):
     shutdown_deadline_seconds: _Seconds
     amule_api_password: _Text
     catalog_db_path: _Text
     local_db_path: _Text
     search: _SearchSchema
-    download: _DownloadSchema = Field(default_factory=_DownloadOff)
-    # Their schemas in CrawlerConfigSchema, which add the refusing keys.
-    observability: _ObservabilityKeys
-    webui: _WebuiKeys
+    download: _DownloadSchema = Field(default_factory=_DownloadOffSchema)
+    observability: Annotated[
+        _ObservabilityKeysSchema,
+        GetPydanticSchema(lambda _source, handler: handler(_ObservabilitySchema)),
+    ] = Field(default_factory=_ObservabilitySchema)
+    webui: Annotated[
+        _WebuiKeysSchema, GetPydanticSchema(lambda _source, handler: handler(_WebuiSchema))
+    ] = Field(default_factory=_WebuiSchema)
 
 
 _REMOVED_KEYS = (
@@ -166,13 +173,10 @@ _REMOVED_KEYS = (
     "search_poll_interval_seconds",
 )
 
-_FIELDS: dict[str, Any] = (
-    {"observability": (_ObservabilitySchema, Field(default_factory=_ObservabilitySchema))}
-    | {"webui": (_WebuiSchema, Field(default_factory=_WebuiSchema))}
-    | {key: (_REMOVED, None) for key in _REMOVED_KEYS}
-    | {"backoff": (moved_key("search.backoff", file_name=_FILE_NAME), None)}
-)
-CrawlerConfigSchema = create_model("CrawlerConfigSchema", __base__=_RootKeys, **_FIELDS)
+_FIELDS: dict[str, Any] = {key: (_REMOVED, None) for key in _REMOVED_KEYS} | {
+    "backoff": (moved_key("search.backoff", file_name=_FILE_NAME), None)
+}
+CrawlerConfigSchema = create_model("CrawlerConfigSchema", __base__=_RootKeysSchema, **_FIELDS)
 
 
 def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePath) -> CrawlerConfig:
@@ -181,7 +185,7 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
     try:
         root = CrawlerConfigSchema.model_validate(document)
     except ValidationError as error:
-        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
+        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
     backoff = root.search.backoff
     crawler_config = CrawlerConfig(
         search=SearchConfig(
@@ -209,7 +213,7 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
     return crawler_config
 
 
-def _observability(observability: _ObservabilityKeys) -> ObservabilityConfig:
+def _observability(observability: _ObservabilityKeysSchema) -> ObservabilityConfig:
     return ObservabilityConfig(
         log_level=observability.log_level,
         notification_timeout_seconds=observability.notification_timeout_seconds,
@@ -224,9 +228,9 @@ def _observability(observability: _ObservabilityKeys) -> ObservabilityConfig:
     )
 
 
-def _download(download: _DownloadOn | _DownloadOff) -> DownloadConfig | None:
+def _download(download: _DownloadOnSchema | _DownloadOffSchema) -> DownloadConfig | None:
     match download:
-        case _DownloadOn(enabled=True):
+        case _DownloadOnSchema(enabled=True):
             return DownloadConfig(
                 poll_interval_seconds=download.poll_interval_seconds,
                 min_free_bytes=download.min_free_bytes,

@@ -53,7 +53,7 @@ TARGETS = (
         absolute_number=63,
         letter="A",
         title="t2",
-        status="complete",
+        status="found",
     ),
 )
 

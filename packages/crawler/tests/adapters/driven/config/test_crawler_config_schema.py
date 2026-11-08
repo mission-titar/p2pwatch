@@ -408,6 +408,7 @@ _THIRTY_DAYS = "Input should be less than or equal to 2592000"
         ("poll_interval_seconds", True, "Input should be a valid number"),
         ("poll_interval_seconds", 0.0, "Input should be greater than 0"),
         ("poll_interval_seconds", 86_401, _A_DAY),
+        ("poll_interval_seconds", None, "Input should be a valid number"),
         ("min_free_bytes", 0, "Input should be greater than 0"),
         ("min_free_bytes", 1024.0, "Input should be a valid integer"),
         ("min_free_bytes", True, "Input should be a valid integer"),
@@ -494,3 +495,10 @@ def test_every_problem_of_the_root_and_of_each_section_is_listed() -> None:
         "port_sync",
         "amules",
     ]
+
+
+def test_the_error_chains_no_pydantic_error_which_holds_the_values() -> None:
+    with pytest.raises(InvalidConfigError) as raised:
+        crawler_config_from_document(_document() | {"unread": "s3cr3t"}, file_path=_FILE)
+    assert raised.value.__cause__ is None
+    assert raised.value.__suppress_context__

@@ -207,3 +207,10 @@ def test_no_message_prints_the_value_received() -> None:
     problems = _problems(document)
     assert len(problems) == 3
     assert not [message for _, message in problems if secret in message]
+
+
+def test_the_error_chains_no_pydantic_error_which_holds_the_values() -> None:
+    with pytest.raises(InvalidConfigError) as raised:
+        targets_from_document({"episodes": "s3cr3t"}, file_path=_FILE)
+    assert raised.value.__cause__ is None
+    assert raised.value.__suppress_context__

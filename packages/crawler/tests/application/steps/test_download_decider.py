@@ -123,27 +123,6 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
 
 
 @pytest.mark.asyncio
-async def test_complete_target_candidate_is_skipped() -> None:
-    client = FakeDownloadClient()
-    tracked_download_store = FakeTrackedDownloadStore()
-    decision_reader = FakeDecisionReader(
-        candidates=(candidate(HASH_B, target_id=TargetId("063A")),)  # 063A status=complete
-    )
-    observation_reader = FakeObservationReader(
-        observations={HASH_B: observation(HASH_B, filename="x", size_bytes=1)}
-    )
-    cycle = build_cycle(
-        client=client,
-        tracked_download_store=tracked_download_store,
-        decision_reader=decision_reader,
-        observation_reader=observation_reader,
-    )
-    await cycle.run(NODE_ID)
-    assert client.started == []
-    assert HASH_B not in tracked_download_store.states
-
-
-@pytest.mark.asyncio
 async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore()

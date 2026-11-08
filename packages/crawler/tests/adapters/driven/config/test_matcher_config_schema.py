@@ -483,3 +483,10 @@ def test_every_problem_of_the_conditions_is_listed() -> None:
         ("rules[0].all[0].min", "was renamed 'min_coverage', rename it in matcher.yml"),
         ("rules[0].all[1].any", _AT_LEAST_ONE),
     ]
+
+
+def test_the_error_chains_no_pydantic_error_which_holds_the_values() -> None:
+    with pytest.raises(InvalidConfigError) as raised:
+        matcher_config_from_document({"vetoes": "s3cr3t"}, file_path=_FILE)
+    assert raised.value.__cause__ is None
+    assert raised.value.__suppress_context__
