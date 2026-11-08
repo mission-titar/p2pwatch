@@ -13,7 +13,9 @@ from p2pwatch.domain.matching.config import (
     KeywordDefinition,
     MatcherConfig,
     RegexDefinition,
+    Rule,
 )
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.matchers import READERS_BY_ATTR
 
 _FILE = PurePath("/srv/matcher.yml")
@@ -32,10 +34,48 @@ def _token_problems(token: object) -> list[tuple[str | None, str]]:
 
 
 def test_a_document_gives_its_matcher_config() -> None:
-    document = {"tokens": {"titar": {"keyword": "mission titar"}}, "vetoes": ["titar"]}
-    assert matcher_config_from_document(document, file_path=_FILE) == MatcherConfig(
-        tokens={"titar": KeywordDefinition(phrase="mission titar")}, vetoes=("titar",)
+    document = {
+        "tokens": {"titar": {"keyword": "mission titar"}, "keroro": {"keyword": "keroro"}},
+        "rules": [{"name": "r", "tier": "notify", "scope": "episode", "any": ["titar"]}],
+        "vetoes": ["titar", "keroro"],
+    }
+    rule = Rule(
+        name="r",
+        tier=DecisionTier.NOTIFY,
+        scope="episode",
+        condition=AnyDefinition(operands=("titar",)),
     )
+    assert matcher_config_from_document(document, file_path=_FILE) == MatcherConfig(
+        tokens={
+            "titar": KeywordDefinition(phrase="mission titar"),
+            "keroro": KeywordDefinition(phrase="keroro"),
+        },
+        rules=(rule,),
+        vetoes=("titar", "keroro"),
+    )
+
+
+def test_a_regex_holds_the_fragments_it_cites() -> None:
+    document = {
+        "fragments": {"marker": "(?:n°|#)\\s*"},
+        "tokens": {"own_id": {"regex": "{marker}0*{absolute_number}"}},
+    }
+    config = matcher_config_from_document(document, file_path=_FILE)
+    assert config.tokens["own_id"] == RegexDefinition(pattern="(?:n°|#)\\s*0*{absolute_number}")
+
+
+def test_every_problem_of_the_fragments_is_listed() -> None:
+    document = {"fragments": {"title": "x", "outer": "a{inner}", "inner": "b"}}
+    assert _problems(document) == [
+        ("fragments.title", "collides with a target placeholder"),
+        ("fragments.outer", "references fragment 'inner'"),
+    ]
+
+
+def test_a_placeholder_neither_fragment_nor_target_field_is_refused() -> None:
+    document = {"fragments": {"known": "x"}, "tokens": {"t": {"regex": "{unknown}"}}}
+    [(key, message)] = _problems(document)
+    assert (key, message.startswith("token 't': invalid interpolation")) == (None, True)
 
 
 def test_each_token_shape_gives_its_definition() -> None:
