@@ -55,13 +55,13 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
     assert loaded == LoadedConfig(
         crawler_config=crawler_config_from_document(
             interpolate_document(
-                load_yaml(config_path), env=_env(), file_path=config_path
+                load_yaml(config_path).document, env=_env(), file_path=config_path
             ).document,
             file_path=config_path,
         ),
-        targets=targets_from_document(load_yaml(targets_path), file_path=targets_path),
+        targets=targets_from_document(load_yaml(targets_path).document, file_path=targets_path),
         matcher_config=matcher_config_from_document(
-            load_yaml(matcher_path), file_path=matcher_path
+            load_yaml(matcher_path).document, file_path=matcher_path
         ),
         policy_fingerprint=policy_fingerprint(
             matcher_path.read_bytes(), targets_bytes=targets_path.read_bytes()
