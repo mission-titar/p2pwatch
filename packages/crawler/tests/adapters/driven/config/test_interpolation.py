@@ -68,6 +68,7 @@ def test_a_value_that_is_no_string_is_unchanged() -> None:
             "observability.notifications[0].url",
         ),
         ({"matrix": [["${UNSET}"]]}, "matrix[0][0]"),
+        ({"un\x1bread": "${UNSET}"}, "un\\x1bread"),
     ],
 )
 def test_an_unset_variable_is_a_problem_under_its_key_path_its_reference_left_as_written(

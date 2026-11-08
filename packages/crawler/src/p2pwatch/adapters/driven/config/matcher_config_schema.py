@@ -298,7 +298,9 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
     try:
         schema = MatcherConfigSchema.model_validate(document)
     except ValidationError as error:
-        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
+        raise InvalidConfigError(
+            validation_problems(error, document=document, file_path=file_path)
+        ) from None
     matcher_config = MatcherConfig(
         tokens={
             name: _token_definition(token, fragments=schema.fragments)

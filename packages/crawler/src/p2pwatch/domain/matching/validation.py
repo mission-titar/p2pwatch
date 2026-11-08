@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePath
 
-from p2pwatch.domain.config_problem import ConfigProblem
+from p2pwatch.domain.config_problem import ConfigProblem, key_path
 from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
@@ -35,7 +35,7 @@ def fragment_problems(
     """Each fragment named like a target placeholder, and each one citing a fragment: a fragment
     is raw regex text, one level deep."""
     return tuple(
-        ConfigProblem(file_path=file_path, key=f"fragments.{name}", message=message)
+        ConfigProblem(file_path=file_path, key=key_path("fragments", name), message=message)
         for name, text in fragments.items()
         for message in _fragment_messages(name, text=text, fragments=fragments)
     )
@@ -82,7 +82,7 @@ def cross_value_problems(
     regexes, which a fragment problem leaves unchecked since they hold the fragments."""
     problems_of_fragments = fragment_problems(fragments, file_path=file_path)
     token_citations = {
-        name: tuple(_citations(definition, key=f"tokens.{name}"))
+        name: tuple(_citations(definition, key=key_path("tokens", name)))
         for name, definition in config.tokens.items()
     }
     citations = (
@@ -191,7 +191,7 @@ def _graph_problems(
     deepest = max(depths, key=depths.__getitem__, default=None)
     if not cycles and deepest is not None and depths[deepest] > max_depth:
         message = f"resolves through {depths[deepest]} levels of tokens, past the bound {max_depth}"
-        yield f"tokens.{deepest}", message
+        yield key_path("tokens", deepest), message
 
 
 def _unknown_token(name: str) -> str:
@@ -210,7 +210,7 @@ def _regex_problems(tokens: Mapping[str, TokenDefinition]) -> Iterator[tuple[str
         ]:
             for placeholder in unknown:
                 yield (
-                    f"tokens.{name}.regex",
+                    key_path("tokens", name, "regex"),
                     f"cites the placeholder '{{{placeholder}}}', neither a fragment nor a target "
                     "field",
                 )
@@ -218,7 +218,7 @@ def _regex_problems(tokens: Mapping[str, TokenDefinition]) -> Iterator[tuple[str
         try:
             re.compile(interpolate(definition.pattern, target=_PROBE_TARGET), re.ASCII)
         except re.error as error:
-            yield f"tokens.{name}.regex", f"does not compile as a regex: {error}"
+            yield key_path("tokens", name, "regex"), f"does not compile as a regex: {error}"
 
 
 @dataclass(kw_only=True, frozen=True)

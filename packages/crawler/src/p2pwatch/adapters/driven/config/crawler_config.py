@@ -55,6 +55,8 @@ def read_crawler_config(config_path: Path, *, env: Mapping[str, str]) -> Crawler
     return _parsed(
         (*loaded.problems, *interpolated.problems),
         parse=lambda: crawler_config_from_document(interpolated.document, file_path=config_path),
+        # A variable left unset is refused by its key's type too: setting it fixes both.
+        superseded_keys=frozenset(problem.key for problem in interpolated.problems),
     )
 
 
@@ -78,13 +80,19 @@ def read_matcher_config(matcher_path: Path) -> MatcherConfig:
     )
 
 
-def _parsed[T](problems: tuple[ConfigProblem, ...], *, parse: FileRead[T]) -> T:
-    """``parse``'s value; ``InvalidConfigError`` with ``problems`` then the parse's, when either
-    holds one."""
+def _parsed[T](
+    problems: tuple[ConfigProblem, ...],
+    *,
+    parse: FileRead[T],
+    superseded_keys: frozenset[str | None] = frozenset(),
+) -> T:
+    """``parse``'s value; ``InvalidConfigError`` with ``problems`` then the parse's but those at
+    ``superseded_keys``, when either holds one."""
     try:
         value = parse()
     except InvalidConfigError as error:
-        raise InvalidConfigError((*problems, *error.problems)) from error
+        kept = (problem for problem in error.problems if problem.key not in superseded_keys)
+        raise InvalidConfigError((*problems, *kept)) from error
     if problems:
         raise InvalidConfigError(problems)
     return value

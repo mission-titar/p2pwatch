@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import PurePath
 from typing import Any
 
-from p2pwatch.domain.config_problem import ConfigProblem
+from p2pwatch.domain.config_problem import ConfigProblem, key_path
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 _ENV_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -30,7 +30,8 @@ def interpolate_document(
     """
     interpolation = _Interpolation(env=env, file_path=file_path)
     resolved = {
-        key: interpolation.subtree(subtree, key_path=str(key)) for key, subtree in document.items()
+        key: interpolation.subtree(subtree, location=(str(key),))
+        for key, subtree in document.items()
     }
     return InterpolatedDocument(document=resolved, problems=tuple(interpolation.problems))
 
@@ -41,42 +42,38 @@ class _Interpolation:
         self._file_path = file_path
         self.problems: list[ConfigProblem] = []
 
-    def subtree(self, subtree: Any, *, key_path: str) -> Any:
+    def subtree(self, subtree: Any, *, location: tuple[str | int, ...]) -> Any:
         match subtree:
             case str():
                 return _ENV_REFERENCE.sub(
-                    lambda match: self._value(match, key_path=key_path), subtree
+                    lambda match: self._value(match, key=key_path(*location)), subtree
                 )
             case dict():
                 return {
-                    key: self.subtree(child, key_path=f"{key_path}.{key}")
+                    key: self.subtree(child, location=(*location, str(key)))
                     for key, child in subtree.items()
                 }
             case list():
                 return [
-                    self.subtree(child, key_path=f"{key_path}[{index}]")
+                    self.subtree(child, location=(*location, index))
                     for index, child in enumerate(subtree)
                 ]
             case _:
                 return subtree
 
-    def _value(self, match: re.Match[str], *, key_path: str) -> str:
+    def _value(self, match: re.Match[str], *, key: str) -> str:
         """The variable ``match`` references, or ``match`` as written with its problem kept."""
         name = match.group(1)
         if name not in self._env:
             return self._unresolved(
-                match,
-                key_path=key_path,
-                message=f"environment variable {name!r} referenced but not set",
+                match, key=key, message=f"environment variable {name!r} referenced but not set"
             )
         try:
             require_well_formed_text(self._env[name], error_label=f"environment variable {name!r}")
         except ValueError as error:
-            return self._unresolved(match, key_path=key_path, message=str(error))
+            return self._unresolved(match, key=key, message=str(error))
         return self._env[name]
 
-    def _unresolved(self, match: re.Match[str], *, key_path: str, message: str) -> str:
-        self.problems.append(
-            ConfigProblem(file_path=self._file_path, key=key_path, message=message)
-        )
+    def _unresolved(self, match: re.Match[str], *, key: str, message: str) -> str:
+        self.problems.append(ConfigProblem(file_path=self._file_path, key=key, message=message))
         return match.group(0)

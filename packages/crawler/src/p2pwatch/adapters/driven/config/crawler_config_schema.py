@@ -185,7 +185,9 @@ def crawler_config_from_document(document: dict[str, Any], *, file_path: PurePat
     try:
         root = CrawlerConfigSchema.model_validate(document)
     except ValidationError as error:
-        raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
+        raise InvalidConfigError(
+            validation_problems(error, document=document, file_path=file_path)
+        ) from None
     backoff = root.search.backoff
     crawler_config = CrawlerConfig(
         search=SearchConfig(

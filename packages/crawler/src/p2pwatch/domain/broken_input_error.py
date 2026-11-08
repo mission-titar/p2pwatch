@@ -1,9 +1,6 @@
-from pathlib import PurePath
-
-
 class BrokenInputError(Exception):
-    """A config file a check cannot read: ``reason`` why, its message naming the file first."""
+    """A config file a check cannot read: ``reason`` why."""
 
-    def __init__(self, path: PurePath, *, reason: str) -> None:
-        super().__init__(f"{path}: {reason}")
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
         self.reason = reason
