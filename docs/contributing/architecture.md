@@ -215,8 +215,8 @@ flowchart TB
   que la composition dérive du code qui journalise, celui de son module
   (`p2pwatch.application.steps.search_worker`), que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et héritent des ports qu'ils implémentent.
-- **`composition/`** (`CrawlerComposition`) charge la config par l'adapter de config, le domaine la
-  valide *fail-fast* (`domain/crawler_config.py`), câble les adapters concrets qu'elle décrit,
+- **`composition/`** (`CrawlerComposition`) charge la config par l'adapter de config, qui contrôle
+  les trois fichiers et en liste chaque problème, câble les adapters concrets qu'elle décrit,
   puis lance `CrawlerLifecycle`
   (`application/crawler_lifecycle.py`), la racine du graphe : il résout le `node_id`, annonce le
   démarrage, réévalue le catalogue si la politique a changé, puis supervise les boucles.
@@ -324,8 +324,8 @@ sequenceDiagram
 ## 6. Du fichier à la décision : le moteur de matching
 
 Maintenant que la recherche est « bête » (2 mots-clés), **c'est le matcher qui porte toute la
-précision**. C'est un **moteur fixe minimal plus une politique 100 % YAML** (des données validées
-*fail-fast*, pas de code par cible).
+précision**. C'est un **moteur fixe minimal plus une politique 100 % YAML** (des données contrôlées
+au chargement, chaque problème listé, pas de code par cible).
 
 ```mermaid
 flowchart LR
@@ -782,7 +782,7 @@ démon sont
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
-| Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`), `domain/crawler_config.py` (contrôle et construit `CrawlerConfig`) |
+| Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `domain/matching/` (moteur + politique `deploy/matcher.yml`) |
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |

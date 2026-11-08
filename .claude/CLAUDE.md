@@ -83,7 +83,7 @@ Claude Code loads each file when its Read, Edit or Write tool touches a matching
 | `deploy.md` | `deploy/`, the config adapter, matching's tests |
 | `docs.md` | `docs/` |
 | `glossary.md` | `packages/`, `agents/specs/` |
-| `matching.md` | the matching engine and its tests, `deploy/matcher.yml`, `deploy/targets.yml` |
+| `matching.md` | the matching engine and its tests, the matcher's and targets' schemas, `deploy/matcher.yml`, `deploy/targets.yml` |
 | `merge.md` | the `merge` use case, the catalog copier, the database opener, the command line |
 | `packaging.md` | every `pyproject.toml`, `tach.toml`, every `Dockerfile` |
 | `persistence.md` | the SQLite adapter and its tests |
