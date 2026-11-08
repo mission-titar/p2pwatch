@@ -86,7 +86,7 @@ def _parse_operand(raw: Any) -> Operand:
         return raw
     if isinstance(raw, dict):
         if any(key in raw for key in _CONDITION_KEYS):
-            return _parse_condition(raw)
+            return parse_condition(raw)
         # Treated as a token reference (with or without the "token" key): _parse_token_reference
         # will raise MatchingConfigError if the "token" key is missing or invalid.
         return _parse_token_reference(raw)
@@ -151,7 +151,8 @@ def _parse_token_reference(raw: dict[str, Any]) -> TokenReference:
     )
 
 
-def _parse_condition(raw: dict[str, Any]) -> Condition:
+def parse_condition(raw: dict[str, Any]) -> Condition:
+    """The condition of ``raw``, its one key ``all``, ``any`` or ``not``."""
     present = [key for key in _CONDITION_KEYS if key in raw]
     if len(present) != 1:
         raise MatchingConfigError(f"exactly one condition (all/any/not) expected, got {present!r}")
@@ -213,7 +214,7 @@ def _parse_token_definition(
     """
     mapping = _require_mapping(raw, error_label="token definition")
     if any(key in mapping for key in _CONDITION_KEYS):
-        return _parse_condition(mapping)
+        return parse_condition(mapping)
     leaf_keys = [k for k in ("keyword", "regex", "coverage", "attr_between") if k in mapping]
     if len(leaf_keys) > 1:
         raise MatchingConfigError(f"a leaf token has exactly one type-key, got {sorted(leaf_keys)}")
@@ -267,7 +268,8 @@ def _parse_token_definition(
     raise MatchingConfigError(f"unknown token shape: keys {sorted(mapping)}")
 
 
-def _parse_rule(raw: Any) -> Rule:
+def parse_rule(raw: Any) -> Rule:
+    """The rule ``raw`` holds: its name, tier, scope and condition."""
     mapping = _require_mapping(raw, error_label="rule")
     name = str(mapping.get("name", ""))
     if not name:
@@ -297,7 +299,7 @@ def _parse_rule(raw: Any) -> Rule:
         name=name,
         tier=DecisionTier(str(tier)),
         scope=str(scope),
-        condition=_parse_condition(mapping),
+        condition=parse_condition(mapping),
     )
 
 
@@ -313,7 +315,7 @@ def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
     rules_raw = raw.get("rules", [])
     if not isinstance(rules_raw, list):
         raise MatchingConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")
-    rules = tuple(_parse_rule(rule_raw) for rule_raw in rules_raw)
+    rules = tuple(parse_rule(rule_raw) for rule_raw in rules_raw)
     vetoes_raw = raw.get("vetoes", [])
     if not isinstance(vetoes_raw, list):
         raise MatchingConfigError(
