@@ -26,9 +26,21 @@ from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import (
     DEFAULT_MIN_SIMILARITY,
     DEFAULT_REGEX_FLAGS,
+    AttributeBetweenDefinition,
+    CoverageDefinition,
+    KeywordDefinition,
     MatcherConfig,
+    RegexDefinition,
+    TokenDefinition,
 )
-from p2pwatch.domain.matching.validation import MatchingConfigError, parse_matcher_config
+from p2pwatch.domain.matching.validation import (
+    MatchingConfigError,
+    expand_fragments,
+    fragment_problems,
+    parse_condition,
+    parse_rule,
+    validate_config,
+)
 
 _FILE_NAME = "matcher.yml"
 
@@ -150,10 +162,15 @@ _TOKEN_SCHEMA: Any = Annotated[
 ]
 
 
+_TokenKeys = (
+    _KeywordSchema | _RegexSchema | _CoverageKeys | _AttributeBetweenSchema | dict[str, Any]
+)
+
+
 class _MatcherKeys(BaseModel, extra="forbid", strict=True):
     fragments: dict[str, _Pattern] = Field(default_factory=dict)
     # Its schema in MatcherConfigSchema, whose coverage token adds the refusing keys.
-    tokens: dict[str, object] = Field(default_factory=dict)
+    tokens: dict[str, _TokenKeys] = Field(default_factory=dict)
     # Read by the domain's parse until they are modelled.
     rules: list[Any] = Field(default_factory=list)
     vetoes: list[str] = Field(default_factory=list)
@@ -173,33 +190,40 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
         schema = MatcherConfigSchema.model_validate(document)
     except ValidationError as error:
         raise InvalidConfigError(validation_problems(error, file_path=file_path)) from error
-    checked = {
-        "fragments": schema.fragments,
-        "tokens": {name: _token_document(token) for name, token in schema.tokens.items()},
-        "rules": schema.rules,
-        "vetoes": schema.vetoes,
-    }
+    if problems := fragment_problems(schema.fragments, file_path=file_path):
+        raise InvalidConfigError(problems)
     try:
-        return parse_matcher_config(checked)
+        matcher_config = MatcherConfig(
+            tokens={
+                name: _token_definition(token, fragments=schema.fragments)
+                for name, token in schema.tokens.items()
+            },
+            rules=tuple(parse_rule(rule) for rule in schema.rules),
+            vetoes=tuple(schema.vetoes),
+        )
+        validate_config(matcher_config)
     except MatchingConfigError as error:
         problem = ConfigProblem(file_path=file_path, key=None, message=str(error))
         raise InvalidConfigError((problem,)) from error
+    return matcher_config
 
 
-def _token_document(token: object) -> object:
-    """``token``'s checked values, as the domain's parse reads them."""
+def _token_definition(token: _TokenKeys, *, fragments: dict[str, str]) -> TokenDefinition:
     match token:
         case _KeywordSchema():
-            return {"keyword": token.keyword}
+            return KeywordDefinition(phrase=token.keyword)
         case _RegexSchema():
-            return {"regex": token.regex, "flags": token.flags}
+            pattern = expand_fragments(token.regex, fragments=fragments)
+            return RegexDefinition(pattern=pattern, flags=token.flags)
         case _CoverageKeys():
-            return {
-                "coverage": token.coverage,
-                "min_coverage": token.min_coverage,
-                "min_similarity": token.min_similarity,
-            }
+            return CoverageDefinition(
+                reference=token.coverage,
+                min_coverage=token.min_coverage,
+                min_similarity=token.min_similarity,
+            )
         case _AttributeBetweenSchema():
-            return {"attr_between": token.attr_between, "min": token.min, "max": token.max}
+            return AttributeBetweenDefinition(
+                attr=token.attr_between, min_bound=token.min, max_bound=token.max
+            )
         case _:
-            return token
+            return parse_condition(token)

@@ -1,25 +1,23 @@
-"""Load-time validation (fail-fast): parsed YAML schema -> config model.
+"""The matcher config's conditions and rules parsed, its fragments and its graph checked.
 
 PURE domain: receives already-parsed structures (``dict``/``list``), does not import
-``yaml``, does not touch the disk. Covers spec §8.4 (load-time validation) on the schema
-side + local validations (closed tier, ``attr_between`` enum, coverage-only override). Graph
-validation (DAG/depth) and the regex compile-check are added in Task 6.
+``yaml``, does not touch the disk.
 """
 
 import re
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import PurePath
 from typing import Any
 
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.matching.config import (
     SCOPES,
     AllDefinition,
     AnyDefinition,
-    AttributeBetweenDefinition,
     Condition,
     CoverageDefinition,
-    KeywordDefinition,
     MatcherConfig,
     NotDefinition,
     Operand,
@@ -36,13 +34,11 @@ from p2pwatch.domain.matching.interpolation import (
     InterpolationError,
     interpolate,
 )
-from p2pwatch.domain.matching.matchers import READERS_BY_ATTR
 from p2pwatch.domain.matching.models import TargetSegment
 
 _CONDITION_KEYS = ("all", "any", "not")
-# 4.x names, refused at load with their 5.0 name (``{segment}`` too, in _check_regexes_compile).
+# A token reference's 4.x names, refused at load with their 5.0 name.
 _RENAMED_COVERAGE_KEYS = {"min": "min_coverage", "fuzz": "min_similarity"}
-_RENAMED_ATTRS = {"size_mb": "size_mib", "duration_sec": "duration_seconds"}
 
 
 class MatchingConfigError(Exception):
@@ -175,97 +171,30 @@ def parse_condition(raw: dict[str, Any]) -> Condition:
     return AnyDefinition(operands=operands)
 
 
-def _optional_float(mapping: dict[str, Any], *, key: str, error_label: str) -> float | None:
-    """Reads an optional float bound (``None`` if absent)."""
-    bound = mapping.get(key)
-    return None if bound is None else _number(bound, error_label=f"{error_label}: key {key!r}")
+def fragment_problems(
+    fragments: Mapping[str, str], *, file_path: PurePath
+) -> tuple[ConfigProblem, ...]:
+    """Each fragment named like a target placeholder, and each one citing a fragment: a fragment
+    is raw regex text, one level deep."""
+    return tuple(
+        ConfigProblem(file_path=file_path, key=f"fragments.{name}", message=message)
+        for name, text in fragments.items()
+        for message in _fragment_messages(name, text=text, fragments=fragments)
+    )
 
 
-def _parse_fragments(raw: Any) -> dict[str, str]:
-    """``fragments:`` name -> raw regex text; one level only (no fragment in a fragment)."""
-    fragments = {
-        str(name): str(text)
-        for name, text in _require_mapping(raw, error_label="'fragments' section").items()
-    }
-    for name, text in fragments.items():
-        if name in TARGET_PLACEHOLDERS:
-            raise MatchingConfigError(f"fragment {name!r} collides with a target placeholder")
-        for fragment_name in PLACEHOLDER.findall(text):
-            if fragment_name in fragments:
-                raise MatchingConfigError(
-                    f"fragment {name!r} references fragment {fragment_name!r}"
-                )
-    return fragments
+def _fragment_messages(name: str, *, text: str, fragments: Mapping[str, str]) -> list[str]:
+    collides = ["collides with a target placeholder"] if name in TARGET_PLACEHOLDERS else []
+    return collides + [
+        f"references fragment {cited!r}"
+        for cited in PLACEHOLDER.findall(text)
+        if cited in fragments
+    ]
 
 
-def _expand_fragments(pattern: str, *, fragments: dict[str, str]) -> str:
+def expand_fragments(pattern: str, *, fragments: Mapping[str, str]) -> str:
     """Substitutes ``{fragment}``; target placeholders are left for per-target interpolation."""
     return PLACEHOLDER.sub(lambda m: fragments.get(m.group(1), m.group(0)), pattern)
-
-
-def _parse_token_definition(
-    token_name: str, *, raw: Any, fragments: dict[str, str]
-) -> TokenDefinition:
-    """Dispatch of a token definition: composite (all/any/not) or leaf (4 types).
-
-    Reads ALL the definition's ancillary keys (``flags`` of regex,
-    ``min_coverage``/``min_similarity`` of coverage, ``min``/``max`` of attr_between), not only
-    the type-key.
-    """
-    mapping = _require_mapping(raw, error_label="token definition")
-    if any(key in mapping for key in _CONDITION_KEYS):
-        return parse_condition(mapping)
-    leaf_keys = [k for k in ("keyword", "regex", "coverage", "attr_between") if k in mapping]
-    if len(leaf_keys) > 1:
-        raise MatchingConfigError(f"a leaf token has exactly one type-key, got {sorted(leaf_keys)}")
-    if "keyword" in mapping:
-        return KeywordDefinition(phrase=str(mapping["keyword"]))
-    if "regex" in mapping:
-        flags = mapping.get("flags", "i")
-        pattern = _expand_fragments(str(mapping["regex"]), fragments=fragments)
-        return RegexDefinition(pattern=pattern, flags=str(flags))
-    if "coverage" in mapping:
-        _refuse_renamed_coverage_keys(mapping, error_label=f"token {token_name!r}")
-        min_coverage = _optional_float(
-            mapping, key="min_coverage", error_label=f"token {token_name!r}"
-        )
-        if min_coverage is None:
-            raise MatchingConfigError("a coverage token must declare 'min_coverage'")
-        min_similarity = _optional_float(
-            mapping, key="min_similarity", error_label=f"token {token_name!r}"
-        )
-        return CoverageDefinition(
-            reference=str(mapping["coverage"]),
-            min_coverage=_require_unit_fraction(
-                min_coverage, error_label="coverage 'min_coverage'"
-            ),
-            min_similarity=(
-                0.85
-                if min_similarity is None
-                else _require_unit_fraction(min_similarity, error_label="coverage 'min_similarity'")
-            ),
-        )
-    if "attr_between" in mapping:
-        attr = str(mapping["attr_between"])
-        if attr in _RENAMED_ATTRS:
-            raise MatchingConfigError(
-                f"attr_between {attr!r} was renamed {_RENAMED_ATTRS[attr]!r}, "
-                "rename it in matcher.yml"
-            )
-        if attr not in READERS_BY_ATTR:
-            raise MatchingConfigError(
-                f"unknown attr_between: {attr!r} (expected one of {sorted(READERS_BY_ATTR)})"
-            )
-        min_bound = _optional_float(mapping, key="min", error_label=f"token {token_name!r}")
-        max_bound = _optional_float(mapping, key="max", error_label=f"token {token_name!r}")
-        # Open bounds (min only / max only / none) are legitimate; only an explicit inverted
-        # range min > max is an EMPTY range (rule mute forever) → fail-fast §8.4.
-        if min_bound is not None and max_bound is not None and min_bound > max_bound:
-            raise MatchingConfigError(
-                f"attr_between {attr!r}: min ({min_bound}) > max ({max_bound}) (empty range)"
-            )
-        return AttributeBetweenDefinition(attr=attr, min_bound=min_bound, max_bound=max_bound)
-    raise MatchingConfigError(f"unknown token shape: keys {sorted(mapping)}")
 
 
 def parse_rule(raw: Any) -> Rule:
@@ -301,30 +230,6 @@ def parse_rule(raw: Any) -> Rule:
         scope=str(scope),
         condition=parse_condition(mapping),
     )
-
-
-def parse_matcher_config(raw: dict[str, Any]) -> MatcherConfig:
-    """Builds a validated (schema) :class:`MatcherConfig` from a parsed YAML dict."""
-    fragments = _parse_fragments(raw.get("fragments", {}))
-    tokens_raw = _require_mapping(raw.get("tokens", {}), error_label="'tokens' section")
-    tokens: dict[str, TokenDefinition] = {}
-    for token_name, token_raw in tokens_raw.items():
-        tokens[str(token_name)] = _parse_token_definition(
-            str(token_name), raw=token_raw, fragments=fragments
-        )
-    rules_raw = raw.get("rules", [])
-    if not isinstance(rules_raw, list):
-        raise MatchingConfigError(f"'rules' section: list expected, got {type(rules_raw).__name__}")
-    rules = tuple(parse_rule(rule_raw) for rule_raw in rules_raw)
-    vetoes_raw = raw.get("vetoes", [])
-    if not isinstance(vetoes_raw, list):
-        raise MatchingConfigError(
-            f"'vetoes' section: list expected, got {type(vetoes_raw).__name__}"
-        )
-    vetoes = tuple(str(name) for name in vetoes_raw)
-    config = MatcherConfig(tokens=tokens, rules=rules, vetoes=vetoes)
-    validate_config(config)
-    return config
 
 
 _DEFAULT_MAX_DEPTH = 32
@@ -504,11 +409,6 @@ def _check_regexes_compile(config: MatcherConfig) -> None:
     for name, token_definition in config.tokens.items():
         if not isinstance(token_definition, RegexDefinition):
             continue
-        if "segment" in PLACEHOLDER.findall(token_definition.pattern):
-            raise MatchingConfigError(
-                f"token {name!r}: placeholder '{{segment}}' was renamed '{{letter}}', "
-                "rename it in matcher.yml"
-            )
         try:
             pattern = interpolate(token_definition.pattern, target=_PROBE_TARGET)
         except InterpolationError as exc:

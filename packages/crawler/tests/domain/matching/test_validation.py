@@ -1,11 +1,12 @@
 import re
+from pathlib import PurePath
 
 import pytest
 
+from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
-    AttributeBetweenDefinition,
     Condition,
     CoverageDefinition,
     KeywordDefinition,
@@ -25,13 +26,15 @@ from p2pwatch.domain.matching.validation import (
     TargetDuplicate,
     UnknownTokenError,
     duplicate_targets,
+    expand_fragments,
+    fragment_problems,
     has_control_character,
     parse_condition,
-    parse_matcher_config,
     parse_rule,
     validate_config,
 )
 
+_FILE = PurePath("/srv/matcher.yml")
 _KERORO = KeywordDefinition(phrase="keroro")
 _COVERAGE = CoverageDefinition(reference="title", min_coverage=0.5)
 
@@ -46,30 +49,6 @@ def _chain(length: int) -> dict[str, TokenDefinition]:
     for index in range(1, length):
         chain[f"t{index}"] = AnyDefinition(operands=(f"t{index - 1}",))
     return chain
-
-
-def test_parse_leaf_token_definitions() -> None:
-    config = parse_matcher_config(
-        {
-            "tokens": {
-                "keroro": {"keyword": "keroro"},
-                "teletoon": {"regex": "t[eé]l[eé]toon"},
-                "video": {"regex": "\\.(avi|mkv)$", "flags": ""},
-                "title_hit": {"coverage": "title", "min_coverage": 0.6, "min_similarity": 0.9},
-                "small": {"attr_between": "size_mib", "min": 30, "max": 600},
-            },
-            "rules": [],
-        }
-    )
-    assert config.tokens["keroro"] == KeywordDefinition(phrase="keroro")
-    assert config.tokens["teletoon"] == RegexDefinition(pattern="t[eé]l[eé]toon", flags="i")
-    assert config.tokens["video"] == RegexDefinition(pattern="\\.(avi|mkv)$", flags="")
-    assert config.tokens["title_hit"] == CoverageDefinition(
-        reference="title", min_coverage=0.6, min_similarity=0.9
-    )
-    assert config.tokens["small"] == AttributeBetweenDefinition(
-        attr="size_mib", min_bound=30.0, max_bound=600.0
-    )
 
 
 def test_parse_composite_token_definition() -> None:
@@ -131,21 +110,6 @@ def test_unknown_scope_raises_and_names_it() -> None:
         parse_rule({"name": "r", "tier": "notify", "scope": "target", "any": ["keroro"]})
 
 
-def test_attr_between_unknown_attr_raises_and_names_it() -> None:
-    with pytest.raises(MatchingConfigError, match="codec"):
-        parse_matcher_config({"tokens": {"c": {"attr_between": "codec", "min": 1}}, "rules": []})
-
-
-def test_unknown_token_definition_shape_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="unknown token shape"):
-        parse_matcher_config({"tokens": {"x": {"frobnicate": "y"}}, "rules": []})
-
-
-def test_token_definition_with_multiple_keys_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="exactly one type-key"):
-        parse_matcher_config({"tokens": {"x": {"keyword": "a", "regex": "b"}}, "rules": []})
-
-
 def test_override_on_non_coverage_token_raises() -> None:
     rule = _rule(AllDefinition(operands=(TokenReference(name="kw", min_coverage=0.5),)))
     with pytest.raises(MatchingConfigError, match="kw"):
@@ -184,27 +148,6 @@ def test_rule_with_empty_any_is_rejected() -> None:
         parse_rule({"name": "pwn", "tier": "download", "scope": "unattributed", "any": []})
 
 
-def test_coverage_min_out_of_unit_range_is_rejected() -> None:
-    # config-validation#2: min_coverage/min_similarity are logical fractions [0, 1].
-    # 'min_coverage: 5.0' (typo for 0.5) would make the rule silently INERT (coverage() <= 1
-    # always false → never matches) with no signal at load time → fail-fast §8.4.
-    with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
-        parse_matcher_config(
-            {"tokens": {"t": {"coverage": "title", "min_coverage": 5.0}}, "rules": []}
-        )
-
-
-def test_coverage_fuzz_out_of_unit_range_is_rejected() -> None:
-    # 'min_similarity: 99' (typo for 0.99) → ratio/100 >= 99 always false → mute rule.
-    with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
-        parse_matcher_config(
-            {
-                "tokens": {"t": {"coverage": "title", "min_coverage": 0.5, "min_similarity": 99}},
-                "rules": [],
-            }
-        )
-
-
 def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
     # Same bound for a min_coverage/min_similarity override on a TokenReference (coverage).
     with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
@@ -216,23 +159,6 @@ def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
                 "all": [{"token": "cov", "min_coverage": 5.0}],
             }
         )
-
-
-@pytest.mark.parametrize(
-    ("coverage_token", "old_key", "new_key"),
-    [
-        ({"coverage": "title", "min": 0.6}, "min", "min_coverage"),
-        ({"coverage": "title", "min_coverage": 0.6, "fuzz": 0.9}, "fuzz", "min_similarity"),
-    ],
-)
-def test_a_coverage_tokens_4x_key_is_refused_with_its_new_name(
-    *, coverage_token: dict[str, object], old_key: str, new_key: str
-) -> None:
-    message = (
-        f"token 'title_hit': key '{old_key}' was renamed '{new_key}', rename it in matcher.yml"
-    )
-    with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_matcher_config({"tokens": {"title_hit": coverage_token}, "rules": []})
 
 
 @pytest.mark.parametrize(
@@ -253,27 +179,6 @@ def test_a_token_references_4x_override_is_refused_with_its_new_name(
                 "scope": "unattributed",
                 "all": [{"token": "cov", old_key: 0.5}],
             }
-        )
-
-
-@pytest.mark.parametrize(
-    ("old_attr", "new_attr"), [("size_mb", "size_mib"), ("duration_sec", "duration_seconds")]
-)
-def test_a_4x_attr_between_attribute_is_refused_with_its_new_name(
-    *, old_attr: str, new_attr: str
-) -> None:
-    message = f"attr_between '{old_attr}' was renamed '{new_attr}', rename it in matcher.yml"
-    with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_matcher_config({"tokens": {"t": {"attr_between": old_attr, "min": 1}}, "rules": []})
-
-
-def test_attr_between_min_greater_than_max_is_rejected() -> None:
-    # config-validation#1: {attr_between: size_mib, min: 600, max: 30} = EMPTY range → the rule is
-    # mute forever (input error). OPEN bounds (min only / max only) stay valid: it is
-    # deliberate and tested; only min > max is rejected.
-    with pytest.raises(MatchingConfigError, match="min.*>.*max"):
-        parse_matcher_config(
-            {"tokens": {"sz": {"attr_between": "size_mib", "min": 600, "max": 30}}, "rules": []}
         )
 
 
@@ -347,16 +252,10 @@ def test_regex_with_date_alt_placeholder_is_rejected() -> None:
 # --- Branch-coverage leftovers ---
 
 
-def test_token_definition_non_mapping_raises() -> None:
-    """_require_mapping raises MatchingConfigError if the token definition is not a mapping."""
-    with pytest.raises(MatchingConfigError, match="mapping"):
-        parse_matcher_config({"tokens": {"x": "not-a-dict"}, "rules": []})
-
-
 def test_composite_token_definition_multiple_condition_keys_raises() -> None:
-    """_parse_condition raises if a composite token contains 2+ condition keys."""
+    """parse_condition raises if a composite token contains 2+ condition keys."""
     with pytest.raises(MatchingConfigError, match="exactly one condition"):
-        parse_matcher_config({"tokens": {"x": {"all": ["a"], "any": ["b"]}}, "rules": []})
+        parse_condition({"all": ["a"], "any": ["b"]})
 
 
 def test_all_body_non_list_raises() -> None:
@@ -365,10 +264,9 @@ def test_all_body_non_list_raises() -> None:
         parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed", "all": "keroro"})
 
 
-def test_coverage_token_missing_min_raises() -> None:
-    """_parse_token_definition raises if a coverage does not declare 'min_coverage'."""
-    with pytest.raises(MatchingConfigError, match="'min_coverage'"):
-        parse_matcher_config({"tokens": {"t": {"coverage": "title"}}, "rules": []})
+def test_a_rule_that_is_no_mapping_raises() -> None:
+    with pytest.raises(MatchingConfigError, match="^rule: mapping expected, got str$"):
+        parse_rule("id_segment_exact")
 
 
 def test_rule_without_name_raises() -> None:
@@ -389,12 +287,6 @@ def test_a_rule_name_beyond_ascii_that_is_no_control_character_is_accepted() -> 
         {"name": "\xe9\xa0", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
     )
     assert rule.name == "\xe9\xa0"
-
-
-def test_rules_non_list_raises() -> None:
-    """parse_matcher_config raises if 'rules' is not a list."""
-    with pytest.raises(MatchingConfigError, match="rules"):
-        parse_matcher_config({"tokens": {}, "rules": "not-a-list"})
 
 
 def test_token_reference_with_coverage_token_no_override_ok() -> None:
@@ -461,12 +353,9 @@ def test_regex_with_known_placeholders_validates() -> None:
     validate_config(MatcherConfig(tokens={"seg": RegexDefinition(pattern=pattern)}))
 
 
-def test_the_4x_segment_placeholder_is_refused_with_its_new_name() -> None:
-    message = (
-        "token 'seg': placeholder '{segment}' was renamed '{letter}', rename it in matcher.yml"
-    )
-    with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_matcher_config({"tokens": {"seg": {"regex": "n°{absolute_number}{segment}"}}})
+def test_a_regex_without_the_flag_i_validates() -> None:
+    video = RegexDefinition(pattern="\\.(avi|mkv)$", flags="")
+    validate_config(MatcherConfig(tokens={"video": video}))
 
 
 def test_depth_within_bound_validates() -> None:
@@ -513,67 +402,52 @@ def test_coverage_override_forward_reference_in_composite_validates() -> None:
 # --- fragments: raw regex text substituted into regex tokens at parse time ---
 
 
-def test_fragment_is_expanded_into_regex_tokens_at_parse_time() -> None:
-    config = parse_matcher_config(
-        {
-            "fragments": {"marker": "(?:n°|#)\\s*"},
-            "tokens": {"explicit": {"regex": "{marker}\\d|\\b{marker}x{2,3}"}},
-        }
+def test_a_fragment_is_expanded_wherever_a_pattern_cites_it() -> None:
+    pattern = expand_fragments(
+        "{marker}\\d|\\b{marker}x{2,3}", fragments={"marker": "(?:n°|#)\\s*"}
     )
-    assert config.tokens["explicit"] == RegexDefinition(
-        pattern="(?:n°|#)\\s*\\d|\\b(?:n°|#)\\s*x{2,3}"
-    )
+    assert pattern == "(?:n°|#)\\s*\\d|\\b(?:n°|#)\\s*x{2,3}"
 
 
-def test_fragment_keeps_its_target_placeholders_for_per_target_interpolation() -> None:
-    config = parse_matcher_config(
-        {"fragments": {"own": "0*{absolute_number}"}, "tokens": {"id": {"regex": "n°{own}"}}}
-    )
-    assert config.tokens["id"] == RegexDefinition(pattern="n°0*{absolute_number}")
+def test_a_fragment_keeps_its_target_placeholders_for_per_target_interpolation() -> None:
+    pattern = expand_fragments("n°{own}{letter}", fragments={"own": "0*{absolute_number}"})
+    assert pattern == "n°0*{absolute_number}{letter}"
+
+
+def test_fragments_of_one_level_named_apart_from_the_placeholders_hold_no_problem() -> None:
+    fragments = {"marker": "#\\s*", "own": "{marker_text}0*{absolute_number}"}
+    assert fragment_problems(fragments, file_path=_FILE) == ()
 
 
 @pytest.mark.parametrize(
     "name", ["season", "seasonal_number", "absolute_number", "letter", "title"]
 )
-def test_fragment_named_like_a_target_placeholder_is_rejected(name: str) -> None:
-    with pytest.raises(
-        MatchingConfigError, match=f"fragment {name!r} collides with a target placeholder"
-    ):
-        parse_matcher_config({"fragments": {name: "x"}})
+def test_a_fragment_named_like_a_target_placeholder_is_a_problem(name: str) -> None:
+    assert fragment_problems({name: "x"}, file_path=_FILE) == (
+        ConfigProblem(
+            file_path=_FILE,
+            key=f"fragments.{name}",
+            message="collides with a target placeholder",
+        ),
+    )
 
 
-def test_fragment_referencing_another_fragment_is_rejected() -> None:
-    with pytest.raises(MatchingConfigError, match="fragment 'outer' references fragment 'inner'"):
-        parse_matcher_config(
-            {
-                "fragments": {"outer": "a{inner}", "inner": "b"},
-                "tokens": {"t": {"regex": "{outer}"}},
-            }
-        )
-
-
-def test_placeholder_that_is_neither_fragment_nor_target_field_is_rejected() -> None:
-    with pytest.raises(MatchingConfigError, match="token 't': invalid interpolation"):
-        parse_matcher_config({"fragments": {"known": "x"}, "tokens": {"t": {"regex": "{unknown}"}}})
-
-
-def test_fragments_section_must_be_a_mapping() -> None:
-    with pytest.raises(MatchingConfigError, match="'fragments' section"):
-        parse_matcher_config({"fragments": ["x"]})
+def test_every_fragment_citing_a_fragment_is_a_problem() -> None:
+    fragments = {"outer": "a{inner}{other}", "inner": "b", "other": "{inner}"}
+    assert fragment_problems(fragments, file_path=_FILE) == (
+        ConfigProblem(
+            file_path=_FILE, key="fragments.outer", message="references fragment 'inner'"
+        ),
+        ConfigProblem(
+            file_path=_FILE, key="fragments.outer", message="references fragment 'other'"
+        ),
+        ConfigProblem(
+            file_path=_FILE, key="fragments.other", message="references fragment 'inner'"
+        ),
+    )
 
 
 # --- vetoes: token names judged on every name of the file ---
-
-
-def test_parse_vetoes_keeps_their_order() -> None:
-    config = parse_matcher_config(
-        {"tokens": {"a": {"keyword": "a"}, "b": {"keyword": "b"}}, "vetoes": ["b", "a"]}
-    )
-    assert config.vetoes == ("b", "a")
-
-
-def test_vetoes_are_optional() -> None:
-    assert parse_matcher_config({"tokens": {"a": {"keyword": "a"}}}).vetoes == ()
 
 
 def test_veto_naming_an_unknown_token_is_rejected() -> None:
@@ -586,38 +460,6 @@ def test_duplicate_veto_is_rejected() -> None:
         validate_config(MatcherConfig(tokens={"a": _KERORO}, vetoes=("a", "a")))
 
 
-def test_vetoes_section_must_be_a_list() -> None:
-    with pytest.raises(MatchingConfigError, match="'vetoes' section: list expected"):
-        parse_matcher_config({"tokens": {"a": {"keyword": "a"}}, "vetoes": "a"})
-
-
-@pytest.mark.parametrize(
-    ("token", "message"),
-    [
-        (
-            {"coverage": "title", "min_coverage": "abc"},
-            "token 't': key 'min_coverage': number expected, got 'abc'",
-        ),
-        (
-            {"coverage": "title", "min_coverage": 0.5, "min_similarity": [1]},
-            "token 't': key 'min_similarity': number expected, got [1]",
-        ),
-        (
-            {"attr_between": "size_mib", "min": "big"},
-            "token 't': key 'min': number expected, got 'big'",
-        ),
-        ({"attr_between": "size_mib", "max": {}}, "token 't': key 'max': number expected, got {}"),
-    ],
-    ids=["min_coverage", "min_similarity", "min", "max"],
-)
-def test_a_token_number_that_is_no_number_raises_and_names_its_key(
-    *, token: dict[str, object], message: str
-) -> None:
-    with pytest.raises(MatchingConfigError) as raised:
-        parse_matcher_config({"tokens": {"t": token}, "rules": []})
-    assert str(raised.value) == message
-
-
 @pytest.mark.parametrize("override_key", ["min_coverage", "min_similarity"])
 def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) -> None:
     rule = {
@@ -627,7 +469,5 @@ def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) ->
         "all": [{"token": "cov", override_key: "x"}],
     }
     with pytest.raises(MatchingConfigError) as raised:
-        parse_matcher_config(
-            {"tokens": {"cov": {"coverage": "title", "min_coverage": 0.5}}, "rules": [rule]}
-        )
+        parse_rule(rule)
     assert str(raised.value) == f"'{override_key}' override of 'cov': number expected, got 'x'"
