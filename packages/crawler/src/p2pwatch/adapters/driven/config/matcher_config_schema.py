@@ -22,7 +22,6 @@ from p2pwatch.adapters.driven.config.validation_problems import (
     renamed_key,
     validation_problems,
 )
-from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import (
     DEFAULT_MIN_SIMILARITY,
@@ -44,10 +43,9 @@ from p2pwatch.domain.matching.config import (
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.validation import (
-    MatchingConfigError,
+    cross_value_problems,
     expand_fragments,
     fragment_problems,
-    validate_config,
 )
 
 _FILE_NAME = "matcher.yml"
@@ -295,7 +293,7 @@ class MatcherConfigSchema(BaseModel, extra="forbid", strict=True):
 
 def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePath) -> MatcherConfig:
     """``document``'s matcher config; ``InvalidConfigError`` with every problem of its values,
-    or once they hold, its first other problem."""
+    or once they hold, every problem across them."""
     try:
         schema = MatcherConfigSchema.model_validate(document)
     except ValidationError as error:
@@ -310,11 +308,8 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
         rules=tuple(_rule(rule) for rule in schema.rules),
         vetoes=tuple(schema.vetoes),
     )
-    try:
-        validate_config(matcher_config)
-    except MatchingConfigError as error:
-        problem = ConfigProblem(file_path=file_path, key=None, message=str(error))
-        raise InvalidConfigError((problem,)) from error
+    if rule_problems := cross_value_problems(matcher_config, file_path=file_path):
+        raise InvalidConfigError(rule_problems)
     return matcher_config
 
 

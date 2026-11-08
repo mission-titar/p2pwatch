@@ -4,7 +4,6 @@ from typing import Any, get_args
 import pytest
 
 from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
-from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import (
     AllDefinition,
@@ -78,8 +77,9 @@ def test_every_problem_of_the_fragments_is_listed() -> None:
 
 def test_a_placeholder_neither_fragment_nor_target_field_is_refused() -> None:
     document = {"fragments": {"known": "x"}, "tokens": {"t": {"regex": "{unknown}"}}}
-    [(key, message)] = _problems(document)
-    assert (key, message.startswith("token 't': invalid interpolation")) == (None, True)
+    assert _problems(document) == [
+        ("tokens.t.regex", "cites a placeholder neither a fragment nor a target field")
+    ]
 
 
 def test_each_token_shape_gives_its_definition() -> None:
@@ -279,14 +279,17 @@ def test_the_4x_segment_placeholder_is_refused_in_a_regex_and_a_fragment() -> No
     ]
 
 
-def test_a_problem_past_the_shape_is_its_files_one_problem() -> None:
-    with pytest.raises(InvalidConfigError) as refusal:
-        matcher_config_from_document({"vetoes": ["ghost"]}, file_path=_FILE)
-    assert refusal.value.problems == (
-        ConfigProblem(
-            file_path=_FILE, key=None, message="veto references an unknown token: 'ghost'"
-        ),
-    )
+def test_every_problem_across_values_is_listed_once_the_shape_holds() -> None:
+    document = {
+        "tokens": {"a": {"keyword": "a"}, "t": {"any": ["a", "ghost"]}},
+        "rules": [_rule(all=[{"token": "a", "min_coverage": 0.5}])],
+        "vetoes": ["t", "t"],
+    }
+    assert _problems(document) == [
+        ("tokens.t.any[1]", "references an unknown token"),
+        ("rules[0].all[0].min_coverage", "can only override a coverage token"),
+        ("vetoes[1]", "same token as vetoes[0]"),
+    ]
 
 
 def _rule(**keys: object) -> dict[str, object]:

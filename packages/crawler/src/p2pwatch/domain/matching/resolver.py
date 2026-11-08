@@ -1,7 +1,7 @@
 """Per-target construction of matcher trees (cf. spec §8.5, construction part).
 
-PURE domain. From a VALIDATED :class:`MatcherConfig` (DAG/depth/RE2 guaranteed by
-``validation.validate_config``) and a :class:`TargetSegment`, builds the :class:`Matcher`
+PURE domain. From a VALIDATED :class:`MatcherConfig` (DAG, depth and regexes checked by
+``validation.cross_value_problems``) and a :class:`TargetSegment`, builds the :class:`Matcher`
 tree of each named token and each rule. Regexes are interpolated and compiled PER TARGET;
 coverages bound to ``target.title`` (with overrides at point of use); keyword/attr_between
 are static.

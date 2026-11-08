@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePath
 
@@ -26,22 +26,6 @@ from p2pwatch.domain.matching.interpolation import (
     interpolate,
 )
 from p2pwatch.domain.matching.models import TargetSegment
-
-
-class MatchingConfigError(Exception):
-    """A matcher config whose graph fails at load (reference, veto, override, cycle, regex)."""
-
-
-class UnknownTokenError(MatchingConfigError):
-    """A reference points to a token missing from the table."""
-
-
-class CycleError(MatchingConfigError):
-    """The token->token reference graph contains a cycle (the message names it)."""
-
-
-class DepthExceededError(MatchingConfigError):
-    """The resolution depth exceeds the bound (default 32)."""
 
 
 def has_control_character(text: str) -> bool:
@@ -77,9 +61,9 @@ def expand_fragments(pattern: str, *, fragments: Mapping[str, str]) -> str:
 
 
 _DEFAULT_MAX_DEPTH = 32
+_UNKNOWN_TOKEN = "references an unknown token"
 
-# Probe target for the compile-check: provides season/seasonal_number/absolute_number/
-# letter/title so that the interpolation of any RegexDefinition is testable at load time.
+# Holds every target placeholder, so that any regex's interpolation is checked at load.
 _PROBE_TARGET = TargetSegment(
     season=2,
     seasonal_number=11,
@@ -88,199 +72,147 @@ _PROBE_TARGET = TargetSegment(
     title="probe",
 )
 
-
-def _operand_token_names(operand: Operand) -> tuple[str, ...]:
-    """Names of tokens directly referenced by an operand (str, TokenReference or inline)."""
-    if isinstance(operand, str):
-        return (operand,)
-    if isinstance(operand, TokenReference):
-        return (operand.name,)
-    if isinstance(operand, NotDefinition):
-        return _operand_token_names(operand.operand)
-    # AllDefinition | AnyDefinition
-    token_names: list[str] = []
-    for child in operand.operands:
-        token_names.extend(_operand_token_names(child))
-    return tuple(token_names)
+type _Citation = tuple[str, str | TokenReference]
+type _Edge = tuple[str, str]
 
 
-def _definition_token_names(token_definition: TokenDefinition) -> tuple[str, ...]:
-    """Names of tokens directly referenced by a definition (empty for a leaf)."""
-    if isinstance(token_definition, AllDefinition | AnyDefinition):
-        token_names: list[str] = []
-        for child in token_definition.operands:
-            token_names.extend(_operand_token_names(child))
-        return tuple(token_names)
-    if isinstance(token_definition, NotDefinition):
-        return _operand_token_names(token_definition.operand)
-    return ()
-
-
-def _operand_token_references(operand: Operand) -> tuple[TokenReference, ...]:
-    """All TokenReferences (with their overrides) reachable from an operand."""
-    if isinstance(operand, TokenReference):
-        return (operand,)
-    if isinstance(operand, NotDefinition):
-        return _operand_token_references(operand.operand)
-    if isinstance(operand, AllDefinition | AnyDefinition):
-        token_references: list[TokenReference] = []
-        for child in operand.operands:
-            token_references.extend(_operand_token_references(child))
-        return tuple(token_references)
-    return ()  # str (bare name) -> no TokenReference
-
-
-def _definition_token_references(token_definition: TokenDefinition) -> tuple[TokenReference, ...]:
-    """All TokenReferences of a composite definition (empty for a leaf)."""
-    if isinstance(token_definition, AllDefinition | AnyDefinition):
-        token_references: list[TokenReference] = []
-        for child in token_definition.operands:
-            token_references.extend(_operand_token_references(child))
-        return tuple(token_references)
-    if isinstance(token_definition, NotDefinition):
-        return _operand_token_references(token_definition.operand)
-    return ()
-
-
-def _check_overrides_only_on_coverage(config: MatcherConfig) -> None:
-    """A min_coverage/min_similarity override is only legal on a coverage token (EBNF §8.3).
-
-    Checked HERE (not at parsing) so as not to depend on the definition order: a forward
-    reference to a coverage token must be accepted.
-    """
-    token_references: list[TokenReference] = []
-    for token_definition in config.tokens.values():
-        token_references.extend(_definition_token_references(token_definition))
-    for rule in config.rules:
-        token_references.extend(_operand_token_references(rule.condition))
-    for token_reference in token_references:
-        if (
-            token_reference.min_coverage is not None or token_reference.min_similarity is not None
-        ) and not isinstance(config.tokens.get(token_reference.name), CoverageDefinition):
-            raise MatchingConfigError(
-                "min_coverage/min_similarity override forbidden on non-coverage token "
-                f"{token_reference.name!r}"
-            )
-
-
-def _check_references_exist(config: MatcherConfig) -> None:
-    """Every reference (in a composite token OR a rule) must exist."""
-    known = set(config.tokens)
-    for token_definition in config.tokens.values():
-        for token_name in _definition_token_names(token_definition):
-            if token_name not in known:
-                raise UnknownTokenError(f"reference to an unknown token: {token_name!r}")
-    for rule in config.rules:
-        for token_name in _operand_token_names(rule.condition):
-            if token_name not in known:
-                raise UnknownTokenError(
-                    f"rule {rule.name!r}: reference to an unknown token: {token_name!r}"
-                )
-
-
-def _check_vetoes(config: MatcherConfig) -> None:
-    """Every veto names a known token, at most once."""
-    seen: set[str] = set()
-    for name in config.vetoes:
-        if name not in config.tokens:
-            raise UnknownTokenError(f"veto references an unknown token: {name!r}")
-        if name in seen:
-            raise MatchingConfigError(f"duplicate veto: {name!r}")
-        seen.add(name)
-
-
-def _check_acyclic(config: MatcherConfig, *, max_depth: int) -> None:
-    """Detects a cycle in the token->token graph and NAMES it (cf. spec §8.4).
-
-    The ``len(stack) >= max_depth`` guard also bounds the recursion: a path deeper than
-    ``max_depth`` is already a depth violation, raised cleanly here (avoids a Python
-    ``RecursionError`` on a pathological chain).
-    """
-    graph = {
-        name: _definition_token_names(token_definition)
-        for name, token_definition in config.tokens.items()
+def cross_value_problems(
+    config: MatcherConfig, *, file_path: PurePath, max_depth: int = _DEFAULT_MAX_DEPTH
+) -> tuple[ConfigProblem, ...]:
+    """The problems of ``config`` no single value shows, once each value of its file holds:
+    references, vetoes, overrides, cycles, the depth when no cycle, regexes."""
+    token_citations = {
+        name: tuple(_citations(definition, key=f"tokens.{name}"))
+        for name, definition in config.tokens.items()
     }
-    visiting: set[str] = set()
-    done: set[str] = set()
-    stack: list[str] = []
+    citations = (
+        *(citation for cited in token_citations.values() for citation in cited),
+        *(
+            citation
+            for index, rule in enumerate(config.rules)
+            for citation in _citations(rule.condition, key=f"rules[{index}]")
+        ),
+    )
+    edges = {
+        name: [(_name_key(citation), _cited_name(citation)) for citation in cited]
+        for name, cited in token_citations.items()
+    }
+    problems = (
+        *_reference_problems(citations, tokens=config.tokens),
+        *_veto_problems(config.vetoes, tokens=config.tokens),
+        *_graph_problems(edges, max_depth=max_depth),
+        *_regex_problems(config.tokens),
+    )
+    return tuple(
+        ConfigProblem(file_path=file_path, key=key, message=message) for key, message in problems
+    )
 
-    def walk(name: str) -> None:
-        if name in done:
+
+def _citations(operand: Operand | TokenDefinition, *, key: str) -> Iterator[_Citation]:
+    """Each token name ``operand`` cites, at its key in the file."""
+    match operand:
+        case str() | TokenReference():
+            yield key, operand
+        case NotDefinition():
+            yield from _citations(operand.operand, key=f"{key}.not")
+        case AllDefinition() | AnyDefinition():
+            condition = "all" if isinstance(operand, AllDefinition) else "any"
+            for index, child in enumerate(operand.operands):
+                yield from _citations(child, key=f"{key}.{condition}[{index}]")
+        case _:
             return
-        if name in visiting:
-            cycle = stack[stack.index(name) :] + [name]
-            raise CycleError(f"reference cycle: {' -> '.join(cycle)}")
-        if len(stack) >= max_depth:
-            tail = " -> ".join([*stack[-3:], name])
-            raise DepthExceededError(f"resolution depth > {max_depth} (chain: … -> {tail})")
-        visiting.add(name)
-        stack.append(name)
-        for token_name in graph.get(
-            name, ()
-        ):  # token_name exists (checked by _check_references_exist)
-            walk(token_name)
-        stack.pop()
-        visiting.discard(name)
-        done.add(name)
-
-    for token_name in graph:
-        walk(token_name)
 
 
-def _max_resolution_depth(config: MatcherConfig) -> int:
-    """Maximum depth of a token (leaf = 1). Assumes the graph is acyclic."""
-    graph = {
-        name: _definition_token_names(token_definition)
-        for name, token_definition in config.tokens.items()
-    }
-    memo: dict[str, int] = {}
-
-    def depth(name: str) -> int:
-        if name in memo:
-            return memo[name]
-        token_names = graph.get(name, ())
-        token_depth = (
-            1 if not token_names else 1 + max(depth(token_name) for token_name in token_names)
-        )
-        memo[name] = token_depth
-        return token_depth
-
-    return max((depth(name) for name in graph), default=0)
+def _cited_name(citation: _Citation) -> str:
+    _, cited = citation
+    return cited if isinstance(cited, str) else cited.name
 
 
-def _check_regexes_compile(config: MatcherConfig) -> None:
-    """Each RegexDefinition interpolates (known placeholders), compiles under ``re`` (cf. §8.4)."""
-    for name, token_definition in config.tokens.items():
-        if not isinstance(token_definition, RegexDefinition):
+def _name_key(citation: _Citation) -> str:
+    key, cited = citation
+    return key if isinstance(cited, str) else f"{key}.token"
+
+
+def _reference_problems(
+    citations: Sequence[_Citation], *, tokens: Mapping[str, TokenDefinition]
+) -> Iterator[tuple[str, str]]:
+    for citation in citations:
+        key, cited = citation
+        definition = tokens.get(_cited_name(citation))
+        if definition is None:
+            yield _name_key(citation), _UNKNOWN_TOKEN
+        elif isinstance(cited, TokenReference) and not isinstance(definition, CoverageDefinition):
+            overrides = {"min_coverage": cited.min_coverage, "min_similarity": cited.min_similarity}
+            for field_name, value in overrides.items():
+                if value is not None:
+                    yield f"{key}.{field_name}", "can only override a coverage token"
+
+
+def _veto_problems(
+    vetoes: Sequence[str], *, tokens: Mapping[str, TokenDefinition]
+) -> Iterator[tuple[str, str]]:
+    first_indexes: dict[str, int] = {}
+    for index, name in enumerate(vetoes):
+        if name not in tokens:
+            yield f"vetoes[{index}]", _UNKNOWN_TOKEN
+        if (first_index := first_indexes.setdefault(name, index)) != index:
+            yield f"vetoes[{index}]", f"same token as vetoes[{first_index}]"
+
+
+def _graph_problems(
+    edges: Mapping[str, Sequence[_Edge]], *, max_depth: int
+) -> Iterator[tuple[str, str]]:
+    """Each citation closing a cycle, else the deepest token past ``max_depth``: the walk keeps
+    its own stack, so a long chain never reaches the interpreter's recursion limit."""
+    depths: dict[str, int] = {}
+    cycles: list[tuple[str, str]] = []
+    for root in edges:
+        if root in depths:
+            continue
+        path = {root: None}
+        pending = [iter(edges[root])]
+        while pending:
+            edge = next(pending[-1], None)
+            if edge is None:
+                name, _ = path.popitem()
+                pending.pop()
+                cited_depths = (depths.get(cited, 0) for _, cited in edges[name])
+                depths[name] = 1 + max(cited_depths, default=0)
+                continue
+            key, cited = edge
+            if cited in path:
+                names = list(path)
+                cycle = " -> ".join([*names[names.index(cited) :], cited])
+                cycles.append((key, f"closes the reference cycle {cycle}"))
+            elif cited in edges and cited not in depths:
+                path[cited] = None
+                pending.append(iter(edges[cited]))
+    yield from cycles
+    deepest = max(depths, key=depths.__getitem__, default=None)
+    if not cycles and deepest is not None and depths[deepest] > max_depth:
+        message = f"resolves through {depths[deepest]} levels of tokens, past the bound {max_depth}"
+        yield f"tokens.{deepest}", message
+
+
+def _regex_problems(tokens: Mapping[str, TokenDefinition]) -> Iterator[tuple[str, str]]:
+    """Each regex that does not interpolate, or does not compile under ``re`` as the engine's."""
+    for name, definition in tokens.items():
+        if not isinstance(definition, RegexDefinition):
             continue
         try:
-            pattern = interpolate(token_definition.pattern, target=_PROBE_TARGET)
-        except InterpolationError as exc:
-            raise MatchingConfigError(f"token {name!r}: invalid interpolation: {exc}") from exc
-        if "i" in token_definition.flags:
+            pattern = interpolate(definition.pattern, target=_PROBE_TARGET)
+        except InterpolationError:
+            yield (
+                f"tokens.{name}.regex",
+                "cites a placeholder neither a fragment nor a target field",
+            )
+            continue
+        if "i" in definition.flags:
             pattern = "(?i)" + pattern
         try:
             re.compile(pattern, re.ASCII)
-        except re.error as exc:
-            raise MatchingConfigError(f"token {name!r}: regex not compilable: {exc}") from exc
-
-
-def validate_config(config: MatcherConfig, *, max_depth: int = _DEFAULT_MAX_DEPTH) -> None:
-    """Validates the graph (references, DAG, depth) and the regexes (cf. spec §8.4).
-
-    Raises :class:`UnknownTokenError`, :class:`CycleError`, :class:`DepthExceededError`
-    or :class:`MatchingConfigError` (regex/interpolation). To be called after schema parsing.
-    """
-    _check_references_exist(config)
-    _check_vetoes(config)
-    _check_overrides_only_on_coverage(config)
-    _check_acyclic(config, max_depth=max_depth)
-    depth = _max_resolution_depth(config)
-    if depth > max_depth:
-        raise DepthExceededError(
-            f"resolution depth {depth} > max {max_depth} (default {_DEFAULT_MAX_DEPTH})"
-        )
-    _check_regexes_compile(config)
+        except re.error:
+            yield f"tokens.{name}.regex", "does not compile as a regex"
 
 
 @dataclass(kw_only=True, frozen=True)
