@@ -1,10 +1,12 @@
 import random
+from pathlib import PurePath
 
+from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
 from p2pwatch.domain.matching.engine import MatchDecision, MatchingEngine
 from p2pwatch.domain.matching.models import FileCandidate, TargetSegment
-from p2pwatch.domain.matching.validation import parse_matcher_config
 
 _MAX_FILENAME_LENGTH = 4096
+_MATCHER_FILE = PurePath("matcher.yml")
 
 # CONSTANT seed: every run is identical (zero flakiness, cf. spec §16).
 _SEED = 20260610
@@ -97,7 +99,7 @@ _FILENAMES = [
 
 def test_property_decision_invariant_under_target_reordering() -> None:
     # P1: reordering targets NEVER changes the decision (§8.5 determinism).
-    config = parse_matcher_config(_CANONICAL_RAW)
+    config = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     rng = random.Random(_SEED)
     base_targets = _targets()
     reference_engine = MatchingEngine(
@@ -121,7 +123,7 @@ def _max_tier(decisions: list[MatchDecision]) -> int | None:
 
 def test_property_higher_priority_rule_never_lowers_tier() -> None:
     # P2: prepending a higher-priority rule never lowers the strongest resulting tier (§16).
-    config_base = parse_matcher_config(_CANONICAL_RAW)
+    config_base = matcher_config_from_document(_CANONICAL_RAW, file_path=_MATCHER_FILE)
     raw_boosted = {
         "tokens": dict(_CANONICAL_RAW["tokens"]),  # type: ignore[call-overload]
         "vetoes": _CANONICAL_RAW["vetoes"],
@@ -135,7 +137,7 @@ def test_property_higher_priority_rule_never_lowers_tier() -> None:
             *_CANONICAL_RAW["rules"],  # type: ignore[misc]
         ],
     }
-    config_boosted = parse_matcher_config(raw_boosted)
+    config_boosted = matcher_config_from_document(raw_boosted, file_path=_MATCHER_FILE)
     targets = _targets()
     engine_base = MatchingEngine(
         config_base, targets=targets, max_filename_length=_MAX_FILENAME_LENGTH

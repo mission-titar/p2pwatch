@@ -6,6 +6,7 @@ from pathlib import PurePath
 
 import yaml
 
+from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
 from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
 from p2pwatch.application.ports.driven.catalog_file_reader import CatalogFileReader
 from p2pwatch.application.ports.driven.source_reader import SourceReader
@@ -21,7 +22,6 @@ from p2pwatch.domain.matching.config import MatcherConfig
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord, Explanation, MatchingEngine
 from p2pwatch.domain.matching.identifiers import TargetId
-from p2pwatch.domain.matching.validation import parse_matcher_config
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
@@ -91,14 +91,16 @@ episodes:
 )
 
 _MAX_FILENAME_LENGTH = 4096
-_MATCHER = parse_matcher_config(
+_MATCHER_FILE = PurePath("matcher.yml")
+_MATCHER = matcher_config_from_document(
     {
         "tokens": {"keroro": {"keyword": "keroro"}, "ita": {"regex": r"\bITA\b"}},
         "vetoes": ["ita"],
         "rules": [
             {"name": "catalog", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
         ],
-    }
+    },
+    file_path=_MATCHER_FILE,
 )
 
 
@@ -229,13 +231,14 @@ def test_the_explanation_judges_the_latest_observations_duration_and_bitrate() -
         "long": {"attr_between": "duration_seconds", "min": 1300.0, "max": 1300.0},
         "dense": {"attr_between": "bitrate_kbps", "min": 900.0, "max": 900.0},
     }
-    matcher_config = parse_matcher_config(
+    matcher_config = matcher_config_from_document(
         {
             "tokens": {"keroro": {"keyword": "keroro"}, **media_tokens},
             "rules": [
                 {"name": "media", "tier": "catalog", "scope": "unattributed", "all": ["long"]}
             ],
-        }
+        },
+        file_path=_MATCHER_FILE,
     )
     description = _describe(
         FakeCatalogFileReader(file_history=_HISTORY), matcher_config=matcher_config
