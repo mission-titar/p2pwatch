@@ -94,3 +94,44 @@ def test_a_file_that_is_not_yaml_is_one_problem_of_it(tmp_path: Path) -> None:
 
     assert (problem.file_path, problem.key) == (path, None)
     assert problem.message.startswith("invalid YAML: ")
+
+
+@pytest.mark.parametrize(
+    ("check", "text", "problems"),
+    [
+        (
+            FilesystemConfigChecker(_ENV).check_crawler_config,
+            (_DEPLOY / "crawler.yml").read_text(encoding="utf-8")
+            + "shutdown_deadline_seconds: 10.0\n",
+            [("shutdown_deadline_seconds", "written twice, at lines 4 and 54")],
+        ),
+        (
+            FilesystemConfigChecker(_ENV).check_targets,
+            "episodes: []\nepisodes: nope\n",
+            [
+                ("episodes", "written twice, at lines 1 and 2"),
+                ("episodes", "Input should be a valid list"),
+            ],
+        ),
+        (
+            FilesystemConfigChecker(_ENV).check_matcher_config,
+            "rules: []\nrules: {}\n",
+            [
+                ("rules", "written twice, at lines 1 and 2"),
+                ("rules", "Input should be a valid list"),
+            ],
+        ),
+    ],
+    ids=["crawler", "targets", "matcher"],
+)
+def test_a_key_written_twice_is_listed_before_the_problems_of_its_latest_value(
+    *, tmp_path: Path, check: ConfigCheck, text: str, problems: list[tuple[str, str]]
+) -> None:
+    path = tmp_path / "twice.yml"
+    path.write_text(text, encoding="utf-8")
+
+    found = check(PurePath(path))
+
+    assert [(problem.file_path, problem.key, problem.message) for problem in found] == [
+        (path, key, message) for key, message in problems
+    ]

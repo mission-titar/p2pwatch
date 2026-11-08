@@ -4,12 +4,13 @@ import pytest
 
 from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
 from p2pwatch.domain.broken_input_error import BrokenInputError
+from p2pwatch.domain.config_problem import ConfigProblem
 
 
 def test_load_yaml_reads_mapping(tmp_path: Path) -> None:
     path = tmp_path / "c.yaml"
     path.write_text("tokens:\n  keroro: { keyword: keroro }\n", encoding="utf-8")
-    document = load_yaml(path)
+    document = load_yaml(path).document
     assert document == {"tokens": {"keroro": {"keyword": "keroro"}}}
 
 
@@ -19,7 +20,7 @@ def test_load_yaml_parses_nested_episode_mapping(tmp_path: Path) -> None:
         "episodes:\n  - { season: 2, seasonal_number: 11, absolute_number: 62 }\n",
         encoding="utf-8",
     )
-    document = load_yaml(path)
+    document = load_yaml(path).document
     assert document["episodes"][0]["absolute_number"] == 62
 
 
@@ -87,7 +88,7 @@ def test_a_text_beyond_ascii_that_is_valid_utf8_loads_unchanged(tmp_path: Path) 
     path.write_text(
         'title: "\\U0001F600 \N{REPLACEMENT CHARACTER} \N{GRINNING FACE} \xe9"\n', encoding="utf-8"
     )
-    assert load_yaml(path) == {
+    assert load_yaml(path).document == {
         "title": "\N{GRINNING FACE} \N{REPLACEMENT CHARACTER} \N{GRINNING FACE} \xe9"
     }
 
@@ -113,4 +114,89 @@ def test_an_alias_of_a_value_holding_it_is_a_broken_input_naming_its_key_path(
 def test_an_alias_reused_beside_its_anchor_loads(tmp_path: Path) -> None:
     path = tmp_path / "shared.yaml"
     path.write_text("a: &k [keroro]\nb: { c: *k, d: *k }\n", encoding="utf-8")
-    assert load_yaml(path) == {"a": ["keroro"], "b": {"c": ["keroro"], "d": ["keroro"]}}
+    assert load_yaml(path).document == {"a": ["keroro"], "b": {"c": ["keroro"], "d": ["keroro"]}}
+
+
+def test_a_file_with_each_key_written_once_has_no_problem(tmp_path: Path) -> None:
+    path = tmp_path / "once.yaml"
+    path.write_text("a: 1\nb: { a: 2 }\nc: [{ a: 3 }]\n", encoding="utf-8")
+    assert load_yaml(path).problems == ()
+
+
+def test_each_key_written_twice_is_a_problem_in_the_order_of_its_repeats(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "twice.yaml"
+    path.write_text(
+        "search:\n"
+        "  keywords: [keroro]\n"
+        "  keywords: [titar]\n"
+        "rules:\n"
+        "  - { name: a, name: b }\n"
+        "search: { keywords: [giroro] }\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_yaml(path)
+
+    assert loaded.problems == (
+        ConfigProblem(
+            file_path=path, key="search.keywords", message="written twice, at lines 2 and 3"
+        ),
+        ConfigProblem(file_path=path, key="rules[0].name", message="written twice on line 5"),
+        ConfigProblem(file_path=path, key="search", message="written twice, at lines 1 and 6"),
+    )
+    assert loaded.document == {"search": {"keywords": ["giroro"]}, "rules": [{"name": "b"}]}
+
+
+def test_a_key_written_three_times_is_a_problem_per_repeat_naming_the_first_line(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "thrice.yaml"
+    path.write_text("a: 1\na: 2\na: 3\n", encoding="utf-8")
+    assert [problem.message for problem in load_yaml(path).problems] == [
+        "written twice, at lines 1 and 2",
+        "written twice, at lines 1 and 3",
+    ]
+
+
+def test_two_spellings_of_one_key_are_a_key_written_twice(tmp_path: Path) -> None:
+    path = tmp_path / "spellings.yaml"
+    path.write_text('episodes:\n  1: a\n  0x1: b\n"c": d\nc: e\n', encoding="utf-8")
+    assert [problem.key for problem in load_yaml(path).problems] == ["episodes.1", "c"]
+
+
+def test_a_key_written_twice_under_an_anchor_is_one_problem_at_the_anchor(tmp_path: Path) -> None:
+    path = tmp_path / "anchor.yaml"
+    path.write_text("a: &k { b: 1, b: 2 }\nc: *k\nd: { e: *k }\n", encoding="utf-8")
+    assert load_yaml(path).problems == (
+        ConfigProblem(file_path=path, key="a.b", message="written twice on line 1"),
+    )
+
+
+def test_a_key_a_merge_key_brings_overridden_is_no_key_written_twice(tmp_path: Path) -> None:
+    path = tmp_path / "merge.yaml"
+    path.write_text("base: &base { a: 1, b: 2 }\nmerged:\n  <<: *base\n  a: 3\n", encoding="utf-8")
+
+    loaded = load_yaml(path)
+
+    assert loaded.problems == ()
+    assert loaded.document["merged"] == {"a": 3, "b": 2}
+
+
+def test_a_key_written_twice_in_a_mapping_a_merge_key_brings_is_a_problem(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "merge.yaml"
+    path.write_text("merged:\n  <<: { a: 1, a: 2 }\n  b: 3\n", encoding="utf-8")
+    assert load_yaml(path).problems == (
+        ConfigProblem(file_path=path, key="merged.a", message="written twice on line 2"),
+    )
+
+
+def test_a_key_that_is_a_sequence_is_a_broken_input(tmp_path: Path) -> None:
+    path = tmp_path / "sequence_key.yaml"
+    path.write_text("? [a]\n: b\n", encoding="utf-8")
+    with pytest.raises(BrokenInputError) as raised:
+        load_yaml(path)
+    assert str(raised.value).startswith(f"{path}: invalid YAML: while constructing a mapping ")

@@ -2,13 +2,13 @@
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config_from_document
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
 from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
-from p2pwatch.adapters.driven.config.yaml_loader import load_yaml
+from p2pwatch.adapters.driven.config.yaml_loader import LoadedDocument, load_yaml
 from p2pwatch.domain.broken_input_error import BrokenInputError
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
@@ -49,25 +49,45 @@ def load_config(
 
 def read_crawler_config(config_path: Path, *, env: Mapping[str, str]) -> CrawlerConfig:
     """``crawler.yml`` parsed, its ``${NAME}`` resolved from ``env``; ``InvalidConfigError`` with
-    every unset variable and the parse's problems."""
-    interpolated = interpolate_document(_document_of(config_path), env=env, file_path=config_path)
-    try:
-        crawler_config = crawler_config_from_document(interpolated.document, file_path=config_path)
-    except InvalidConfigError as error:
-        raise InvalidConfigError((*interpolated.problems, *error.problems)) from error
-    if interpolated.problems:
-        raise InvalidConfigError(interpolated.problems)
-    return crawler_config
+    every key written twice, every unset variable and the parse's problems."""
+    loaded = _document_of(config_path)
+    interpolated = interpolate_document(loaded.document, env=env, file_path=config_path)
+    return _parsed(
+        (*loaded.problems, *interpolated.problems),
+        parse=lambda: crawler_config_from_document(interpolated.document, file_path=config_path),
+    )
 
 
 def read_targets(targets_path: Path) -> tuple[TargetSegment, ...]:
-    """``targets.yml`` parsed; ``InvalidConfigError`` with its problem."""
-    return targets_from_document(_document_of(targets_path), file_path=targets_path)
+    """``targets.yml`` parsed; ``InvalidConfigError`` with every key written twice and the parse's
+    problems."""
+    loaded = _document_of(targets_path)
+    return _parsed(
+        loaded.problems,
+        parse=lambda: targets_from_document(loaded.document, file_path=targets_path),
+    )
 
 
 def read_matcher_config(matcher_path: Path) -> MatcherConfig:
-    """``matcher.yml`` parsed; ``InvalidConfigError`` with its problem."""
-    return matcher_config_from_document(_document_of(matcher_path), file_path=matcher_path)
+    """``matcher.yml`` parsed; ``InvalidConfigError`` with every key written twice and the parse's
+    problems."""
+    loaded = _document_of(matcher_path)
+    return _parsed(
+        loaded.problems,
+        parse=lambda: matcher_config_from_document(loaded.document, file_path=matcher_path),
+    )
+
+
+def _parsed[T](problems: tuple[ConfigProblem, ...], *, parse: FileRead[T]) -> T:
+    """``parse``'s value; ``InvalidConfigError`` with ``problems`` then the parse's, when either
+    holds one."""
+    try:
+        value = parse()
+    except InvalidConfigError as error:
+        raise InvalidConfigError((*problems, *error.problems)) from error
+    if problems:
+        raise InvalidConfigError(problems)
+    return value
 
 
 def _read_into[T](problems: list[ConfigProblem], *, read: FileRead[T]) -> T | None:
@@ -79,7 +99,7 @@ def _read_into[T](problems: list[ConfigProblem], *, read: FileRead[T]) -> T | No
         return None
 
 
-def _document_of(file_path: Path) -> dict[str, Any]:
+def _document_of(file_path: Path) -> LoadedDocument:
     """The YAML document of ``file_path``; ``InvalidConfigError`` when it cannot be read."""
     try:
         return load_yaml(file_path)
