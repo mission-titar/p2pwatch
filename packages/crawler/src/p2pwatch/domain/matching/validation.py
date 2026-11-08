@@ -19,12 +19,7 @@ from p2pwatch.domain.matching.config import (
     TokenReference,
 )
 from p2pwatch.domain.matching.identifiers import TargetId
-from p2pwatch.domain.matching.interpolation import (
-    PLACEHOLDER,
-    TARGET_PLACEHOLDERS,
-    InterpolationError,
-    interpolate,
-)
+from p2pwatch.domain.matching.interpolation import PLACEHOLDER, TARGET_PLACEHOLDERS, interpolate
 from p2pwatch.domain.matching.models import TargetSegment
 
 
@@ -61,7 +56,6 @@ def expand_fragments(pattern: str, *, fragments: Mapping[str, str]) -> str:
 
 
 _DEFAULT_MAX_DEPTH = 32
-_UNKNOWN_TOKEN = "references an unknown token"
 
 # Holds every target placeholder, so that any regex's interpolation is checked at load.
 _PROBE_TARGET = TargetSegment(
@@ -77,10 +71,16 @@ type _Edge = tuple[str, str]
 
 
 def cross_value_problems(
-    config: MatcherConfig, *, file_path: PurePath, max_depth: int = _DEFAULT_MAX_DEPTH
+    config: MatcherConfig,
+    *,
+    fragments: Mapping[str, str],
+    file_path: PurePath,
+    max_depth: int = _DEFAULT_MAX_DEPTH,
 ) -> tuple[ConfigProblem, ...]:
-    """The problems of ``config`` no single value shows, once each value of its file holds:
-    references, vetoes, overrides, cycles, the depth when no cycle, regexes."""
+    """The problems of ``config`` and the ``fragments`` its regexes hold, which no single value
+    shows: fragments, references, vetoes, overrides, cycles, the depth when no cycle, then the
+    regexes, which a fragment problem leaves unchecked since they hold the fragments."""
+    problems_of_fragments = fragment_problems(fragments, file_path=file_path)
     token_citations = {
         name: tuple(_citations(definition, key=f"tokens.{name}"))
         for name, definition in config.tokens.items()
@@ -101,9 +101,9 @@ def cross_value_problems(
         *_reference_problems(citations, tokens=config.tokens),
         *_veto_problems(config.vetoes, tokens=config.tokens),
         *_graph_problems(edges, max_depth=max_depth),
-        *_regex_problems(config.tokens),
+        *(() if problems_of_fragments else _regex_problems(config.tokens)),
     )
-    return tuple(
+    return problems_of_fragments + tuple(
         ConfigProblem(file_path=file_path, key=key, message=message) for key, message in problems
     )
 
@@ -140,7 +140,7 @@ def _reference_problems(
         key, cited = citation
         definition = tokens.get(_cited_name(citation))
         if definition is None:
-            yield _name_key(citation), _UNKNOWN_TOKEN
+            yield _name_key(citation), _unknown_token(_cited_name(citation))
         elif isinstance(cited, TokenReference) and not isinstance(definition, CoverageDefinition):
             overrides = {"min_coverage": cited.min_coverage, "min_similarity": cited.min_similarity}
             for field_name, value in overrides.items():
@@ -154,7 +154,7 @@ def _veto_problems(
     first_indexes: dict[str, int] = {}
     for index, name in enumerate(vetoes):
         if name not in tokens:
-            yield f"vetoes[{index}]", _UNKNOWN_TOKEN
+            yield f"vetoes[{index}]", _unknown_token(name)
         if (first_index := first_indexes.setdefault(name, index)) != index:
             yield f"vetoes[{index}]", f"same token as vetoes[{first_index}]"
 
@@ -194,25 +194,31 @@ def _graph_problems(
         yield f"tokens.{deepest}", message
 
 
+def _unknown_token(name: str) -> str:
+    return f"references the unknown token {name!r}"
+
+
 def _regex_problems(tokens: Mapping[str, TokenDefinition]) -> Iterator[tuple[str, str]]:
-    """Each regex that does not interpolate, or does not compile under ``re`` as the engine's."""
+    """Each placeholder a regex cites that no target fills, else each regex that does not
+    compile under ``re`` as the engine's."""
     for name, definition in tokens.items():
         if not isinstance(definition, RegexDefinition):
             continue
-        try:
-            pattern = interpolate(definition.pattern, target=_PROBE_TARGET)
-        except InterpolationError:
-            yield (
-                f"tokens.{name}.regex",
-                "cites a placeholder neither a fragment nor a target field",
-            )
+        cited = dict.fromkeys(PLACEHOLDER.findall(definition.pattern))
+        if unknown := [
+            placeholder for placeholder in cited if placeholder not in TARGET_PLACEHOLDERS
+        ]:
+            for placeholder in unknown:
+                yield (
+                    f"tokens.{name}.regex",
+                    f"cites the placeholder '{{{placeholder}}}', neither a fragment nor a target "
+                    "field",
+                )
             continue
-        if "i" in definition.flags:
-            pattern = "(?i)" + pattern
         try:
-            re.compile(pattern, re.ASCII)
-        except re.error:
-            yield f"tokens.{name}.regex", "does not compile as a regex"
+            re.compile(interpolate(definition.pattern, target=_PROBE_TARGET), re.ASCII)
+        except re.error as error:
+            yield f"tokens.{name}.regex", f"does not compile as a regex: {error}"
 
 
 @dataclass(kw_only=True, frozen=True)

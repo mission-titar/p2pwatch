@@ -45,7 +45,6 @@ from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.validation import (
     cross_value_problems,
     expand_fragments,
-    fragment_problems,
 )
 
 _FILE_NAME = "matcher.yml"
@@ -300,8 +299,6 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
         schema = MatcherConfigSchema.model_validate(document)
     except ValidationError as error:
         raise InvalidConfigError(validation_problems(error, file_path=file_path)) from None
-    if problems := fragment_problems(schema.fragments, file_path=file_path):
-        raise InvalidConfigError(problems)
     matcher_config = MatcherConfig(
         tokens={
             name: _token_definition(token, fragments=schema.fragments)
@@ -310,7 +307,9 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
         rules=tuple(_rule(rule) for rule in schema.rules),
         vetoes=tuple(schema.vetoes),
     )
-    if rule_problems := cross_value_problems(matcher_config, file_path=file_path):
+    if rule_problems := cross_value_problems(
+        matcher_config, fragments=schema.fragments, file_path=file_path
+    ):
         raise InvalidConfigError(rule_problems)
     return matcher_config
 

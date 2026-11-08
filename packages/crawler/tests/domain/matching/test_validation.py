@@ -31,10 +31,16 @@ _FILE = PurePath("/srv/matcher.yml")
 _KERORO = KeywordDefinition(phrase="keroro")
 _COVERAGE = CoverageDefinition(reference="title", min_coverage=0.5)
 _KERORO_ONLY = AllDefinition(operands=("keroro",))
-_UNKNOWN = "references an unknown token"
 _OVERRIDE = "can only override a coverage token"
-_PLACEHOLDER = "cites a placeholder neither a fragment nor a target field"
-_NOT_COMPILABLE = "does not compile as a regex"
+_UNBALANCED = "does not compile as a regex: missing ), unterminated subpattern at position 0"
+
+
+def _unknown(name: str) -> str:
+    return f"references the unknown token {name!r}"
+
+
+def _placeholder(name: str) -> str:
+    return f"cites the placeholder '{{{name}}}', neither a fragment nor a target field"
 
 
 def _rule(condition: Condition) -> Rule:
@@ -49,12 +55,18 @@ def _chain(length: int) -> dict[str, TokenDefinition]:
     return chain
 
 
-def _problems(config: MatcherConfig, *, max_depth: int | None = None) -> list[tuple[str, str]]:
-    """The key and message of each problem of ``config``, all of them in ``_FILE``."""
+def _problems(
+    config: MatcherConfig, *, fragments: dict[str, str] | None = None, max_depth: int | None = None
+) -> list[tuple[str, str]]:
+    """The key and message of each problem of ``config`` and its ``fragments``, all of them in
+    ``_FILE``."""
+    fragments = fragments or {}
     if max_depth is None:
-        problems = cross_value_problems(config, file_path=_FILE)
+        problems = cross_value_problems(config, fragments=fragments, file_path=_FILE)
     else:
-        problems = cross_value_problems(config, file_path=_FILE, max_depth=max_depth)
+        problems = cross_value_problems(
+            config, fragments=fragments, file_path=_FILE, max_depth=max_depth
+        )
     assert {problem.file_path for problem in problems} <= {_FILE}
     return [(str(problem.key), problem.message) for problem in problems]
 
@@ -120,7 +132,7 @@ def test_every_duplicate_target_names_its_first_holder_letters_upper_cased() -> 
 
 def test_a_regex_citing_the_removed_date_alt_placeholder_is_a_problem() -> None:
     config = MatcherConfig(tokens={"air": RegexDefinition(pattern="{date_alt}")})
-    assert _problems(config) == [("tokens.air.regex", _PLACEHOLDER)]
+    assert _problems(config) == [("tokens.air.regex", _placeholder("date_alt"))]
 
 
 def test_token_reference_with_coverage_token_no_override_ok() -> None:
@@ -133,14 +145,14 @@ def test_a_reference_to_an_unknown_token_in_a_token_is_a_problem_at_its_place() 
         "kt": AnyDefinition(operands=("keroro", "ghost")),
         "keroro": _KERORO,
     }
-    assert _problems(MatcherConfig(tokens=tokens)) == [("tokens.kt.any[1]", _UNKNOWN)]
+    assert _problems(MatcherConfig(tokens=tokens)) == [("tokens.kt.any[1]", _unknown("ghost"))]
 
 
 def test_a_reference_to_an_unknown_token_in_a_rule_is_a_problem_at_its_place() -> None:
     inline = AnyDefinition(operands=(TokenReference(name="ghost", min_coverage=0.5),))
     rule = _rule(AllDefinition(operands=("keroro", inline)))
     config = MatcherConfig(tokens={"keroro": _KERORO}, rules=(_rule(_KERORO_ONLY), rule))
-    assert _problems(config) == [("rules[1].all[1].any[0].token", _UNKNOWN)]
+    assert _problems(config) == [("rules[1].all[1].any[0].token", _unknown("ghost"))]
 
 
 def test_a_direct_cycle_is_a_problem_naming_it() -> None:
@@ -186,24 +198,28 @@ def test_acyclic_composite_graph_validates() -> None:
     assert _problems(MatcherConfig(tokens=tokens, rules=(rule,))) == []
 
 
-def test_a_regex_that_does_not_compile_is_a_problem() -> None:
-    config = MatcherConfig(tokens={"bad": RegexDefinition(pattern="(unbalanced")})
-    assert _problems(config) == [("tokens.bad.regex", _NOT_COMPILABLE)]
+def test_a_regex_that_does_not_compile_is_a_problem_giving_re_s_reason() -> None:
+    config = MatcherConfig(tokens={"bad": RegexDefinition(pattern="[a")})
+    assert _problems(config) == [
+        (
+            "tokens.bad.regex",
+            "does not compile as a regex: unterminated character set at position 0",
+        )
+    ]
 
 
-def test_a_regex_citing_an_unknown_placeholder_is_a_problem() -> None:
-    config = MatcherConfig(tokens={"bad": RegexDefinition(pattern="n {bogus}")})
-    assert _problems(config) == [("tokens.bad.regex", _PLACEHOLDER)]
+def test_each_unknown_placeholder_of_a_regex_is_a_problem_naming_it() -> None:
+    pattern = "n {bogus}{letter}{other}{bogus}"
+    config = MatcherConfig(tokens={"bad": RegexDefinition(pattern=pattern)})
+    assert _problems(config) == [
+        ("tokens.bad.regex", _placeholder("bogus")),
+        ("tokens.bad.regex", _placeholder("other")),
+    ]
 
 
 def test_regex_with_known_placeholders_validates() -> None:
     pattern = "n[°o]?\\s*0*{absolute_number}\\s*{letter}"
     assert _problems(MatcherConfig(tokens={"seg": RegexDefinition(pattern=pattern)})) == []
-
-
-def test_a_regex_without_the_flag_i_validates() -> None:
-    video = RegexDefinition(pattern="\\.(avi|mkv)$", flags="")
-    assert _problems(MatcherConfig(tokens={"video": video})) == []
 
 
 def test_depth_within_bound_validates() -> None:
@@ -254,14 +270,27 @@ def test_every_problem_across_values_is_listed() -> None:
     }
     config = MatcherConfig(tokens=tokens, rules=(rule,), vetoes=("kw", "spectre", "kw"))
     assert _problems(config) == [
-        ("tokens.kt.not", _UNKNOWN),
-        ("rules[0].all[0]", _UNKNOWN),
+        ("tokens.kt.not", _unknown("phantom")),
+        ("rules[0].all[0]", _unknown("ghost")),
         ("rules[0].all[1].min_similarity", _OVERRIDE),
-        ("vetoes[1]", _UNKNOWN),
+        ("vetoes[1]", _unknown("spectre")),
         ("vetoes[2]", "same token as vetoes[0]"),
         ("tokens.a.any[0]", "closes the reference cycle a -> a"),
-        ("tokens.bad.regex", _NOT_COMPILABLE),
-        ("tokens.air.regex", _PLACEHOLDER),
+        ("tokens.bad.regex", _UNBALANCED),
+        ("tokens.air.regex", _placeholder("date_alt")),
+    ]
+
+
+def test_a_fragment_problem_comes_first_and_lets_every_check_run_but_the_regexes() -> None:
+    tokens: dict[str, TokenDefinition] = {
+        "t": AnyDefinition(operands=("ghost",)),
+        "bad": RegexDefinition(pattern="(unbalanced"),
+    }
+    config = MatcherConfig(tokens=tokens, vetoes=("t", "t"))
+    assert _problems(config, fragments={"outer": "a{inner}", "inner": "b"}) == [
+        ("fragments.outer", "references fragment 'inner'"),
+        ("tokens.t.any[0]", _unknown("ghost")),
+        ("vetoes[1]", "same token as vetoes[0]"),
     ]
 
 
@@ -318,7 +347,7 @@ def test_every_fragment_citing_a_fragment_is_a_problem() -> None:
 
 def test_a_veto_naming_an_unknown_token_is_a_problem() -> None:
     config = MatcherConfig(tokens={"a": _KERORO}, vetoes=("a", "ghost"))
-    assert _problems(config) == [("vetoes[1]", _UNKNOWN)]
+    assert _problems(config) == [("vetoes[1]", _unknown("ghost"))]
 
 
 def test_each_duplicate_veto_names_its_first_place() -> None:
