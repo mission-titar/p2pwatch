@@ -202,7 +202,7 @@ on 2026-11-08.
 | 14 | nothing guards strictness on a new schema | fixed, block 140: `StrictSchema` |
 | 15 | `TargetSegment.status` a `str` beside `TargetStatus` | fixed, block 140 (a class 1 fix with it, above) |
 | 16 | schema names in three patterns | fixed, block 140: every one ends in `Schema` |
-| 17 | the compose smoke test's flake, outside the lot | a `BACKLOG.md` entry, agreed by the operator on 2026-11-08: a deadline sized for an `ed2k` restart and a hash, `ed2k`'s state logged on failure |
+| 17 | the compose smoke test's flake, outside the lot | fixed after the lot, tier Direct: `_wait_new_shared_hash` bounded by a 180 s deadline, its failure naming the last reading, `ed2k`'s state and health, and its logs |
 | marks | the spec's departures not marked | fixed, block 142: every mark of the review's table, D7's as the operator decided, appendix B row 1's for `targets.yml` |
 
 Each new behaviour's test, watched failing (or proven by a mutation where it passed at once):

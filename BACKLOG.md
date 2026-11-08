@@ -50,9 +50,6 @@ An agent adds an entry only after the operator has agreed to it.
 - **A generic way to write the tests' stubs and spies**: one typed mechanism for all of them, where a call no stub
   expects fails the test, in place of a class per port. Candidates measured in `agents/reference/2026-10-25-stub-and-spy-libraries.md`.
 
-- **The compose smoke test's wait for a new shared hash bounded by time**: a deadline sized for an `ed2k` restart and
-  a hash rather than a count of polls, logging `ed2k`'s state on failure (one amd64 flake). `_wait_new_shared_hash` in `packages/crawler/tests/integration/test_compose_smoke.py`.
-
 ## Postponed
 
 - **Adopt ty**, first as the gate's type checker in mypy's place, then as Serena's language server, once it reaches
