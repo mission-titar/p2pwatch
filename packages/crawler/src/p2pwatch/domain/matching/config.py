@@ -12,6 +12,9 @@ from p2pwatch.domain.matching.decision_tier import DecisionTier
 
 # --- LEAF token definitions (4 types, cf. spec §8.2) ---
 
+DEFAULT_REGEX_FLAGS = "i"
+DEFAULT_MIN_SIMILARITY = 0.85
+
 
 @dataclass(kw_only=True, frozen=True)
 class KeywordDefinition:
@@ -25,7 +28,7 @@ class RegexDefinition:
     """``{ regex: "...", flags: "i" }``: fragments expanded at parse, interpolated per target."""
 
     pattern: str
-    flags: str = "i"
+    flags: str = DEFAULT_REGEX_FLAGS
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -39,7 +42,7 @@ class CoverageDefinition:
 
     reference: str
     min_coverage: float
-    min_similarity: float = 0.85
+    min_similarity: float = DEFAULT_MIN_SIMILARITY
 
 
 @dataclass(kw_only=True, frozen=True)

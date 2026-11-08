@@ -85,7 +85,7 @@ def test_validate_config_lists_an_absent_targets_beside_a_wrong_matcher(
 
     [targets_line, matcher_line] = capsys.readouterr().err.splitlines()
     assert targets_line == f"Invalid config: {targets}: No such file or directory"
-    assert matcher_line.startswith(f"Invalid config: {matcher}: 'rules' section: ")
+    assert matcher_line == f"Invalid config: {matcher}: rules: Input should be a valid list"
 
 
 def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(

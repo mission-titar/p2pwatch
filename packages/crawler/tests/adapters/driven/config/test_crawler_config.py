@@ -167,7 +167,7 @@ def test_every_unset_variable_is_listed_beside_the_parses_problem(tmp_path: Path
     [
         ("crawler.yml", "search: [unclosed\n", None, "invalid YAML: "),  # a broken file
         ("targets.yml", "episodes: nope\n", "episodes", "Input should be a valid list"),
-        ("matcher.yml", "tokens: {}\nrules: {}\n", None, "'rules' section: list expected"),
+        ("matcher.yml", "tokens: {}\nrules: {}\n", "rules", "Input should be a valid list"),
     ],
 )
 def test_an_invalid_file_is_an_invalid_config(
@@ -210,7 +210,5 @@ def test_every_wrong_file_is_listed_in_the_crawls_order(tmp_path: Path) -> None:
             message="List should have at least 1 item after validation, not 0",
         ),
         ConfigProblem(file_path=targets_path, key=None, message="No such file or directory"),
-        ConfigProblem(
-            file_path=matcher_path, key=None, message="'rules' section: list expected, got dict"
-        ),
+        ConfigProblem(file_path=matcher_path, key="rules", message="Input should be a valid list"),
     )
