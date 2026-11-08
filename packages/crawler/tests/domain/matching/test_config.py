@@ -3,7 +3,6 @@ import dataclasses
 import pytest
 
 from p2pwatch.domain.matching.config import (
-    SCOPES,
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
@@ -96,10 +95,6 @@ def test_matcher_config_is_frozen() -> None:
     config = MatcherConfig()
     with pytest.raises(dataclasses.FrozenInstanceError):
         config.rules = ()  # type: ignore[misc]
-
-
-def test_scopes_is_the_closed_segment_episode_unattributed_set() -> None:
-    assert frozenset({"segment", "episode", "unattributed"}) == SCOPES
 
 
 def test_matcher_config_has_no_vetoes_by_default() -> None:

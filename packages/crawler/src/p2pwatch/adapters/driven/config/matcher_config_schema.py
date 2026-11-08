@@ -18,6 +18,7 @@ from pydantic_core import PydanticCustomError
 
 from p2pwatch.adapters.driven.config.validation_problems import (
     TAG_MARK,
+    refuse_control_character,
     renamed_key,
     validation_problems,
 )
@@ -31,14 +32,16 @@ from p2pwatch.domain.matching.config import (
     KeywordDefinition,
     MatcherConfig,
     RegexDefinition,
+    Rule,
+    Scope,
     TokenDefinition,
 )
+from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.validation import (
     MatchingConfigError,
     expand_fragments,
     fragment_problems,
     parse_condition,
-    parse_rule,
     validate_config,
 )
 
@@ -141,6 +144,77 @@ def _refuse_the_shape(token: dict[Any, Any]) -> NoReturn:
     )
 
 
+_ALL = f"{TAG_MARK}all"
+_ANY = f"{TAG_MARK}any"
+_NOT = f"{TAG_MARK}not"
+_NOT_ONE_CONDITION = f"{TAG_MARK}not_one_condition"
+
+
+def _condition_shape(mapping: dict[Any, Any]) -> str | None:
+    """The tag of ``mapping``'s condition key, ``_NOT_ONE_CONDITION`` for two, ``None`` for none."""
+    present = [key for key in _CONDITION_KEYS if key in mapping]
+    if not present:
+        return None
+    return f"{TAG_MARK}{present[0]}" if len(present) == 1 else _NOT_ONE_CONDITION
+
+
+def _rule_shape(rule: object) -> str | None:
+    if not isinstance(rule, dict):
+        return None
+    return _condition_shape(rule) or _NOT_ONE_CONDITION
+
+
+def _refuse_the_conditions(mapping: dict[Any, Any]) -> NoReturn:
+    raise PydanticCustomError(
+        "condition_shape",
+        "exactly one condition (all/any/not) expected, got {keys}",
+        {"keys": [key for key in _CONDITION_KEYS if key in mapping]},
+    )
+
+
+# Any, since its validator refuses every value: pydantic has no schema for Never.
+_NotOneCondition = Annotated[Any, BeforeValidator(_refuse_the_conditions), Tag(_NOT_ONE_CONDITION)]
+
+
+class _RuleKeys(BaseModel, extra="forbid", strict=True):
+    name: Annotated[str, Field(min_length=1), AfterValidator(refuse_control_character)]
+    # DecisionTier's values, which its own tests compare: strict, pydantic refuses a str for it.
+    tier: Literal["catalog", "notify", "download"]
+    scope: Scope
+
+
+# Their condition read by the domain's parse until it is modelled.
+class _AllRule(_RuleKeys):
+    """A rule whose condition is ``all``."""
+
+    operands: Any = Field(alias="all")
+
+
+class _AnyRule(_RuleKeys):
+    """A rule whose condition is ``any``."""
+
+    operands: Any = Field(alias="any")
+
+
+class _NotRule(_RuleKeys):
+    """A rule whose condition is ``not``."""
+
+    operand: Any = Field(alias="not")
+
+
+type _Rule = Annotated[
+    Annotated[_AllRule, Tag(_ALL)]
+    | Annotated[_AnyRule, Tag(_ANY)]
+    | Annotated[_NotRule, Tag(_NOT)]
+    | _NotOneCondition,
+    Discriminator(
+        _rule_shape,
+        custom_error_type="rule_type",
+        custom_error_message="Input should be a valid dictionary",
+    ),
+]
+
+
 # Typed Any, since mypy refuses a variable schema in a type.
 _TOKEN_SCHEMA: Any = Annotated[
     Annotated[_KeywordSchema, Tag(f"{TAG_MARK}keyword")]
@@ -171,8 +245,7 @@ class _MatcherKeys(BaseModel, extra="forbid", strict=True):
     fragments: dict[str, _Pattern] = Field(default_factory=dict)
     # Its schema in MatcherConfigSchema, whose coverage token adds the refusing keys.
     tokens: dict[str, _TokenKeys] = Field(default_factory=dict)
-    # Read by the domain's parse until they are modelled.
-    rules: list[Any] = Field(default_factory=list)
+    rules: list[_Rule] = Field(default_factory=list)
     vetoes: list[str] = Field(default_factory=list)
 
 
@@ -198,7 +271,7 @@ def matcher_config_from_document(document: dict[str, Any], *, file_path: PurePat
                 name: _token_definition(token, fragments=schema.fragments)
                 for name, token in schema.tokens.items()
             },
-            rules=tuple(parse_rule(rule) for rule in schema.rules),
+            rules=tuple(_rule(rule) for rule in schema.rules),
             vetoes=tuple(schema.vetoes),
         )
         validate_config(matcher_config)
@@ -227,3 +300,8 @@ def _token_definition(token: _TokenKeys, *, fragments: dict[str, str]) -> TokenD
             )
         case _:
             return parse_condition(token)
+
+
+def _rule(rule: _Rule) -> Rule:
+    condition = parse_condition(rule.model_dump(by_alias=True, exclude={"name", "tier", "scope"}))
+    return Rule(name=rule.name, tier=DecisionTier(rule.tier), scope=rule.scope, condition=condition)

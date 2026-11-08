@@ -30,7 +30,6 @@ from p2pwatch.domain.matching.validation import (
     fragment_problems,
     has_control_character,
     parse_condition,
-    parse_rule,
     validate_config,
 )
 
@@ -61,53 +60,16 @@ def test_parse_not_token_definition() -> None:
     assert parse_condition({"not": "keroro"}) == NotDefinition(operand="keroro")
 
 
-def test_parse_rule_with_inline_token_reference_and_condition() -> None:
-    rule = parse_rule(
-        {
-            "name": "numero_titre",
-            "tier": "notify",
-            "scope": "unattributed",
-            "all": ["seg", {"token": "title_hit", "min_coverage": 0.5}],
-        }
-    )
-    assert rule.name == "numero_titre"
-    assert rule.tier is DecisionTier.NOTIFY
-    assert rule.condition == AllDefinition(
+def test_parse_condition_with_inline_token_reference() -> None:
+    condition = parse_condition({"all": ["seg", {"token": "title_hit", "min_coverage": 0.5}]})
+    assert condition == AllDefinition(
         operands=("seg", TokenReference(name="title_hit", min_coverage=0.5))
     )
 
 
-def test_parse_rule_with_nested_inline_condition() -> None:
-    rule = parse_rule(
-        {
-            "name": "r",
-            "tier": "catalog",
-            "scope": "unattributed",
-            "not": {"any": ["keroro", "titar"]},
-        }
-    )
-    assert rule.condition == NotDefinition(operand=AnyDefinition(operands=("keroro", "titar")))
-
-
-def test_unknown_tier_raises_and_names_it() -> None:
-    with pytest.raises(MatchingConfigError, match="bogus"):
-        parse_rule({"name": "r", "tier": "bogus", "scope": "unattributed", "any": ["keroro"]})
-
-
-def test_parse_rule_reads_its_scope() -> None:
-    rule = parse_rule({"name": "r", "tier": "notify", "scope": "episode", "any": ["keroro"]})
-    assert rule.scope == "episode"
-
-
-def test_rule_without_scope_raises_and_names_the_rule() -> None:
-    # A matcher.yml from before scopes must fail at boot, not silently lose its fan-out.
-    with pytest.raises(MatchingConfigError, match="rule 'numero_nu' without 'scope'"):
-        parse_rule({"name": "numero_nu", "tier": "notify", "any": ["keroro"]})
-
-
-def test_unknown_scope_raises_and_names_it() -> None:
-    with pytest.raises(MatchingConfigError, match="unknown scope for rule 'r': 'target'"):
-        parse_rule({"name": "r", "tier": "notify", "scope": "target", "any": ["keroro"]})
+def test_parse_condition_with_nested_inline_condition() -> None:
+    condition = parse_condition({"not": {"any": ["keroro", "titar"]}})
+    assert condition == NotDefinition(operand=AnyDefinition(operands=("keroro", "titar")))
 
 
 def test_override_on_non_coverage_token_raises() -> None:
@@ -116,49 +78,24 @@ def test_override_on_non_coverage_token_raises() -> None:
         validate_config(MatcherConfig(tokens={"kw": _KERORO}, rules=(rule,)))
 
 
-def test_rule_without_condition_key_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="condition"):
-        parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed"})
-
-
-def test_rule_with_two_condition_keys_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="exactly one condition"):
-        parse_rule(
-            {
-                "name": "r",
-                "tier": "catalog",
-                "scope": "unattributed",
-                "all": ["keroro"],
-                "any": ["keroro"],
-            }
-        )
-
-
 def test_rule_with_empty_all_is_rejected() -> None:
     # config-validation#0: AllMatcher([]).matches() == all([]) == True → a rule 'all: []'
     # would unconditionally match EVERY file (here in tier=download → auto-download).
     # EBNF §8.3 requires >=1 operand; fail-fast must reject it at load time.
     with pytest.raises(MatchingConfigError, match="at least one operand"):
-        parse_rule({"name": "pwn", "tier": "download", "scope": "unattributed", "all": []})
+        parse_condition({"all": []})
 
 
 def test_rule_with_empty_any_is_rejected() -> None:
     # Same fail-fast gap for 'any: []' (EBNF §8.3: >=1 operand), degenerate config.
     with pytest.raises(MatchingConfigError, match="at least one operand"):
-        parse_rule({"name": "pwn", "tier": "download", "scope": "unattributed", "any": []})
+        parse_condition({"any": []})
 
 
 def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
     # Same bound for a min_coverage/min_similarity override on a TokenReference (coverage).
     with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
-        parse_rule(
-            {
-                "name": "r",
-                "tier": "catalog",
-                "scope": "unattributed",
-                "all": [{"token": "cov", "min_coverage": 5.0}],
-            }
-        )
+        parse_condition({"all": [{"token": "cov", "min_coverage": 5.0}]})
 
 
 @pytest.mark.parametrize(
@@ -172,31 +109,17 @@ def test_a_token_references_4x_override_is_refused_with_its_new_name(
         "rename it in matcher.yml"
     )
     with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_rule(
-            {
-                "name": "r",
-                "tier": "catalog",
-                "scope": "unattributed",
-                "all": [{"token": "cov", old_key: 0.5}],
-            }
-        )
+        parse_condition({"all": [{"token": "cov", old_key: 0.5}]})
 
 
 def test_token_reference_missing_name_raises() -> None:
     with pytest.raises(MatchingConfigError, match="token"):
-        parse_rule(
-            {
-                "name": "r",
-                "tier": "catalog",
-                "scope": "unattributed",
-                "all": [{"min_coverage": 0.5}],
-            }
-        )
+        parse_condition({"all": [{"min_coverage": 0.5}]})
 
 
 def test_operand_wrong_type_raises() -> None:
     with pytest.raises(MatchingConfigError, match="operand"):
-        parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed", "all": [123]})
+        parse_condition({"all": [123]})
 
 
 # A format character such as a zero width space is no control character.
@@ -261,32 +184,7 @@ def test_composite_token_definition_multiple_condition_keys_raises() -> None:
 def test_all_body_non_list_raises() -> None:
     """parse_condition raises if the body of 'all' is not a list."""
     with pytest.raises(MatchingConfigError, match="list"):
-        parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed", "all": "keroro"})
-
-
-def test_a_rule_that_is_no_mapping_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="^rule: mapping expected, got str$"):
-        parse_rule("id_segment_exact")
-
-
-def test_rule_without_name_raises() -> None:
-    """parse_rule raises if a rule has no 'name'."""
-    with pytest.raises(MatchingConfigError, match="name"):
-        parse_rule({"tier": "catalog", "scope": "unattributed", "any": ["keroro"]})
-
-
-@pytest.mark.parametrize("name", ["a\tb", "\x1f", "\x85", "\x7f"])
-def test_a_rule_name_holding_a_control_character_is_refused_and_named(name: str) -> None:
-    with pytest.raises(MatchingConfigError) as raised:
-        parse_rule({"name": name, "tier": "catalog", "scope": "unattributed", "any": ["keroro"]})
-    assert str(raised.value) == f"rule name {name!r} holds a control character"
-
-
-def test_a_rule_name_beyond_ascii_that_is_no_control_character_is_accepted() -> None:
-    rule = parse_rule(
-        {"name": "\xe9\xa0", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
-    )
-    assert rule.name == "\xe9\xa0"
+        parse_condition({"all": "keroro"})
 
 
 def test_token_reference_with_coverage_token_no_override_ok() -> None:
@@ -462,12 +360,6 @@ def test_duplicate_veto_is_rejected() -> None:
 
 @pytest.mark.parametrize("override_key", ["min_coverage", "min_similarity"])
 def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) -> None:
-    rule = {
-        "name": "r",
-        "tier": "catalog",
-        "scope": "unattributed",
-        "all": [{"token": "cov", override_key: "x"}],
-    }
     with pytest.raises(MatchingConfigError) as raised:
-        parse_rule(rule)
+        parse_condition({"all": [{"token": "cov", override_key: "x"}]})
     assert str(raised.value) == f"'{override_key}' override of 'cov': number expected, got 'x'"

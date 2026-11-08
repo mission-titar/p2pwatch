@@ -1,5 +1,5 @@
 from pathlib import PurePath
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 
@@ -14,6 +14,7 @@ from p2pwatch.domain.matching.config import (
     MatcherConfig,
     RegexDefinition,
     Rule,
+    Scope,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.matchers import READERS_BY_ATTR
@@ -283,3 +284,97 @@ def test_a_problem_past_the_shape_is_its_files_one_problem() -> None:
             file_path=_FILE, key=None, message="veto references an unknown token: 'ghost'"
         ),
     )
+
+
+def _rule(**keys: object) -> dict[str, object]:
+    return {"name": "r", "tier": "catalog", "scope": "unattributed", **keys}
+
+
+def _rule_problems(rule: object) -> list[tuple[str | None, str]]:
+    return _problems({"tokens": {"a": {"keyword": "a"}}, "rules": [rule]})
+
+
+@pytest.mark.parametrize("tier", list(DecisionTier))
+def test_every_tier_is_accepted(tier: DecisionTier) -> None:
+    document = {"tokens": {"a": {"keyword": "a"}}, "rules": [_rule(tier=str(tier), any=["a"])]}
+    [rule] = matcher_config_from_document(document, file_path=_FILE).rules
+    assert rule.tier is tier
+
+
+@pytest.mark.parametrize("scope", get_args(Scope.__value__))
+def test_every_scope_is_accepted(scope: Scope) -> None:
+    document = {"tokens": {"a": {"keyword": "a"}}, "rules": [_rule(scope=scope, any=["a"])]}
+    [rule] = matcher_config_from_document(document, file_path=_FILE).rules
+    assert rule.scope == scope
+
+
+def test_a_rule_name_beyond_ascii_that_is_no_control_character_is_accepted() -> None:
+    document = {"tokens": {"a": {"keyword": "a"}}, "rules": [_rule(name="\xe9\xa0", any=["a"])]}
+    [rule] = matcher_config_from_document(document, file_path=_FILE).rules
+    assert rule.name == "\xe9\xa0"
+
+
+_ONE_CONDITION = "exactly one condition (all/any/not) expected, got {keys}"
+
+
+@pytest.mark.parametrize(
+    ("rule", "key", "message"),
+    [
+        ("id_segment_exact", "rules[0]", "Input should be a valid dictionary"),
+        (_rule(), "rules[0]", _ONE_CONDITION.format(keys=[])),
+        (_rule(all=["a"], any=["a"]), "rules[0]", _ONE_CONDITION.format(keys=["all", "any"])),
+        (
+            {"tier": "catalog", "scope": "unattributed", "any": ["a"]},
+            "rules[0].name",
+            "Field required",
+        ),
+        (_rule(name="", any=["a"]), "rules[0].name", "String should have at least 1 character"),
+        (_rule(name=62, any=["a"]), "rules[0].name", "Input should be a valid string"),
+        (
+            _rule(tier="bogus", any=["a"]),
+            "rules[0].tier",
+            "Input should be 'catalog', 'notify' or 'download'",
+        ),
+        ({"name": "r", "tier": "notify", "any": ["a"]}, "rules[0].scope", "Field required"),
+        (
+            _rule(scope="target", any=["a"]),
+            "rules[0].scope",
+            "Input should be 'segment', 'episode' or 'unattributed'",
+        ),
+        (_rule(all=["a"], keyword="a"), "rules[0].keyword", "Extra inputs are not permitted"),
+    ],
+)
+def test_a_wrong_rule_is_refused_by_its_key(*, rule: object, key: str, message: str) -> None:
+    assert _rule_problems(rule) == [(key, message)]
+
+
+# Cc: the C0 controls, DEL and the C1 controls.
+@pytest.mark.parametrize("name", ["a\tb", "\x1f", "\x85", "\x7f"])
+def test_a_control_character_in_a_rule_name_is_refused_without_its_value(name: str) -> None:
+    assert _rule_problems(_rule(name=name, any=["a"])) == [
+        ("rules[0].name", "holds a control character")
+    ]
+
+
+def test_every_problem_of_the_rules_is_listed() -> None:
+    rules = [_rule(name=3, tier="bogus", any=["a"]), _rule(any=["a"], extra=True), "x"]
+    assert _problems({"tokens": {"a": {"keyword": "a"}}, "rules": rules}) == [
+        ("rules[0].name", "Input should be a valid string"),
+        ("rules[0].tier", "Input should be 'catalog', 'notify' or 'download'"),
+        ("rules[1].extra", "Extra inputs are not permitted"),
+        ("rules[2]", "Input should be a valid dictionary"),
+    ]
+
+
+def test_a_failing_token_cited_by_two_rules_is_its_definitions_problem_alone() -> None:
+    document = {
+        "tokens": {"t": {"keyword": 3}},
+        "rules": [_rule(name="one", any=["t"]), _rule(name="two", all=["t"])],
+    }
+    assert _problems(document) == [("tokens.t.keyword", "Input should be a valid string")]
+
+
+def test_no_message_of_the_rules_prints_the_value_received() -> None:
+    problems = _rule_problems(_rule(name=["SECRET"], tier="SECRET", scope="SECRET", any=["a"]))
+    assert [key for key, _ in problems] == ["rules[0].name", "rules[0].tier", "rules[0].scope"]
+    assert all("SECRET" not in message for _, message in problems)
