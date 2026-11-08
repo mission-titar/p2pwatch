@@ -6,10 +6,14 @@ from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
+    Condition,
     CoverageDefinition,
     KeywordDefinition,
+    MatcherConfig,
     NotDefinition,
     RegexDefinition,
+    Rule,
+    TokenDefinition,
     TokenReference,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
@@ -22,9 +26,26 @@ from p2pwatch.domain.matching.validation import (
     UnknownTokenError,
     duplicate_targets,
     has_control_character,
+    parse_condition,
     parse_matcher_config,
+    parse_rule,
     validate_config,
 )
+
+_KERORO = KeywordDefinition(phrase="keroro")
+_COVERAGE = CoverageDefinition(reference="title", min_coverage=0.5)
+
+
+def _rule(condition: Condition) -> Rule:
+    return Rule(name="r", tier=DecisionTier.CATALOG, scope="unattributed", condition=condition)
+
+
+def _chain(length: int) -> dict[str, TokenDefinition]:
+    """``t0`` a keyword, each ``t<i>`` up to ``t<length - 1>`` citing ``t<i - 1>``."""
+    chain: dict[str, TokenDefinition] = {"t0": KeywordDefinition(phrase="x")}
+    for index in range(1, length):
+        chain[f"t{index}"] = AnyDefinition(operands=(f"t{index - 1}",))
+    return chain
 
 
 def test_parse_leaf_token_definitions() -> None:
@@ -52,44 +73,24 @@ def test_parse_leaf_token_definitions() -> None:
 
 
 def test_parse_composite_token_definition() -> None:
-    config = parse_matcher_config(
-        {
-            "tokens": {
-                "keroro": {"keyword": "keroro"},
-                "titar": {"keyword": "titar"},
-                "kt": {"any": ["keroro", "titar"]},
-            },
-            "rules": [],
-        }
+    assert parse_condition({"any": ["keroro", "titar"]}) == AnyDefinition(
+        operands=("keroro", "titar")
     )
-    assert config.tokens["kt"] == AnyDefinition(operands=("keroro", "titar"))
 
 
 def test_parse_not_token_definition() -> None:
-    config = parse_matcher_config(
-        {"tokens": {"keroro": {"keyword": "keroro"}, "nk": {"not": "keroro"}}, "rules": []}
-    )
-    assert config.tokens["nk"] == NotDefinition(operand="keroro")
+    assert parse_condition({"not": "keroro"}) == NotDefinition(operand="keroro")
 
 
 def test_parse_rule_with_inline_token_reference_and_condition() -> None:
-    config = parse_matcher_config(
+    rule = parse_rule(
         {
-            "tokens": {
-                "title_hit": {"coverage": "title", "min_coverage": 0.6},
-                "seg": {"regex": "0*{absolute_number}"},
-            },
-            "rules": [
-                {
-                    "name": "numero_titre",
-                    "tier": "notify",
-                    "scope": "unattributed",
-                    "all": ["seg", {"token": "title_hit", "min_coverage": 0.5}],
-                }
-            ],
+            "name": "numero_titre",
+            "tier": "notify",
+            "scope": "unattributed",
+            "all": ["seg", {"token": "title_hit", "min_coverage": 0.5}],
         }
     )
-    rule = config.rules[0]
     assert rule.name == "numero_titre"
     assert rule.tier is DecisionTier.NOTIFY
     assert rule.condition == AllDefinition(
@@ -98,65 +99,36 @@ def test_parse_rule_with_inline_token_reference_and_condition() -> None:
 
 
 def test_parse_rule_with_nested_inline_condition() -> None:
-    config = parse_matcher_config(
+    rule = parse_rule(
         {
-            "tokens": {"keroro": {"keyword": "keroro"}, "titar": {"keyword": "titar"}},
-            "rules": [
-                {
-                    "name": "r",
-                    "tier": "catalog",
-                    "scope": "unattributed",
-                    "not": {"any": ["keroro", "titar"]},
-                }
-            ],
+            "name": "r",
+            "tier": "catalog",
+            "scope": "unattributed",
+            "not": {"any": ["keroro", "titar"]},
         }
     )
-    assert config.rules[0].condition == NotDefinition(
-        operand=AnyDefinition(operands=("keroro", "titar"))
-    )
+    assert rule.condition == NotDefinition(operand=AnyDefinition(operands=("keroro", "titar")))
 
 
 def test_unknown_tier_raises_and_names_it() -> None:
     with pytest.raises(MatchingConfigError, match="bogus"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [
-                    {"name": "r", "tier": "bogus", "scope": "unattributed", "any": ["keroro"]}
-                ],
-            }
-        )
+        parse_rule({"name": "r", "tier": "bogus", "scope": "unattributed", "any": ["keroro"]})
 
 
 def test_parse_rule_reads_its_scope() -> None:
-    config = parse_matcher_config(
-        {
-            "tokens": {"keroro": {"keyword": "keroro"}},
-            "rules": [{"name": "r", "tier": "notify", "scope": "episode", "any": ["keroro"]}],
-        }
-    )
-    assert config.rules[0].scope == "episode"
+    rule = parse_rule({"name": "r", "tier": "notify", "scope": "episode", "any": ["keroro"]})
+    assert rule.scope == "episode"
 
 
 def test_rule_without_scope_raises_and_names_the_rule() -> None:
     # A matcher.yml from before scopes must fail at boot, not silently lose its fan-out.
     with pytest.raises(MatchingConfigError, match="rule 'numero_nu' without 'scope'"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [{"name": "numero_nu", "tier": "notify", "any": ["keroro"]}],
-            }
-        )
+        parse_rule({"name": "numero_nu", "tier": "notify", "any": ["keroro"]})
 
 
 def test_unknown_scope_raises_and_names_it() -> None:
     with pytest.raises(MatchingConfigError, match="unknown scope for rule 'r': 'target'"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [{"name": "r", "tier": "notify", "scope": "target", "any": ["keroro"]}],
-            }
-        )
+        parse_rule({"name": "r", "tier": "notify", "scope": "target", "any": ["keroro"]})
 
 
 def test_attr_between_unknown_attr_raises_and_names_it() -> None:
@@ -175,46 +147,25 @@ def test_token_definition_with_multiple_keys_raises() -> None:
 
 
 def test_override_on_non_coverage_token_raises() -> None:
+    rule = _rule(AllDefinition(operands=(TokenReference(name="kw", min_coverage=0.5),)))
     with pytest.raises(MatchingConfigError, match="kw"):
-        parse_matcher_config(
-            {
-                "tokens": {"kw": {"keyword": "keroro"}},
-                "rules": [
-                    {
-                        "name": "r",
-                        "tier": "catalog",
-                        "scope": "unattributed",
-                        "all": [{"token": "kw", "min_coverage": 0.5}],
-                    }
-                ],
-            }
-        )
+        validate_config(MatcherConfig(tokens={"kw": _KERORO}, rules=(rule,)))
 
 
 def test_rule_without_condition_key_raises() -> None:
     with pytest.raises(MatchingConfigError, match="condition"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [{"name": "r", "tier": "catalog", "scope": "unattributed"}],
-            }
-        )
+        parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed"})
 
 
 def test_rule_with_two_condition_keys_raises() -> None:
     with pytest.raises(MatchingConfigError, match="exactly one condition"):
-        parse_matcher_config(
+        parse_rule(
             {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [
-                    {
-                        "name": "r",
-                        "tier": "catalog",
-                        "scope": "unattributed",
-                        "all": ["keroro"],
-                        "any": ["keroro"],
-                    }
-                ],
+                "name": "r",
+                "tier": "catalog",
+                "scope": "unattributed",
+                "all": ["keroro"],
+                "any": ["keroro"],
             }
         )
 
@@ -224,17 +175,13 @@ def test_rule_with_empty_all_is_rejected() -> None:
     # would unconditionally match EVERY file (here in tier=download → auto-download).
     # EBNF §8.3 requires >=1 operand; fail-fast must reject it at load time.
     with pytest.raises(MatchingConfigError, match="at least one operand"):
-        parse_matcher_config(
-            {"rules": [{"name": "pwn", "tier": "download", "scope": "unattributed", "all": []}]}
-        )
+        parse_rule({"name": "pwn", "tier": "download", "scope": "unattributed", "all": []})
 
 
 def test_rule_with_empty_any_is_rejected() -> None:
     # Same fail-fast gap for 'any: []' (EBNF §8.3: >=1 operand), degenerate config.
     with pytest.raises(MatchingConfigError, match="at least one operand"):
-        parse_matcher_config(
-            {"rules": [{"name": "pwn", "tier": "download", "scope": "unattributed", "any": []}]}
-        )
+        parse_rule({"name": "pwn", "tier": "download", "scope": "unattributed", "any": []})
 
 
 def test_coverage_min_out_of_unit_range_is_rejected() -> None:
@@ -261,17 +208,12 @@ def test_coverage_fuzz_out_of_unit_range_is_rejected() -> None:
 def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
     # Same bound for a min_coverage/min_similarity override on a TokenReference (coverage).
     with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
-        parse_matcher_config(
+        parse_rule(
             {
-                "tokens": {"cov": {"coverage": "title", "min_coverage": 0.5}},
-                "rules": [
-                    {
-                        "name": "r",
-                        "tier": "catalog",
-                        "scope": "unattributed",
-                        "all": [{"token": "cov", "min_coverage": 5.0}],
-                    }
-                ],
+                "name": "r",
+                "tier": "catalog",
+                "scope": "unattributed",
+                "all": [{"token": "cov", "min_coverage": 5.0}],
             }
         )
 
@@ -304,17 +246,12 @@ def test_a_token_references_4x_override_is_refused_with_its_new_name(
         "rename it in matcher.yml"
     )
     with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_matcher_config(
+        parse_rule(
             {
-                "tokens": {"cov": {"coverage": "title", "min_coverage": 0.5}},
-                "rules": [
-                    {
-                        "name": "r",
-                        "tier": "catalog",
-                        "scope": "unattributed",
-                        "all": [{"token": "cov", old_key: 0.5}],
-                    }
-                ],
+                "name": "r",
+                "tier": "catalog",
+                "scope": "unattributed",
+                "all": [{"token": "cov", old_key: 0.5}],
             }
         )
 
@@ -342,29 +279,19 @@ def test_attr_between_min_greater_than_max_is_rejected() -> None:
 
 def test_token_reference_missing_name_raises() -> None:
     with pytest.raises(MatchingConfigError, match="token"):
-        parse_matcher_config(
+        parse_rule(
             {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [
-                    {
-                        "name": "r",
-                        "tier": "catalog",
-                        "scope": "unattributed",
-                        "all": [{"min_coverage": 0.5}],
-                    }
-                ],
+                "name": "r",
+                "tier": "catalog",
+                "scope": "unattributed",
+                "all": [{"min_coverage": 0.5}],
             }
         )
 
 
 def test_operand_wrong_type_raises() -> None:
     with pytest.raises(MatchingConfigError, match="operand"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [{"name": "r", "tier": "catalog", "scope": "unattributed", "all": [123]}],
-            }
-        )
+        parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed", "all": [123]})
 
 
 # A format character such as a zero width space is no control character.
@@ -414,7 +341,7 @@ def test_every_duplicate_target_names_its_first_holder_letters_upper_cased() -> 
 def test_regex_with_date_alt_placeholder_is_rejected() -> None:
     # {date_alt} removed: a token using it fails at load time (unknown placeholder).
     with pytest.raises(MatchingConfigError, match="date_alt"):
-        parse_matcher_config({"tokens": {"air": {"regex": "{date_alt}"}}, "rules": []})
+        validate_config(MatcherConfig(tokens={"air": RegexDefinition(pattern="{date_alt}")}))
 
 
 # --- Branch-coverage leftovers ---
@@ -433,16 +360,9 @@ def test_composite_token_definition_multiple_condition_keys_raises() -> None:
 
 
 def test_all_body_non_list_raises() -> None:
-    """_parse_condition raises if the body of 'all' is not a list."""
+    """parse_condition raises if the body of 'all' is not a list."""
     with pytest.raises(MatchingConfigError, match="list"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [
-                    {"name": "r", "tier": "catalog", "scope": "unattributed", "all": "keroro"}
-                ],
-            }
-        )
+        parse_rule({"name": "r", "tier": "catalog", "scope": "unattributed", "all": "keroro"})
 
 
 def test_coverage_token_missing_min_raises() -> None:
@@ -452,40 +372,23 @@ def test_coverage_token_missing_min_raises() -> None:
 
 
 def test_rule_without_name_raises() -> None:
-    """_parse_rule raises if a rule has no 'name'."""
+    """parse_rule raises if a rule has no 'name'."""
     with pytest.raises(MatchingConfigError, match="name"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [{"tier": "catalog", "scope": "unattributed", "any": ["keroro"]}],
-            }
-        )
+        parse_rule({"tier": "catalog", "scope": "unattributed", "any": ["keroro"]})
 
 
 @pytest.mark.parametrize("name", ["a\tb", "\x1f", "\x85", "\x7f"])
 def test_a_rule_name_holding_a_control_character_is_refused_and_named(name: str) -> None:
     with pytest.raises(MatchingConfigError) as raised:
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [
-                    {"name": name, "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
-                ],
-            }
-        )
+        parse_rule({"name": name, "tier": "catalog", "scope": "unattributed", "any": ["keroro"]})
     assert str(raised.value) == f"rule name {name!r} holds a control character"
 
 
 def test_a_rule_name_beyond_ascii_that_is_no_control_character_is_accepted() -> None:
-    config = parse_matcher_config(
-        {
-            "tokens": {"keroro": {"keyword": "keroro"}},
-            "rules": [
-                {"name": "\xe9\xa0", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
-            ],
-        }
+    rule = parse_rule(
+        {"name": "\xe9\xa0", "tier": "catalog", "scope": "unattributed", "any": ["keroro"]}
     )
-    assert config.rules[0].name == "\xe9\xa0"
+    assert rule.name == "\xe9\xa0"
 
 
 def test_rules_non_list_raises() -> None:
@@ -496,94 +399,66 @@ def test_rules_non_list_raises() -> None:
 
 def test_token_reference_with_coverage_token_no_override_ok() -> None:
     """TokenReference on a coverage without an override: valid, no error."""
-    config = parse_matcher_config(
-        {
-            "tokens": {"title_hit": {"coverage": "title", "min_coverage": 0.6}},
-            "rules": [
-                {
-                    "name": "r",
-                    "tier": "catalog",
-                    "scope": "unattributed",
-                    "all": [{"token": "title_hit"}],
-                }
-            ],
-        }
-    )
-    assert config.rules[0].name == "r"
+    rule = _rule(AllDefinition(operands=(TokenReference(name="title_hit"),)))
+    validate_config(MatcherConfig(tokens={"title_hit": _COVERAGE}, rules=(rule,)))
 
 
 # --- Task 6: graph validation (DAG, depth, RE2 compile-check) ---
 
 
 def test_unknown_token_reference_raises_and_names_it() -> None:
+    tokens: dict[str, TokenDefinition] = {
+        "kt": AnyDefinition(operands=("keroro", "ghost")),
+        "keroro": _KERORO,
+    }
     with pytest.raises(UnknownTokenError, match="ghost"):
-        parse_matcher_config(
-            {
-                "tokens": {"kt": {"any": ["keroro", "ghost"]}, "keroro": {"keyword": "keroro"}},
-                "rules": [],
-            }
-        )
+        validate_config(MatcherConfig(tokens=tokens))
 
 
 def test_unknown_token_in_rule_raises() -> None:
+    rule = _rule(AllDefinition(operands=("keroro", "ghost")))
     with pytest.raises(UnknownTokenError, match="ghost"):
-        parse_matcher_config(
-            {
-                "tokens": {"keroro": {"keyword": "keroro"}},
-                "rules": [
-                    {
-                        "name": "r",
-                        "tier": "catalog",
-                        "scope": "unattributed",
-                        "all": ["keroro", "ghost"],
-                    }
-                ],
-            }
-        )
+        validate_config(MatcherConfig(tokens={"keroro": _KERORO}, rules=(rule,)))
 
 
 def test_direct_cycle_is_detected_and_named() -> None:
+    tokens = {"a": AnyDefinition(operands=("b",)), "b": AnyDefinition(operands=("a",))}
     with pytest.raises(CycleError) as excinfo:
-        parse_matcher_config({"tokens": {"a": {"any": ["b"]}, "b": {"any": ["a"]}}, "rules": []})
+        validate_config(MatcherConfig(tokens=tokens))
     message = str(excinfo.value)
     assert "a -> b -> a" in message or "b -> a -> b" in message
 
 
 def test_self_cycle_is_detected() -> None:
     with pytest.raises(CycleError, match="loop"):
-        parse_matcher_config({"tokens": {"loop": {"any": ["loop"]}}, "rules": []})
+        validate_config(MatcherConfig(tokens={"loop": AnyDefinition(operands=("loop",))}))
 
 
 def test_acyclic_composite_graph_validates() -> None:
-    config = parse_matcher_config(
-        {
-            "tokens": {
-                "keroro": {"keyword": "keroro"},
-                "titar": {"keyword": "titar"},
-                "kt": {"any": ["keroro", "titar"]},
-                "deep": {"all": ["kt", "keroro"]},
-            },
-            "rules": [{"name": "r", "tier": "catalog", "scope": "unattributed", "any": ["deep"]}],
-        }
-    )
-    assert "deep" in config.tokens
+    tokens: dict[str, TokenDefinition] = {
+        "keroro": _KERORO,
+        "titar": KeywordDefinition(phrase="titar"),
+        "kt": AnyDefinition(operands=("keroro", "titar")),
+        "deep": AllDefinition(operands=("kt", "keroro")),
+        "not_deep": NotDefinition(operand="deep"),
+    }
+    rule = _rule(NotDefinition(operand=AnyDefinition(operands=("not_deep",))))
+    validate_config(MatcherConfig(tokens=tokens, rules=(rule,)))
 
 
 def test_regex_compile_check_rejects_bad_pattern() -> None:
     with pytest.raises(MatchingConfigError, match="not compilable"):
-        parse_matcher_config({"tokens": {"bad": {"regex": "(unbalanced"}}, "rules": []})
+        validate_config(MatcherConfig(tokens={"bad": RegexDefinition(pattern="(unbalanced")}))
 
 
 def test_regex_unknown_placeholder_rejected_at_load() -> None:
     with pytest.raises(MatchingConfigError, match="bogus"):
-        parse_matcher_config({"tokens": {"bad": {"regex": "n {bogus}"}}, "rules": []})
+        validate_config(MatcherConfig(tokens={"bad": RegexDefinition(pattern="n {bogus}")}))
 
 
 def test_regex_with_known_placeholders_validates() -> None:
-    config = parse_matcher_config(
-        {"tokens": {"seg": {"regex": "n[°o]?\\s*0*{absolute_number}\\s*{letter}"}}, "rules": []}
-    )
-    assert "seg" in config.tokens
+    pattern = "n[°o]?\\s*0*{absolute_number}\\s*{letter}"
+    validate_config(MatcherConfig(tokens={"seg": RegexDefinition(pattern=pattern)}))
 
 
 def test_the_4x_segment_placeholder_is_refused_with_its_new_name() -> None:
@@ -595,75 +470,44 @@ def test_the_4x_segment_placeholder_is_refused_with_its_new_name() -> None:
 
 
 def test_depth_within_bound_validates() -> None:
-    # Chain a -> b -> c (depth 3) with max_depth=3: OK.
-    config = parse_matcher_config(
-        {
-            "tokens": {
-                "c": {"keyword": "x"},
-                "b": {"any": ["c"]},
-                "a": {"any": ["b"]},
-            },
-            "rules": [],
-        }
-    )
-    validate_config(config, max_depth=3)
+    # Chain t2 -> t1 -> t0 (depth 3) with max_depth=3: OK.
+    validate_config(MatcherConfig(tokens=_chain(3)), max_depth=3)
 
 
 def test_depth_exceeded_raises() -> None:
-    config = parse_matcher_config(
-        {
-            "tokens": {
-                "c": {"keyword": "x"},
-                "b": {"any": ["c"]},
-                "a": {"any": ["b"]},
-            },
-            "rules": [],
-        }
-    )
     with pytest.raises(DepthExceededError, match="depth"):
-        validate_config(config, max_depth=2)
+        validate_config(MatcherConfig(tokens=_chain(3)), max_depth=2)
 
 
 def test_default_max_depth_is_32() -> None:
-    # A chain of 33 tokens exceeds the default 32.
-    tokens: dict[str, object] = {"t0": {"keyword": "x"}}
-    for i in range(1, 34):
-        tokens[f"t{i}"] = {"any": [f"t{i - 1}"]}
+    # A chain of 34 tokens exceeds the default 32.
     with pytest.raises(DepthExceededError):
-        parse_matcher_config({"tokens": tokens, "rules": []})
+        validate_config(MatcherConfig(tokens=_chain(34)))
 
 
 def test_deep_chain_root_first_caught_by_dfs_guard() -> None:
     # Root-first order: _check_acyclic's DFS descends the whole chain, so the
     # len(stack)>=max_depth guard raises DepthExceededError before any RecursionError.
-    tokens: dict[str, object] = {}
-    for i in range(40, 0, -1):  # t40 (root) defined first, t0 (leaf) last
-        tokens[f"t{i}"] = {"any": [f"t{i - 1}"]}
-    tokens["t0"] = {"keyword": "x"}
+    tokens = dict(reversed(_chain(41).items()))
     with pytest.raises(DepthExceededError):
-        parse_matcher_config({"tokens": tokens, "rules": []})
+        validate_config(MatcherConfig(tokens=tokens))
 
 
 def test_empty_config_validates() -> None:
     # Empty token table: _max_resolution_depth must return 0 (default), no error.
-    config = parse_matcher_config({"tokens": {}, "rules": []})
-    assert config.tokens == {}
+    validate_config(MatcherConfig())
 
 
 def test_coverage_override_forward_reference_in_composite_validates() -> None:
     # Regression: a composite token referencing {token: cov, min: …} where cov is
     # defined AFTER must NOT be rejected (override validation deferred to the graph).
-    config = parse_matcher_config(
-        {
-            "tokens": {
-                "combo": {"any": [{"token": "title_hit", "min_coverage": 0.4}, "keroro"]},
-                "title_hit": {"coverage": "title", "min_coverage": 0.6},
-                "keroro": {"keyword": "keroro"},
-            },
-            "rules": [],
-        }
-    )
-    assert "combo" in config.tokens
+    combo = AnyDefinition(operands=(TokenReference(name="title_hit", min_coverage=0.4), "keroro"))
+    tokens: dict[str, TokenDefinition] = {
+        "combo": combo,
+        "title_hit": _COVERAGE,
+        "keroro": _KERORO,
+    }
+    validate_config(MatcherConfig(tokens=tokens))
 
 
 # --- fragments: raw regex text substituted into regex tokens at parse time ---
@@ -734,12 +578,12 @@ def test_vetoes_are_optional() -> None:
 
 def test_veto_naming_an_unknown_token_is_rejected() -> None:
     with pytest.raises(UnknownTokenError, match="veto references an unknown token: 'ghost'"):
-        parse_matcher_config({"tokens": {"a": {"keyword": "a"}}, "vetoes": ["ghost"]})
+        validate_config(MatcherConfig(tokens={"a": _KERORO}, vetoes=("ghost",)))
 
 
 def test_duplicate_veto_is_rejected() -> None:
     with pytest.raises(MatchingConfigError, match="duplicate veto: 'a'"):
-        parse_matcher_config({"tokens": {"a": {"keyword": "a"}}, "vetoes": ["a", "a"]})
+        validate_config(MatcherConfig(tokens={"a": _KERORO}, vetoes=("a", "a")))
 
 
 def test_vetoes_section_must_be_a_list() -> None:
