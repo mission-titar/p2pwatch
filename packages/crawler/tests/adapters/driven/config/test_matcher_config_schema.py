@@ -7,14 +7,17 @@ from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.matching.config import (
+    AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
     CoverageDefinition,
     KeywordDefinition,
     MatcherConfig,
+    NotDefinition,
     RegexDefinition,
     Rule,
     Scope,
+    TokenReference,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.matchers import READERS_BY_ATTR
@@ -378,3 +381,102 @@ def test_no_message_of_the_rules_prints_the_value_received() -> None:
     problems = _rule_problems(_rule(name=["SECRET"], tier="SECRET", scope="SECRET", any=["a"]))
     assert [key for key, _ in problems] == ["rules[0].name", "rules[0].tier", "rules[0].scope"]
     assert all("SECRET" not in message for _, message in problems)
+
+
+def test_a_rule_gives_its_conditions_operands_and_references() -> None:
+    title_hit = {"coverage": "title", "min_coverage": 0.6}
+    reference = {"token": "title_hit", "min_coverage": 0.5, "min_similarity": 0.9}
+    document = {
+        "tokens": {"a": {"keyword": "a"}, "title_hit": title_hit, "not_a": {"not": "a"}},
+        "rules": [_rule(all=["a", reference, {"not": {"any": ["not_a", {"token": "a"}]}}])],
+    }
+    [rule] = matcher_config_from_document(document, file_path=_FILE).rules
+    assert rule.condition == AllDefinition(
+        operands=(
+            "a",
+            TokenReference(name="title_hit", min_coverage=0.5, min_similarity=0.9),
+            NotDefinition(operand=AnyDefinition(operands=("not_a", TokenReference(name="a")))),
+        )
+    )
+
+
+_AT_LEAST_ONE = "List should have at least 1 item after validation, not 0"
+
+
+@pytest.mark.parametrize(
+    ("rule", "key", "message"),
+    [
+        (_rule(all=[]), "rules[0].all", _AT_LEAST_ONE),
+        (_rule(any=[]), "rules[0].any", _AT_LEAST_ONE),
+        (_rule(all="a"), "rules[0].all", "Input should be a valid list"),
+        (_rule(all=[123]), "rules[0].all[0]", "Input should be a valid string or dictionary"),
+        (_rule(**{"not": {"min_coverage": 0.5}}), "rules[0].not.token", "Field required"),
+        (
+            _rule(all=[{"token": "a", "min_coverage": "0.5"}]),
+            "rules[0].all[0].min_coverage",
+            "Input should be a valid number",
+        ),
+        (
+            _rule(all=[{"token": "a", "min_similarity": float("nan")}]),
+            "rules[0].all[0].min_similarity",
+            "Input should be a finite number",
+        ),
+        (
+            _rule(all=[{"token": "a", "min_coverage": 5.0}]),
+            "rules[0].all[0].min_coverage",
+            "Input should be less than or equal to 1",
+        ),
+        (
+            _rule(all=[{"token": "a", "weight": 1}]),
+            "rules[0].all[0].weight",
+            "Extra inputs are not permitted",
+        ),
+        (
+            _rule(any=[{"all": ["a"], "not": "a"}]),
+            "rules[0].any[0]",
+            _ONE_CONDITION.format(keys=["all", "not"]),
+        ),
+    ],
+)
+def test_a_wrong_condition_of_a_rule_is_refused_by_its_key(
+    *, rule: object, key: str, message: str
+) -> None:
+    assert _rule_problems(rule) == [(key, message)]
+
+
+@pytest.mark.parametrize(
+    ("token", "key", "message"),
+    [
+        ({"all": ["a"], "keyword": "a"}, "tokens.t.keyword", "Extra inputs are not permitted"),
+        ({"any": ["a"], "not": "a"}, "tokens.t", _ONE_CONDITION.format(keys=["any", "not"])),
+        ({"not": 3}, "tokens.t.not", "Input should be a valid string or dictionary"),
+    ],
+)
+def test_a_wrong_condition_token_is_refused_by_its_key(
+    *, token: dict[str, Any], key: str, message: str
+) -> None:
+    assert _token_problems(token) == [(key, message)]
+
+
+@pytest.mark.parametrize(
+    ("old_key", "new_key"), [("min", "min_coverage"), ("fuzz", "min_similarity")]
+)
+def test_a_token_references_4x_key_is_one_problem_naming_its_new_name(
+    *, old_key: str, new_key: str
+) -> None:
+    rule = _rule(all=[{"token": "a", old_key: 0.5}])
+    message = f"was renamed '{new_key}', rename it in matcher.yml"
+    assert _rule_problems(rule) == [(f"rules[0].all[0].{old_key}", message)]
+
+
+def test_every_problem_of_the_conditions_is_listed() -> None:
+    document = {
+        "tokens": {"a": {"keyword": "a"}, "t": {"any": [3, {"not": []}]}},
+        "rules": [_rule(all=[{"token": "a", "min": 0.5}, {"any": []}])],
+    }
+    assert _problems(document) == [
+        ("tokens.t.any[0]", "Input should be a valid string or dictionary"),
+        ("tokens.t.any[1].not", "Input should be a valid string or dictionary"),
+        ("rules[0].all[0].min", "was renamed 'min_coverage', rename it in matcher.yml"),
+        ("rules[0].all[1].any", _AT_LEAST_ONE),
+    ]

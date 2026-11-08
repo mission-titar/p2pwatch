@@ -1,21 +1,15 @@
-"""The matcher config's conditions parsed, its fragments and its graph checked.
-
-PURE domain: receives already-parsed structures (``dict``/``list``), does not import
-``yaml``, does not touch the disk.
-"""
+"""The matcher config's fragments and its graph checked, once the config adapter built it."""
 
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import PurePath
-from typing import Any
 
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
-    Condition,
     CoverageDefinition,
     MatcherConfig,
     NotDefinition,
@@ -33,13 +27,9 @@ from p2pwatch.domain.matching.interpolation import (
 )
 from p2pwatch.domain.matching.models import TargetSegment
 
-_CONDITION_KEYS = ("all", "any", "not")
-# A token reference's 4.x names, refused at load with their 5.0 name.
-_RENAMED_COVERAGE_KEYS = {"min": "min_coverage", "fuzz": "min_similarity"}
-
 
 class MatchingConfigError(Exception):
-    """A matcher config refused at load: a condition's shape, or its graph."""
+    """A matcher config whose graph fails at load (reference, veto, override, cycle, regex)."""
 
 
 class UnknownTokenError(MatchingConfigError):
@@ -58,101 +48,6 @@ def has_control_character(text: str) -> bool:
     """Whether ``text`` holds a control character (``Cc``: C0, DEL, C1), which no identifier
     holds: the files page splits target ids and rule names on U+001F."""
     return any(unicodedata.category(char) == "Cc" for char in text)
-
-
-def _parse_operand(raw: Any) -> Operand:
-    """An operand: bare token name (str), ``{token: …}`` (TokenReference), or inline condition."""
-    if isinstance(raw, str):
-        return raw
-    if isinstance(raw, dict):
-        if any(key in raw for key in _CONDITION_KEYS):
-            return parse_condition(raw)
-        # Treated as a token reference (with or without the "token" key): _parse_token_reference
-        # will raise MatchingConfigError if the "token" key is missing or invalid.
-        return _parse_token_reference(raw)
-    raise MatchingConfigError(f"operand of invalid type: {type(raw).__name__} ({raw!r})")
-
-
-def _number(raw: Any, *, error_label: str) -> float:
-    try:
-        return float(raw)
-    except (TypeError, ValueError) as error:
-        raise MatchingConfigError(f"{error_label}: number expected, got {raw!r}") from error
-
-
-def _require_unit_fraction(fraction: float, *, error_label: str) -> float:
-    """Validates that a fraction (min_coverage, min_similarity) is in [0, 1] (fail-fast §8.4).
-
-    Outside [0, 1], the rule is silently inert (threshold never reached): that is a config
-    error (typically a percentage entered for a fraction), rejected at load time.
-    """
-    if not 0.0 <= fraction <= 1.0:
-        raise MatchingConfigError(f"{error_label} must be in [0, 1], got {fraction}")
-    return fraction
-
-
-def _refuse_renamed_coverage_keys(mapping: dict[str, Any], *, error_label: str) -> None:
-    for old_key, new_key in _RENAMED_COVERAGE_KEYS.items():
-        if old_key in mapping:
-            raise MatchingConfigError(
-                f"{error_label}: key {old_key!r} was renamed {new_key!r}, rename it in matcher.yml"
-            )
-
-
-def _parse_token_reference(raw: dict[str, Any]) -> TokenReference:
-    name = raw.get("token")
-    if not isinstance(name, str):
-        raise MatchingConfigError(f"operand {{token: …}} without a valid token name: {raw!r}")
-    _refuse_renamed_coverage_keys(raw, error_label=f"operand {{token: {name!r}}}")
-    min_coverage = raw.get("min_coverage")
-    min_similarity = raw.get("min_similarity")
-    # The legality of an override (coverage-only, cf. EBNF §8.3) is checked at the
-    # graph level (validate_config), not here: parsing stays purely structural and independent
-    # of the token definition order (forward references allowed). The [0, 1] BOUNDS, on the
-    # other hand, are structural → validated here.
-    return TokenReference(
-        name=name,
-        min_coverage=(
-            None
-            if min_coverage is None
-            else _require_unit_fraction(
-                _number(min_coverage, error_label=f"'min_coverage' override of {name!r}"),
-                error_label=f"'min_coverage' override of {name!r}",
-            )
-        ),
-        min_similarity=(
-            None
-            if min_similarity is None
-            else _require_unit_fraction(
-                _number(min_similarity, error_label=f"'min_similarity' override of {name!r}"),
-                error_label=f"'min_similarity' override of {name!r}",
-            )
-        ),
-    )
-
-
-def parse_condition(raw: dict[str, Any]) -> Condition:
-    """The condition of ``raw``, its one key ``all``, ``any`` or ``not``."""
-    present = [key for key in _CONDITION_KEYS if key in raw]
-    if len(present) != 1:
-        raise MatchingConfigError(f"exactly one condition (all/any/not) expected, got {present!r}")
-    key = present[0]
-    body = raw[key]
-    if key == "not":
-        return NotDefinition(operand=_parse_operand(body))
-    if not isinstance(body, list):
-        raise MatchingConfigError(f"'{key}:' expects a list of operands, got {type(body).__name__}")
-    if not body:
-        # EBNF §8.3: operand (',' operand)* = at least one operand. An empty list would give
-        # AllMatcher([]).matches()==all([])==True (matches EVERYTHING) or AnyMatcher([])==False
-        # (mute): degenerate config, rejected at load time (fail-fast §8.4). all([])/any([])
-        # remains the legitimate internal semantics of the combinators - it is the empty CONFIG
-        # that we forbid.
-        raise MatchingConfigError(f"'{key}:' requires at least one operand (empty list received)")
-    operands = tuple(_parse_operand(raw_operand) for raw_operand in body)
-    if key == "all":
-        return AllDefinition(operands=operands)
-    return AnyDefinition(operands=operands)
 
 
 def fragment_problems(

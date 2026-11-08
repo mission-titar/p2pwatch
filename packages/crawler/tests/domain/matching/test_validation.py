@@ -1,4 +1,3 @@
-import re
 from pathlib import PurePath
 
 import pytest
@@ -29,7 +28,6 @@ from p2pwatch.domain.matching.validation import (
     expand_fragments,
     fragment_problems,
     has_control_character,
-    parse_condition,
     validate_config,
 )
 
@@ -50,76 +48,10 @@ def _chain(length: int) -> dict[str, TokenDefinition]:
     return chain
 
 
-def test_parse_composite_token_definition() -> None:
-    assert parse_condition({"any": ["keroro", "titar"]}) == AnyDefinition(
-        operands=("keroro", "titar")
-    )
-
-
-def test_parse_not_token_definition() -> None:
-    assert parse_condition({"not": "keroro"}) == NotDefinition(operand="keroro")
-
-
-def test_parse_condition_with_inline_token_reference() -> None:
-    condition = parse_condition({"all": ["seg", {"token": "title_hit", "min_coverage": 0.5}]})
-    assert condition == AllDefinition(
-        operands=("seg", TokenReference(name="title_hit", min_coverage=0.5))
-    )
-
-
-def test_parse_condition_with_nested_inline_condition() -> None:
-    condition = parse_condition({"not": {"any": ["keroro", "titar"]}})
-    assert condition == NotDefinition(operand=AnyDefinition(operands=("keroro", "titar")))
-
-
 def test_override_on_non_coverage_token_raises() -> None:
     rule = _rule(AllDefinition(operands=(TokenReference(name="kw", min_coverage=0.5),)))
     with pytest.raises(MatchingConfigError, match="kw"):
         validate_config(MatcherConfig(tokens={"kw": _KERORO}, rules=(rule,)))
-
-
-def test_rule_with_empty_all_is_rejected() -> None:
-    # config-validation#0: AllMatcher([]).matches() == all([]) == True → a rule 'all: []'
-    # would unconditionally match EVERY file (here in tier=download → auto-download).
-    # EBNF §8.3 requires >=1 operand; fail-fast must reject it at load time.
-    with pytest.raises(MatchingConfigError, match="at least one operand"):
-        parse_condition({"all": []})
-
-
-def test_rule_with_empty_any_is_rejected() -> None:
-    # Same fail-fast gap for 'any: []' (EBNF §8.3: >=1 operand), degenerate config.
-    with pytest.raises(MatchingConfigError, match="at least one operand"):
-        parse_condition({"any": []})
-
-
-def test_coverage_override_min_out_of_unit_range_is_rejected() -> None:
-    # Same bound for a min_coverage/min_similarity override on a TokenReference (coverage).
-    with pytest.raises(MatchingConfigError, match=r"\[0, 1\]"):
-        parse_condition({"all": [{"token": "cov", "min_coverage": 5.0}]})
-
-
-@pytest.mark.parametrize(
-    ("old_key", "new_key"), [("min", "min_coverage"), ("fuzz", "min_similarity")]
-)
-def test_a_token_references_4x_override_is_refused_with_its_new_name(
-    *, old_key: str, new_key: str
-) -> None:
-    message = (
-        f"operand {{token: 'cov'}}: key '{old_key}' was renamed '{new_key}', "
-        "rename it in matcher.yml"
-    )
-    with pytest.raises(MatchingConfigError, match=re.escape(message)):
-        parse_condition({"all": [{"token": "cov", old_key: 0.5}]})
-
-
-def test_token_reference_missing_name_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="token"):
-        parse_condition({"all": [{"min_coverage": 0.5}]})
-
-
-def test_operand_wrong_type_raises() -> None:
-    with pytest.raises(MatchingConfigError, match="operand"):
-        parse_condition({"all": [123]})
 
 
 # A format character such as a zero width space is no control character.
@@ -170,21 +102,6 @@ def test_regex_with_date_alt_placeholder_is_rejected() -> None:
     # {date_alt} removed: a token using it fails at load time (unknown placeholder).
     with pytest.raises(MatchingConfigError, match="date_alt"):
         validate_config(MatcherConfig(tokens={"air": RegexDefinition(pattern="{date_alt}")}))
-
-
-# --- Branch-coverage leftovers ---
-
-
-def test_composite_token_definition_multiple_condition_keys_raises() -> None:
-    """parse_condition raises if a composite token contains 2+ condition keys."""
-    with pytest.raises(MatchingConfigError, match="exactly one condition"):
-        parse_condition({"all": ["a"], "any": ["b"]})
-
-
-def test_all_body_non_list_raises() -> None:
-    """parse_condition raises if the body of 'all' is not a list."""
-    with pytest.raises(MatchingConfigError, match="list"):
-        parse_condition({"all": "keroro"})
 
 
 def test_token_reference_with_coverage_token_no_override_ok() -> None:
@@ -356,10 +273,3 @@ def test_veto_naming_an_unknown_token_is_rejected() -> None:
 def test_duplicate_veto_is_rejected() -> None:
     with pytest.raises(MatchingConfigError, match="duplicate veto: 'a'"):
         validate_config(MatcherConfig(tokens={"a": _KERORO}, vetoes=("a", "a")))
-
-
-@pytest.mark.parametrize("override_key", ["min_coverage", "min_similarity"])
-def test_an_override_that_is_no_number_raises_and_names_it(override_key: str) -> None:
-    with pytest.raises(MatchingConfigError) as raised:
-        parse_condition({"all": [{"token": "cov", override_key: "x"}]})
-    assert str(raised.value) == f"'{override_key}' override of 'cov': number expected, got 'x'"
