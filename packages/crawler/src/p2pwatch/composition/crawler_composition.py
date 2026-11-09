@@ -115,9 +115,7 @@ from p2pwatch.application.use_cases.describe_source_name import DescribeSourceNa
 from p2pwatch.application.use_cases.list_files import ListFiles
 from p2pwatch.application.use_cases.list_node_metrics import ListNodeMetrics
 from p2pwatch.application.use_cases.list_sources import ListSources
-from p2pwatch.application.use_cases.pause_crawl import PauseCrawl
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
-from p2pwatch.application.use_cases.resume_crawl import ResumeCrawl
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
@@ -245,8 +243,6 @@ class CrawlerComposition(CrawlerRunner):
             target_segments=config.targets,
             templates_directory=webui_package_directory / "templates",
             static_directory=webui_package_directory / "static",
-            crawl_pauser=PauseCrawl(run_state_store),
-            crawl_resumer=ResumeCrawl(run_state_store),
             shutdown_requester=shutdown_requester,
             crawl_summarizer=SummarizeCrawl(
                 target_ids=tuple(target.target_id for target in config.targets),

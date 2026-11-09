@@ -72,8 +72,6 @@ from p2pwatch.adapters.driving.webui.prometheus_text import (
     prometheus_text,
 )
 from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRunner
-from p2pwatch.application.ports.driving.crawl_pauser import CrawlPauser
-from p2pwatch.application.ports.driving.crawl_resumer import CrawlResumer
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
 from p2pwatch.application.ports.driving.file_describer import FileDescriber
 from p2pwatch.application.ports.driving.file_lister import FileLister
@@ -576,11 +574,6 @@ async def _add_security_headers(request: Request, call_next: RequestResponseEndp
 # ``?done=<code>`` param). The strings avoid em/en-dashes (project UI rule). A ``done`` code absent
 # from this mapping (or no ``done`` at all) renders NO banner.
 _CONTROL_MESSAGES: dict[str, str] = {
-    "paused": (
-        "Crawl paused. Searches in flight or already waiting their network slot still run, "
-        "then the crawler idles."
-    ),
-    "resumed": "Crawl resumed.",
     "restarted": "Restart requested. The service goes offline briefly, then returns.",
 }
 
@@ -752,8 +745,6 @@ def build_app(
     target_segments: tuple[TargetSegment, ...],
     templates_directory: Path,
     static_directory: Path,
-    crawl_pauser: CrawlPauser,
-    crawl_resumer: CrawlResumer,
     shutdown_requester: ShutdownRequester,
     crawl_summarizer: CrawlSummarizer,
     node_describer: NodeDescriber,
@@ -770,7 +761,7 @@ def build_app(
 
     ``target_segments`` arrive ALREADY PARSED from the caller, for their titles.
 
-    Each POST to a ``/controls/*`` route calls its use case, which returns at once; the webui
+    A POST to ``/controls/restart`` calls its use case, which returns at once; the webui
     itself holds no write connection (spec §4/§10). ``crawl_summarizer`` serves the dashboard,
     ``node_describer`` /node, ``file_lister`` /files and a target's page, ``file_describer`` a
     file's page, ``source_lister`` /sources, ``source_describer`` a source's page,
@@ -1179,18 +1170,10 @@ def build_app(
         )
 
     # ------------------------------------------------------------------
-    # Runtime controls (phase P6a): each POST calls its use case, then redirects
+    # The restart control (phase P6a): its POST calls its use case, then redirects
     # (PRG) to ``/?done=<code>``, where the dashboard shows a 0-or-1 message banner.
     # NO CSRF token: consistent with the no-auth, network-trust-boundary posture (spec §12).
     # ------------------------------------------------------------------
-
-    async def handle_pause(request: Request) -> Response:
-        crawl_pauser.pause_crawl()
-        return RedirectResponse("/?done=paused", status_code=303)
-
-    async def handle_resume(request: Request) -> Response:
-        crawl_resumer.resume_crawl()
-        return RedirectResponse("/?done=resumed", status_code=303)
 
     async def handle_restart(request: Request) -> Response:
         shutdown_requester.request_shutdown()
@@ -1300,8 +1283,6 @@ def build_app(
             Route("/sources/{source_id_hex}", handle_source),
             Route("/targets/{target_id}", handle_target),
             Route("/node", handle_node),
-            Route("/controls/pause", handle_pause, methods=["POST"]),
-            Route("/controls/resume", handle_resume, methods=["POST"]),
             Route("/controls/restart", handle_restart, methods=["POST"]),
             Route("/console", handle_console),
             Route("/console", handle_console_run, methods=["POST"]),

@@ -27,9 +27,6 @@ class AsyncioRunStateStore(RunStateWriter, RunStateReader):
         self._resumed.set()
         self._shutdown_requested = asyncio.Event()
 
-    def set_paused(self, paused: bool) -> None:
-        self._loop.call_soon_threadsafe(self._resumed.clear if paused else self._resumed.set)
-
     def set_shutdown_requested(self) -> None:
         self._loop.call_soon_threadsafe(self._shutdown_requested.set)
 

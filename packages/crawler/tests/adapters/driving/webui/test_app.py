@@ -62,8 +62,6 @@ from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, Sou
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.application.use_cases.fake_console_query_runner import FakeConsoleQueryRunner
-from tests.fakes.application.use_cases.fake_crawl_pauser import FakeCrawlPauser
-from tests.fakes.application.use_cases.fake_crawl_resumer import FakeCrawlResumer
 from tests.fakes.application.use_cases.fake_crawl_summarizer import FakeCrawlSummarizer
 from tests.fakes.application.use_cases.fake_file_describer import (
     DescribeFileCall,
@@ -98,15 +96,13 @@ _WALL_CLOCK = _FAKE_TIME.wall
 
 @dataclass(kw_only=True, frozen=True)
 class _Controls:
-    """The three run state use cases' fakes, ``calls`` the operations the routes called on them."""
+    """The restart use case's fake, ``calls`` the operations the routes called on it."""
 
-    pauser: FakeCrawlPauser = field(default_factory=FakeCrawlPauser)
-    resumer: FakeCrawlResumer = field(default_factory=FakeCrawlResumer)
     shutdown_requester: FakeShutdownRequester = field(default_factory=FakeShutdownRequester)
 
     @property
     def calls(self) -> list[str]:
-        return self.pauser.calls + self.resumer.calls + self.shutdown_requester.calls
+        return self.shutdown_requester.calls
 
 
 # The read-path fixtures never call the controls, and read the crawl as running.
@@ -220,8 +216,6 @@ def _app_on_fakes(
         target_segments=_targets() if target_segments is None else target_segments,
         templates_directory=webui_directory / "templates",
         static_directory=webui_directory / "static",
-        crawl_pauser=controls.pauser,
-        crawl_resumer=controls.resumer,
         shutdown_requester=controls.shutdown_requester,
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
         node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state)),
@@ -1269,8 +1263,6 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         target_segments=_targets(),
         templates_directory=templates_directory,
         static_directory=Path(p2pwatch.adapters.driving.webui.__file__).parent / "static",
-        crawl_pauser=_NO_CONTROLS.pauser,
-        crawl_resumer=_NO_CONTROLS.resumer,
         shutdown_requester=_NO_CONTROLS.shutdown_requester,
         crawl_summarizer=_SUMMARIZER,
         node_describer=_DESCRIBER,
@@ -1711,13 +1703,12 @@ def controls_app() -> tuple[Starlette, _Controls]:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_renders_the_three_action_forms_and_the_running_crawl(
+async def test_dashboard_renders_the_restart_form_alone_and_the_running_crawl(
     controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
     text = await _page(app, url="/")
-    assert 'action="/controls/pause"' in text
-    assert 'action="/controls/resume"' in text
+    assert text.count('<form method="post"') == 1
     assert 'action="/controls/restart"' in text
     assert "The crawl is running." in text
 
@@ -1760,12 +1751,13 @@ async def test_dashboard_unknown_done_shows_no_banner(
 
 
 @pytest.mark.asyncio
-async def test_there_is_no_force_cycle_control(
-    controls_app: tuple[Starlette, _Controls],
+@pytest.mark.parametrize("action", ["force-cycle", "pause", "resume"])
+async def test_there_is_no_such_control(
+    *, controls_app: tuple[Starlette, _Controls], action: str
 ) -> None:
     app, controls = controls_app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/controls/force-cycle")
+        resp = await client.post(f"/controls/{action}")
     assert resp.status_code == 404
     assert controls.calls == []
 
@@ -1773,11 +1765,7 @@ async def test_there_is_no_force_cycle_control(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("action", "call", "done"),
-    [
-        ("pause", "pause_crawl", "paused"),
-        ("resume", "resume_crawl", "resumed"),
-        ("restart", "request_shutdown", "restarted"),
-    ],
+    [("restart", "request_shutdown", "restarted")],
 )
 async def test_each_control_dispatches_and_redirects_to_the_dashboard(
     *, controls_app: tuple[Starlette, _Controls], action: str, call: str, done: str
@@ -1792,15 +1780,7 @@ async def test_each_control_dispatches_and_redirects_to_the_dashboard(
 
 @pytest.mark.parametrize(
     ("action", "banner"),
-    [
-        (
-            "pause",
-            "Crawl paused. Searches in flight or already waiting their network slot still run, "
-            "then the crawler idles.",
-        ),
-        ("resume", "Crawl resumed."),
-        ("restart", "Restart requested. The service goes offline briefly, then returns."),
-    ],
+    [("restart", "Restart requested. The service goes offline briefly, then returns.")],
 )
 @pytest.mark.asyncio
 async def test_each_control_followed_lands_on_its_dashboard_banner(
