@@ -77,9 +77,7 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
         static_directory=static_directory,
         shutdown_requester=FakeShutdownRequester(),  # the console routes never restart
         crawl_summarizer=FakeCrawlSummarizer(
-            CrawlSummary(
-                client_summaries=(), is_paused=False, node_state=node_state, target_coverages=()
-            )
+            CrawlSummary(client_summaries=(), node_state=node_state, target_coverages=())
         ),
         node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state)),
         file_lister=FakeFileLister(

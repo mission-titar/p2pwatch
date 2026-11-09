@@ -11,7 +11,6 @@ from datetime import timedelta
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.search_worker import SearchTask, SearchWorker
 from p2pwatch.domain.identifiers import NodeId
@@ -28,7 +27,6 @@ class SearchTaskRunner:
         *,
         workers: Sequence[SearchWorker],
         keywords: Sequence[str],
-        run_state_reader: RunStateReader,
         backoff: BackoffRegistry,
         backoff_state_writer: BackoffStateWriter,
         monotonic_clock: MonotonicClock,
@@ -36,7 +34,6 @@ class SearchTaskRunner:
     ) -> None:
         self._workers = workers
         self._keywords = keywords
-        self._run_state_reader = run_state_reader
         self._backoff = backoff
         self._backoff_state_writer = backoff_state_writer
         self._monotonic_clock = monotonic_clock
@@ -64,7 +61,6 @@ class SearchTaskRunner:
         self, worker: SearchWorker, *, task: SearchTask, node_id: NodeId
     ) -> None:
         while True:
-            await self._run_state_reader.wait_until_resumed()
             wait = worker.time_until_ready(task.channel)
             if wait > timedelta(0):
                 await self._monotonic_clock.sleep(wait)

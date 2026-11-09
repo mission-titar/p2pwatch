@@ -248,7 +248,6 @@ class CrawlerComposition(CrawlerRunner):
                 target_ids=tuple(target.target_id for target in config.targets),
                 coverage_reader=SqliteCoverageReader(catalog_read_connections),
                 node_state_reader=node_state_reader,
-                run_state_reader=run_state_store,
                 status_reading_reader=status_reading_store,
                 monotonic_clock=monotonic_clock,
             ),
@@ -442,7 +441,6 @@ class CrawlerComposition(CrawlerRunner):
             search_task_runner = SearchTaskRunner(
                 workers=workers,
                 keywords=crawler_config.search.keywords,
-                run_state_reader=run_state_store,
                 backoff=backoff,
                 backoff_state_writer=backoff_state_store,
                 monotonic_clock=monotonic_clock,

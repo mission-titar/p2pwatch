@@ -21,7 +21,6 @@ class ClientSummary:
 @dataclass(kw_only=True, frozen=True)
 class CrawlSummary:
     client_summaries: tuple[ClientSummary, ...]
-    is_paused: bool
     node_state: NodeState
     target_coverages: tuple[TargetCoverage, ...]  # one per configured target, in their order
 
@@ -31,4 +30,4 @@ class CrawlSummarizer(ABC):
 
     @abstractmethod
     def summarize_crawl(self) -> CrawlSummary:
-        """Each client's status, whether the crawl is paused, the node, each target's coverage."""
+        """Each client's status, the node, each target's coverage."""

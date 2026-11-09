@@ -1,9 +1,8 @@
-"""Summarizes the crawl from the catalog, local.db, the run state and the clients' readings."""
+"""Summarizes the crawl from the catalog, local.db and the clients' readings."""
 
 from p2pwatch.application.ports.driven.coverage_reader import CoverageReader
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
-from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.status_reading_reader import StatusReadingReader
 from p2pwatch.application.ports.driving.crawl_summarizer import (
     ClientSummary,
@@ -24,14 +23,12 @@ class SummarizeCrawl(CrawlSummarizer):
         target_ids: tuple[TargetId, ...],
         coverage_reader: CoverageReader,
         node_state_reader: NodeStateReader,
-        run_state_reader: RunStateReader,
         status_reading_reader: StatusReadingReader,
         monotonic_clock: MonotonicClock,
     ) -> None:
         self._target_ids = target_ids
         self._coverage_reader = coverage_reader
         self._node_state_reader = node_state_reader
-        self._run_state_reader = run_state_reader
         self._status_reading_reader = status_reading_reader
         self._monotonic_clock = monotonic_clock
 
@@ -49,7 +46,6 @@ class SummarizeCrawl(CrawlSummarizer):
                 )
                 for client_name, published in published_readings.items()
             ),
-            is_paused=self._run_state_reader.is_paused(),
             node_state=self._node_state_reader.read_node_state(),
             target_coverages=tuple(
                 coverage_of(target_id, tiers=tiers_by_target.get(target_id, ()))

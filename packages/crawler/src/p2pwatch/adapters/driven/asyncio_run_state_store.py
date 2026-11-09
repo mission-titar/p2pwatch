@@ -17,28 +17,19 @@ from p2pwatch.application.ports.driven.run_state_writer import RunStateWriter
 class AsyncioRunStateStore(RunStateWriter, RunStateReader):
     """Forwards each change onto the crawler loop via ``call_soon_threadsafe``.
 
-    ``resumed`` is the pause gate (set = running, clear = paused), and ``shutdown_requested`` the
-    graceful-shutdown signal. The crawler starts resumed.
+    ``shutdown_requested`` is the graceful-shutdown signal, clear at start.
     """
 
     def __init__(self, *, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
-        self._resumed = asyncio.Event()
-        self._resumed.set()
         self._shutdown_requested = asyncio.Event()
 
     def set_shutdown_requested(self) -> None:
         self._loop.call_soon_threadsafe(self._shutdown_requested.set)
 
-    def is_paused(self) -> bool:
-        """A read, safe from another thread: ``is_set`` only returns a flag."""
-        return not self._resumed.is_set()
-
     def is_shutdown_requested(self) -> bool:
+        """A read, safe from another thread: ``is_set`` only returns a flag."""
         return self._shutdown_requested.is_set()
-
-    async def wait_until_resumed(self) -> None:
-        await self._resumed.wait()
 
     async def wait_until_shutdown_requested(self) -> None:
         await self._shutdown_requested.wait()
