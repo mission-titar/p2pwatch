@@ -274,11 +274,13 @@ def _copy_catalogs(
     ``open_catalog``'s ``PersistenceError`` or ``OutOfSpaceError`` raises ``CatalogCopyError``, and
     so does the first source whose copy fails (a row the destination's schema refuses, FK…), a new
     ``destination`` then removed; a later one raises ``PartialCopyError``, naming the sources
-    merged, which stay.
+    merged, which stay; a new ``destination`` it cannot remove is logged.
     """
-    is_new = not destination.exists()
     try:
+        is_new = not destination.exists()
         connection = database_opener.open_catalog(destination, exclusive=True)
+    except OSError as error:
+        raise CatalogCopyError(f"cannot open output {destination}: {error.strerror}") from error
     except HeldDatabaseError as error:
         raise CatalogCopyError(
             f"destination {destination} is held by another process: stop the node first"
@@ -303,8 +305,17 @@ def _copy_catalogs(
         connection.close()
         # Left behind, it would make the same command refuse to run again.
         if is_new and not merged_catalogs:
-            for suffix in ("", "-wal", "-shm"):
-                Path(f"{destination}{suffix}").unlink(missing_ok=True)
+            _remove_new_output(destination)
+
+
+def _remove_new_output(destination: Path) -> None:
+    """Removes ``destination``'s files, logging each it cannot: the failure that left it stands."""
+    for suffix in ("", "-wal", "-shm"):
+        path = Path(f"{destination}{suffix}")
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as error:
+            _logger.warning("%s, which no source entered, not removed: %s", path, error.strerror)
 
 
 def _copy_catalog(connection: sqlite3.Connection, *, source_catalog: PurePath) -> None:

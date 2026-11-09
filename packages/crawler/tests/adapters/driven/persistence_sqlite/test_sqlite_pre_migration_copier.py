@@ -329,6 +329,31 @@ def test_a_leftover_is_deleted_before_the_copy(tmp_path: Path) -> None:
         assert rows(copy, sql="PRAGMA integrity_check") == [{"integrity_check": "ok"}]
 
 
+def test_a_leftover_that_cannot_be_deleted_raises_a_migration_error(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        (path.parent / "catalog.db.pre-0003.partial").mkdir()
+        with pytest.raises(MigrationError, match=r"catalog\.db\.pre-0003\.partial"):
+            _copier().ensure_copy(
+                connection, path=path, pending=_pending(scripts), open_reader=open_reader
+            )
+
+
+def test_a_write_ahead_log_removed_before_the_copy_raises_a_migration_error(
+    tmp_path: Path,
+) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        Path(f"{path}-wal").unlink()
+        with pytest.raises(MigrationError, match=r"catalog\.db-wal"):
+            _copier().ensure_copy(
+                connection, path=path, pending=_pending(scripts), open_reader=open_reader
+            )
+    assert _copy_names(path.parent) == []
+
+
 def test_a_taken_name_refuses_and_leaves_its_file(tmp_path: Path) -> None:
     scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
     path = tmp_path / "data" / "catalog.db"

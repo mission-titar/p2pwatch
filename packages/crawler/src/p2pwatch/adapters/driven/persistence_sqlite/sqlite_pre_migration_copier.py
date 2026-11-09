@@ -58,7 +58,21 @@ class SqlitePreMigrationCopier:
         """On return, a pre-migration copy matching ``path``'s content exists, reused or made, or
         none was needed: no pending migration is marked ``copy-before``, or the database is new.
         The latest copy is read through ``open_reader``. Short of free space, it raises
-        ``OutOfSpaceError`` before writing anything."""
+        ``OutOfSpaceError`` before writing anything; a file it cannot read or write,
+        ``MigrationError``."""
+        try:
+            self._ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
+        except OSError as error:
+            raise MigrationError(f"pre-migration copy of {path} failed: {error}") from error
+
+    def _ensure_copy(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        path: Path,
+        pending: PendingMigrations,
+        open_reader: ReaderOpener,
+    ) -> None:
         _delete_leftovers(path)
         if pending.current_version == 0 or not any(
             migration.copy_before for migration in pending.migrations

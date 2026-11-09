@@ -585,6 +585,35 @@ def test_a_first_source_the_destination_refuses_leaves_no_output(tmp_path: Path)
     assert list(destination.parent.iterdir()) == []
 
 
+def test_a_new_output_left_behind_is_logged_and_its_source_s_failure_raised(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    _with_a_row_the_schema_refuses(source, sql=_BOGUS_ROLE)
+    destination = tmp_path / "output" / "out.db"
+    destination.parent.mkdir()
+    # Held exclusive, the output writes no -shm: a directory there opens, then cannot be removed.
+    shm = Path(f"{destination}-shm")
+    shm.mkdir()
+
+    with (
+        caplog.at_level("WARNING", logger=_COPIER_LOGGER),
+        pytest.raises(CatalogCopyError) as raised,
+    ):
+        _copy_catalogs(destination, source_catalogs=[source])
+
+    assert str(raised.value).startswith(f"copy of {source} failed at source_variants: CHECK")
+    assert caplog.messages == [f"{shm}, which no source entered, not removed: Is a directory"]
+
+
+def test_an_output_whose_name_is_too_long_raises_a_merge_error(tmp_path: Path) -> None:
+    source = make_catalog(tmp_path / "a.db", content=_full_catalog("a", node_id="node-a"))
+    destination = tmp_path / ("o" * 256)
+
+    with pytest.raises(CatalogCopyError, match=f"cannot open output {destination}: File name"):
+        _copy_catalogs(destination, source_catalogs=[source])
+
+
 def test_a_source_holding_a_pending_wal_merges_and_keeps_its_bytes(tmp_path: Path) -> None:
     # A copy of a running node's catalog: its rows still wait in its -wal.
     live = tmp_path / "live.db"
