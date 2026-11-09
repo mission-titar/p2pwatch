@@ -10,7 +10,10 @@ All SQL lives in module constants, parameterized (no value interpolation).
 import sqlite3
 from datetime import timedelta
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import best_observation
@@ -188,6 +191,7 @@ def _sources_search(search_text: str | None) -> tuple[str, list[str]]:
     return _SQL_SOURCES_SEARCH, [search_text, search_text]
 
 
+@wrap_stored_value_errors()
 def _sharing_period(row: NamedRow) -> SharingPeriod:
     """A row of ``_SQL_PERIODS`` as a period; only a sending one received its growth (D6)."""
     network, connectable = row["network"], row["connectable"]
@@ -225,13 +229,32 @@ def _source_namings(
 ) -> tuple[SourceNaming, ...]:
     params = {"key": key, "limit": limit, "offset": offset}
     return tuple(
-        SourceNaming(
-            source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
-            source_name=row["name"],
-            latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
-            file_count=row["file_count"],
-        )
-        for row in connection.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params)
+        map(_source_naming, connection.execute(_SQL_PAIRS + where + _SQL_PAIRS_END, params))
+    )
+
+
+@wrap_stored_value_errors()
+def _source_key(row: NamedRow) -> SourceKey:
+    return SourceKey(network=Network(row["network"]), native_id=row["native_id"])
+
+
+@wrap_stored_value_errors()
+def _source_naming(row: NamedRow) -> SourceNaming:
+    return SourceNaming(
+        source=_source_key(row),
+        source_name=row["name"],
+        latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
+        file_count=row["file_count"],
+    )
+
+
+@wrap_stored_value_errors()
+def _known_source(row: NamedRow) -> KnownSource:
+    return KnownSource(
+        source=_source_key(row),
+        source_name=row["name"],
+        latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
+        file_count=row["file_count"],
     )
 
 
@@ -266,15 +289,7 @@ class SqliteSourceReader(SourceReader):
             + "ORDER BY seen.latest_seen_at_micros DESC, s.source_id\nLIMIT ? OFFSET ?\n"
         )
         rows = self._thread_read_connections.connection().execute(sql, [*params, limit, offset])
-        return tuple(
-            KnownSource(
-                source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
-                source_name=row["name"],
-                latest_seen_at=micros_to_instant(row["latest_seen_at_micros"]),
-                file_count=row["file_count"],
-            )
-            for row in rows
-        )
+        return tuple(map(_known_source, rows))
 
     @wrap_sqlite_errors()
     def read_source_count(self, *, search_text: str | None) -> int:
@@ -299,7 +314,7 @@ class SqliteSourceReader(SourceReader):
         )
         best_filename_by_file = _best_filename_by_file(connection, sharing_periods=sharing_periods)
         return SourceHistory(
-            source=SourceKey(network=Network(row["network"]), native_id=row["native_id"]),
+            source=_source_key(row),
             source_namings=_source_namings(
                 connection, where=_WHERE_SOURCE_NAMED, key=source_id, limit=limit, offset=offset
             ),

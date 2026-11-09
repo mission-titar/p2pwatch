@@ -5,9 +5,11 @@ from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Protocol
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
@@ -138,3 +140,51 @@ def test_a_page_leaves_out_the_periods_on_a_file_never_observed(catalog_db: Path
         assert history is not None
         assert [period.file for period in history.sharing_periods] == [file]
         assert history.best_filename_by_file == {file: "keroro_s2e62a_vf.avi"}
+
+
+class _Read(Protocol):
+    def __call__(self, reader: SqliteSourceReader, /) -> object: ...
+
+
+# Each read of a source whose network no code knows.
+_READS_OF_AN_UNKNOWN_NETWORK: dict[str, _Read] = {
+    "known sources": lambda reader: reader.read_known_sources(
+        search_text=None, limit=_LIMIT, offset=0
+    ),
+    # A window after its point: the source alone is read.
+    "source history": lambda reader: reader.read_source_history(
+        source_id(_USER),
+        limit=_LIMIT,
+        offset=0,
+        window=PeriodWindow(since=_at(_S), until=_at(2 * _S), gap=_WINDOW.gap),
+    ),
+    "name history": lambda reader: reader.read_source_name_history(
+        _NAME, limit=_LIMIT, offset=0, window=_WINDOW
+    ),
+    "sharing periods": lambda reader: reader.read_sharing_periods(
+        FileKey(network=Network.ED2K, native_id="a" * 32), window=_WINDOW
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "read", _READS_OF_AN_UNKNOWN_NETWORK.values(), ids=list(_READS_OF_AN_UNKNOWN_NETWORK)
+)
+def test_a_stored_source_that_cannot_be_read_back_raises_persistence_error(
+    *, catalog_db: Path, read: _Read
+) -> None:
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        insert_file(connection, native_id="a" * 32)
+        insert_observation(connection, native_id="a" * 32, filename="keroro_s2e62a_vf.avi")
+        connection.execute(
+            "INSERT INTO sources (source_id, network, native_id) VALUES (?, 'bogus', ?)",
+            (source_id(_USER), _USER),
+        )
+        variant = insert_source_variant(connection, native_id="a" * 32, user_hash=_USER, name=_NAME)
+        insert_source_point(connection, variant_id=variant, observed_at_micros=0)
+    with (
+        ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections,
+        pytest.raises(PersistenceError, match="^a stored value cannot be read: 'bogus'"),
+    ):
+        read(SqliteSourceReader(thread_read_connections))

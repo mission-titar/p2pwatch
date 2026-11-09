@@ -3,6 +3,7 @@
 import sqlite3
 from collections.abc import Iterator
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_stored_value_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.domain.file_key import FileKey, Network
@@ -92,6 +93,7 @@ LIMIT 1
 )
 
 
+@wrap_stored_value_errors()
 def observation_from_row(row: NamedRow) -> FileObservation:
     reported_file = ReportedFile(
         file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),

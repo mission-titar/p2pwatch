@@ -22,7 +22,7 @@ from tests.contracts.application.ports.driven.decision_store_contract import (
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
-from tests.support.catalog_rows import insert_file
+from tests.support.catalog_rows import insert_decision, insert_file
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _KEY = FileKey(network=Network.ED2K, native_id=_HASH)
@@ -203,3 +203,26 @@ def test_of_two_decisions_of_the_same_instant_the_last_recorded_is_the_latest(
         )
     }
     assert decision_store.read_download_candidates() == ()
+
+
+def test_a_stored_tier_that_cannot_be_read_back_raises_persistence_error(
+    *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
+) -> None:
+    connection.execute("PRAGMA ignore_check_constraints = ON")
+    insert_decision(connection, native_id=_HASH, target_id=_TARGET_ID, tier="bogus")
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: 'bogus'"):
+        decision_store.read_latest_decisions(_KEY)
+
+
+def test_a_stored_file_that_cannot_be_read_back_raises_persistence_error(
+    *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
+) -> None:
+    connection.execute("PRAGMA ignore_check_constraints = ON")
+    other = FileKey(network=Network.ED2K, native_id="c" * 32)
+    connection.execute(
+        "INSERT INTO files (file_id, network, native_id, size_bytes) VALUES (?, 'bogus', ?, 1)",
+        (other.file_id, other.native_id),
+    )
+    insert_decision(connection, native_id=other.native_id, target_id=_TARGET_ID, tier="download")
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: 'bogus'"):
+        decision_store.read_download_candidates()

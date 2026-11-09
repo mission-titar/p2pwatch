@@ -11,7 +11,10 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from collections.abc import Mapping
 from datetime import datetime
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
@@ -321,22 +324,23 @@ class SqliteCatalogFileReader(CatalogFileReader):
         params.append(offset)
 
         rows = self._thread_read_connections.connection().execute(sql, params).fetchall()
-        return tuple(
-            CatalogEntry(
-                file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
-                latest_observation=observation_from_row(row),
-                decisions=tuple(
-                    DecisionRecord(target_id=TargetId(t), rule_name=r, tier=DecisionTier(ti))
-                    for t, r, ti in zip(
-                        _split_concat(row["target_ids"]),
-                        _split_concat(row["rule_names"]),
-                        _split_concat(row["tiers"]),
-                        strict=True,
-                    )
-                ),
+        with wrap_stored_value_errors():
+            return tuple(
+                CatalogEntry(
+                    file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
+                    latest_observation=observation_from_row(row),
+                    decisions=tuple(
+                        DecisionRecord(target_id=TargetId(t), rule_name=r, tier=DecisionTier(ti))
+                        for t, r, ti in zip(
+                            _split_concat(row["target_ids"]),
+                            _split_concat(row["rule_names"]),
+                            _split_concat(row["tiers"]),
+                            strict=True,
+                        )
+                    ),
+                )
+                for row in rows
             )
-            for row in rows
-        )
 
     @wrap_sqlite_errors()
     def read_file_history(
@@ -351,19 +355,20 @@ class SqliteCatalogFileReader(CatalogFileReader):
         file = latest_observation.reported_file.file
         dec_rows = connection.execute(_SQL_FILE_DECISIONS, (file_id,)).fetchall()
 
-        decisions = tuple(
-            DatedDecision(
-                file=file,
-                decision=DecisionRecord(
-                    target_id=TargetId(row["target_id"]),
-                    rule_name=row["rule_name"],
-                    tier=DecisionTier(row["tier"]),
-                ),
-                decided_at=micros_to_instant(row["decided_at_micros"]),
-                node_id=NodeId(row["node_id"]),
+        with wrap_stored_value_errors():
+            decisions = tuple(
+                DatedDecision(
+                    file=file,
+                    decision=DecisionRecord(
+                        target_id=TargetId(row["target_id"]),
+                        rule_name=row["rule_name"],
+                        tier=DecisionTier(row["tier"]),
+                    ),
+                    decided_at=micros_to_instant(row["decided_at_micros"]),
+                    node_id=NodeId(row["node_id"]),
+                )
+                for row in dec_rows
             )
-            for row in dec_rows
-        )
 
         return FileHistory(
             file=file,
