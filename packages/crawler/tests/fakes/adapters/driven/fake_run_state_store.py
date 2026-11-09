@@ -13,6 +13,7 @@ class FakeRunStateStore(RunStateWriter, RunStateReader):
         self.set_paused(paused)
 
     def set_paused(self, paused: bool) -> None:
+        """No port's: the pause its reader's tests set, since no use case sets one."""
         if paused:
             self._resumed.clear()
         else:

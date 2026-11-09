@@ -68,7 +68,6 @@ _RESULT = {
     "size_bytes": 367_001_600,
     "sources": {"total": 3},
 }
-_LOGIN = ("POST", "/api/v1/auth/login")
 # A million recursion steps: tens of milliseconds at least, far below the console's budget.
 _COUNTING_QUERY = (
     "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 1000000)"
@@ -165,10 +164,6 @@ def _searches_read(api: FakeAmuleApi) -> int:
 
 def _has_logged_out(api: FakeAmuleApi) -> bool:
     return any(request.url.path == "/api/v1/auth/logout" for request in api.requests)
-
-
-def _has_read_the_status(api: FakeAmuleApi) -> bool:
-    return any(request.url.path == "/api/v1/status" for request in api.requests)
 
 
 async def _crawl_until_a_search_is_read(config_path: Path, *, targets_path: Path) -> None:
@@ -464,49 +459,6 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
     assert _search_types(api) == ["kad"]
-
-
-@pytest.mark.asyncio
-async def test_a_pause_from_the_webui_holds_the_searches_until_its_resume(
-    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
-    api = FakeAmuleApi()
-    login_arrived = threading.Event()
-    paused = threading.Event()
-
-    def login_once_paused(request: httpx.Request) -> httpx.Response:
-        # Held until the test has paused, so the loops start paused; then answered as usual.
-        login_arrived.set()
-        paused.wait(_WAIT_SECONDS)
-        del api.overrides[_LOGIN]
-        return api.handle(request)
-
-    api.overrides[_LOGIN] = login_once_paused
-
-    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
-        run = _crawl(server, config_path=config_path)
-        assert await asyncio.to_thread(login_arrived.wait, _WAIT_SECONDS)
-        host, port = _webui_bound_address(caplog.messages)
-        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as webui:
-            await webui.post("/controls/pause")
-            paused.set()
-            # The status loop reads on while paused; only time shows that no search starts.
-            assert await asyncio.to_thread(
-                server.wait_for, _has_read_the_status, timeout_seconds=_WAIT_SECONDS
-            )
-            await asyncio.sleep(0.5)  # noqa: TID251
-            searches_while_paused = _search_types(api)
-            await webui.post("/controls/resume")
-            assert await asyncio.to_thread(
-                server.wait_for,
-                lambda seen: _searches_read(seen) >= 1,
-                timeout_seconds=_WAIT_SECONDS,
-            )
-            await webui.post("/controls/restart")
-        await asyncio.wait_for(run, _WAIT_SECONDS)
-
-    assert searches_while_paused == []
 
 
 @pytest.mark.asyncio

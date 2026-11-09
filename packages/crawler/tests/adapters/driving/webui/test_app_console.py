@@ -25,8 +25,6 @@ from tests.fakes.application.use_cases.fake_console_query_runner import (
     FakeConsoleQueryRunner,
     RunConsoleQueryCall,
 )
-from tests.fakes.application.use_cases.fake_crawl_pauser import FakeCrawlPauser
-from tests.fakes.application.use_cases.fake_crawl_resumer import FakeCrawlResumer
 from tests.fakes.application.use_cases.fake_crawl_summarizer import FakeCrawlSummarizer
 from tests.fakes.application.use_cases.fake_file_describer import FakeFileDescriber
 from tests.fakes.application.use_cases.fake_file_lister import FakeFileLister
@@ -77,9 +75,7 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
         target_segments=_targets(),
         templates_directory=templates_directory,
         static_directory=static_directory,
-        crawl_pauser=FakeCrawlPauser(),  # the console routes never call the controls
-        crawl_resumer=FakeCrawlResumer(),
-        shutdown_requester=FakeShutdownRequester(),
+        shutdown_requester=FakeShutdownRequester(),  # the console routes never restart
         crawl_summarizer=FakeCrawlSummarizer(
             CrawlSummary(
                 client_summaries=(), is_paused=False, node_state=node_state, target_coverages=()

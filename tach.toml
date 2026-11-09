@@ -344,8 +344,6 @@ layer = "adapters"
 depends_on = [
   "p2pwatch.domain",
   "p2pwatch.application.ports.driving.console_query_runner",
-  "p2pwatch.application.ports.driving.crawl_pauser",
-  "p2pwatch.application.ports.driving.crawl_resumer",
   "p2pwatch.application.ports.driving.crawl_summarizer",
   "p2pwatch.application.ports.driving.file_describer",
   "p2pwatch.application.ports.driving.file_lister",
@@ -426,8 +424,6 @@ depends_on = [
   "p2pwatch.application.ports.driving.catalog_merger",
   "p2pwatch.application.ports.driving.config_validator",
   "p2pwatch.application.ports.driving.console_query_runner",
-  "p2pwatch.application.ports.driving.crawl_pauser",
-  "p2pwatch.application.ports.driving.crawl_resumer",
   "p2pwatch.application.ports.driving.crawl_summarizer",
   "p2pwatch.application.ports.driving.file_describer",
   "p2pwatch.application.ports.driving.file_lister",
@@ -707,16 +703,6 @@ depends_on = ["p2pwatch.domain"]
 path = "p2pwatch.application.ports.driving.console_query_runner"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
-
-[[modules]]
-path = "p2pwatch.application.ports.driving.crawl_pauser"
-layer = "ports"
-depends_on = []
-
-[[modules]]
-path = "p2pwatch.application.ports.driving.crawl_resumer"
-layer = "ports"
-depends_on = []
 
 [[modules]]
 path = "p2pwatch.application.ports.driving.crawler_runner"
