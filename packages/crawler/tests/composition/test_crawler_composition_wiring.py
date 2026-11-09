@@ -555,6 +555,9 @@ async def test_a_sigterm_during_a_re_evaluation_stops_its_pass_and_the_run_at_on
         insert_observation(catalog, native_id=native_id, filename=f"unrelated_{index}.avi")
     catalog.close()
     config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+    # One target: the shipped ones cost about 45 ms a file under coverage.
+    targets_path = tmp_path / "targets.yml"
+    targets_path.write_text(_TARGET_062A, encoding="utf-8")
     reevaluator_logger = logging.getLogger(CatalogReevaluator.__module__)
     sigterm = _SigtermAtRecord(
         "catalogue re-evaluation: 200/400 files, 0 rows written",
@@ -563,7 +566,9 @@ async def test_a_sigterm_during_a_re_evaluation_stops_its_pass_and_the_run_at_on
     reevaluator_logger.addHandler(sigterm)
     try:
         with FakeAmuleApiServer(FakeAmuleApi()) as server, caplog.at_level(logging.INFO):
-            await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
+            await asyncio.wait_for(
+                _crawl(server, config_path=config_path, targets_path=targets_path), _WAIT_SECONDS
+            )
     finally:
         reevaluator_logger.removeHandler(sigterm)
 
