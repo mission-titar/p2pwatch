@@ -91,8 +91,8 @@ def _record_decisions(
 ) -> None:
     """Records each decision on its file, at its instant or a drawn one."""
     for file, decision, decided_at in decisions:
-        decision_writer.record_decision(
-            draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)
+        decision_writer.record_decisions(
+            [draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)]
         )
 
 
@@ -418,8 +418,8 @@ class CatalogFileReaderContract(ABC):
             (elsewhere, DecisionTier.DOWNLOAD, other_target_id),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=decided_target_id)
-            decision_writer.record_decision(
-                draw_dated_decision(randomness, file=decided_file, decision=record)
+            decision_writer.record_decisions(
+                [draw_dated_decision(randomness, file=decided_file, decision=record)]
             )
         entries = _entries(
             reader, target_id=target_id, tier=DecisionTier.DOWNLOAD, search_text=search_text
@@ -734,8 +734,8 @@ class CatalogFileReaderContract(ABC):
             (elsewhere, DecisionTier.DOWNLOAD, other_target_id),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=decided_target_id)
-            decision_writer.record_decision(
-                draw_dated_decision(randomness, file=decided_file, decision=record)
+            decision_writer.record_decisions(
+                [draw_dated_decision(randomness, file=decided_file, decision=record)]
             )
         assert (
             _counts(reader, target_id=target_id),
@@ -846,7 +846,7 @@ class CatalogFileReaderContract(ABC):
             )
         )
         for dated_decision in (retraction, withdrawn, *reversed(current), outdated):
-            decision_writer.record_decision(dated_decision)
+            decision_writer.record_decisions([dated_decision])
         since, until = draw_instants(randomness, count=2)
         file_history = reader.read_file_history(file.file_id, since=since, until=until)
         assert file_history is not None
@@ -876,7 +876,7 @@ class CatalogFileReaderContract(ABC):
             )
         )
         for dated_decision in (decided, legacy):
-            decision_writer.record_decision(dated_decision)
+            decision_writer.record_decisions([dated_decision])
         file_history = reader.read_file_history(file.file_id, since=earlier_at, until=later_at)
         assert file_history is not None
         assert file_history.decisions == (decided,)

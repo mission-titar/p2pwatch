@@ -13,6 +13,7 @@ from p2pwatch.domain.file_target_decision import Retraction
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord
 from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,
     draw_decision_record,
@@ -59,7 +60,7 @@ class DecisionStoreContract(ABC):
     ) -> None:
         file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=tier)
-        writer.record_decision(draw_dated_decision(randomness, file=file, decision=record))
+        writer.record_decisions([draw_dated_decision(randomness, file=file, decision=record)])
         latest_decisions = reader.read_latest_decisions(file)
         assert latest_decisions == {record.target_id: record}
         # A `StrEnum` member equals its text: only `is` tells the tier from a bare string.
@@ -67,6 +68,26 @@ class DecisionStoreContract(ABC):
             isinstance(decision, DecisionRecord) and decision.tier is tier
             for decision in latest_decisions.values()
         )
+
+    def test_decisions_refused_on_a_file_never_observed_are_none_written(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        writer: DecisionWriter,
+        reader: DecisionReader,
+    ) -> None:
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
+        record = draw_decision_record(randomness, tier=DecisionTier.DOWNLOAD)
+        with pytest.raises(StoreError):
+            writer.record_decisions(
+                [
+                    draw_dated_decision(randomness, file=file, decision=record),
+                    draw_dated_decision(randomness, file=draw_file(randomness), decision=record),
+                ]
+            )
+        assert reader.read_latest_decisions(file) == {}
+        assert reader.read_download_candidates() == ()
 
     def test_a_target_s_latest_decision_is_the_most_recent_of_its_file_not_the_last_recorded(
         self,
@@ -96,10 +117,12 @@ class DecisionStoreContract(ABC):
             (file, other_target, earlier_at),
             (other_file, earlier, latest_at),
         ):
-            writer.record_decision(
-                draw_dated_decision(
-                    randomness, file=decided_file, decision=decision, decided_at=decided_at
-                )
+            writer.record_decisions(
+                [
+                    draw_dated_decision(
+                        randomness, file=decided_file, decision=decision, decided_at=decided_at
+                    )
+                ]
             )
         assert reader.read_latest_decisions(file) == {
             target_id: latest,
@@ -118,11 +141,11 @@ class DecisionStoreContract(ABC):
         earlier_at, later_at = draw_instants(randomness, count=2)
         record = draw_decision_record(randomness, tier=DecisionTier.DOWNLOAD)
         retraction = Retraction(target_id=record.target_id)
-        writer.record_decision(
-            draw_dated_decision(randomness, file=file, decision=retraction, decided_at=later_at)
+        writer.record_decisions(
+            [draw_dated_decision(randomness, file=file, decision=retraction, decided_at=later_at)]
         )
-        writer.record_decision(
-            draw_dated_decision(randomness, file=file, decision=record, decided_at=earlier_at)
+        writer.record_decisions(
+            [draw_dated_decision(randomness, file=file, decision=record, decided_at=earlier_at)]
         )
         assert reader.read_latest_decisions(file) == {record.target_id: retraction}
         assert reader.read_download_candidates() == ()
@@ -137,9 +160,13 @@ class DecisionStoreContract(ABC):
     ) -> None:
         file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=DecisionTier.NOTIFY)
-        writer.record_decision(draw_dated_decision(randomness, file=file, decision=record))
-        writer.record_decision(
-            draw_dated_decision(randomness, file=file, decision=Retraction(target_id=TargetId("")))
+        writer.record_decisions([draw_dated_decision(randomness, file=file, decision=record)])
+        writer.record_decisions(
+            [
+                draw_dated_decision(
+                    randomness, file=file, decision=Retraction(target_id=TargetId(""))
+                )
+            ]
         )
         assert reader.read_latest_decisions(file) == {record.target_id: record}
 
@@ -161,8 +188,8 @@ class DecisionStoreContract(ABC):
             (DecisionTier.CATALOG, earlier_at),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
-            writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)
+            writer.record_decisions(
+                [draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)]
             )
         assert reader.read_download_candidates() == (
             DownloadCandidate(file=file, target_id=target_id),
@@ -183,8 +210,8 @@ class DecisionStoreContract(ABC):
         earlier_at, later_at = draw_instants(randomness, count=2)
         for tier, decided_at in ((latest_tier, later_at), (DecisionTier.DOWNLOAD, earlier_at)):
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
-            writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)
+            writer.record_decisions(
+                [draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)]
             )
         assert reader.read_download_candidates() == ()
 
@@ -208,8 +235,8 @@ class DecisionStoreContract(ABC):
             (other_file, DecisionTier.DOWNLOAD, earliest_at),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
-            writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)
+            writer.record_decisions(
+                [draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)]
             )
         assert reader.read_download_candidates() == (
             DownloadCandidate(file=candidate_file, target_id=target_id),
@@ -233,8 +260,8 @@ class DecisionStoreContract(ABC):
             (first_target_id, DecisionTier.DOWNLOAD, later_at),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
-            writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)
+            writer.record_decisions(
+                [draw_dated_decision(randomness, file=file, decision=record, decided_at=decided_at)]
             )
         assert reader.read_download_candidates() == (
             DownloadCandidate(file=file, target_id=first_target_id),

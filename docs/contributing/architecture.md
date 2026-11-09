@@ -285,10 +285,8 @@ sequenceDiagram
     W->>C: read_known_filenames(file)
     W->>E: evaluate_file(candidates)
     E-->>W: list[MatchDecision]
-    loop each changed decision
-      W->>C: record_decision(DatedDecision)
-      W-)D: wake (if download tier)
-    end
+    W->>C: record_decisions(changed DatedDecisions), one transaction
+    W-)D: wake (if a download tier)
   end
 ```
 

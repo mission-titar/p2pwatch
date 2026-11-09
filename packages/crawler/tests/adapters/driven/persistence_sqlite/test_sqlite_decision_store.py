@@ -83,7 +83,7 @@ class TestSqliteDecisionStore(DecisionStoreContract):
 def test_record_decision_round_trip(
     *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
-    decision_store.record_decision(_decision(_KEY))
+    decision_store.record_decisions([_decision(_KEY)])
     assert rows(
         connection,
         sql="SELECT file_id, target_id, rule_name, tier,"
@@ -105,7 +105,7 @@ def test_record_decision_round_trip(
 def test_explanation_is_never_persisted(
     *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
-    decision_store.record_decision(_decision(_KEY))
+    decision_store.record_decisions([_decision(_KEY)])
     columns = {
         column["name"] for column in rows(connection, sql="PRAGMA table_info(match_decisions)")
     }
@@ -125,7 +125,9 @@ def test_record_decision_for_unknown_file_raises_persistence_error(
 ) -> None:
     # FK violated (file never observed): sqlite3.IntegrityError WRAPPED, never bare.
     with pytest.raises(PersistenceError, match="FOREIGN KEY"):
-        decision_store.record_decision(_decision(FileKey(network=Network.ED2K, native_id="0" * 32)))
+        decision_store.record_decisions(
+            [_decision(FileKey(network=Network.ED2K, native_id="0" * 32))]
+        )
 
 
 def test_record_decision_rejects_non_canonical_hash(
@@ -134,8 +136,8 @@ def test_record_decision_rejects_non_canonical_hash(
     # Python validation BEFORE any transaction: an uppercase hash is rejected
     # with a clear message, no row is written.
     with pytest.raises(PersistenceError, match="non-canonical eD2k hash"):
-        decision_store.record_decision(
-            _decision(FileKey(network=Network.ED2K, native_id=_HASH.upper()))
+        decision_store.record_decisions(
+            [_decision(FileKey(network=Network.ED2K, native_id=_HASH.upper()))]
         )
     assert rows(connection, sql="SELECT count(*) AS decision_count FROM match_decisions") == [
         {"decision_count": 0}
@@ -145,7 +147,7 @@ def test_record_decision_rejects_non_canonical_hash(
 def test_record_retraction_round_trip(
     *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
-    decision_store.record_decision(_retraction(_KEY))
+    decision_store.record_decisions([_retraction(_KEY)])
     assert rows(
         connection,
         sql="SELECT file_id, target_id, rule_name, tier, decided_at_micros, node_id"
@@ -168,8 +170,8 @@ def test_record_retraction_round_trip(
 def test_each_decision_stores_its_own_node_id(
     *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
-    decision_store.record_decision(_decision(_KEY, node_id=NodeId("n2")))
-    decision_store.record_decision(_retraction(_KEY, node_id=NodeId("n3")))
+    decision_store.record_decisions([_decision(_KEY, node_id=NodeId("n2"))])
+    decision_store.record_decisions([_retraction(_KEY, node_id=NodeId("n3"))])
     assert rows(connection, sql="SELECT node_id FROM match_decisions ORDER BY id") == [
         {"node_id": "n2"},
         {"node_id": "n3"},
@@ -179,7 +181,7 @@ def test_each_decision_stores_its_own_node_id(
 def test_record_retraction_row_is_append_only(
     *, decision_store: SqliteDecisionStore, connection: sqlite3.Connection
 ) -> None:
-    decision_store.record_decision(_retraction(_KEY))
+    decision_store.record_decisions([_retraction(_KEY)])
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
         connection.execute("UPDATE match_decisions SET tier = 'catalog'")
     with pytest.raises(sqlite3.IntegrityError, match="match_decisions is append-only"):
@@ -193,8 +195,8 @@ def test_record_retraction_row_is_append_only(
 def test_of_two_decisions_of_the_same_instant_the_last_recorded_is_the_latest(
     decision_store: SqliteDecisionStore,
 ) -> None:
-    decision_store.record_decision(_decision(_KEY, tier=DecisionTier.DOWNLOAD))
-    decision_store.record_decision(_decision(_KEY, tier=DecisionTier.CATALOG))
+    decision_store.record_decisions([_decision(_KEY, tier=DecisionTier.DOWNLOAD)])
+    decision_store.record_decisions([_decision(_KEY, tier=DecisionTier.CATALOG)])
     assert decision_store.read_latest_decisions(_KEY) == {
         _TARGET_ID: DecisionRecord(
             target_id=_TARGET_ID, rule_name="exact_062a", tier=DecisionTier.CATALOG

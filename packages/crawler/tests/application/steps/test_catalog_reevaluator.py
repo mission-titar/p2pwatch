@@ -259,13 +259,15 @@ async def test_unchanged_row_is_evaluated_but_not_written(
     decisions = engine.evaluate_file((candidate,))
     assert decisions  # non-empty
     # pre-seed the "already correct" verdict
-    decision_store.record_decision(
-        DatedDecision(
-            file=FileKey(network=Network.ED2K, native_id=_HASH_CAT),
-            decision=to_record(decisions[0]),
-            decided_at=wall_clock.now(),
-            node_id=_NODE_ID,
-        )
+    decision_store.record_decisions(
+        [
+            DatedDecision(
+                file=FileKey(network=Network.ED2K, native_id=_HASH_CAT),
+                decision=to_record(decisions[0]),
+                decided_at=wall_clock.now(),
+                node_id=_NODE_ID,
+            )
+        ]
     )
     reevaluation = _Reevaluation(
         observation_store,
@@ -359,15 +361,17 @@ async def test_backfill_retracts_a_legacy_arbitrary_target_row(
             node_id=_NODE_ID,
         )
     )
-    decision_store.record_decision(
-        DatedDecision(
-            file=FileKey(network=Network.ED2K, native_id=_HASH_MULTI),
-            decision=DecisionRecord(
-                target_id=TargetId("001A"), rule_name="keroro_large", tier=DecisionTier.CATALOG
-            ),
-            decided_at=wall_clock.now(),
-            node_id=_NODE_ID,
-        )
+    decision_store.record_decisions(
+        [
+            DatedDecision(
+                file=FileKey(network=Network.ED2K, native_id=_HASH_MULTI),
+                decision=DecisionRecord(
+                    target_id=TargetId("001A"), rule_name="keroro_large", tier=DecisionTier.CATALOG
+                ),
+                decided_at=wall_clock.now(),
+                node_id=_NODE_ID,
+            )
+        ]
     )
     reevaluation = _Reevaluation(
         observation_store,
@@ -413,13 +417,15 @@ async def test_backfill_ignores_the_legacy_empty_sentinel(
             node_id=_NODE_ID,
         )
     )
-    decision_store.record_decision(
-        DatedDecision(
-            file=FileKey(network=Network.ED2K, native_id=_HASH_MULTI),
-            decision=Retraction(target_id=TargetId("")),
-            decided_at=wall_clock.now(),
-            node_id=_NODE_ID,
-        )
+    decision_store.record_decisions(
+        [
+            DatedDecision(
+                file=FileKey(network=Network.ED2K, native_id=_HASH_MULTI),
+                decision=Retraction(target_id=TargetId("")),
+                decided_at=wall_clock.now(),
+                node_id=_NODE_ID,
+            )
+        ]
     )
     reevaluation = _Reevaluation(
         observation_store,

@@ -26,6 +26,7 @@ from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
@@ -83,15 +84,17 @@ def _seed_decision(
     decided_at: datetime,
     node_id: NodeId = _NODE_ID,
 ) -> None:
-    decision_store.record_decision(
-        DatedDecision(
-            file=_key(native_id),
-            decision=DecisionRecord(
-                target_id=target_id, rule_name="title_review", tier=DecisionTier.NOTIFY
-            ),
-            decided_at=decided_at,
-            node_id=node_id,
-        )
+    decision_store.record_decisions(
+        [
+            DatedDecision(
+                file=_key(native_id),
+                decision=DecisionRecord(
+                    target_id=target_id, rule_name="title_review", tier=DecisionTier.NOTIFY
+                ),
+                decided_at=decided_at,
+                node_id=node_id,
+            )
+        ]
     )
 
 
@@ -234,6 +237,53 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
     )
     assert again == 0
     assert count_decisions(catalog_connection) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_refused_second_decision_writes_none_and_the_next_judgement_redoes_them(
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    catalog_connection: sqlite3.Connection,
+    engine: MatchingEngine,
+    wall_clock: FakeWallClock,
+) -> None:
+    catalog_connection.execute(
+        "CREATE TRIGGER refuse_062b BEFORE INSERT ON match_decisions WHEN NEW.target_id = '062B'"
+        " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"
+    )
+    observability, waker = ObservabilityOverFakes(), FakeWaker()
+    with pytest.raises(StoreError, match="injected failure"):
+        await _record(
+            _HASH_MULTI,
+            filename=_MULTI_NAME,
+            observation_store=observation_store,
+            decision_store=decision_store,
+            engine=engine,
+            waker=waker,
+            observability=observability,
+            wall_clock=wall_clock,
+        )
+    assert decision_store.read_latest_decisions(_key(_HASH_MULTI)) == {}
+    assert (observability.logger.lines, waker.woken_subjects) == ([], [])
+    catalog_connection.execute("DROP TRIGGER refuse_062b")
+    written = await _record(
+        _HASH_MULTI,
+        filename=_MULTI_NAME,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        waker=waker,
+        observability=observability,
+        wall_clock=wall_clock,
+    )
+    assert written == 2
+    assert observability.logger.lines == [
+        _decisions_line(
+            _HASH_MULTI, filename=_MULTI_NAME, changes="062A none → download, 062B none → download"
+        )
+    ]
+    assert observability.notifier.node_ids == [_NODE_ID]
 
 
 @pytest.mark.asyncio
@@ -431,13 +481,15 @@ async def test_already_retracted_then_none_is_a_no_op(
     _seed_decision(
         decision_store, native_id=_HASH_CAT, target_id=TargetId("062A"), decided_at=wall_clock.now()
     )
-    decision_store.record_decision(
-        DatedDecision(
-            file=_key(_HASH_CAT),
-            decision=Retraction(target_id=TargetId("062A")),
-            decided_at=wall_clock.now(),
-            node_id=_NODE_ID,
-        )
+    decision_store.record_decisions(
+        [
+            DatedDecision(
+                file=_key(_HASH_CAT),
+                decision=Retraction(target_id=TargetId("062A")),
+                decided_at=wall_clock.now(),
+                node_id=_NODE_ID,
+            )
+        ]
     )
     observability, waker = ObservabilityOverFakes(), FakeWaker()
     written = await _record(

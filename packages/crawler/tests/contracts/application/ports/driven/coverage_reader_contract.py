@@ -64,7 +64,9 @@ class CoverageReaderContract(ABC):
     ) -> None:
         file = record_drawn_observation(randomness, observation_writer=observation_writer)
         record = draw_decision_record(randomness, tier=tier)
-        decision_writer.record_decision(draw_dated_decision(randomness, file=file, decision=record))
+        decision_writer.record_decisions(
+            [draw_dated_decision(randomness, file=file, decision=record)]
+        )
         coverage = reader.read_target_coverage()
         assert coverage == {record.target_id: (tier,)}
         # A `StrEnum` member equals its text: only `is` tells the tier from a bare string.
@@ -83,8 +85,8 @@ class CoverageReaderContract(ABC):
         for tier in tiers:
             file = record_drawn_observation(randomness, observation_writer=observation_writer)
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
-            decision_writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=record)
+            decision_writer.record_decisions(
+                [draw_dated_decision(randomness, file=file, decision=record)]
             )
         assert _sorted_tiers(reader.read_target_coverage()) == {target_id: sorted(tiers)}
 
@@ -103,8 +105,8 @@ class CoverageReaderContract(ABC):
             (other_target_id, DecisionTier.NOTIFY),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=decided_target_id)
-            decision_writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=record)
+            decision_writer.record_decisions(
+                [draw_dated_decision(randomness, file=file, decision=record)]
             )
         assert reader.read_target_coverage() == {
             target_id: (DecisionTier.DOWNLOAD,),
@@ -131,10 +133,12 @@ class CoverageReaderContract(ABC):
             (other_file, DecisionTier.CATALOG, latest_at),
         ):
             record = draw_decision_record(randomness, tier=tier, target_id=target_id)
-            decision_writer.record_decision(
-                draw_dated_decision(
-                    randomness, file=decided_file, decision=record, decided_at=decided_at
-                )
+            decision_writer.record_decisions(
+                [
+                    draw_dated_decision(
+                        randomness, file=decided_file, decision=record, decided_at=decided_at
+                    )
+                ]
             )
         assert _sorted_tiers(reader.read_target_coverage()) == {
             target_id: sorted([DecisionTier.NOTIFY, DecisionTier.CATALOG])
@@ -167,8 +171,12 @@ class CoverageReaderContract(ABC):
             ),
         )
         for decision, decided_at in decisions:
-            decision_writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)
+            decision_writer.record_decisions(
+                [
+                    draw_dated_decision(
+                        randomness, file=file, decision=decision, decided_at=decided_at
+                    )
+                ]
             )
         assert reader.read_target_coverage() == {kept_target_id: (DecisionTier.CATALOG,)}
 
@@ -188,7 +196,11 @@ class CoverageReaderContract(ABC):
             (Retraction(target_id=TargetId("")), later_at),
         )
         for decision, decided_at in decisions:
-            decision_writer.record_decision(
-                draw_dated_decision(randomness, file=file, decision=decision, decided_at=decided_at)
+            decision_writer.record_decisions(
+                [
+                    draw_dated_decision(
+                        randomness, file=file, decision=decision, decided_at=decided_at
+                    )
+                ]
             )
         assert reader.read_target_coverage() == {record.target_id: (DecisionTier.NOTIFY,)}
