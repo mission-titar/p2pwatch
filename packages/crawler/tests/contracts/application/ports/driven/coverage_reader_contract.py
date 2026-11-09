@@ -13,6 +13,7 @@ from p2pwatch.application.ports.driven.observation_writer import ObservationWrit
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,
     draw_decision_record,
@@ -45,6 +46,11 @@ class CoverageReaderContract(ABC):
     @abstractmethod
     def reader(self) -> CoverageReader:
         """The reader of the writers' catalog."""
+
+    @pytest.fixture
+    @abstractmethod
+    def unreadable_reader(self) -> CoverageReader:
+        """The reader of a catalog that cannot be read."""
 
     def test_a_catalog_without_decisions_covers_no_target(
         self, *, randomness: Random, observation_writer: ObservationWriter, reader: CoverageReader
@@ -204,3 +210,9 @@ class CoverageReaderContract(ABC):
                 ]
             )
         assert reader.read_target_coverage() == {record.target_id: (DecisionTier.NOTIFY,)}
+
+    def test_a_read_of_a_catalog_that_cannot_be_read_raises_store_error(
+        self, unreadable_reader: CoverageReader
+    ) -> None:
+        with pytest.raises(StoreError):
+            unreadable_reader.read_target_coverage()

@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import datetime
 from random import Random
+from typing import Protocol
 
 import pytest
 
@@ -20,6 +21,7 @@ from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observation import FileObservation
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.file_target_decision import (
     draw_dated_decision,
     draw_decision_record,
@@ -31,7 +33,7 @@ from tests.support.domain.observation import (
     draw_file_observation,
     record_drawn_observation,
 )
-from tests.support.draws import draw_instants, draw_text
+from tests.support.draws import draw_instant, draw_instants, draw_text
 
 _EVERY_ENTRY = 100  # past the files any test records
 
@@ -165,6 +167,23 @@ def _of_file(observation: FileObservation, *, file: FileKey) -> FileObservation:
     return replace(observation, reported_file=replace(observation.reported_file, file=file))
 
 
+class _Read(Protocol):
+    def __call__(self, reader: CatalogFileReader, *, randomness: Random) -> object: ...
+
+
+# Each read of the port, its arguments drawn.
+_READS: dict[str, _Read] = {
+    "entries": lambda reader, randomness: _entries(reader),
+    "counts": lambda reader, randomness: _counts(reader),
+    "count by tier": lambda reader, randomness: _file_count_by_tier(reader),
+    "history": lambda reader, randomness: reader.read_file_history(
+        draw_file(randomness).file_id,
+        since=draw_instant(randomness),
+        until=draw_instant(randomness),
+    ),
+}
+
+
 class CatalogFileReaderContract(ABC):
     @pytest.fixture
     @abstractmethod
@@ -180,6 +199,11 @@ class CatalogFileReaderContract(ABC):
     @abstractmethod
     def reader(self) -> CatalogFileReader:
         """The reader of the writers' catalog."""
+
+    @pytest.fixture
+    @abstractmethod
+    def unreadable_reader(self) -> CatalogFileReader:
+        """The reader of a catalog that cannot be read."""
 
     def test_an_entry_holds_its_latest_observation_and_its_decisions_by_target(
         self,
@@ -893,3 +917,14 @@ class CatalogFileReaderContract(ABC):
         # A file is read by its id: the bytes of a held file's native id are no file's.
         for file_id in (draw_file(randomness).file_id, FileId(bytes.fromhex(held.native_id))):
             assert reader.read_file_history(file_id, since=since, until=until) is None
+
+    @pytest.mark.parametrize("read", _READS.values(), ids=list(_READS))
+    def test_a_read_of_a_catalog_that_cannot_be_read_raises_store_error(
+        self,
+        *,
+        randomness: Random,
+        unreadable_reader: CatalogFileReader,
+        read: _Read,
+    ) -> None:
+        with pytest.raises(StoreError):
+            read(unreadable_reader, randomness=randomness)

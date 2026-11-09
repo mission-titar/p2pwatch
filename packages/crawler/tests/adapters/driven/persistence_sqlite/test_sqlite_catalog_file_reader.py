@@ -77,6 +77,11 @@ class TestSqliteCatalogFileReader(CatalogFileReaderContract):
     def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteCatalogFileReader:
         return SqliteCatalogFileReader(thread_read_connections)
 
+    @pytest.fixture
+    def unreadable_reader(self, unreadable_database: Path) -> Iterator[SqliteCatalogFileReader]:
+        with ThreadReadConnections(unreadable_database, open_reader=open_reader) as connections:
+            yield SqliteCatalogFileReader(connections)
+
 
 def _entries(
     catalog_db: Path,

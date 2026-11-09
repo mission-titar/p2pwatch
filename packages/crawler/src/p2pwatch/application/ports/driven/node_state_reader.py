@@ -6,7 +6,7 @@ from p2pwatch.domain.node_state import NodeState
 
 
 class NodeStateReader(ABC):
-    """Reads the node's state from any thread."""
+    """Reads the node's state from any thread; a read that fails raises ``StoreError``."""
 
     @abstractmethod
     def read_node_state(self) -> NodeState:

@@ -10,6 +10,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 import sqlite3
 from datetime import timedelta
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import best_observation
@@ -253,6 +254,7 @@ class SqliteSourceReader(SourceReader):
     def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
         self._thread_read_connections = thread_read_connections
 
+    @wrap_sqlite_errors()
     def read_known_sources(
         self, *, search_text: str | None, limit: int, offset: int
     ) -> tuple[KnownSource, ...]:
@@ -274,12 +276,14 @@ class SqliteSourceReader(SourceReader):
             for row in rows
         )
 
+    @wrap_sqlite_errors()
     def read_source_count(self, *, search_text: str | None) -> int:
         search, params = _sources_search(search_text)
         sql = "SELECT COUNT(*) AS n\n" + _SQL_SOURCES_FROM + search
         count: int = self._thread_read_connections.connection().execute(sql, params).fetchone()["n"]
         return count
 
+    @wrap_sqlite_errors()
     def read_source_history(
         self, source_id: SourceId, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceHistory | None:
@@ -305,6 +309,7 @@ class SqliteSourceReader(SourceReader):
             best_filename_by_file=best_filename_by_file,
         )
 
+    @wrap_sqlite_errors()
     def read_source_name_history(
         self, source_name: str, *, limit: int, offset: int, window: PeriodWindow
     ) -> SourceNameHistory | None:
@@ -331,6 +336,7 @@ class SqliteSourceReader(SourceReader):
             best_filename_by_file=best_filename_by_file,
         )
 
+    @wrap_sqlite_errors()
     def read_sharing_periods(
         self, file: FileKey, *, window: PeriodWindow
     ) -> tuple[SharingPeriod, ...]:

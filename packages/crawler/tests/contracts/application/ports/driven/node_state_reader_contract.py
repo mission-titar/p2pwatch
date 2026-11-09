@@ -15,6 +15,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.download.status import draw_download_status
 from tests.support.domain.file_target_decision import draw_target_id
 from tests.support.domain.observation import draw_file
@@ -65,6 +66,11 @@ class NodeStateReaderContract(ABC):
     @abstractmethod
     def reader(self) -> NodeStateReader:
         """The reader of the writers' node."""
+
+    @pytest.fixture
+    @abstractmethod
+    def unreadable_reader(self) -> NodeStateReader:
+        """The reader of a node whose state cannot be read."""
 
     def test_a_node_that_recorded_nothing_has_no_id_no_download_and_no_backoff(
         self, reader: NodeStateReader
@@ -213,3 +219,9 @@ class NodeStateReaderContract(ABC):
         backoff_state_writer.set_backoff_states(dict(reversed(backoff_state_by_key.items())))
         backoff_states = reader.read_node_state().backoff_state_by_key.items()
         assert list(backoff_states) == list(backoff_state_by_key.items())
+
+    def test_a_read_of_a_state_that_cannot_be_read_raises_store_error(
+        self, unreadable_reader: NodeStateReader
+    ) -> None:
+        with pytest.raises(StoreError):
+            unreadable_reader.read_node_state()
