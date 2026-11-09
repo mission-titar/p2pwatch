@@ -25,6 +25,24 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 _AMPLE_BYTES = 1 << 62
 
 
+def _never_requested() -> bool:
+    return False
+
+
+class ShutdownFlag:
+    """A shutdown a test requests, from Python or by ``SELECT request_shutdown();`` in a
+    migration script."""
+
+    def __init__(self) -> None:
+        self._requested = False
+
+    def request(self) -> None:
+        self._requested = True
+
+    def is_requested(self) -> bool:
+        return self._requested
+
+
 class _Preparation(Protocol):
     def __call__(self, connection: sqlite3.Connection, /) -> object: ...
 
@@ -63,6 +81,7 @@ def database_opener(
         ticker=FakeTicker(),
         free_bytes=free_bytes,
         memory_releaser=memory_releaser or FakeMemoryReleaser(),
+        shutdown_requested=_never_requested,
     )
 
 
@@ -75,6 +94,7 @@ def database_opener_setting(
         ticker=FakeTicker(),
         free_bytes=free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
+        shutdown_requested=_never_requested,
     )
 
 
@@ -85,6 +105,7 @@ def database_opener_ticked_by(ticker: FakeTicker) -> SqliteDatabaseOpener:
         ticker=ticker,
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
+        shutdown_requested=_never_requested,
     )
 
 
@@ -96,6 +117,7 @@ def database_opener_ticked_by_progress(ticker: FakeTicker) -> SqliteDatabaseOpen
         ticker=ticker,
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
+        shutdown_requested=_never_requested,
     )
 
 
@@ -107,6 +129,21 @@ def database_opener_registering(function_name: str) -> SqliteDatabaseOpener:
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
+        shutdown_requested=_never_requested,
+    )
+
+
+def database_opener_with_shutdown(shutdown: ShutdownFlag) -> SqliteDatabaseOpener:
+    """The same, its shutdown read from ``shutdown``, which a migration script requests by
+    ``SELECT request_shutdown();``."""
+    return SqliteDatabaseOpener(
+        _PreparingCopier(
+            lambda connection: connection.create_function("request_shutdown", 0, shutdown.request)
+        ),
+        ticker=FakeTicker(),
+        free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
+        memory_releaser=FakeMemoryReleaser(),
+        shutdown_requested=shutdown.is_requested,
     )
 
 
@@ -138,6 +175,7 @@ def database_opener_held_at_reopen(
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
+        shutdown_requested=_never_requested,
     )
 
 

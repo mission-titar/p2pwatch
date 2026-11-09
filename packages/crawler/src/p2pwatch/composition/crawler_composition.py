@@ -41,6 +41,7 @@ from p2pwatch.adapters.driven.glibc_memory_releaser import GlibcMemoryReleaser
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
+from p2pwatch.adapters.driven.persistence_sqlite.errors import OpeningInterruptedError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
@@ -348,7 +349,7 @@ class CrawlerComposition(CrawlerRunner):
         shutdown_requester = RequestShutdown(run_state_store)
         # The last context exits first: the resources close, then the signal handlers go.
         async with (
-            PosixProcess(shutdown_requester),
+            PosixProcess(shutdown_requester) as process,
             resource_stack(close_timeout_seconds=CLOSE_TIMEOUT_SECONDS) as stack,
         ):
             ticker = ThreadingTicker(monotonic_clock)
@@ -362,11 +363,18 @@ class CrawlerComposition(CrawlerRunner):
                 free_bytes=lambda directory: disk_usage(directory).free,
                 # None: the process's own symbols, the C library's included.
                 memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
+                shutdown_requested=process.is_shutdown_requested,
             )
-            catalog_connection = database_opener.open_catalog(Path(crawler_config.catalog_db_path))
-            stack.callback(catalog_connection.close)
-            local_connection = database_opener.open_local(Path(crawler_config.local_db_path))
-            stack.callback(local_connection.close)
+            try:
+                catalog_connection = database_opener.open_catalog(
+                    Path(crawler_config.catalog_db_path)
+                )
+                stack.callback(catalog_connection.close)
+                local_connection = database_opener.open_local(Path(crawler_config.local_db_path))
+                stack.callback(local_connection.close)
+            except OpeningInterruptedError as interruption:
+                _print_progress(f"Shutdown requested during the start: {interruption}; exiting.")
+                return
 
             node_id_store = SqliteNodeIdStore(local_connection)
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)

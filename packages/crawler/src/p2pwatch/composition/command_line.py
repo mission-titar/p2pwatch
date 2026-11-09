@@ -59,6 +59,8 @@ def build_command_line(
                     free_bytes=lambda directory: disk_usage(directory).free,
                     # None: the process's own symbols, the C library's included.
                     memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
+                    # A merge keeps Python's own Ctrl-C.
+                    shutdown_requested=lambda: False,
                 )
             ),
             logger=StdlibLogger(MergeCatalogs.__module__),

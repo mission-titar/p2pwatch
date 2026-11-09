@@ -26,6 +26,11 @@ class MigrationError(PersistenceError):
     """Database newer than the code, or a script that fails (fail-fast, MVP spec §14)."""
 
 
+class OpeningInterruptedError(Exception):
+    """A requested shutdown stopped a database's opening, its block of migrations rolled back
+    whole; a stop, never a persistence failure."""
+
+
 @contextmanager
 def wrap_sqlite_errors() -> Iterator[None]:
     """Wraps any ``sqlite3.Error`` as ``PersistenceError`` (chained cause)."""
