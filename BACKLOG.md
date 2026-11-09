@@ -17,8 +17,20 @@ An agent adds an entry only after the operator has agreed to it.
 
 ## Must be done before the next release
 
-- **v5 release readiness**: seven thematic lots (aMule container, migration and first start, config validation, fault
-  isolation, webui, release chain, migration guide), then release candidates checked on the operator's node. Umbrella spec: `agents/specs/2026-11-04-v5-release-readiness.md`.
+- **v5 release readiness**: the thematic lots below, merged in this order, then release candidates checked on the
+  operator's node. Umbrella spec: `agents/specs/2026-11-04-v5-release-readiness.md`.
+  - **Lot 4a, the ground of fault isolation**: the backoff overflow, the pause removed, a file's decisions in one
+    transaction, a bounded shutdown, the adapters' exception leaks. D13 and appendix A "Lot 4" of the umbrella spec.
+  - **Lot 4b, the health model running**: health conditions on a graph of components and a supervisor restarting a
+    buggy part, so one bug no longer stops the node. D12 of the umbrella spec.
+  - **Lot 4c, what the operator sees of health**: alerts per root cause, health metrics, the Node page, `/health` per
+    MicroProfile, the frozen-loop watchdog, the real stops. D12 of the umbrella spec.
+  - **Lot 5, the webui**: database reads off the event loop, abandon and retry from the Node page, the heavy file page
+    out of v5. D14 to D16 of the umbrella spec.
+  - **Lot 6, the release chain**: release candidates as GitHub prereleases with their own image tags, never `latest`.
+    D17, D18 and D23 of the umbrella spec.
+  - **Lot 7, the migration guide and the docs**: rewritten last, against the behaviour lots 1 to 6 leave. D19 and D20
+    of the umbrella spec.
 
 - **The Grype scan back on p2pwatch right after the v5.0.0 tag**, once `latest` is published: one leg per image, `p2pwatch` and `p2pwatch-amule`, each with
   its versioned VEX and signed by `mission-titar/p2pwatch`, in place of v4's `mulewatch` leg. `.github/workflows/grype-scan.yml`, D21 of `agents/specs/2026-11-04-v5-release-readiness.md`.
