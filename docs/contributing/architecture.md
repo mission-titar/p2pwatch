@@ -683,8 +683,7 @@ redémarrer, garde ses transferts et sa session Kad, et enregistre lui-même `am
 flowchart LR
   g["gluetun's port<br/>differs"] --> p["PATCH tcp_port + udp_port"]
   p -->|"200"| ok["set live"]
-  p -->|"not ready or 400"| n["next poll"]
-  p -->|"anything else"| x["port-sync exits:<br/>the container restarts"]
+  p -->|"anything else"| n["logged,<br/>next poll"]
 ```
 
 - **Les deux ports reçoivent la même valeur** (`tcp_port`, `udp_port` pour Kad) : un tunnel ne
@@ -694,10 +693,14 @@ flowchart LR
   rejoue ses `401`).
 - **amuleapi pas prêt** (connexion refusée, délai dépassé, `503` avant son premier instantané, `401`
   après la reconnexion) : journalisé, réessayé au prochain sondage. Le premier tour tourne avant
-  qu'amuleapi n'écoute ; lever ferait redémarrer le conteneur en boucle.
+  qu'amuleapi n'écoute : une attente prévue, journalisée en information, sans trace.
 - **Un refus** (`400` : au-delà de 65532, un port déjà pris, le port EC) : journalisé en erreur,
   amuled reste sur son port, le prochain sondage réessaie.
-- **Toute autre erreur** sort du port-sync, et son `finish` arrête le conteneur (§13).
+- **Toute autre erreur d'un tour**, un bug compris (un `401` ou un `404` à la connexion, des
+  préférences mal formées) : journalisée avec sa trace, réessayée au prochain sondage. Le port-sync
+  ne sort que sur un réglage invalide au démarrage ou la mort du processus, et son `finish` arrête
+  alors le conteneur (§13) : en sortir pour une erreur d'un tour redémarrerait amuled, sans rien
+  réparer.
 - **Interrupteur.** `PORT_SYNC` reçoit `VPN_PORT_FORWARDING` tel quel ; éteint, le one-shot de
   démarrage pose le fichier `down` du service, et s6 ne le lance jamais. Allumé, il valide les
   réglages ([Devenir High-ID](../high-id.md)) avant tout, et sort en nommant une valeur invalide.

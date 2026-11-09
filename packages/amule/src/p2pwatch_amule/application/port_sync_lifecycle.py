@@ -1,6 +1,5 @@
 """Keeps amuled's listen port on gluetun's forwarded port: each round reads it and sets it live
-through amuleapi, and leaves amuled on its port until the next poll when amuleapi is not ready or
-rejects it."""
+through amuleapi, and leaves amuled on its port until the next poll when the round fails."""
 
 from p2pwatch_amule.application.ports.driven.forwarded_port_client import ForwardedPortClient
 from p2pwatch_amule.application.ports.driven.listen_port_client import ListenPortClient
@@ -11,8 +10,8 @@ from p2pwatch_amule.domain.settings import PortSyncSettings
 
 
 class PortSyncLifecycle:
-    """Polls every ``poll_interval``; a failure of amuleapi other than not ready or a rejection
-    ends the loop; port-sync's root, behind no port."""
+    """Polls every ``poll_interval``, a round's failure logged and retried at the next poll;
+    port-sync's root, behind no port."""
 
     def __init__(
         self,
@@ -31,8 +30,16 @@ class PortSyncLifecycle:
 
     def run(self) -> None:
         while True:
-            self._sync_listen_port_once()
+            self._run_round()
             self._monotonic_clock.sleep(self._port_sync_settings.poll_interval)
+
+    def _run_round(self) -> None:
+        try:
+            self._sync_listen_port_once()
+        except Exception as error:  # a bug included: exiting restarts amuled with the container
+            self._logger.error_with_trace(
+                "the round failed, amuled stays on its port until the next poll", error=error
+            )
 
     def _sync_listen_port_once(self) -> None:
         forwarded_port = self._forwarded_port_client.read_forwarded_port()
@@ -59,7 +66,7 @@ class PortSyncLifecycle:
             )
 
     def _log_not_ready(self, *, forwarded_port: int, error: ApiNotReadyError) -> None:
-        # The first round runs before amuleapi listens: raising would restart the container.
+        # The first round runs before amuleapi listens: an expected wait, no error and no trace.
         self._logger.info(
             "amuleapi is not ready, %d waits for the next poll (%s)", forwarded_port, error
         )

@@ -13,3 +13,7 @@ class Logger(ABC):
     @abstractmethod
     def error(self, message: str, *args: object) -> None:
         """A failure that loses work: a command or a write that did not happen."""
+
+    @abstractmethod
+    def error_with_trace(self, message: str, *args: object, error: Exception) -> None:
+        """A failure no other line foresees, a bug included: the line, then ``error``'s trace."""
