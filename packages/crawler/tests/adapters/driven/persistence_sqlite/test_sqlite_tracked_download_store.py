@@ -277,3 +277,21 @@ def test_set_state_records_a_failure_reason_and_any_other_state_clears_it(
         _A, completed_at=_T0
     )  # a failed download can still complete
     assert _lifecycle(connection, file=_A)["failure_reason"] is None
+
+
+def test_a_stored_state_that_cannot_be_read_back_raises_persistence_error(
+    *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
+) -> None:
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
+    connection.execute("UPDATE downloads SET state = 'bogus'")
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: 'bogus'"):
+        tracked_download_store.read_tracked_states()
+
+
+def test_a_stored_instant_that_cannot_be_read_back_raises_persistence_error(
+    *, tracked_download_store: SqliteTrackedDownloadStore, connection: sqlite3.Connection
+) -> None:
+    tracked_download_store.record_queued(_A, target_id=TargetId("062A"), queued_at=_T0)
+    connection.execute(f"UPDATE downloads SET latest_seen_at_micros = {2**62}")
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: date value"):
+        tracked_download_store.read_latest_seen_at_by_file()

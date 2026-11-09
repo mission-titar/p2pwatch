@@ -20,7 +20,11 @@ from contextlib import suppress
 from datetime import datetime
 from typing import Literal
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError, wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    PersistenceError,
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
@@ -158,23 +162,25 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         listed it, else when it was queued."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(_LATEST_SEEN_AT_BY_FILE).fetchall()
-        return {
-            FileKey(network=Network(row["network"]), native_id=row["native_id"]): micros_to_instant(
-                row["seen_at_micros"]
-            )
-            for row in rows
-        }
+        with wrap_stored_value_errors():
+            return {
+                FileKey(
+                    network=Network(row["network"]), native_id=row["native_id"]
+                ): micros_to_instant(row["seen_at_micros"])
+                for row in rows
+            }
 
     def read_tracked_states(self) -> dict[FileKey, DownloadState]:
         """File→state map of ALL tracked downloads, whatever their state."""
         with wrap_sqlite_errors():
             rows = self._connection.execute(_TRACKED_STATES).fetchall()
-        return {
-            FileKey(network=Network(row["network"]), native_id=row["native_id"]): DownloadState(
-                row["state"]
-            )
-            for row in rows
-        }
+        with wrap_stored_value_errors():
+            return {
+                FileKey(network=Network(row["network"]), native_id=row["native_id"]): DownloadState(
+                    row["state"]
+                )
+                for row in rows
+            }
 
     def read_queued_target_id(self, file: FileKey) -> TargetId | None:
         """``target_id`` the file was queued for, or ``None`` (never queued).

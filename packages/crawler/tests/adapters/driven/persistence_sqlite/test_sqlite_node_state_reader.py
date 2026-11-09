@@ -3,9 +3,11 @@
 import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
+from random import Random
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
 )
@@ -19,6 +21,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
+from p2pwatch.domain.identifiers import NodeId
 from tests.contracts.application.ports.driven.node_state_reader_contract import (
     NodeStateReaderContract,
 )
@@ -26,6 +29,10 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
     open_local,
     open_reader,
 )
+from tests.support.domain.file_target_decision import draw_target_id
+from tests.support.domain.observation import draw_file
+from tests.support.domain.search.backoff import draw_backoff_key, draw_backoff_state
+from tests.support.draws import draw_instant, draw_text
 
 
 @pytest.fixture
@@ -62,3 +69,35 @@ class TestSqliteNodeStateReader(NodeStateReaderContract):
     def unreadable_reader(self, unreadable_database: Path) -> Iterator[SqliteNodeStateReader]:
         with ThreadReadConnections(unreadable_database, open_reader=open_reader) as connections:
             yield SqliteNodeStateReader(connections)
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "UPDATE downloads SET state = 'bogus'",
+        "UPDATE backoff_states SET delay_seconds = 9e999",
+        f"UPDATE node_identity SET created_at_micros = {2**62}",
+    ],
+    ids=["unknown state", "infinite delay", "creation past year 9999"],
+)
+def test_a_stored_state_that_cannot_be_read_back_raises_persistence_error(
+    *,
+    randomness: Random,
+    connection: sqlite3.Connection,
+    thread_read_connections: ThreadReadConnections,
+    corruption: str,
+) -> None:
+    SqliteNodeIdStore(connection).record_node_id(
+        NodeId(draw_text(randomness)), created_at=draw_instant(randomness)
+    )
+    SqliteTrackedDownloadStore(connection).record_queued(
+        draw_file(randomness),
+        target_id=draw_target_id(randomness),
+        queued_at=draw_instant(randomness),
+    )
+    SqliteBackoffStateStore(connection).set_backoff_states(
+        {draw_backoff_key(randomness, has_channel=True): draw_backoff_state(randomness)}
+    )
+    connection.execute(corruption)
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: "):
+        SqliteNodeStateReader(thread_read_connections).read_node_state()
