@@ -46,6 +46,9 @@ _FILE_NAME = "crawler.yml"
 _A_DAY_SECONDS = 86_400
 _THIRTY_DAYS_SECONDS = 2_592_000
 
+# Past it, a delay reaches its cap after a failure or two: a step rather than a backoff.
+_MAX_FACTOR = 10
+
 _Seconds = Annotated[float, Field(gt=0, le=_A_DAY_SECONDS)]
 _Absence = Annotated[float, Field(gt=0, le=_THIRTY_DAYS_SECONDS)]
 _Text = Annotated[str, Field(min_length=1)]
@@ -54,8 +57,8 @@ _Text = Annotated[str, Field(min_length=1)]
 class _BackoffSchema(StrictSchema):
     base_seconds: _Seconds
     cap_seconds: _Seconds
-    factor: Annotated[float, Field(ge=1)]
-    jitter_ratio: Annotated[float, Field(ge=0)]
+    factor: Annotated[float, Field(ge=1, le=_MAX_FACTOR)]
+    jitter_ratio: Annotated[float, Field(ge=0, le=1)]
 
 
 class _SearchSchema(StrictSchema):
