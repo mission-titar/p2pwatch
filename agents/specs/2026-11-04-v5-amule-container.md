@@ -142,7 +142,7 @@ above.
 - **A forwarded port above 65532 is refused by amuleapi**: the port-sync logs the refusal and leaves amuled on its
   port, which stays Low-ID.
 - **A port-sync bug restarts amuled too** (D3, the umbrella's D24 cost): lot 4 makes the port-sync robust to its own
-  errors.
+  errors. (Corrected: fixed by v5 lot 4's D20, every port-sync error logged and retried at the next poll)
 - **A `ListenPortError` that repeats restarts the container in a loop** (Corrected: found by the holistic review,
   accepted by the operator on 2026-11-06): a route renamed or a body changed by an aMule bump (`404`, a `400` to the
   login, malformed preferences) makes the port-sync exit, the container restart, and the next round, one poll after
@@ -150,7 +150,7 @@ above.
   transfers and Kad, while `ed2k` reads `healthy` most of the time. Its signal: `docker inspect -f
   '{{.RestartCount}}' ed2k` rising, the port-sync's traceback in `docker compose logs ed2k`. Every amule-bump pull
   request runs the smoke's port-sync test against the real amuleapi; lot 4 owns the fix, with the port-sync's
-  robustness.
+  robustness. (Corrected: fixed by v5 lot 4's D20, every port-sync error logged and retried at the next poll)
 - **A crashed service makes the container exit 0**, as a requested stop does: s6-svscan exits so when told to, and
   the operator keeps it simple over a script that would tell the two apart. The crash shows in the restart count and
   the `finish` log line; the umbrella's "exits in error" reads exit 0.
