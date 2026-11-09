@@ -58,7 +58,7 @@ class DecisionRecord:
     """The 3 COMPARABLE columns of a persisted decision, without the runtime explainability.
 
     This is exactly what ``match_decisions`` stores (§11), ``target_id``/``rule_name``/
-    ``tier``, read back for anti-redundancy (orchestration spec §3: only re-``record_decision``
+    ``tier``, read back for anti-redundancy (orchestration spec §3: only re-``record_decisions``
     if the verdict CHANGES). Deliberately distinct from :class:`MatchDecision`: the read
     cannot reconstruct the ``explanation`` (not persisted), and two ``DecisionRecord``s are
     equal iff their three fields are equal (frozen dataclass → field-by-field ``==``).

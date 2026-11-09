@@ -1,6 +1,8 @@
 """``SqliteDecisionStore``: the matcher's verdicts, appended per target, and their latest reads."""
 
 import sqlite3
+from collections.abc import Sequence
+from contextlib import suppress
 
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
@@ -65,23 +67,27 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def record_decision(self, dated_decision: DatedDecision[FileTargetDecision]) -> None:
-        """INSERT alone (autocommit); unknown file → FK violated → ``PersistenceError``.
+    def record_decisions(
+        self, dated_decisions: Sequence[DatedDecision[FileTargetDecision]]
+    ) -> None:
+        """ONE transaction; unknown file → FK violated → ``PersistenceError``.
 
         A retraction is the row ``(target_id, rule_name="", tier=_RETRACTED_TIER)``, appended
         instead of a mutation, per the append-only invariant (spec §7).
         """
-        require_canonical_native_id(dated_decision.file)
+        for dated_decision in dated_decisions:
+            require_canonical_native_id(dated_decision.file)
         with wrap_sqlite_errors():
-            self._connection.execute(
-                _INSERT_DECISION,
-                (
-                    dated_decision.file.file_id,
-                    *_decision_columns(dated_decision.decision),
-                    instant_to_micros(dated_decision.decided_at),
-                    dated_decision.node_id,
-                ),
-            )
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._connection.executemany(
+                    _INSERT_DECISION, [_row(dated_decision) for dated_decision in dated_decisions]
+                )
+                self._connection.execute("COMMIT")
+            except BaseException:
+                with suppress(sqlite3.Error):
+                    self._connection.execute("ROLLBACK")
+                raise
 
     def read_latest_decisions(self, file: FileKey) -> dict[TargetId, FileTargetDecision]:
         """Latest verdict per target for this file (set-diff anti-redundancy, spec §7), READ.
@@ -116,6 +122,15 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
             )
             for row in rows
         )
+
+
+def _row(dated_decision: DatedDecision[FileTargetDecision]) -> tuple[object, ...]:
+    return (
+        dated_decision.file.file_id,
+        *_decision_columns(dated_decision.decision),
+        instant_to_micros(dated_decision.decided_at),
+        dated_decision.node_id,
+    )
 
 
 def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:

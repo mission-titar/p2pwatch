@@ -112,8 +112,8 @@ def _clean_catalog(path: Path) -> Path:
         SqliteObservationStore(connection).record_observation(
             FileObservation(reported_file=reported_file, observed_at=_T0, node_id=_NODE_ID)
         )
-        SqliteDecisionStore(connection).record_decision(
-            DatedDecision(file=_FILE, decision=decision, decided_at=_T0, node_id=_NODE_ID)
+        SqliteDecisionStore(connection).record_decisions(
+            [DatedDecision(file=_FILE, decision=decision, decided_at=_T0, node_id=_NODE_ID)]
         )
         SqliteSourcePointStore(connection).record_points(points)
     return path

@@ -1,4 +1,4 @@
-"""The file judge: evaluate → record / retract what changed → wake → dispatch (spec §7).
+"""The file judge: evaluate → build what changed → record it in one transaction → wake → dispatch.
 
 APPLICATION ring, PURE orchestration (no ``try/except`` here: a ``StoreError`` is a
 port's error each CALLER absorbs on its own terms, cf. ``Cataloguer`` and
@@ -13,6 +13,7 @@ The rows written are dispatched once, as one ``DecisionsRecorded`` for the file 
 researcher-notifications §2).
 """
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
@@ -22,10 +23,15 @@ from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.file_target_decision import DatedDecision, records_to_write
+from p2pwatch.domain.file_target_decision import (
+    DatedDecision,
+    FileTargetDecision,
+    records_to_write,
+)
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord, MatchingEngine, to_record
+from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import FileCandidate
 from p2pwatch.domain.observability.events import DecisionChange, DecisionsRecorded
 from p2pwatch.domain.wake_subject import WakeSubject
@@ -71,38 +77,38 @@ class FileJudge:
         best = self._observation_reader.read_best_observation(file)
         if best is None:
             raise RuntimeError(f"file {file.native_id} judged without an observation")
-        changes: list[DecisionChange] = []
-        for new_decision in new_decisions:
-            target_id = new_decision.target_id
-            self._decision_writer.record_decision(
-                DatedDecision(
-                    file=file,
-                    decision=new_decision,
-                    decided_at=self._wall_clock.now(),
-                    node_id=node_id,
-                )
+        dated_decisions = [
+            DatedDecision(
+                file=file, decision=new_decision, decided_at=self._wall_clock.now(), node_id=node_id
             )
+            for new_decision in new_decisions
+        ]
+        event = DecisionsRecorded(
+            file=file,
+            filename=best.reported_file.filename,
+            size_bytes=best.reported_file.size_bytes,
+            changes=tuple(
+                self._change(decision, persisted=persisted) for decision in new_decisions
+            ),
+            node_id=node_id,
+        )
+        self._decision_writer.record_decisions(dated_decisions)
+        for new_decision in new_decisions:
             if (
                 isinstance(new_decision, DecisionRecord)
                 and new_decision.tier is DecisionTier.DOWNLOAD
             ):
                 self._waker.wake(WakeSubject.DOWNLOAD)
-            target = self._engine.target(target_id)
-            changes.append(
-                DecisionChange(
-                    target_id=target_id,
-                    title="" if target is None else target.title,
-                    previous_decision=persisted.get(target_id),
-                    new_decision=new_decision,
-                )
-            )
-        await self._observability_dispatcher.dispatch(
-            DecisionsRecorded(
-                file=file,
-                filename=best.reported_file.filename,
-                size_bytes=best.reported_file.size_bytes,
-                changes=tuple(changes),
-                node_id=node_id,
-            )
+        await self._observability_dispatcher.dispatch(event)
+        return len(event.changes)
+
+    def _change(
+        self, new_decision: FileTargetDecision, *, persisted: Mapping[TargetId, FileTargetDecision]
+    ) -> DecisionChange:
+        target = self._engine.target(new_decision.target_id)
+        return DecisionChange(
+            target_id=new_decision.target_id,
+            title="" if target is None else target.title,
+            previous_decision=persisted.get(new_decision.target_id),
+            new_decision=new_decision,
         )
-        return len(changes)
