@@ -19,3 +19,6 @@ class StdlibLogger(Logger):
 
     def error(self, message: str, *args: object) -> None:
         self._logger.error(message, *args, stacklevel=_CALLER)
+
+    def error_with_trace(self, message: str, *args: object, error: Exception) -> None:
+        self._logger.error(message, *args, exc_info=error, stacklevel=_CALLER)

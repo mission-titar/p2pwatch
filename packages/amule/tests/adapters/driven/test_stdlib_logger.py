@@ -28,3 +28,25 @@ def test_a_record_carries_its_callers_location(caplog: pytest.LogCaptureFixture)
         __file__,
         "test_a_record_carries_its_callers_location",
     )
+
+
+def test_an_error_with_its_trace_carries_the_errors_traceback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    try:
+        raise RuntimeError("a bug")
+    except RuntimeError as raised:
+        error = raised
+
+    with caplog.at_level(logging.INFO, logger=_NAME):
+        StdlibLogger(_NAME).error_with_trace("the round failed (%s)", "port 51820", error=error)
+
+    record = caplog.records[0]
+    assert (record.levelno, record.getMessage(), record.funcName) == (
+        logging.ERROR,
+        "the round failed (port 51820)",
+        "test_an_error_with_its_trace_carries_the_errors_traceback",
+    )
+    assert record.exc_info is not None
+    assert record.exc_info[1] is error
+    assert caplog.text.rstrip().endswith('raise RuntimeError("a bug")\nRuntimeError: a bug')

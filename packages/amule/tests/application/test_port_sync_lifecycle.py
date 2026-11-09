@@ -1,5 +1,5 @@
 """Port-sync's loop: amuled's port read and set live through amuleapi, retried at the next poll
-while amuleapi is not ready or rejects it."""
+after any failure of a round."""
 
 import dataclasses
 from datetime import timedelta
@@ -23,6 +23,7 @@ READ = "read listen port"
 SET = "set listen port 51820"
 REFUSAL = ListenPortRejectedError("PATCH /api/v1/preferences: 400 b'amuled_rejected'")
 NOT_READY = ApiNotReadyError("POST /api/v1/auth/login: <urlopen error [Errno 111] refused>")
+ROUND_FAILED = "the round failed, amuled stays on its port until the next poll"
 SETTINGS = PortSyncSettings(
     gluetun_control_url="http://localhost:8000",
     poll_interval=timedelta(seconds=60),
@@ -144,18 +145,43 @@ def test_amuleapi_not_ready_for_the_read_is_logged_and_retried_at_the_next_poll(
     )
 
 
-def test_another_failure_of_the_read_ends_the_loop(node: Node) -> None:
-    node.listen_port_client.read_error = ListenPortError("GET /api/v1/preferences: 500 b''")
-    node.run_loop(raises=ListenPortError)
-    assert node.actions == [READ]
-    assert node.logger.lines == []
+def test_any_other_failure_of_a_round_is_logged_with_its_trace_and_retried_at_the_next_poll(
+    node: Node,
+) -> None:
+    failures: list[Exception] = [
+        ListenPortError("POST /api/v1/auth/login?include_token=true: 401 b''"),
+        ListenPortError("POST /api/v1/auth/login?include_token=true: 404 b''"),
+        ListenPortError("amuleapi's preferences answered without a TCP port (b'{}')"),
+        RuntimeError("a bug"),
+    ]
+    pending = list(failures)
+
+    def next_failure() -> None:
+        pending.pop(0)
+        node.listen_port_client.read_error = pending[0] if pending else None
+
+    node.listen_port_client.read_error = pending[0]
+    node.between_rounds = next_failure
+    node.run_loop(rounds=5)
+    assert node.actions == [READ, READ, READ, READ, READ, SET]
+    assert node.logger.lines == [
+        *(LoggedLine(level="error", message=ROUND_FAILED, error=error) for error in failures),
+        LoggedLine(
+            level="info", message="gluetun forwards 51820, amuled listened on 4662: set live"
+        ),
+    ]
 
 
-def test_another_failure_of_amuleapi_ends_the_loop(node: Node) -> None:
-    node.listen_port_client.set_error = ListenPortError("PATCH /api/v1/preferences: 500 b''")
-    node.run_loop(raises=ListenPortError)
-    assert node.actions == [READ, SET]
-    assert node.logger.lines == []
+def test_another_failure_of_the_set_is_logged_with_its_trace_and_retried_at_the_next_poll(
+    node: Node,
+) -> None:
+    failure = ListenPortError("PATCH /api/v1/preferences: 500 b''")
+    node.listen_port_client.set_error = failure
+    node.run_loop(rounds=2)
+    assert node.actions == [READ, SET, READ, SET]
+    assert node.listen_port_client.listen_port == 4662
+    failed = LoggedLine(level="error", message=ROUND_FAILED, error=failure)
+    assert node.logger.lines == [failed, failed]
 
 
 def test_the_same_port_asks_amuleapi_nothing(node: Node) -> None:

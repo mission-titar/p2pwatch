@@ -1,5 +1,4 @@
 from p2pwatch_amule.application.ports.driven.listen_port_client import ListenPortClient
-from p2pwatch_amule.domain.listen_port_error import ListenPortError
 
 
 class FakeListenPortClient(ListenPortClient):
@@ -9,8 +8,8 @@ class FakeListenPortClient(ListenPortClient):
     def __init__(self, actions: list[str]) -> None:
         self.actions = actions
         self.listen_port = 4662
-        self.read_error: ListenPortError | None = None
-        self.set_error: ListenPortError | None = None
+        self.read_error: Exception | None = None
+        self.set_error: Exception | None = None
 
     def read_listen_port(self) -> int:
         self.actions.append("read listen port")
