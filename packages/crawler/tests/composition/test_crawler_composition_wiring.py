@@ -8,6 +8,7 @@ import re
 import signal
 import threading
 import warnings
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from http.server import ThreadingHTTPServer
 from importlib.metadata import version
@@ -20,6 +21,9 @@ import yaml
 
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    SqliteDatabaseOpener,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
@@ -35,10 +39,12 @@ from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 from tests.fakes.fake_notification_sink import FakeNotificationSink
+from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.older_catalog import open_catalog_at
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
     open_local,
+    open_reader,
 )
 from tests.support.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     pre_migration_copies,
@@ -151,6 +157,22 @@ def _send_sigterm(default_handler: object) -> None:
     """Only once the run handles SIGTERM: a missing handler then fails instead of killing pytest."""
     assert signal.getsignal(signal.SIGTERM) is not default_handler
     signal.raise_signal(signal.SIGTERM)
+
+
+class _SigtermAtRecord(logging.Handler):
+    """Raises one SIGTERM on the thread that first logs ``message``, there and then, as one
+    arriving in the middle of the step that logs it; only once the run handles SIGTERM."""
+
+    def __init__(self, message: str, *, default_handler: object) -> None:
+        super().__init__()
+        self._message = message
+        self._default_handler = default_handler
+        self._sent = False
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if not self._sent and record.getMessage() == self._message:
+            self._sent = True
+            _send_sigterm(self._default_handler)
 
 
 def _searches_read(api: FakeAmuleApi) -> int:
@@ -513,6 +535,46 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
         "p2pwatch.application.steps.catalog_reevaluator",
         "catalogue re-evaluation: 200/200 files, 0 rows written",
     ) in [(record.name, record.getMessage()) for record in caplog.records]
+
+
+# A table that 0008 copies: a statement long enough for the shutdown check to run inside it.
+_FILES_AT_5 = (
+    "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5000)"
+    " INSERT INTO files (ed2k_hash, size_bytes) SELECT printf('%032x', i), 1 FROM n"
+)
+_INTERRUPTED_START = re.compile(
+    r"^Shutdown requested during the start: the migrations of (.+) rolled back at migration"
+    r" \d+, the database left at version 5; exiting\.$",
+    re.MULTILINE,
+)
+
+
+@pytest.mark.asyncio
+async def test_a_sigterm_during_the_migrations_rolls_their_block_back_and_ends_the_start(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture, capsys: pytest.CaptureFixture[str]
+) -> None:
+    catalog_path = tmp_path / "catalog.db"
+    with closing(open_catalog_at(catalog_path, version=5)) as catalog:
+        catalog.execute(_FILES_AT_5)
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+    api = FakeAmuleApi()
+    opener_logger = logging.getLogger(SqliteDatabaseOpener.__module__)
+    sigterm = _SigtermAtRecord(
+        "migration 6: applying", default_handler=signal.getsignal(signal.SIGTERM)
+    )
+    opener_logger.addHandler(sigterm)
+    try:
+        with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
+            await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
+    finally:
+        opener_logger.removeHandler(sigterm)
+
+    interrupted = _INTERRUPTED_START.search(capsys.readouterr().err)
+    assert interrupted is not None and interrupted.group(1) == str(catalog_path)
+    with closing(open_reader(catalog_path)) as catalog:
+        assert rows(catalog, sql="PRAGMA user_version") == [{"user_version": 5}]
+    assert not (tmp_path / "local.db").exists()
+    assert api.logins == 0
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 import gc
+import re
 import sqlite3
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -10,7 +11,11 @@ from typing import Any
 import pytest
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
-from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, PersistenceError
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    MigrationError,
+    OpeningInterruptedError,
+    PersistenceError,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
@@ -27,11 +32,13 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
     open_local_at,
 )
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
+    ShutdownFlag,
     database_opener,
     database_opener_registering,
     database_opener_setting,
     database_opener_ticked_by,
     database_opener_ticked_by_progress,
+    database_opener_with_shutdown,
     open_catalog,
     open_local,
 )
@@ -617,6 +624,49 @@ def test_a_failing_second_script_rolls_back_the_first_and_keeps_the_starting_ver
     assert _version_and_tables(path) == (0, set())
 
 
+# Seconds of virtual machine instructions, unless the progress handler interrupts them.
+_TEN_MILLION_STEPS = (
+    "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 10000000)"
+    " SELECT count(*) FROM r;"
+)
+
+
+def test_a_shutdown_requested_during_a_migration_rolls_the_whole_block_back(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "stopped.db"
+    scripts = (
+        Migration(version=1, script="CREATE TABLE a (x INTEGER);"),
+        Migration(version=2, script="CREATE TABLE b (x INTEGER);"),
+        Migration(
+            version=3,
+            script=f"CREATE TABLE c (x INTEGER);\nSELECT request_shutdown();\n{_TEN_MILLION_STEPS}",
+        ),
+    )
+    _open(path, scripts=scripts[:1]).close()
+    message = f"the migrations of {path} rolled back at migration 3, the database left at version 1"
+    with pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"):
+        database_opener_with_shutdown(ShutdownFlag()).open(path, scripts=scripts)
+    assert _version_and_tables(path) == (1, {"a"})
+
+
+def test_a_shutdown_requested_before_the_migrations_stops_the_opening_at_its_version(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "stopped.db"
+    scripts = (
+        Migration(version=1, script="CREATE TABLE a (x INTEGER);"),
+        Migration(version=2, script="CREATE TABLE b (x INTEGER);"),
+    )
+    _open(path, scripts=scripts[:1]).close()
+    shutdown = ShutdownFlag()
+    shutdown.request()
+    message = f"the opening of {path} stopped, the database at version 1"
+    with pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"):
+        database_opener_with_shutdown(shutdown).open(path, scripts=scripts)
+    assert _version_and_tables(path) == (1, {"a"})
+
+
 def test_a_migration_over_an_instant_without_a_time_zone_names_it(tmp_path: Path) -> None:
     path = tmp_path / "naive.db"
     with pytest.raises(
@@ -845,6 +895,19 @@ def test_a_block_of_migrations_leaving_less_than_a_quarter_free_is_not_compacted
     path = tmp_path / "block.db"
     _open(path, scripts=_block_freeing(5)).close()
     assert _page_and_free_counts(path) == (21, 5)
+
+
+def test_a_shutdown_requested_as_the_block_commits_stops_the_opening_before_the_reclaim(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "block.db"
+    # The block's last statement: none after it runs long enough to meet the check.
+    scripts = (*_block_freeing(6), Migration(version=4, script="SELECT request_shutdown();"))
+    message = f"the opening of {path} stopped, the database at version 4"
+    with pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"):
+        database_opener_with_shutdown(ShutdownFlag()).open(path, scripts=scripts)
+    assert _version_and_tables(path)[0] == 4
+    assert _page_and_free_counts(path)[1] == 6
 
 
 def test_the_reclaim_leaves_the_wal_empty(tmp_path: Path) -> None:

@@ -21,11 +21,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import quote
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     MigrationError,
+    OpeningInterruptedError,
     PersistenceError,
     wrap_sqlite_errors,
 )
@@ -57,6 +58,13 @@ _MIGRATIONS = resources.files("p2pwatch.adapters.driven.persistence_sqlite") / "
 # Under a minute between two lines: a silent start is one an operator restarts.
 _PROGRESS_PERIOD = timedelta(seconds=30)
 _BUSY_TIMEOUT_SECONDS = 5.0  # Python's default, which the crawler has always had
+# How many SQLite VM steps the block runs between two reads of the shutdown check.
+_SHUTDOWN_CHECK_INSTRUCTIONS = 1000
+
+
+# Whether the shutdown was requested, read on the opening's thread, between its steps.
+class ShutdownCheck(Protocol):
+    def __call__(self) -> bool: ...
 
 
 class SqliteDatabaseOpener:
@@ -70,8 +78,10 @@ class SqliteDatabaseOpener:
         ticker: Ticker,
         free_bytes: FreeBytesMeter,
         memory_releaser: MemoryReleaser,
+        shutdown_requested: ShutdownCheck,
     ) -> None:
         self._pre_migration_copier = pre_migration_copier
+        self._shutdown_requested = shutdown_requested
         self._ticker = ticker
         self._free_bytes = free_bytes
         self._memory_releaser = memory_releaser
@@ -95,7 +105,8 @@ class SqliteDatabaseOpener:
         """Opens ``path`` and applies the ``scripts`` above its version, after its pre-migration
         copy, then opens it again and releases the memory the block took; gives back its free
         pages once they are a quarter of the file. A database newer than the ``scripts`` raises
-        ``MigrationError``, a lack of disk space ``OutOfSpaceError``. ``exclusive``, each
+        ``MigrationError``, a lack of disk space ``OutOfSpaceError``, a requested shutdown
+        ``OpeningInterruptedError`` before the block, during it or after it. ``exclusive``, each
         connection holds ``path`` until it closes, and another one raises ``HeldDatabaseError``, at
         the reopen too, the database then migrated."""
         failures = SqlFunctionFailures()
@@ -105,6 +116,7 @@ class SqliteDatabaseOpener:
             self._pre_migration_copier.ensure_copy(
                 connection, path=path, pending=pending, open_reader=self.open_reader
             )
+            self._stop_if_requested(path, version=pending.current_version)
             with wrap_sqlite_errors():
                 # On disk: an in-memory sort is unbounded (+697 MB for one index at 11.5M rows), and
                 # VACUUM builds its whole copy in a temporary database.
@@ -116,6 +128,7 @@ class SqliteDatabaseOpener:
                 ticker=self._ticker,
                 free_bytes=self._free_bytes,
                 failures=failures,
+                shutdown_requested=self._shutdown_requested,
             )
             if pending.migrations:
                 # Closed, it drops the memos, the page cache and the pragmas the scripts set.
@@ -123,6 +136,7 @@ class SqliteDatabaseOpener:
                 connection = _connect(path, exclusive=exclusive, failures=failures)
                 with wrap_sqlite_errors():
                     connection.execute("PRAGMA temp_store=FILE")
+                self._stop_if_requested(path, version=pending.migrations[-1].version)
             _reclaim(connection, path=path, ticker=self._ticker, free_bytes=self._free_bytes)
             with wrap_sqlite_errors():
                 connection.execute("PRAGMA temp_store=DEFAULT")
@@ -135,6 +149,12 @@ class SqliteDatabaseOpener:
             connection.close()
             raise
         return connection
+
+    def _stop_if_requested(self, path: Path, *, version: int) -> None:
+        if self._shutdown_requested():
+            raise OpeningInterruptedError(
+                f"the opening of {path} stopped, the database at version {version}"
+            )
 
     def open_reader(self, path: Path) -> sqlite3.Connection:
         """Opens ``path`` read-only, ``query_only``, its rows read by column name, its temporary
@@ -243,10 +263,12 @@ def _apply_migrations(
     ticker: Ticker,
     free_bytes: FreeBytesMeter,
     failures: SqlFunctionFailures,
+    shutdown_requested: ShutdownCheck,
 ) -> None:
     """Applies the pending scripts in order in one transaction, the schema version written once,
-    at its end, a failure naming the SQL function call that raised it; the rules for writing one:
-    ``docs/contributing/architecture.md``, "Écrire une migration"."""
+    at its end, a failure naming the SQL function call that raised it, a requested shutdown
+    interrupting it; the rules for writing one: ``docs/contributing/architecture.md``, "Écrire
+    une migration"."""
     if not pending.migrations:
         return
     _logger.info(
@@ -266,6 +288,9 @@ def _apply_migrations(
             elapsed.total_seconds(),
         )
 
+    # The signal handler runs at the check's own call, inside the block's statements. Left set:
+    # the open closes this connection after the block, whatever its end.
+    connection.set_progress_handler(shutdown_requested, _SHUTDOWN_CHECK_INSTRUCTIONS)
     # No finally: a failed block fails the open, which closes the connection.
     try:
         ticker.run(
@@ -274,6 +299,11 @@ def _apply_migrations(
             period=_PROGRESS_PERIOD,
         )
     except sqlite3.Error as error:
+        if error.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT:
+            raise OpeningInterruptedError(
+                f"the migrations of {path} rolled back at {step.name}, "
+                f"the database left at version {pending.current_version}"
+            ) from error
         raise _migration_error(
             error,
             connection=connection,
