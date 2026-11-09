@@ -83,9 +83,8 @@ en place** : ce sont des mots de passe en clair, donc des portes ouvertes.
 
     `AMULE_API_PASSWORD` protège le port **4711 seulement**. Le catalogue p2pwatch sur le port
     **8080** est servi **sans mot de passe, sans connexion, sans jeton CSRF**, et il expose le
-    catalogue, les
-    contrôles de crawl (pause, redémarrage) **et une console SQL en lecture seule** à
-    quiconque atteint ce port.
+    catalogue, le redémarrage du crawler **et une console SQL en lecture seule** à quiconque
+    atteint ce port.
 
     C'est voulu : l'authentification est déléguée à ce que vous mettez devant. Sur une machine
     joignable depuis Internet, mettez-le derrière un reverse proxy authentifié, ou un VPN, ou ne
@@ -116,7 +115,7 @@ Votre nœud sert deux pages web :
 
 | Adresse | Ce que c'est | Mot de passe |
 |---|---|---|
-| <http://localhost:8080> | **Le catalogue p2pwatch** : catalogue en lecture seule, contrôles de crawl, console SQL. | **Aucun.** Voir l'avertissement de l'étape 3. |
+| <http://localhost:8080> | **Le catalogue p2pwatch** : catalogue en lecture seule, redémarrage du crawler, console SQL. | **Aucun.** Voir l'avertissement de l'étape 3. |
 | <http://localhost:4711> | **L'interface web propre à aMule** : recherche, transferts, serveurs, état Kad. | `AMULE_API_PASSWORD` de votre `.env`. |
 
 Sur un serveur distant, remplacez `localhost` par son adresse.

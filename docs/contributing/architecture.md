@@ -233,13 +233,12 @@ toutes en même temps (`application/steps/search_task_runner.py`).
 
 ```mermaid
 flowchart TD
-  gate["Wait while paused"]
   backoff["Sleep until the backoff ends"]
   search["search(keyword, channel, budget)"]
   record["Record each observation"]
   persist["Persist the backoff<br/>if it changed"]
 
-  gate --> backoff --> search --> record --> persist --> gate
+  backoff --> search --> record --> persist --> backoff
 ```
 
 Points clés en chemin :
@@ -781,7 +780,7 @@ démon sont
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/loop_supervisor.py` (`LoopSupervisor`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
-| Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), les contrôles (`pause_crawl.py`, `resume_crawl.py`, `request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
+| Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
 | Matching | `domain/matching/` (moteur + politique `deploy/matcher.yml`) |

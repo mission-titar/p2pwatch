@@ -348,7 +348,7 @@ Un nœud publie deux surfaces web, qui n'ont pas la même posture :
 | **4711** | amuleapi, l'interface propre à aMule | le mot de passe admin `AMULE_API_PASSWORD` |
 
 **Le port 8080 n'a aucune authentification, d'aucune sorte.** Quiconque l'atteint obtient le
-catalogue, historique des sources compris, les contrôles du tableau de bord qui modifient l'état,
+catalogue, historique des sources compris, le contrôle du tableau de bord qui modifie l'état,
 une console SQL en lecture seule et les métriques du nœud (`/metrics`).
 `AMULE_API_PASSWORD` ne protège que le 4711. Mettez le 8080 derrière un reverse proxy ou un VPN, ou
 gardez-le sur un réseau de confiance, et ne le posez jamais sur l'Internet ouvert.
@@ -367,7 +367,7 @@ crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 
 | Route | Description |
 |---|---|
-| `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : connecté à son réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; état du crawl, avec les boutons pause, reprise et redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
+| `/` | Tableau de bord : état de chaque client (version, API joignable, et par canal : connecté à son réseau, joignable par les pairs), d'après la dernière lecture de moins de deux minutes ; le bouton de redémarrage du crawler seul (aMule garde ses sessions) ; couverture par cible (épisodes trouvés et manquants) |
 | `/files` | Liste paginée des fichiers ; filtres `?target_id=`, `?tier=`, `?search=` |
 | `/files/{file_id}` | Détail d'un fichier, désigné par son `file_id` en 32 caractères hexadécimaux minuscules, tel que la console SQL l'affiche : réseau, identifiant natif, observations et historique des sources dans l'intervalle choisi, décisions, explication du matching, avec la valeur de chaque token `coverage` (à deux décimales, sur l'échelle de son `min_coverage`) |
 | `/sources` | Liste paginée des sources qui ont un user hash, la plus récemment vue d'abord : dernier nom, début du user hash, dernière vue, nombre de fichiers ; `?search=` cherche un début de user hash ou un morceau de n'importe quel nom porté |
@@ -375,12 +375,12 @@ crawl en gardant aMule vivant, c'est `docker compose stop p2pwatch`.
 | `/sources/name?source_name=` | Un nom : les user hashes qui l'ont porté, et les périodes relevées sous ce nom sans user hash, dans l'intervalle choisi. Les liens s'arrêtent là : la page d'un nom ne montre pas les autres noms de ces user hashes, pour ne pas confondre en une seule personne des inconnus qui partagent un nom par défaut |
 | `/targets/{target_id}` | Fichiers d'une cible (alias de `/files?target_id=`) |
 | `/node` | État du crawler : `node_id`, backoff des recherches (le client entier ou l'un de ses canaux, le nombre de tentatives et le prochain essai prévu, en UTC) et téléchargements (voir [Suivre un téléchargement](#suivre-un-téléchargement)). |
-| `POST /controls/pause`, `/controls/resume`, `/controls/restart` | Les boutons du tableau de bord, qui y renvoient. La pause n'arrête pas les recherches en cours, ni celles qui attendent déjà leur créneau réseau : avec K mots-clés, jusqu'à K-1 recherches ed2k, espacées d'une minute, et la prochaine de chaque mot Kad partent encore, puis le crawler se tait. |
+| `POST /controls/restart` | Le bouton de redémarrage du tableau de bord, qui y renvoie. |
 | `/console` | Console SQL en lecture seule : un unique `SELECT` sur `catalog.db` ou `local.db`, avec export CSV. Toujours active. |
 | `/metrics` | Les métriques du nœud pour Prometheus, au format texte 0.0.4 (voir [Métriques Prometheus](settings.md#métriques-prometheus)) |
 | `/health` | Healthcheck JSON : répond `{"status": "ok"}` si le service est opérationnel |
 
-Les `POST /controls/*` déclenchent des actions qui modifient l'état, sans jeton CSRF ni
+`POST /controls/restart` déclenche une action qui modifie l'état, sans jeton CSRF ni
 authentification, par conception. `/console` est structurellement en lecture seule et bornée contre
 le déni de service (délai maximum, plafond de lignes rendues, une seule instruction). **Ces deux surfaces ne sont
 défendables que derrière votre propre périmètre** : réseau privé, VPN ou reverse proxy authentifié,
