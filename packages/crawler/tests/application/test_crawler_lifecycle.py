@@ -99,6 +99,8 @@ class _Crawl:
                 ),
                 catalog_scan_reader=catalog_scan_reader,
                 progress_every_files=200,
+                run_state_reader=self.run_state,
+                monotonic_clock=self.fake_time.monotonic,
                 logger=self.catalog_reevaluator_logger,
             ),
             backoff=self.backoff,

@@ -1,11 +1,14 @@
 """Re-judges the whole catalog at the start when the policy changed since the last pass."""
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from p2pwatch.application.ports.driven.catalog_scan_reader import CatalogScanReader
 from p2pwatch.application.ports.driven.logger import Logger
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
 from p2pwatch.application.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
+from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
@@ -33,6 +36,8 @@ class CatalogReevaluator:
         file_judge: FileJudge,
         catalog_scan_reader: CatalogScanReader,
         progress_every_files: int,
+        run_state_reader: RunStateReader,
+        monotonic_clock: MonotonicClock,
         logger: Logger,
     ) -> None:
         self._policy_fingerprint = policy_fingerprint
@@ -41,15 +46,19 @@ class CatalogReevaluator:
         self._file_judge = file_judge
         self._catalog_scan_reader = catalog_scan_reader
         self._progress_every_files = progress_every_files
+        self._run_state_reader = run_state_reader
+        self._monotonic_clock = monotonic_clock
         self._logger = logger
 
     async def reevaluate_if_policy_changed(self, node_id: NodeId) -> None:
-        """Re-evaluates iff the stored policy fingerprint differs, then stores it; logs either
-        outcome."""
+        """Re-evaluates iff the stored policy fingerprint differs, then stores it unless a
+        requested shutdown stopped the pass; logs each outcome."""
         if self._policy_fingerprint_reader.read_policy_fingerprint() == self._policy_fingerprint:
             self._logger.info("policy unchanged: catalogue re-evaluation skipped")
             return
         summary = await self._reevaluate_catalog(node_id)
+        if summary is None:
+            return
         # Stored only once the pass ends: a pass that raises is retried at the next start.
         self._policy_fingerprint_writer.set_policy_fingerprint(self._policy_fingerprint)
         self._logger.info(
@@ -58,12 +67,23 @@ class CatalogReevaluator:
             summary.rows_written,
         )
 
-    async def _reevaluate_catalog(self, node_id: NodeId) -> ReevaluationSummary:
-        """Judges each file in turn; a ``StoreError`` on one is logged and the sweep goes on."""
+    async def _reevaluate_catalog(self, node_id: NodeId) -> ReevaluationSummary | None:
+        """Judges each file in turn; a ``StoreError`` on one is logged and the sweep goes on; a
+        requested shutdown stops it before the next file, and gives ``None``."""
         total = self._catalog_scan_reader.read_file_count()
         files_evaluated = 0
         rows_written = 0
         for observation in self._catalog_scan_reader.iter_latest_observations():
+            # Yields the loop, so a signal's or the webui's request lands before the next file.
+            await self._monotonic_clock.sleep(timedelta(0))
+            if self._run_state_reader.is_shutdown_requested():
+                self._logger.info(
+                    "catalogue re-evaluation stopped by the shutdown at %d/%d files: the policy "
+                    "fingerprint not stored, the pass runs again at the next start",
+                    files_evaluated,
+                    total,
+                )
+                return None
             files_evaluated += 1
             reported_file = observation.reported_file
             try:

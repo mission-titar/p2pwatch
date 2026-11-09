@@ -30,6 +30,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
+from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.composition.crawler_composition import CrawlerComposition
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -535,6 +536,43 @@ async def test_a_re_evaluation_logs_its_progress_under_its_module_s_name(
         "p2pwatch.application.steps.catalog_reevaluator",
         "catalogue re-evaluation: 200/200 files, 0 rows written",
     ) in [(record.name, record.getMessage()) for record in caplog.records]
+
+
+_STOPPED_PASS = re.compile(
+    r"^catalogue re-evaluation stopped by the shutdown at (\d+)/400 files: the policy fingerprint"
+    r" not stored, the pass runs again at the next start$"
+)
+
+
+@pytest.mark.asyncio
+async def test_a_sigterm_during_a_re_evaluation_stops_its_pass_and_the_run_at_once(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    catalog = open_catalog(tmp_path / "catalog.db")
+    for index in range(400):  # twice the composition's progress interval
+        native_id = f"{index:032x}"
+        insert_file(catalog, native_id=native_id)
+        insert_observation(catalog, native_id=native_id, filename=f"unrelated_{index}.avi")
+    catalog.close()
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+    reevaluator_logger = logging.getLogger(CatalogReevaluator.__module__)
+    sigterm = _SigtermAtRecord(
+        "catalogue re-evaluation: 200/400 files, 0 rows written",
+        default_handler=signal.getsignal(signal.SIGTERM),
+    )
+    reevaluator_logger.addHandler(sigterm)
+    try:
+        with FakeAmuleApiServer(FakeAmuleApi()) as server, caplog.at_level(logging.INFO):
+            await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
+    finally:
+        reevaluator_logger.removeHandler(sigterm)
+
+    [stopped] = [match for match in map(_STOPPED_PASS.match, caplog.messages) if match]
+    assert 200 <= int(stopped.group(1)) < 400
+    with closing(open_reader(tmp_path / "local.db")) as local:
+        assert rows(local, sql="SELECT count(*) AS stored FROM reevaluation_state") == [
+            {"stored": 0}
+        ]
 
 
 # A table that 0008 copies: a statement long enough for the shutdown check to run inside it.

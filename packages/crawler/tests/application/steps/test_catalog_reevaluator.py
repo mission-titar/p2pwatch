@@ -4,6 +4,7 @@ Real engine and SQLite stores, the real file judge and dispatch step over fakes.
 test is seeded through ``observation_store.record_observation`` so the scan reaches it.
 """
 
+import asyncio
 import sqlite3
 from datetime import timedelta
 
@@ -30,6 +31,7 @@ from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.adapters.driven.fake_wall_clock import FakeWallClock
@@ -65,6 +67,7 @@ class _Reevaluation:
         self.observability = ObservabilityOverFakes()
         self.waker = FakeWaker()
         self.logger = FakeLogger()
+        self.run_state = FakeRunStateStore()
         self.catalog_reevaluator = CatalogReevaluator(
             policy_fingerprint=_FINGERPRINT,
             policy_fingerprint_reader=self.fingerprints,
@@ -80,6 +83,8 @@ class _Reevaluation:
             ),
             catalog_scan_reader=catalog_scan_reader,
             progress_every_files=progress_every_files,
+            run_state_reader=self.run_state,
+            monotonic_clock=FakeTime().monotonic,
             logger=self.logger,
         )
 
@@ -544,3 +549,48 @@ async def test_progress_is_logged_at_each_multiple_of_the_cadence_only(
         LoggedLine(level="info", message="catalogue re-evaluation: 2/3 files, 2 rows written"),
         LoggedLine(level="info", message="catalogue re-evaluated: 3 files, 2 rows written"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_shutdown_requested_during_the_pass_stops_it_at_the_next_file_unfingerprinted(
+    *,
+    observation_store: SqliteObservationStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
+    decision_store: SqliteDecisionStore,
+    catalog_connection: sqlite3.Connection,
+    engine: MatchingEngine,
+    wall_clock: FakeWallClock,
+) -> None:
+    for native_id, filename in ((_HASH_DL, _DL_NAME), (_HASH_CAT, _CAT_NAME)):
+        observation_store.record_observation(
+            FileObservation(
+                reported_file=_reported_file(native_id, filename=filename),
+                observed_at=wall_clock.now(),
+                node_id=_NODE_ID,
+            )
+        )
+    reevaluation = _Reevaluation(
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        wall_clock=wall_clock,
+    )
+
+    async def request_the_shutdown() -> None:
+        """Runs only once the pass yields the loop, as a signal's or the webui's request does."""
+        reevaluation.run_state.set_shutdown_requested()
+
+    requesting = asyncio.create_task(request_the_shutdown())
+    await reevaluation.run()
+    await requesting
+
+    assert reevaluation.logger.lines == [
+        LoggedLine(
+            level="info",
+            message="catalogue re-evaluation stopped by the shutdown at 0/2 files: the policy "
+            "fingerprint not stored, the pass runs again at the next start",
+        )
+    ]
+    assert reevaluation.fingerprints.read_policy_fingerprint() == "policy-1"
+    assert count_decisions(catalog_connection) == 0
