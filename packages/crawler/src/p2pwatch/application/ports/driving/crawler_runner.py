@@ -13,4 +13,4 @@ class CrawlerRunner(ABC):
     ) -> None:
         """Raises ``InvalidConfigError`` on a refused config, ``OutOfSpaceError`` short of disk
         space for a database's opening, ``HeldDatabaseError`` for a database another process
-        holds, ``TimeoutError`` on a fired bound."""
+        holds, ``ShutdownDeadlineError`` once the shutdown deadline fired."""

@@ -31,6 +31,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 from tests.fakes.fake_notification_sink import FakeNotificationSink
@@ -420,7 +421,11 @@ def test_the_shutdown_deadline_spares_the_run_then_cuts_a_logout_amuled_never_an
             await asyncio.wait({run}, timeout=2 * _WAIT_SECONDS)
             elapsed = loop.time() - stopped_at
             released.set()
-        return logged_out_before_the_stop, isinstance(run.exception(), TimeoutError), elapsed
+        return (
+            logged_out_before_the_stop,
+            isinstance(run.exception(), ShutdownDeadlineError),
+            elapsed,
+        )
 
     with caplog.at_level(logging.INFO):
         logged_out_before_the_stop, timed_out, elapsed = asyncio.run(stop_during_the_logout())
