@@ -90,7 +90,7 @@ def cross_value_problems(
         *(
             citation
             for index, rule in enumerate(config.rules)
-            for citation in _citations(rule.condition, key=f"rules[{index}]")
+            for citation in _citations(rule.expression, key=f"rules[{index}]")
         ),
     )
     edges = {
@@ -116,9 +116,9 @@ def _citations(operand: Operand | TokenDefinition, *, key: str) -> Iterator[_Cit
         case NotDefinition():
             yield from _citations(operand.operand, key=f"{key}.not")
         case AllDefinition() | AnyDefinition():
-            condition = "all" if isinstance(operand, AllDefinition) else "any"
+            expression_key = "all" if isinstance(operand, AllDefinition) else "any"
             for index, child in enumerate(operand.operands):
-                yield from _citations(child, key=f"{key}.{condition}[{index}]")
+                yield from _citations(child, key=f"{key}.{expression_key}[{index}]")
         case _:
             return
 

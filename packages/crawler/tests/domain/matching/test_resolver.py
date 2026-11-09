@@ -105,7 +105,7 @@ def test_resolve_composite_all_and_not() -> None:
     assert matcher.matches(FileCandidate(filename="keroro titar.avi")) is False
 
 
-def test_resolve_rule_condition() -> None:
+def test_resolve_rule_expression() -> None:
     resolver = _resolver_from(
         {
             "tokens": {"keroro": {"keyword": "keroro"}, "titar": {"keyword": "titar"}},

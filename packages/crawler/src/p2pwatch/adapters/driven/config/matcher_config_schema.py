@@ -29,7 +29,6 @@ from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
     AttributeBetweenDefinition,
-    Condition,
     CoverageDefinition,
     KeywordDefinition,
     MatcherConfig,
@@ -39,6 +38,7 @@ from p2pwatch.domain.matching.config import (
     Rule,
     Scope,
     TokenDefinition,
+    TokenExpression,
     TokenReference,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
@@ -126,18 +126,18 @@ def _refuse_an_empty_range(token: _AttributeBetweenSchema) -> _AttributeBetweenS
     return token
 
 
-_CONDITION_KEYS = ("all", "any", "not")
+_EXPRESSION_KEYS = ("all", "any", "not")
 _LEAF_KEYS = ("keyword", "regex", "coverage", "attr_between")
 _NO_SHAPE = f"{TAG_MARK}no_shape"
 
 
 def _token_shape(token: object) -> str | None:
-    """The tag of ``token``'s shape: a condition first, as 4.x read it, then its one leaf key;
-    ``_NO_SHAPE`` for none or two, ``None`` for no mapping."""
+    """The tag of ``token``'s shape: a token expression first, as 4.x read it, then its one leaf
+    key; ``_NO_SHAPE`` for none or two, ``None`` for no mapping."""
     if not isinstance(token, dict):
         return None
-    if condition := _condition_shape(token):
-        return condition
+    if expression := _expression_shape(token):
+        return expression
     leaf_keys = [key for key in _LEAF_KEYS if key in token]
     return f"{TAG_MARK}{leaf_keys[0]}" if len(leaf_keys) == 1 else _NO_SHAPE
 
@@ -162,55 +162,56 @@ _ANY = f"{TAG_MARK}any"
 _NOT = f"{TAG_MARK}not"
 _NAME = f"{TAG_MARK}name"
 _REFERENCE = f"{TAG_MARK}reference"
-_NOT_ONE_CONDITION = f"{TAG_MARK}not_one_condition"
+_NOT_ONE_EXPRESSION = f"{TAG_MARK}not_one_expression"
 
 
-def _condition_shape(mapping: dict[Any, Any]) -> str | None:
-    """The tag of ``mapping``'s condition key, ``_NOT_ONE_CONDITION`` for two, ``None`` for none."""
-    present = [key for key in _CONDITION_KEYS if key in mapping]
+def _expression_shape(mapping: dict[Any, Any]) -> str | None:
+    """The tag of ``mapping``'s token expression key, ``_NOT_ONE_EXPRESSION`` for two, ``None``
+    for none."""
+    present = [key for key in _EXPRESSION_KEYS if key in mapping]
     if not present:
         return None
-    return f"{TAG_MARK}{present[0]}" if len(present) == 1 else _NOT_ONE_CONDITION
+    return f"{TAG_MARK}{present[0]}" if len(present) == 1 else _NOT_ONE_EXPRESSION
 
 
 def _rule_shape(rule: object) -> str | None:
     if not isinstance(rule, dict):
         return None
-    return _condition_shape(rule) or _NOT_ONE_CONDITION
+    return _expression_shape(rule) or _NOT_ONE_EXPRESSION
 
 
 def _operand_shape(operand: object) -> str | None:
-    """A token name, a condition, else a ``{token: ...}`` reference; ``None`` for no string
+    """A token name, a token expression, else a ``{token: ...}`` reference; ``None`` for no string
     and no mapping."""
     if isinstance(operand, str):
         return _NAME
     if not isinstance(operand, dict):
         return None
-    return _condition_shape(operand) or _REFERENCE
+    return _expression_shape(operand) or _REFERENCE
 
 
-def _refuse_the_conditions(mapping: dict[Any, Any]) -> NoReturn:
+def _refuse_the_expressions(mapping: dict[Any, Any]) -> NoReturn:
     raise PydanticCustomError(
-        "condition_shape",
-        "exactly one condition (all/any/not) expected, got {keys}",
-        {"keys": [key for key in _CONDITION_KEYS if key in mapping]},
+        "expression_shape",
+        "exactly one token expression (all/any/not) expected, got {keys}",
+        {"keys": [key for key in _EXPRESSION_KEYS if key in mapping]},
     )
 
 
 # Any, since its validator refuses every value: pydantic has no schema for Never.
-_NotOneConditionSchema = Annotated[
-    Any, BeforeValidator(_refuse_the_conditions), Tag(_NOT_ONE_CONDITION)
+_NotOneExpressionSchema = Annotated[
+    Any, BeforeValidator(_refuse_the_expressions), Tag(_NOT_ONE_EXPRESSION)
 ]
 
 
-# Lazy, so that the conditions below can hold it.
+# Lazy, so that the token expressions below can hold it.
 type _OperandSchema = Annotated[
     Annotated[str, Tag(_NAME)]
     | Annotated[_TokenReferenceKeysSchema, _AS_REFERENCE_SCHEMA, Tag(_REFERENCE)]
     | Annotated[_AllSchema, Tag(_ALL)]
     | Annotated[_AnySchema, Tag(_ANY)]
     | Annotated[_NotSchema, Tag(_NOT)]
-    | _NotOneConditionSchema,
+    | _NotOneExpressionSchema,
     Discriminator(
         _operand_shape,
         custom_error_type="operand_type",
@@ -239,22 +240,22 @@ class _RuleKeysSchema(StrictSchema):
 
 
 class _AllRuleSchema(_AllSchema, _RuleKeysSchema):
-    """A rule whose condition is ``all``."""
+    """A rule whose token expression is ``all``."""
 
 
 class _AnyRuleSchema(_AnySchema, _RuleKeysSchema):
-    """A rule whose condition is ``any``."""
+    """A rule whose token expression is ``any``."""
 
 
 class _NotRuleSchema(_NotSchema, _RuleKeysSchema):
-    """A rule whose condition is ``not``."""
+    """A rule whose token expression is ``not``."""
 
 
 type _RuleSchema = Annotated[
     Annotated[_AllRuleSchema, Tag(_ALL)]
     | Annotated[_AnyRuleSchema, Tag(_ANY)]
     | Annotated[_NotRuleSchema, Tag(_NOT)]
-    | _NotOneConditionSchema,
+    | _NotOneExpressionSchema,
     Discriminator(
         _rule_shape,
         custom_error_type="rule_type",
@@ -275,7 +276,7 @@ type _TokenSchema = Annotated[
     | Annotated[_AllSchema, Tag(_ALL)]
     | Annotated[_AnySchema, Tag(_ANY)]
     | Annotated[_NotSchema, Tag(_NOT)]
-    | _NotOneConditionSchema
+    | _NotOneExpressionSchema
     | Annotated[Any, BeforeValidator(_refuse_the_shape), Tag(_NO_SHAPE)],
     Discriminator(
         _token_shape,
@@ -334,27 +335,30 @@ def _token_definition(token: _TokenSchema, *, fragments: dict[str, str]) -> Toke
                 attr=token.attr_between, min_bound=token.min, max_bound=token.max
             )
         case _:
-            return _condition(token)
+            return _token_expression(token)
 
 
 def _rule(rule: _RuleSchema) -> Rule:
     return Rule(
-        name=rule.name, tier=DecisionTier(rule.tier), scope=rule.scope, condition=_condition(rule)
+        name=rule.name,
+        tier=DecisionTier(rule.tier),
+        scope=rule.scope,
+        expression=_token_expression(rule),
     )
 
 
-def _condition(condition: _AllSchema | _AnySchema | _NotSchema) -> Condition:
-    match condition:
+def _token_expression(expression: _AllSchema | _AnySchema | _NotSchema) -> TokenExpression:
+    match expression:
         case _AllSchema():
             return AllDefinition(
-                operands=tuple(_operand(operand) for operand in condition.operands)
+                operands=tuple(_operand(operand) for operand in expression.operands)
             )
         case _AnySchema():
             return AnyDefinition(
-                operands=tuple(_operand(operand) for operand in condition.operands)
+                operands=tuple(_operand(operand) for operand in expression.operands)
             )
         case _:
-            return NotDefinition(operand=_operand(condition.operand))
+            return NotDefinition(operand=_operand(expression.operand))
 
 
 def _operand(operand: _OperandSchema) -> Operand:
@@ -368,4 +372,4 @@ def _operand(operand: _OperandSchema) -> Operand:
                 min_similarity=operand.min_similarity,
             )
         case _:
-            return _condition(operand)
+            return _token_expression(operand)
