@@ -41,6 +41,7 @@ import sqlite3
 from datetime import timedelta
 from pathlib import Path
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.sql_executor import SqlExecutor
@@ -75,8 +76,12 @@ class SqliteSqlExecutor(SqlExecutor):
     def execute(
         self, sql: str, *, row_cap: int, time_limit: timedelta
     ) -> QueryAnswer | QueryFailure:
+        try:
+            connection = self._open_reader(self._db_path)
+        except PersistenceError as error:
+            return QueryFailure(message=f"SQL error: {error}")
         return _run_query(
-            connection=self._open_reader(self._db_path),
+            connection=connection,
             sql=sql,
             row_cap=row_cap,
             budget=time_limit,

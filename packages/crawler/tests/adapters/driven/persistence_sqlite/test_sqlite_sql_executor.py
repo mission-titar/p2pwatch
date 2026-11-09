@@ -259,3 +259,14 @@ def test_statement_without_result_columns_is_safe(tmp_path: Path) -> None:
     )
     assert isinstance(query_answer, QueryAnswer)
     assert (query_answer.columns, query_answer.rows) == ((), ())
+
+
+def test_a_database_that_cannot_be_opened_is_a_failure(unreadable_database: Path) -> None:
+    query_answer = SqliteSqlExecutor(
+        unreadable_database,
+        open_reader=open_reader,
+        monotonic_clock=FakeTime().monotonic,
+        budget_check_instructions=_BUDGET_CHECK_INSTRUCTIONS,
+    ).execute("SELECT 1 FROM files", row_cap=1000, time_limit=_TIME_LIMIT)
+    assert isinstance(query_answer, QueryFailure)
+    assert query_answer.message.startswith("SQL error: ")
