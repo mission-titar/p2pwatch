@@ -35,7 +35,6 @@ from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_never_suspending_search_client import (
     FakeNeverSuspendingSearchClient,
 )
-from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
@@ -78,7 +77,6 @@ class _Tasks:
             jitter_generator=FakeJitterGenerator(),
             backoff_state_reader=self.state,
         )
-        self.run_state = FakeRunStateStore()
         self.logger = FakeLogger()
 
     def searching(self, client: Any, *, keywords: list[str]) -> Coroutine[Any, Any, None]:
@@ -110,7 +108,6 @@ class _Tasks:
         return SearchTaskRunner(
             workers=[worker],
             keywords=keywords,
-            run_state_reader=self.run_state,
             backoff=self.backoff,
             backoff_state_writer=self.state,
             monotonic_clock=self.monotonic_clock,
@@ -123,12 +120,11 @@ class _Tasks:
         *,
         client: Any,
         keywords: list[str],
-        beside: tuple[Coroutine[Any, Any, None], ...] = (),
     ) -> None:
         async def bounded() -> None:
             with suppress(TimeoutError):
                 async with asyncio.timeout(seconds):
-                    await asyncio.gather(self.searching(client, keywords=keywords), *beside)
+                    await self.searching(client, keywords=keywords)
 
         self.loop.run_until_complete(bounded())
 
@@ -181,21 +177,6 @@ def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:
     tasks.run_for(_HOUR, client=client, keywords=["keroro"])
     counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels()}
     assert counts[Channel("ed2k")] >= 5 * counts[Channel("kad")]
-
-
-def test_a_paused_task_waits_before_its_next_search_and_finishes_the_one_in_flight(
-    tasks: _Tasks,
-) -> None:
-    client = FakeTimedSearchClient({Channel("kad"): 30.0})
-
-    async def pause_then_resume() -> None:
-        await asyncio.sleep(10.0)  # noqa: TID251
-        tasks.run_state.set_paused(True)
-        await asyncio.sleep(990.0)  # noqa: TID251
-        tasks.run_state.set_paused(False)
-
-    tasks.run_for(1040.0, client=client, keywords=["keroro"], beside=(pause_then_resume(),))
-    assert [start for start, *_ in client.searches] == [0.0, 1000.0, 1030.0]
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(tasks: _Tasks) -> None:

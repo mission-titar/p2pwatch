@@ -816,7 +816,6 @@ def build_app(
                 "coverage_rows": coverage_rows,
                 "node_state": _node_state_display(summary.node_state),
                 "clients": _client_lines(summary.client_summaries),
-                "crawl_state": "paused" if summary.is_paused else "running",
                 # 0-or-1-element tuple the template iterates with {% for %} (no {% if %}, W-D8).
                 "messages": (message,) if message is not None else (),
             },

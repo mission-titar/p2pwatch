@@ -26,19 +26,17 @@ class RunStateStoreContract(ABC):
     def reader(self) -> RunStateReader:
         """The reader of the writer's run state."""
 
-    async def test_the_crawler_starts_resumed_without_a_shutdown_request(
+    async def test_the_crawler_starts_without_a_shutdown_request(
         self, reader: RunStateReader
     ) -> None:
-        assert reader.is_paused() is False
         assert reader.is_shutdown_requested() is False
 
-    async def test_a_shutdown_request_leaves_the_crawler_resumed(
+    async def test_a_shutdown_request_is_read(
         self, *, writer: RunStateWriter, reader: RunStateReader
     ) -> None:
         writer.set_shutdown_requested()
         await asyncio.sleep(0)  # noqa: TID251
         assert reader.is_shutdown_requested() is True
-        assert reader.is_paused() is False
 
     async def test_a_change_from_another_thread_is_read_from_another_thread(
         self, *, writer: RunStateWriter, reader: RunStateReader
@@ -46,13 +44,6 @@ class RunStateStoreContract(ABC):
         await asyncio.to_thread(writer.set_shutdown_requested)
         await asyncio.sleep(0)  # noqa: TID251
         assert await asyncio.to_thread(reader.is_shutdown_requested) is True
-
-    async def test_waiting_until_resumed_returns_at_once_when_resumed(
-        self, reader: RunStateReader
-    ) -> None:
-        waiting = asyncio.create_task(reader.wait_until_resumed())
-        await asyncio.sleep(0)  # noqa: TID251
-        assert waiting.done()
 
     async def test_waiting_until_shutdown_requested_returns_at_once_when_requested(
         self, *, writer: RunStateWriter, reader: RunStateReader

@@ -416,7 +416,6 @@ depends_on = [
   "p2pwatch.application.ports.driven.monotonic_clock",
   "p2pwatch.application.ports.driven.node_metric_reader",
   "p2pwatch.application.ports.driven.node_state_reader",
-  "p2pwatch.application.ports.driven.run_state_reader",
   "p2pwatch.application.ports.driven.run_state_writer",
   "p2pwatch.application.ports.driven.source_reader",
   "p2pwatch.application.ports.driven.sql_executor",

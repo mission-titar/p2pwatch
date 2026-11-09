@@ -105,7 +105,7 @@ class _Controls:
         return self.shutdown_requester.calls
 
 
-# The read-path fixtures never call the controls, and read the crawl as running.
+# The read-path fixtures never call the controls.
 _NO_CONTROLS = _Controls()
 _NODE_STATE = NodeState(
     node_id=NodeId("node-test-001"),
@@ -115,7 +115,6 @@ _NODE_STATE = NodeState(
 )
 _CRAWL_SUMMARY = CrawlSummary(
     client_summaries=(),
-    is_paused=False,
     node_state=_NODE_STATE,
     target_coverages=(
         TargetCoverage(
@@ -1703,20 +1702,14 @@ def controls_app() -> tuple[Starlette, _Controls]:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_renders_the_restart_form_alone_and_the_running_crawl(
+async def test_dashboard_renders_the_restart_form_alone_and_no_crawl_state(
     controls_app: tuple[Starlette, _Controls],
 ) -> None:
     app, _ = controls_app
     text = await _page(app, url="/")
     assert text.count('<form method="post"') == 1
     assert 'action="/controls/restart"' in text
-    assert "The crawl is running." in text
-
-
-@pytest.mark.asyncio
-async def test_dashboard_shows_a_paused_crawl() -> None:
-    app = _app_on_fakes(crawl_summary=replace(_CRAWL_SUMMARY, is_paused=True))
-    assert "The crawl is paused." in await _page(app, url="/")
+    assert "The crawl is" not in text
 
 
 @pytest.mark.asyncio

@@ -54,7 +54,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `response model` | what a driving port returns, named from its use case's verb: `FileListing`, `NodeDescription` | `result`, `view` |
 | `display` | a `<Thing>Display`, the view model a webui template renders, its values already text | `view` |
 | `wake` | `Waker` wakes the loop waiting on a `WakeSubject` | `signal`, `nudge`, a string subject |
-| `run state` | whether the crawler searches or idles, and whether its shutdown was requested: `RunStateWriter` sets it, `RunStateReader` reads it and waits until it changes | `control` |
+| `run state` | whether the crawler's shutdown was requested: `RunStateWriter` requests it, `RunStateReader` reads it and waits until it is | `control` |
 | `fake` | a double that works, as its port promises: a store reads back what it was written, a clock moves | a stub or a spy, which keep the `Fake` prefix for now |
 | `stub` | a double whose reads return what its test gave it, whatever was written: `FakeSourcePointStore` | a fake |
 | `spy` | a double that keeps the calls it receives for its test to read: `FakeNotifier` | a fake |
