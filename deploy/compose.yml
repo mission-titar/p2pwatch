@@ -15,6 +15,8 @@ services:
     pids_limit: 512
     mem_limit: 2g
     restart: unless-stopped
+    # Above crawler.yml's shutdown_deadline_seconds plus the close it then allows (5 s).
+    stop_grace_period: 30s
     environment:
       AMULE_API_PASSWORD: ${AMULE_API_PASSWORD:?}
     ports:
