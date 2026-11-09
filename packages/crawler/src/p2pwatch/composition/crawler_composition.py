@@ -567,6 +567,8 @@ class CrawlerComposition(CrawlerRunner):
                     file_judge=file_judge,
                     catalog_scan_reader=catalog_scan_reader,
                     progress_every_files=_REEVALUATION_PROGRESS_EVERY_FILES,
+                    run_state_reader=run_state_store,
+                    monotonic_clock=monotonic_clock,
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
