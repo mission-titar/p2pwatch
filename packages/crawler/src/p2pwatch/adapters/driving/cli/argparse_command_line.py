@@ -25,6 +25,7 @@ from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
+from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
@@ -154,9 +155,9 @@ class ArgparseCommandLine:
         except HeldDatabaseError as error:
             print(f"Database in use, refusing to start: {error}", file=sys.stderr, flush=True)
             return 1
-        except TimeoutError:
-            # The deadline firing is the crawler keeping its promise not to hang; a worker timing
-            # out escapes as an ``ExceptionGroup`` instead, and exits non-zero like any crash.
+        except ShutdownDeadlineError:
+            # The deadline firing is the crawler keeping its promise not to hang; any other
+            # ``TimeoutError`` escapes, and exits non-zero like any crash.
             print(
                 "Shutdown deadline elapsed: exiting on the bound rather than hanging.",
                 file=sys.stderr,

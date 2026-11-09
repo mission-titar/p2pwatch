@@ -21,6 +21,7 @@ from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
+from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
 from tests.fakes.application.use_cases.fake_config_validator import FakeConfigValidator
 from tests.fakes.composition.fake_crawler_runner import FakeCrawlerRunner
@@ -119,11 +120,18 @@ def test_crawl_exits_zero_when_the_shutdown_deadline_fires(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The bound firing is the crawler keeping its promise not to hang, not a crash.
-    crawler_runner = FakeCrawlerRunner(TimeoutError())
+    crawler_runner = FakeCrawlerRunner(ShutdownDeadlineError("cut after 10.0 s"))
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 0
 
     assert "Shutdown deadline elapsed" in capsys.readouterr().err
+
+
+def test_crawl_lets_a_timeout_error_of_the_startup_escape_as_a_crash() -> None:
+    crawler_runner = FakeCrawlerRunner(TimeoutError("an amuleapi bug"))
+
+    with pytest.raises(TimeoutError, match="an amuleapi bug"):
+        _command_line(crawler_runner=crawler_runner).run(["crawl"])
 
 
 def test_validate_config_validates_the_paths_given_under_cwd_and_starts_nothing(

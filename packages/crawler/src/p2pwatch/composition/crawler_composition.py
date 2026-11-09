@@ -101,7 +101,7 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
+from p2pwatch.application.steps.loop_supervisor import LoopSupervisor, ShutdownBoundArmer
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
@@ -123,6 +123,7 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
+from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 
 _logger = logging.getLogger(__name__)
 
@@ -160,6 +161,20 @@ async def resource_stack() -> AsyncIterator[AsyncExitStack]:
         # Best effort after a fired deadline or a failed setup: its failures never mask the first.
         with suppress(BaseException):
             await resources.aclose()
+
+
+@asynccontextmanager
+async def shutdown_bound(*, deadline_seconds: float) -> AsyncIterator[ShutdownBoundArmer]:
+    """Unbounded until armed, then cut ``deadline_seconds`` later by ``ShutdownDeadlineError``;
+    a ``TimeoutError`` raised in its body passes through as it is."""
+    loop = asyncio.get_running_loop()
+    try:
+        async with asyncio.timeout(None) as timeout:
+            yield lambda: timeout.reschedule(loop.time() + deadline_seconds)
+    except TimeoutError as error:
+        if not timeout.expired():
+            raise
+        raise ShutdownDeadlineError(f"cut after {deadline_seconds} s") from error
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
@@ -305,8 +320,8 @@ class CrawlerComposition(CrawlerRunner):
     ) -> None:
         """Opens the resources under ``PosixProcess``, runs ``CrawlerLifecycle`` to shutdown (§6).
 
-        Only the shutdown is bounded: an overrun raises ``TimeoutError``, and the resource stack
-        then closes what is left, before ``PosixProcess`` gives the signals back.
+        Only the shutdown is bounded: an overrun raises ``ShutdownDeadlineError``, and the resource
+        stack then closes what is left, before ``PosixProcess`` gives the signals back.
         """
         config = load_config(
             Path(config_path),
@@ -323,9 +338,8 @@ class CrawlerComposition(CrawlerRunner):
         wall_clock = SystemWallClock()
         monotonic_clock = AsyncioMonotonicClock()
         waker = AsyncioWaker()
-        loop = asyncio.get_running_loop()
         # On the crawler's OWN loop, so the webui thread changes it thread-safely.
-        run_state_store = AsyncioRunStateStore(loop=loop)
+        run_state_store = AsyncioRunStateStore(loop=asyncio.get_running_loop())
         shutdown_requester = RequestShutdown(run_state_store)
         # The last context exits first: the resources close, then the signal handlers go.
         async with PosixProcess(shutdown_requester), resource_stack() as stack:
@@ -547,12 +561,10 @@ class CrawlerComposition(CrawlerRunner):
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
             # shutdown is requested, so the unwind and the close below are bounded.
-            async with asyncio.timeout(None) as shutdown_timeout:
-                await crawler_lifecycle.run(
-                    arm_shutdown_bound=lambda: shutdown_timeout.reschedule(
-                        loop.time() + crawler_config.shutdown_deadline_seconds
-                    ),
-                )
+            async with shutdown_bound(
+                deadline_seconds=crawler_config.shutdown_deadline_seconds
+            ) as arm_shutdown_bound:
+                await crawler_lifecycle.run(arm_shutdown_bound=arm_shutdown_bound)
                 _print_progress("Workers stopped.")
                 _print_progress(f"{len(workers)} amuled session(s) closing…")
                 await stack.aclose()
