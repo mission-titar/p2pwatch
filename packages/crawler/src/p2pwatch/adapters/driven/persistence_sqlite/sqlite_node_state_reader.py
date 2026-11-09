@@ -7,21 +7,27 @@
 All SQL lives in module constants, parameterized (no value interpolation).
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import StrEnum
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
+    backoff_from_row,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
 from p2pwatch.application.ports.driven.node_state_reader import NodeStateReader
 from p2pwatch.domain.download.states import DownloadState, FailureReason, WaitingReason
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
-from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 
 # ---------------------------------------------------------------------------
 # SQL constants
@@ -61,6 +67,20 @@ def _optional[Reason: StrEnum](reason_type: type[Reason], *, stored: str | None)
     return None if stored is None else reason_type(stored)
 
 
+@wrap_stored_value_errors()
+def _tracked_download(row: NamedRow) -> TrackedDownload:
+    return TrackedDownload(
+        file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
+        target_id=TargetId(row["target_id"]),
+        state=DownloadState(row["state"]),
+        queued_at=micros_to_instant(row["queued_at_micros"]),
+        completed_at=_instant(row["completed_at_micros"]),
+        latest_progress_at=_instant(row["latest_progress_at_micros"]),
+        waiting_reason=_optional(WaitingReason, stored=row["waiting_reason"]),
+        failure_reason=_optional(FailureReason, stored=row["failure_reason"]),
+    )
+
+
 # ---------------------------------------------------------------------------
 # SqliteNodeStateReader
 # ---------------------------------------------------------------------------
@@ -75,43 +95,18 @@ class SqliteNodeStateReader(NodeStateReader):
     @wrap_sqlite_errors()
     def read_node_state(self) -> NodeState:
         connection = self._thread_read_connections.connection()
-        dl_rows = connection.execute(_SQL_DOWNLOADS).fetchall()
-
+        downloads = tuple(map(_tracked_download, connection.execute(_SQL_DOWNLOADS)))
+        backoff_state_by_key = dict(map(backoff_from_row, connection.execute(_SQL_BACKOFF)))
         identity_row = connection.execute(_SQL_NODE_IDENTITY).fetchone()
-
-        downloads = tuple(
-            TrackedDownload(
-                file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
-                target_id=TargetId(row["target_id"]),
-                state=DownloadState(row["state"]),
-                queued_at=micros_to_instant(row["queued_at_micros"]),
-                completed_at=_instant(row["completed_at_micros"]),
-                latest_progress_at=_instant(row["latest_progress_at_micros"]),
-                waiting_reason=_optional(WaitingReason, stored=row["waiting_reason"]),
-                failure_reason=_optional(FailureReason, stored=row["failure_reason"]),
-            )
-            for row in dl_rows
-        )
-
-        backoff_state_by_key = {
-            BackoffKey(
-                client_name=ClientName(row["client_name"]),
-                channel=None if row["channel"] is None else Channel(row["channel"]),
-            ): BackoffState(
-                attempts=row["attempts"],
-                started_at=micros_to_instant(row["started_at_micros"]),
-                delay=timedelta(seconds=row["delay_seconds"]),
-            )
-            for row in connection.execute(_SQL_BACKOFF)
-        }
-
+        if identity_row is None:
+            node_id, created_at = None, None
+        else:
+            node_id = NodeId(identity_row["node_id"])
+            with wrap_stored_value_errors():
+                created_at = micros_to_instant(identity_row["created_at_micros"])
         return NodeState(
-            node_id=NodeId(identity_row["node_id"]) if identity_row is not None else None,
-            created_at=(
-                micros_to_instant(identity_row["created_at_micros"])
-                if identity_row is not None
-                else None
-            ),
+            node_id=node_id,
+            created_at=created_at,
             downloads=downloads,
             backoff_state_by_key=backoff_state_by_key,
         )

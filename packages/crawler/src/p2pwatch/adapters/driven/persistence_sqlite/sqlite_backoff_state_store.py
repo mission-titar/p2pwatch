@@ -5,8 +5,12 @@ import sqlite3
 from contextlib import suppress
 from datetime import timedelta
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
+from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
 from p2pwatch.domain.identifiers import Channel, ClientName
@@ -22,6 +26,20 @@ VALUES (?, ?, ?, ?, ?)
 """
 
 
+@wrap_stored_value_errors()
+def backoff_from_row(row: NamedRow) -> tuple[BackoffKey, BackoffState]:
+    """A row of ``backoff_states`` as its key and its state."""
+    backoff_key = BackoffKey(
+        client_name=ClientName(row["client_name"]),
+        channel=None if row["channel"] is None else Channel(row["channel"]),
+    )
+    return backoff_key, BackoffState(
+        attempts=row["attempts"],
+        started_at=micros_to_instant(row["started_at_micros"]),
+        delay=timedelta(seconds=row["delay_seconds"]),
+    )
+
+
 class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -29,17 +47,7 @@ class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
     def read_backoff_states(self) -> dict[BackoffKey, BackoffState]:
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT).fetchall()
-        return {
-            BackoffKey(
-                client_name=ClientName(row["client_name"]),
-                channel=None if row["channel"] is None else Channel(row["channel"]),
-            ): BackoffState(
-                attempts=row["attempts"],
-                started_at=micros_to_instant(row["started_at_micros"]),
-                delay=timedelta(seconds=row["delay_seconds"]),
-            )
-            for row in rows
-        }
+        return dict(map(backoff_from_row, rows))
 
     def set_backoff_states(self, backoff_state_by_key: dict[BackoffKey, BackoffState]) -> None:
         """Replaces the whole table in one transaction."""

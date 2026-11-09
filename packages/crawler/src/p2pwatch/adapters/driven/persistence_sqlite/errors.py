@@ -38,3 +38,13 @@ def wrap_sqlite_errors() -> Iterator[None]:
         yield
     except sqlite3.Error as error:
         raise PersistenceError(str(error)) from error
+
+
+@contextmanager
+def wrap_stored_value_errors() -> Iterator[None]:
+    """Wraps a ``ValueError`` or ``OverflowError`` raised turning a stored value back into its type
+    as ``PersistenceError``: the database holds a value no store writes (chained cause)."""
+    try:
+        yield
+    except (ValueError, OverflowError) as error:
+        raise PersistenceError(f"a stored value cannot be read: {error}") from error

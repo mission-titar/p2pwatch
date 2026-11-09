@@ -112,3 +112,17 @@ def test_set_backoff_states_is_atomic_on_injected_failure(
     with pytest.raises(PersistenceError, match="injected failure"):
         backoff_state_store.set_backoff_states(later)
     assert backoff_state_store.read_backoff_states() == _BACKOFF
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ["delay_seconds = 9e999", f"started_at_micros = {2**62}"],
+    ids=["infinite delay", "start past year 9999"],
+)
+def test_a_stored_backoff_state_that_cannot_be_read_back_raises_persistence_error(
+    *, backoff_state_store: SqliteBackoffStateStore, connection: sqlite3.Connection, corruption: str
+) -> None:
+    backoff_state_store.set_backoff_states(_BACKOFF)
+    connection.execute(f"UPDATE backoff_states SET {corruption}")  # noqa: S608
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: "):
+        backoff_state_store.read_backoff_states()
