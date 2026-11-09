@@ -373,6 +373,33 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
 
 
 @pytest.mark.asyncio
+async def test_a_channel_refused_past_a_floats_range_waits_its_cap(
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+) -> None:
+    failures = 1100  # 2.0 ** 1024 overflows a float: the 1025th failure raised OverflowError
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
+    worker = _worker(
+        FakeSearchClient(search_failures=[make_search_failed()] * failures),
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
+    )
+    for _ in range(failures):
+        fake_time.advance(worker.time_until_ready(Channel("ed2k")))
+        await worker.run_task(
+            SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")), node_id=_NODE_ID
+        )
+    assert registry.snapshot()[_ED2K].attempts == failures
+    assert registry.time_until_retry(_ED2K) == timedelta(seconds=60)
+
+
+@pytest.mark.asyncio
 async def test_a_task_is_one_search_given_the_cores_budget(
     *,
     observation_store: SqliteObservationStore,

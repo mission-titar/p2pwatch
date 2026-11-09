@@ -145,8 +145,10 @@ def _with(path: str, *, value: object) -> dict[str, Any]:
         ("backoff.base_seconds", 86_401, "Input should be less than or equal to 86400"),
         ("backoff.cap_seconds", 0, "Input should be greater than 0"),
         ("backoff.factor", 0.5, "Input should be greater than or equal to 1"),
+        ("backoff.factor", 11, "Input should be less than or equal to 10"),
         ("backoff.factor", "2", "Input should be a valid number"),
         ("backoff.jitter_ratio", -0.1, "Input should be greater than or equal to 0"),
+        ("backoff.jitter_ratio", 1.5, "Input should be less than or equal to 1"),
         ("unread", 1, "Extra inputs are not permitted"),
         ("backoff.unread", 1, "Extra inputs are not permitted"),
     ],
@@ -184,6 +186,14 @@ def test_a_backoff_of_a_day_without_jitter_is_accepted() -> None:
     config = crawler_config_from_document(_with("search.backoff", value=backoff), file_path=_FILE)
     assert config.search.backoff == BackoffConfig(
         base_seconds=86_400, cap_seconds=86_400, factor=1, jitter_ratio=0
+    )
+
+
+def test_a_backoff_at_its_upper_bounds_is_accepted() -> None:
+    backoff = {"base_seconds": 2, "cap_seconds": 86_400, "factor": 10, "jitter_ratio": 1}
+    config = crawler_config_from_document(_with("search.backoff", value=backoff), file_path=_FILE)
+    assert config.search.backoff == BackoffConfig(
+        base_seconds=2, cap_seconds=86_400, factor=10, jitter_ratio=1
     )
 
 

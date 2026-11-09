@@ -7,6 +7,7 @@ keeps this module trivially testable and the jitter replayable. Used by
 ``application/steps/search_worker.py`` for the PER (client, channel) backoff (spec §3).
 """
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -40,6 +41,8 @@ def backoff_delay(attempt: int, *, base: float, cap: float, factor: float) -> fl
     delay for "zero failures", but we do not crash on an out-of-bounds input (resilience,
     spec §14).
     """
-    if attempt <= 1:
-        return min(base, cap)
-    return min(base * factor ** (attempt - 1), cap)
+    exponent = max(attempt - 1, 0)
+    # Compared in logarithms: ``factor ** exponent`` overflows a float long after the cap.
+    if base >= cap or exponent * math.log(factor) >= math.log(cap / base):
+        return cap
+    return min(base * factor**exponent, cap)
