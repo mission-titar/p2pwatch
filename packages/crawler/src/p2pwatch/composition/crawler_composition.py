@@ -13,7 +13,8 @@ Loops: the search tasks (``SearchTaskRunner``), the status loop, and the downloa
 configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
 shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
-the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``.
+the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
+deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
 """
 
 import asyncio
@@ -142,6 +143,8 @@ _WEBUI_JOIN_TIMEOUT_SECONDS = 5.0
 _CONSOLE_BUDGET_CHECK_INSTRUCTIONS = 1000
 # A longer filename is never matched: it bounds the matching's cost on what a peer advertises.
 _MAX_FILENAME_LENGTH = 4096
+# The close left once the shutdown deadline fired: the webui's join, the logout, the databases.
+CLOSE_TIMEOUT_SECONDS = 5.0
 # One INFO progress line per this many files, so a long sweep visibly advances.
 _REEVALUATION_PROGRESS_EVERY_FILES = 200
 
@@ -152,15 +155,17 @@ def _print_progress(message: str) -> None:
 
 
 @asynccontextmanager
-async def resource_stack() -> AsyncIterator[AsyncExitStack]:
-    """The stack of the resources the crawler holds, closed on exit."""
+async def resource_stack(*, close_timeout_seconds: float) -> AsyncIterator[AsyncExitStack]:
+    """The stack of the resources the crawler holds, closed on exit, the close cut past
+    ``close_timeout_seconds``, what is left then closed by the process's exit."""
     resources = AsyncExitStack()
     try:
         yield resources
     finally:
         # Best effort after a fired deadline or a failed setup: its failures never mask the first.
         with suppress(BaseException):
-            await resources.aclose()
+            async with asyncio.timeout(close_timeout_seconds):
+                await resources.aclose()
 
 
 @asynccontextmanager
@@ -342,7 +347,10 @@ class CrawlerComposition(CrawlerRunner):
         run_state_store = AsyncioRunStateStore(loop=asyncio.get_running_loop())
         shutdown_requester = RequestShutdown(run_state_store)
         # The last context exits first: the resources close, then the signal handlers go.
-        async with PosixProcess(shutdown_requester), resource_stack() as stack:
+        async with (
+            PosixProcess(shutdown_requester),
+            resource_stack(close_timeout_seconds=CLOSE_TIMEOUT_SECONDS) as stack,
+        ):
             ticker = ThreadingTicker(monotonic_clock)
             database_opener = SqliteDatabaseOpener(
                 SqlitePreMigrationCopier(
