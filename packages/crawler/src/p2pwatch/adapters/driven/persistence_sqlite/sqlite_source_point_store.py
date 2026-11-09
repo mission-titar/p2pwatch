@@ -5,7 +5,10 @@ from collections.abc import Sequence
 from contextlib import suppress
 from datetime import datetime
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.variants import source_content_hash
@@ -166,6 +169,7 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
         return bool(row["has_points"])
 
 
+@wrap_stored_value_errors()
 def _latest_point(row: NamedRow) -> LatestPoint:
     return LatestPoint(
         role=SourceRole(row["role"]),

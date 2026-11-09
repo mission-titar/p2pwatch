@@ -8,6 +8,7 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
 )
@@ -221,3 +222,15 @@ def test_the_latest_point_seeks_this_sources_variants_whatever_the_node_holds(
         read=lambda: _latest(source_point_store, reading=_passing(), since=since, before=before),
     )
     assert abs(large - small) <= small // 10
+
+
+def test_a_stored_role_that_cannot_be_read_back_raises_persistence_error(
+    *, source_point_store: SqliteSourcePointStore, catalog: sqlite3.Connection
+) -> None:
+    catalog.execute("PRAGMA ignore_check_constraints = ON")
+    variant_id = insert_source_variant(catalog, native_id=_FILE, user_hash=_USER, role="bogus")
+    insert_source_point(catalog, variant_id=variant_id, observed_at_micros=_us(_T0))
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: 'bogus'"):
+        source_point_store.read_earlier_points(
+            _KEY, before=_T0 + timedelta(hours=1), node_id=_NODE_ID
+        )

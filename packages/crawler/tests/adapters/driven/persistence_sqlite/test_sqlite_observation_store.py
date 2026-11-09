@@ -22,7 +22,7 @@ from tests.contracts.application.ports.driven.observation_store_contract import 
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
-from tests.support.catalog_rows import count_observations, insert_file
+from tests.support.catalog_rows import count_observations, insert_file, insert_observation
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32
@@ -300,3 +300,13 @@ def test_read_latest_observation_of_a_file_never_observed_is_none(
 ) -> None:
     insert_file(connection, native_id=_HASH, size_bytes=1)
     assert observation_store.read_latest_observation(_KEY) is None
+
+
+def test_a_stored_observation_that_cannot_be_read_back_raises_persistence_error(
+    *, observation_store: SqliteObservationStore, connection: sqlite3.Connection
+) -> None:
+    insert_file(connection, native_id=_HASH)
+    connection.execute("PRAGMA ignore_check_constraints = ON")
+    insert_observation(connection, native_id=_HASH, filename="keroro.avi", source_count=-1)
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: "):
+        observation_store.read_latest_observation(_KEY)

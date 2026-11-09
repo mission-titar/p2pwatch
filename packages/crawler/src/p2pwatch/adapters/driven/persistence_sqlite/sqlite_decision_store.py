@@ -7,7 +7,10 @@ from contextlib import suppress
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    wrap_sqlite_errors,
+    wrap_stored_value_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
@@ -115,13 +118,14 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         """
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT_DOWNLOAD_DECISIONS).fetchall()
-        return tuple(
-            DownloadCandidate(
-                file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
-                target_id=TargetId(row["target_id"]),
+        with wrap_stored_value_errors():
+            return tuple(
+                DownloadCandidate(
+                    file=FileKey(network=Network(row["network"]), native_id=row["native_id"]),
+                    target_id=TargetId(row["target_id"]),
+                )
+                for row in rows
             )
-            for row in rows
-        )
 
 
 def _row(dated_decision: DatedDecision[FileTargetDecision]) -> tuple[object, ...]:
@@ -139,6 +143,7 @@ def _decision_columns(decision: FileTargetDecision) -> tuple[str, str, str]:
     return decision.target_id, decision.rule_name, decision.tier.value
 
 
+@wrap_stored_value_errors()
 def _file_target_decision(target_id: TargetId, *, rule_name: str, tier: str) -> FileTargetDecision:
     if tier == _RETRACTED_TIER:
         return Retraction(target_id=target_id)

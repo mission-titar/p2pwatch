@@ -10,6 +10,7 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_catalog_file_reader import (
     _JOIN_DECISIONS,
     _JOIN_LATEST_OBSERVATION,
@@ -274,3 +275,34 @@ def test_counters_read_observations_only_for_a_name_filter(
             SqliteCatalogFileReader(thread_read_connections), search_text=search_text
         )
     assert ("observations" in tables) is (search_text is not None)
+
+
+def test_a_stored_file_that_cannot_be_read_back_raises_persistence_error(catalog_db: Path) -> None:
+    native_id = "a" * 32
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(
+            "INSERT INTO files (file_id, network, native_id, size_bytes) VALUES (?, 'bogus', ?, 1)",
+            (file_id(native_id), native_id),
+        )
+        insert_observation(connection, native_id=native_id, filename="keroro.avi")
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: 'bogus'"):
+        _entries(catalog_db)
+
+
+def test_a_stored_decision_that_cannot_be_read_back_raises_persistence_error(
+    catalog_db: Path,
+) -> None:
+    native_id = "a" * 32
+    with closing(sqlite3.connect(catalog_db)) as connection, connection:
+        insert_file(connection, native_id=native_id)
+        insert_observation(connection, native_id=native_id, filename="keroro.avi")
+        connection.execute("PRAGMA ignore_check_constraints = ON")
+        connection.execute(
+            "INSERT INTO match_decisions"
+            " (file_id, target_id, rule_name, tier, decided_at_micros, node_id)"
+            " VALUES (?, '062A', 'rule', 'download', ?, 'n1')",
+            (file_id(native_id), 2**62),
+        )
+    with pytest.raises(PersistenceError, match="^a stored value cannot be read: date value"):
+        _history(catalog_db, native_id=native_id)
