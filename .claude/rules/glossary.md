@@ -45,6 +45,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `search text` | `search_text`, the text a listed name must contain, or a listed source's hash prefix | `query`, which is SQL's |
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
 | `word` | a piece of normalized text | `token` |
+| `token expression` | `TokenExpression`, an `all`, `any` or `not` over tokens: a rule's body, a composite token or an inline operand | `condition`, a health word |
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
 | `tracked` | a download with a row in `downloads`, whatever its state: `TrackedDownload` | `downloaded`, `active` |
 | `download status` | `DownloadStatus`, a download as its client lists it: its bytes, its `completed` signal, its `WaitingReason` or `FailureReason` | a tracked download, which is ours |

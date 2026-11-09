@@ -16,7 +16,7 @@ The core is one layered, declarative matching engine under `packages/crawler/src
 load_yaml(path)                         # the crawler's adapters/driven/config/yaml_loader.py: the ONLY I/O;
   →                                        #   its document, and each key written twice as a problem
   → matcher_config_from_document           # the config adapter's matcher_config_schema.py (pydantic):
-  →                                        #   fragments, tokens, conditions and rules (closed tier and
+  →                                        #   fragments, tokens, token expressions and rules (closed tier and
   →                                        #   scope, no control character (Cc) in a rule name), every
   →                                        #   problem listed, then validation.py's rules across
   →                                        #   values: every fragment problem, unknown reference,

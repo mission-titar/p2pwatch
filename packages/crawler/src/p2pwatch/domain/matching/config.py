@@ -55,9 +55,9 @@ class AttributeBetweenDefinition:
     max_bound: float | None = None
 
 
-# --- COMPOSITE defs / conditions (cf. spec §8.3: all/any/not) ---
-# Reused in three contexts: named composite token, rule body, inline condition
-# `{condition}`. Operands mix bare names, TokenReference, and inline conditions.
+# --- COMPOSITE defs / token expressions (cf. spec §8.3: all/any/not) ---
+# Reused in three contexts: named composite token, rule body, inline token expression
+# `{expression}`. Operands mix bare names, TokenReference, and inline token expressions.
 
 # PEP 695 type alias (`type ...`), lazily evaluated: referencing TokenReference, AllDefinition,
 # AnyDefinition and NotDefinition (defined below and mutually recursive) is therefore valid,
@@ -110,8 +110,8 @@ TokenDefinition = (
     | NotDefinition
 )
 
-# A rule body / inline operand `{condition}` is a composite condition.
-Condition = AllDefinition | AnyDefinition | NotDefinition
+# A rule body / inline operand `{expression}` is a token expression.
+TokenExpression = AllDefinition | AnyDefinition | NotDefinition
 
 # What a rule's win pins: one segment, the whole episode, nothing.
 type Scope = Literal["segment", "episode", "unattributed"]
@@ -119,12 +119,12 @@ type Scope = Literal["segment", "episode", "unattributed"]
 
 @dataclass(kw_only=True, frozen=True)
 class Rule:
-    """Ordered rule: ``{ name, tier, scope, <condition> }`` (cf. spec §8.3)."""
+    """Ordered rule: ``{ name, tier, scope, <expression> }`` (cf. spec §8.3)."""
 
     name: str
     tier: DecisionTier
     scope: Scope
-    condition: Condition
+    expression: TokenExpression
 
 
 @dataclass(kw_only=True, frozen=True)

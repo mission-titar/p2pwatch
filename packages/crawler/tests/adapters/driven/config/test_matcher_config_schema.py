@@ -46,7 +46,7 @@ def test_a_document_gives_its_matcher_config() -> None:
         name="r",
         tier=DecisionTier.NOTIFY,
         scope="episode",
-        condition=AnyDefinition(operands=("titar",)),
+        expression=AnyDefinition(operands=("titar",)),
     )
     assert matcher_config_from_document(document, file_path=_FILE) == MatcherConfig(
         tokens={
@@ -334,15 +334,15 @@ def test_a_rule_name_beyond_ascii_that_is_no_control_character_is_accepted() -> 
     assert rule.name == "\xe9\xa0"
 
 
-_ONE_CONDITION = "exactly one condition (all/any/not) expected, got {keys}"
+_ONE_EXPRESSION = "exactly one token expression (all/any/not) expected, got {keys}"
 
 
 @pytest.mark.parametrize(
     ("rule", "key", "message"),
     [
         ("id_segment_exact", "rules[0]", "Input should be a valid dictionary"),
-        (_rule(), "rules[0]", _ONE_CONDITION.format(keys=[])),
-        (_rule(all=["a"], any=["a"]), "rules[0]", _ONE_CONDITION.format(keys=["all", "any"])),
+        (_rule(), "rules[0]", _ONE_EXPRESSION.format(keys=[])),
+        (_rule(all=["a"], any=["a"]), "rules[0]", _ONE_EXPRESSION.format(keys=["all", "any"])),
         (
             {"tier": "catalog", "scope": "unattributed", "any": ["a"]},
             "rules[0].name",
@@ -400,7 +400,7 @@ def test_no_message_of_the_rules_prints_the_value_received() -> None:
     assert all("SECRET" not in message for _, message in problems)
 
 
-def test_a_rule_gives_its_conditions_operands_and_references() -> None:
+def test_a_rule_gives_its_expression_operands_and_references() -> None:
     title_hit = {"coverage": "title", "min_coverage": 0.6}
     reference = {"token": "title_hit", "min_coverage": 0.5, "min_similarity": 0.9}
     document = {
@@ -408,7 +408,7 @@ def test_a_rule_gives_its_conditions_operands_and_references() -> None:
         "rules": [_rule(all=["a", reference, {"not": {"any": ["not_a", {"token": "a"}]}}])],
     }
     [rule] = matcher_config_from_document(document, file_path=_FILE).rules
-    assert rule.condition == AllDefinition(
+    assert rule.expression == AllDefinition(
         operands=(
             "a",
             TokenReference(name="title_hit", min_coverage=0.5, min_similarity=0.9),
@@ -451,11 +451,11 @@ _AT_LEAST_ONE = "List should have at least 1 item after validation, not 0"
         (
             _rule(any=[{"all": ["a"], "not": "a"}]),
             "rules[0].any[0]",
-            _ONE_CONDITION.format(keys=["all", "not"]),
+            _ONE_EXPRESSION.format(keys=["all", "not"]),
         ),
     ],
 )
-def test_a_wrong_condition_of_a_rule_is_refused_by_its_key(
+def test_a_wrong_expression_of_a_rule_is_refused_by_its_key(
     *, rule: object, key: str, message: str
 ) -> None:
     assert _rule_problems(rule) == [(key, message)]
@@ -465,11 +465,11 @@ def test_a_wrong_condition_of_a_rule_is_refused_by_its_key(
     ("token", "key", "message"),
     [
         ({"all": ["a"], "keyword": "a"}, "tokens.t.keyword", "Extra inputs are not permitted"),
-        ({"any": ["a"], "not": "a"}, "tokens.t", _ONE_CONDITION.format(keys=["any", "not"])),
+        ({"any": ["a"], "not": "a"}, "tokens.t", _ONE_EXPRESSION.format(keys=["any", "not"])),
         ({"not": 3}, "tokens.t.not", "Input should be a valid string or dictionary"),
     ],
 )
-def test_a_wrong_condition_token_is_refused_by_its_key(
+def test_a_wrong_expression_token_is_refused_by_its_key(
     *, token: dict[str, Any], key: str, message: str
 ) -> None:
     assert _token_problems(token) == [(key, message)]
@@ -486,7 +486,7 @@ def test_a_token_references_4x_key_is_one_problem_naming_its_new_name(
     assert _rule_problems(rule) == [(f"rules[0].all[0].{old_key}", message)]
 
 
-def test_every_problem_of_the_conditions_is_listed() -> None:
+def test_every_problem_of_the_expressions_is_listed() -> None:
     document = {
         "tokens": {"a": {"keyword": "a"}, "t": {"any": [3, {"not": []}]}},
         "rules": [_rule(all=[{"token": "a", "min": 0.5}, {"any": []}])],

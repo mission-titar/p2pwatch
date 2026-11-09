@@ -76,9 +76,9 @@ class MatcherResolver:
         )
 
     def resolve_rule(self, rule: Rule, *, target: TargetSegment) -> Matcher:
-        """Builds the matcher of a rule's condition for ``target``."""
+        """Builds the matcher of a rule's token expression for ``target``."""
         return self._build_definition(
-            rule.condition, target=target, min_coverage_override=None, min_similarity_override=None
+            rule.expression, target=target, min_coverage_override=None, min_similarity_override=None
         )
 
     def resolve_target(self, target: TargetSegment) -> ResolvedTarget:

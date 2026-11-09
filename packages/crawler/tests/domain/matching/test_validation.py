@@ -6,7 +6,6 @@ from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.matching.config import (
     AllDefinition,
     AnyDefinition,
-    Condition,
     CoverageDefinition,
     KeywordDefinition,
     MatcherConfig,
@@ -14,6 +13,7 @@ from p2pwatch.domain.matching.config import (
     RegexDefinition,
     Rule,
     TokenDefinition,
+    TokenExpression,
     TokenReference,
 )
 from p2pwatch.domain.matching.decision_tier import DecisionTier
@@ -43,8 +43,8 @@ def _placeholder(name: str) -> str:
     return f"cites the placeholder '{{{name}}}', neither a fragment nor a target field"
 
 
-def _rule(condition: Condition) -> Rule:
-    return Rule(name="r", tier=DecisionTier.CATALOG, scope="unattributed", condition=condition)
+def _rule(expression: TokenExpression) -> Rule:
+    return Rule(name="r", tier=DecisionTier.CATALOG, scope="unattributed", expression=expression)
 
 
 def _chain(length: int) -> dict[str, TokenDefinition]:

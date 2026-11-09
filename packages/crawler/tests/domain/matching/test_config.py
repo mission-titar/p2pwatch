@@ -57,17 +57,17 @@ def test_token_reference_overrides_default_to_none() -> None:
     assert TokenReference(name="title_hit", min_coverage=0.4).min_coverage == 0.4
 
 
-def test_rule_holds_name_tier_scope_condition() -> None:
+def test_rule_holds_name_tier_scope_expression() -> None:
     rule = Rule(
         name="keroro_large",
         tier=DecisionTier.CATALOG,
         scope="unattributed",
-        condition=AnyDefinition(operands=("keroro_titar",)),
+        expression=AnyDefinition(operands=("keroro_titar",)),
     )
     assert rule.name == "keroro_large"
     assert rule.tier is DecisionTier.CATALOG
     assert rule.scope == "unattributed"
-    assert isinstance(rule.condition, AnyDefinition)
+    assert isinstance(rule.expression, AnyDefinition)
 
 
 def test_matcher_config_holds_tokens_and_rules() -> None:
@@ -78,7 +78,7 @@ def test_matcher_config_holds_tokens_and_rules() -> None:
                 name="r",
                 tier=DecisionTier.CATALOG,
                 scope="unattributed",
-                condition=AnyDefinition(operands=("keroro",)),
+                expression=AnyDefinition(operands=("keroro",)),
             ),
         ),
     )
