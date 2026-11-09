@@ -10,6 +10,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from datetime import datetime, timedelta
 from enum import StrEnum
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
@@ -71,6 +72,7 @@ class SqliteNodeStateReader(NodeStateReader):
     def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
         self._thread_read_connections = thread_read_connections
 
+    @wrap_sqlite_errors()
     def read_node_state(self) -> NodeState:
         connection = self._thread_read_connections.connection()
         dl_rows = connection.execute(_SQL_DOWNLOADS).fetchall()

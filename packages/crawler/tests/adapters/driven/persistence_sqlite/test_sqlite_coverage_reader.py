@@ -53,6 +53,11 @@ class TestSqliteCoverageReader(CoverageReaderContract):
     def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteCoverageReader:
         return SqliteCoverageReader(thread_read_connections)
 
+    @pytest.fixture
+    def unreadable_reader(self, unreadable_database: Path) -> Iterator[SqliteCoverageReader]:
+        with ThreadReadConnections(unreadable_database, open_reader=open_reader) as connections:
+            yield SqliteCoverageReader(connections)
+
 
 def _read_target_coverage(catalog_db: Path) -> Mapping[TargetId, tuple[DecisionTier, ...]]:
     with ThreadReadConnections(catalog_db, open_reader=open_reader) as thread_read_connections:

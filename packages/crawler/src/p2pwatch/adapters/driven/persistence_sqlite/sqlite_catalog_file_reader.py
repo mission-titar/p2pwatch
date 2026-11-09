@@ -11,6 +11,7 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from collections.abc import Mapping
 from datetime import datetime
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.observation_read import (
     LATEST_OBSERVATION_CTE,
@@ -248,6 +249,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
         self._thread_read_connections = thread_read_connections
 
+    @wrap_sqlite_errors()
     def read_matched_and_total_file_counts(
         self,
         *,
@@ -265,6 +267,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
         total: int = row["total"]
         return (matched, total)
 
+    @wrap_sqlite_errors()
     def read_file_count_by_tier(
         self,
         *,
@@ -285,6 +288,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
     # Filtered paginated explorer
     # ------------------------------------------------------------------
 
+    @wrap_sqlite_errors()
     def read_catalog_entries(
         self,
         *,
@@ -334,6 +338,7 @@ class SqliteCatalogFileReader(CatalogFileReader):
             for row in rows
         )
 
+    @wrap_sqlite_errors()
     def read_file_history(
         self, file_id: FileId, *, since: datetime, until: datetime
     ) -> FileHistory | None:

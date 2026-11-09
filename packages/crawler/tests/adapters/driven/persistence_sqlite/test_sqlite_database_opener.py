@@ -239,6 +239,11 @@ def test_open_reader_opens_a_path_holding_characters_a_uri_escapes(tmp_path: Pat
         assert rows(reader, sql="SELECT native_id FROM files") == [{"native_id": _CANONICAL_HASH}]
 
 
+def test_open_reader_of_a_missing_file_raises_persistence_error(tmp_path: Path) -> None:
+    with pytest.raises(PersistenceError, match="unable to open database file"):
+        database_opener().open_reader(tmp_path / "catalog.db")
+
+
 def test_open_catalog_opens_a_path_holding_characters_a_uri_escapes(tmp_path: Path) -> None:
     directory = tmp_path / "data #%?"
     directory.mkdir()

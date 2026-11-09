@@ -11,7 +11,8 @@ from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory
 
 class SourceReader(ABC):
     """Reads the sources from any thread: one passes ``search_text`` when its user hash starts with
-    it or a name it carried holds it, as typed, case, accents and ligatures ignored."""
+    it or a name it carried holds it, as typed, case, accents and ligatures ignored; a read that
+    fails raises ``StoreError``."""
 
     @abstractmethod
     def read_known_sources(

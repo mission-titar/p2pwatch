@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import replace
 from datetime import datetime, timedelta
 from random import Random
+from typing import Protocol
 
 import pytest
 
@@ -16,6 +17,7 @@ from p2pwatch.domain.known_source import KnownSource
 from p2pwatch.domain.sharing_period import PeriodWindow, SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourcePoint, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.observation import (
     draw_file,
     draw_file_observation,
@@ -132,6 +134,31 @@ def _name_history(
     return reader.read_source_name_history(source_name, limit=limit, offset=offset, window=window)
 
 
+def _drawn_window(randomness: Random) -> PeriodWindow:
+    since, until = draw_instants(randomness, count=2)
+    return _window(since, until=until)
+
+
+class _Read(Protocol):
+    def __call__(self, reader: SourceReader, *, randomness: Random) -> object: ...
+
+
+# Each read of the port, its arguments drawn.
+_READS: dict[str, _Read] = {
+    "known sources": lambda reader, randomness: _known_sources(reader),
+    "count": lambda reader, randomness: reader.read_source_count(search_text=None),
+    "source history": lambda reader, randomness: _source_history(
+        reader, source=draw_source_key(randomness), window=_drawn_window(randomness)
+    ),
+    "name history": lambda reader, randomness: _name_history(
+        reader, source_name=draw_text(randomness), window=_drawn_window(randomness)
+    ),
+    "sharing periods": lambda reader, randomness: reader.read_sharing_periods(
+        draw_file(randomness), window=_drawn_window(randomness)
+    ),
+}
+
+
 class SourceReaderContract(ABC):
     @pytest.fixture
     @abstractmethod
@@ -147,6 +174,11 @@ class SourceReaderContract(ABC):
     @abstractmethod
     def reader(self) -> SourceReader:
         """The reader of the writers' catalog."""
+
+    @pytest.fixture
+    @abstractmethod
+    def unreadable_reader(self) -> SourceReader:
+        """The reader of a catalog that cannot be read."""
 
     def test_a_known_source_holds_its_latest_name_its_latest_reading_and_its_file_count(
         self,
@@ -1039,3 +1071,14 @@ class SourceReaderContract(ABC):
         )
         assert _source_history(reader, source=draw_source_key(randomness), window=window) is None
         assert _name_history(reader, source_name=draw_text(randomness), window=window) is None
+
+    @pytest.mark.parametrize("read", _READS.values(), ids=list(_READS))
+    def test_a_read_of_a_catalog_that_cannot_be_read_raises_store_error(
+        self,
+        *,
+        randomness: Random,
+        unreadable_reader: SourceReader,
+        read: _Read,
+    ) -> None:
+        with pytest.raises(StoreError):
+            read(unreadable_reader, randomness=randomness)

@@ -14,7 +14,8 @@ from p2pwatch.domain.matching.identifiers import TargetId
 class CatalogFileReader(ABC):
     """Reads the files from any thread: one passes ``target_id`` when it holds a current decision
     of that target, its tier not ``catalog``, ``tier`` when one is of that tier, ``search_text``
-    when its latest filename holds it as typed, case, accents and ligatures ignored."""
+    when its latest filename holds it as typed, case, accents and ligatures ignored; a read that
+    fails raises ``StoreError``."""
 
     @abstractmethod
     def read_catalog_entries(

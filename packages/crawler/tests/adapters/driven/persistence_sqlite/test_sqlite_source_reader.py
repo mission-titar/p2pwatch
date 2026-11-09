@@ -64,6 +64,11 @@ class TestSqliteSourceReader(SourceReaderContract):
     def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteSourceReader:
         return SqliteSourceReader(thread_read_connections)
 
+    @pytest.fixture
+    def unreadable_reader(self, unreadable_database: Path) -> Iterator[SqliteSourceReader]:
+        with ThreadReadConnections(unreadable_database, open_reader=open_reader) as connections:
+            yield SqliteSourceReader(connections)
+
 
 # ---------------------------------------------------------------------------
 # Tests: a file's source history as periods (source points spec, D6)

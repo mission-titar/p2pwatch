@@ -1,4 +1,4 @@
-"""Pytest fixtures: a migrated catalog.db and local.db."""
+"""Pytest fixtures: a migrated catalog.db and local.db, and a database that cannot be read."""
 
 from pathlib import Path
 
@@ -23,4 +23,13 @@ def local_db(tmp_path: Path) -> Path:
     """An empty local.db migrated by the crawler's own migrations."""
     path = tmp_path / "local.db"
     open_local(path).close()
+    return path
+
+
+@pytest.fixture(params=["missing", "not a database"])
+def unreadable_database(*, request: pytest.FixtureRequest, tmp_path: Path) -> Path:
+    """A database's path where no file is, or a file whose bytes are no database's."""
+    path = tmp_path / "unreadable.db"
+    if request.param == "not a database":
+        path.write_bytes(b"not a database\n" * 256)
     return path

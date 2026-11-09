@@ -8,6 +8,7 @@ sentinel and per-target ``retracted`` rows are excluded.
 All SQL lives in module constants, parameterized; only the tiers are interpolated, from their enum.
 """
 
+from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
@@ -56,6 +57,7 @@ class SqliteCoverageReader(CoverageReader):
     def __init__(self, thread_read_connections: ThreadReadConnections) -> None:
         self._thread_read_connections = thread_read_connections
 
+    @wrap_sqlite_errors()
     def read_target_coverage(self) -> dict[TargetId, tuple[DecisionTier, ...]]:
         tiers_by_target: dict[TargetId, list[DecisionTier]] = {}
         for row in self._thread_read_connections.connection().execute(_SQL_COVERAGE):

@@ -57,3 +57,8 @@ class TestSqliteNodeStateReader(NodeStateReaderContract):
     @pytest.fixture
     def reader(self, thread_read_connections: ThreadReadConnections) -> SqliteNodeStateReader:
         return SqliteNodeStateReader(thread_read_connections)
+
+    @pytest.fixture
+    def unreadable_reader(self, unreadable_database: Path) -> Iterator[SqliteNodeStateReader]:
+        with ThreadReadConnections(unreadable_database, open_reader=open_reader) as connections:
+            yield SqliteNodeStateReader(connections)
