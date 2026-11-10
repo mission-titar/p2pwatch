@@ -88,3 +88,10 @@ def test_an_error_body_whose_error_key_is_not_an_object_still_maps() -> None:
     mapped = error_from_response(_sent(httpx.Response(500, json={"error": 7})))
     assert type(mapped) is ApiUnreachableError
     assert str(mapped) == "GET /api/v1/status: 500 : Internal Server Error"
+
+
+def test_an_error_body_nested_past_the_recursion_limit_still_maps() -> None:
+    nested = b"[" * 100_000 + b"]" * 100_000
+    mapped = error_from_response(_sent(httpx.Response(503, content=nested)))
+    assert type(mapped) is ApiUnreachableError
+    assert str(mapped) == "GET /api/v1/status: 503 : Service Unavailable"

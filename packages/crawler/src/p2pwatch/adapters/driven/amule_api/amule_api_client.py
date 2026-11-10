@@ -429,7 +429,7 @@ def _decode(response: httpx.Response) -> dict[str, Any]:
         return {}
     try:
         decoded_body = json.loads(response.content)
-    except ValueError as failure:  # JSONDecodeError is one
+    except (ValueError, RecursionError) as failure:  # JSONDecodeError is a ValueError
         raise ApiUnreachableError(f"{response.request.url.path}: unreadable body") from failure
     return decoded_body if isinstance(decoded_body, dict) else {}
 

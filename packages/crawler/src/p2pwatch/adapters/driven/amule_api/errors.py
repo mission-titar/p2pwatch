@@ -61,7 +61,7 @@ def _error_code_and_message(response: httpx.Response) -> tuple[str, str]:
     """``{"error": {code, message}}`` -> the pair, or placeholders if the body is not one."""
     try:
         decoded_body = json.loads(response.content)
-    except ValueError:  # JSONDecodeError is one
+    except (ValueError, RecursionError):  # JSONDecodeError is a ValueError
         return "", response.reason_phrase
     error = decoded_body.get("error") if isinstance(decoded_body, dict) else None
     if not isinstance(error, dict):
