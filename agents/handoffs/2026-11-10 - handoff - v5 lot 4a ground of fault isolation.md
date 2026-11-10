@@ -24,7 +24,10 @@ its three (D21), under `agents/specs/2026-11-04-v5-release-readiness.md` (the um
   `DecisionWriter.record_decisions(sequence)` replaces `record_decision`, one `BEGIN IMMEDIATE` around an
   `executemany`, and a `StoreError` writes none of them; the download loop is woken after the commit, the
   `DecisionsRecorded` event dispatched last. A failed write writes and sends nothing, and the next judgement redoes
-  it all.
+  it all. Every store's write transaction is `immediate_transaction(connection)` (block 95): `BEGIN IMMEDIATE`
+  outside the `try`, so a failed `BEGIN` rolls back no transaction its caller had open; `COMMIT` inside it, so a
+  failed `COMMIT` rolls back instead of leaving the transaction open; `ROLLBACK` under `suppress(sqlite3.Error)`,
+  since SQLite rolls a full disk back itself and the `ROLLBACK`'s own error would replace the cause.
 - **Each port-sync round is a unit of work** (D20, block 50): `PortSyncLifecycle` keeps the not-ready and rejected
   lines, logs any other exception, a bug included, with its trace, and polls again; the process exits only on a
   `SettingsError` at start. The `Logger` port of `p2pwatch_amule` gains `error_with_trace`.
@@ -94,10 +97,12 @@ its three (D21), under `agents/specs/2026-11-04-v5-release-readiness.md` (the um
 | 90 | | the stop during the start: copy, comparison and reclaim interrupted, the plain handler, the 25 s bound | 404, 15 |
 | 92 | | the catalog's writer contracts: a full and a read-only database | 163, 9 |
 | 94 | | local.db's writer contracts, `FakeCatalogFinder`'s contract | 197, 15 |
+| 95 | | the stores' write transaction in one context manager, `immediate_transaction` (the operator's request) | 193, 7 |
 | 96 | | the policy files read once, `backoff_read`, `strerror`, two comments, the records | 220, 17 |
 
-Nineteen blocks: the spec's 11 rows before the closing one, 4 from their splits, and the closing block in four;
-the workflow's 19 exactly.
+Twenty blocks: the spec's 11 rows before the closing one, 4 from their splits, the closing block in four, and
+block 95, which the operator asked for in the review of #701; the operator accepted the stack past the workflow's 19
+on 2026-11-10 ("Accepté").
 
 - **The re-cut of blocks 30, 33 and 36, by the lead**: as the spec drew them, block 30 could not pass vulture, since
   `PauseCrawl` and `ResumeCrawl` were the only callers of `set_paused` in `src` (block 33 had the mirror problem with
@@ -145,6 +150,14 @@ the workflow's 19 exactly.
   - The closing block: the four fakes of the local writer contracts skip the full and read-only case
     (`pytest.skip`, "a fake's memory refuses no write"), the reviewer's exemption; `FakeShutdownRequestingTicker`
     joins `_EXEMPTIONS` as a stub; at the 25 s bound, a close that uses its whole 5 s ends as the grace expires.
+  - Block 95: `SqliteObservationStore` opened its transaction with a deferred `BEGIN` and now takes `BEGIN IMMEDIATE`,
+    which changes nothing observable, its first statement a write taking the same lock; the migrations' block (a
+    deferred `BEGIN` inside its `try`, only `sqlite3.Error` caught, a failure reported at the step that ran) and the
+    catalog copier's per-source copy (`ATTACH` outside the transaction, each statement's failure a
+    `CatalogCopyError` naming its table) keep their own transactions, sharing the shape but not the contract; the
+    failed `COMMIT` is provoked by a key declared `DEFERRABLE INITIALLY DEFERRED` rather than
+    `PRAGMA defer_foreign_keys`, which each `COMMIT` resets. Class 1 fix: the observation store's docstring cited
+    `connection._open`, which no longer exists.
   - Every departure above is marked `(Corrected: ...)` in the spec's section 5 table and appendix A.
 
 ## The tests watched failing
@@ -220,6 +233,7 @@ Each new behaviour's test, watched failing (or proven able to fail where it pass
 | 90 | `shutdown_deadline_seconds` at 25.001; the bound's drift test | `Failed: DID NOT RAISE InvalidConfigError`; `ImportError: cannot import name 'MAX_SHUTDOWN_DEADLINE_SECONDS'` |
 | 92, 94 | the seven writer contracts' refused write, full and read-only (14 cases) | passed at once, as the review expected; the refusal made a no-op: `Failed: DID NOT RAISE StoreError` (14); `wrap_sqlite_errors` made a pass-through: `sqlite3.OperationalError: database or disk is full` (7) and `attempt to write a readonly database` (7) |
 | 94 | `TestFakeCatalogFinder` | the exemption dropped without it: `{'...fake_catalog_finder.py::FakeCatalogFinder': 'TestFakeCatalogFinder'}` |
+| 95 | the five `immediate_transaction` tests | at collection, `ModuleNotFoundError: No module named 'p2pwatch.adapters.driven.persistence_sqlite.immediate_transaction'`; then each mutation fails exactly one: `ROLLBACK` unsuppressed, `^database or disk is full$` met `cannot rollback - no transaction is active`; `COMMIT` in an `else`, `assert not True` on `in_transaction`; `BEGIN` in the `try`, `assert False` on `in_transaction`; `except Exception` for `BaseException`, `assert not True` on `in_transaction` |
 | 96 | `test_each_policy_file_is_read_once_its_fingerprint_that_of_the_bytes_parsed` (each policy file a FIFO yielding its bytes once) | `assert [] == ['f6ab2e31...']`, the second read waiting for a writer |
 | 96 | the finder's and the meter's messages | `"cannot exami...cccc'" == 'cannot exami...name too long'`; `"free space o...removed'" == 'free space o... or directory'` |
 | 96 | `backoff_read`'s own tests | the stored-value case moved from the store's module; `open_in_memory`'s wrap has no provokable failure |
@@ -284,15 +298,18 @@ The spec's section 6 lists what the pages must say. The blocks add:
 - Cascaded rebases: 2 (blocks 70 to 74 onto block 62's fix, by hand with `git rebase --update-refs`, since
   `gh stack rebase --upstack` refuses branches not yet pushed; blocks 92 to 96 onto block 90's fix, by
   `gh stack rebase --upstack`). Runs re-triggered by them: 1 (block 62's; none for 70 to 74, not yet pushed then),
-  then 4 for 90 to 96 once the lead pushes: 5 in all, against 19 blocks.
+  then 4 for 90 to 96 after block 90's fix-back, and 1 for 96 rebased onto block 95 (95's own first run aside): 6 in
+  all, against 20 blocks. Block 96's rebase onto 95 conflicted on `sqlite_backoff_state_store.py`, both sides kept.
 - Rebases onto `main`: none so far. Bodies the operator called unreadable: none so far.
 - Splits: 4 (60 in two, 70 in three, 75 in two, the closing block in four), and the lead's re-cut of 30, 33, 36.
+- Blocks inserted: 1 (block 95, the operator's request in the review of #701); 20 blocks, accepted.
 - Class 2 questions: 1 (block 75: one common declared failure for `FreeSpaceMeter` and `CatalogFinder`,
   `InaccessiblePathError`; the operator answered "Ok" to the recommendation on 2026-11-10).
-- Class 1 fixes: 5 (block 40: `record_decision` named in `docs/contributing/architecture.md`'s diagram, the glossary's
-  `dated decision` line and an `engine.py` docstring; block 72: the merge's `destination.exists()` leak, not in the
-  inventory; block 74: the backoff row's decoding, duplicated between two stores, one `backoff_from_row`; block 80:
-  the control character's `ReaderError` in `load_yaml`, and `RecursionError` in `p2pwatch_amule`'s three JSON readers).
+- Class 1 fixes: 6 (block 95: the observation store's docstring citing `connection._open`; block 40: `record_decision`
+  named in `docs/contributing/architecture.md`'s diagram, the glossary's `dated decision` line and an `engine.py`
+  docstring; block 72: the merge's `destination.exists()` leak, not in the inventory; block 74: the backoff row's
+  decoding, duplicated between two stores, one `backoff_from_row`; block 80: the control character's `ReaderError` in
+  `load_yaml`, and `RecursionError` in `p2pwatch_amule`'s three JSON readers).
 - The closing block: one fix-back (block 90, above), no class 1 fix, no class 2 question.
 - Spec corrections: every mark the review lists, written by the closing block (block 96).
 
