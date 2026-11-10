@@ -188,7 +188,8 @@ class SqliteDatabaseOpener:
     def open_in_memory(self) -> sqlite3.Connection:
         """Opens an empty database in memory, its rows read by column name, to attach the
         databases a check reads."""
-        connection = sqlite3.connect(":memory:", autocommit=True, uri=True)
+        with wrap_sqlite_errors():
+            connection = sqlite3.connect(":memory:", autocommit=True, uri=True)
         connection.row_factory = _build_named_row
         return connection
 
