@@ -14,5 +14,6 @@ class DecisionWriter(ABC):
     def record_decisions(
         self, dated_decisions: Sequence[DatedDecision[FileTargetDecision]]
     ) -> None:
-        """Appends ``dated_decisions`` in one transaction, a retraction as a ``retracted`` row
-        (spec §7); a ``StoreError``, a file never observed's included, writes none of them."""
+        """Appends ``dated_decisions`` in one transaction, a retraction as a ``retracted`` row,
+        since the catalog deletes nothing; a ``StoreError``, a file never observed's included,
+        writes none of them."""
