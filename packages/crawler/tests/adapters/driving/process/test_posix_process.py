@@ -3,12 +3,18 @@ flag says it at once; on exit, the signals are given back."""
 
 import asyncio
 import signal
+import sqlite3
+from contextlib import closing
 
 import pytest
 
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from tests.fakes.application.use_cases.fake_shutdown_requester import FakeShutdownRequester
 
+_TEN_THOUSAND_STEPS = (
+    "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 10000)"
+    " SELECT count(*) FROM r"
+)
 _REQUESTED = (
     "Shutdown requested: finishing in-flight searches, clean close… (Ctrl-C again to force)"
 )
@@ -25,7 +31,7 @@ async def _let_the_loop_run() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("signal_number", [signal.SIGINT, signal.SIGTERM])
 async def test_a_first_signal_requests_the_shutdown_and_says_how_to_force(
-    *, signal_number: signal.Signals, capsys: pytest.CaptureFixture[str]
+    *, signal_number: signal.Signals, capfd: pytest.CaptureFixture[str]
 ) -> None:
     shutdown_requester = FakeShutdownRequester()
 
@@ -33,7 +39,7 @@ async def test_a_first_signal_requests_the_shutdown_and_says_how_to_force(
         signal.raise_signal(signal_number)
         await asyncio.wait_for(shutdown_requester.requested.wait(), 1.0)
 
-    assert capsys.readouterr().err == f"{_REQUESTED}\n"
+    assert capfd.readouterr().err == f"{_REQUESTED}\n"
 
 
 @pytest.mark.asyncio
@@ -65,7 +71,7 @@ async def test_once_the_loop_runs_a_signal_is_handled_by_the_loop_never_mid_byte
 
 @pytest.mark.parametrize("loop_ran", [False, True], ids=["holding-the-loop", "on-the-loop"])
 def test_a_second_signal_forces_the_exit(
-    *, loop_ran: bool, capsys: pytest.CaptureFixture[str]
+    *, loop_ran: bool, capfd: pytest.CaptureFixture[str]
 ) -> None:
     async def signal_twice() -> None:
         shutdown_requester = FakeShutdownRequester()
@@ -82,7 +88,42 @@ def test_a_second_signal_forces_the_exit(
         asyncio.run(signal_twice())
 
     assert raised.value.code == 1
-    assert capsys.readouterr().err == f"{_REQUESTED}\nForced shutdown.\n"
+    assert capfd.readouterr().err == f"{_REQUESTED}\nForced shutdown.\n"
+
+
+class _SecondSignalOnce:
+    """A progress handler raising SIGINT at its first call, interrupting nothing."""
+
+    def __init__(self) -> None:
+        self._sent = False
+
+    def __call__(self) -> bool:
+        if not self._sent:
+            self._sent = True
+            signal.raise_signal(signal.SIGINT)
+        return False
+
+
+def test_a_second_signal_inside_a_progress_handler_raises_nothing_there_then_forces_the_exit(
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    counts: list[int] = []
+
+    async def signal_twice_the_second_inside_a_statement() -> None:
+        async with PosixProcess(FakeShutdownRequester()):
+            signal.raise_signal(signal.SIGTERM)
+            with closing(sqlite3.connect(":memory:")) as connection:
+                # sqlite3 would swallow an exit raised there as the statement's interruption.
+                connection.set_progress_handler(_SecondSignalOnce(), 100)
+                counts.append(connection.execute(_TEN_THOUSAND_STEPS).fetchone()[0])
+            await asyncio.wait_for(asyncio.Event().wait(), 1.0)  # only the forced exit ends it
+
+    with pytest.raises(SystemExit) as raised:
+        asyncio.run(signal_twice_the_second_inside_a_statement())
+
+    assert raised.value.code == 1
+    assert counts == [10000]
+    assert capfd.readouterr().err == f"{_REQUESTED}\nForced shutdown.\n"
 
 
 @pytest.mark.asyncio
