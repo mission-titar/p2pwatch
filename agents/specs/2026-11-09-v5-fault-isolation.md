@@ -261,6 +261,7 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 | 75 | `fix/filesystem-leaks` | the filesystem adapters' leaks, their contracts (Corrected: split for the bound: 75 the meter, the download cycle and the opening; 77, `fix/catalog-finder-leaks`, the finder and the merge) |
 | 80 | `fix/amuleapi-yaml-leaks` | the amuleapi and YAML adapters' leaks, their contracts |
 | 90 | `docs/lot-4a-wrap` | closing block (Corrected: cut as `fix/lot-4a-review`, then split in four for the bounds: 90 the stop during the start and its 25 s bound, 92 and 94 the writer contracts' refused writes, the catalog's then local.db's, 96 the other findings and the records) |
+| 95 | `refactor/sqlite-immediate-transaction` | (Corrected: added below 96 on the operator's request in the review of #701, the stack taken to 20 blocks, past the workflow's 19, accepted by the operator on 2026-11-10) the stores' write transaction in one context manager |
 
 ### Lot 4b
 
@@ -566,6 +567,13 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
   came in the closing block, their fakes skipping the case, memory refusing no write.)
 - **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4a deleted, the holistic review's fixes. (Corrected: split into
   90, 92, 94 and 96, as section 5's table says.)
+- **Block 95** (Corrected: added on the operator's request in the review of #701, the lot's 20 blocks accepted by the
+  operator on 2026-11-10): `immediate_transaction(connection)`, the SQLite adapter's one write transaction, used by
+  the backoff, decision, source point, tracked download and observation stores, each of its three placements
+  commented and provoked by a test: `BEGIN IMMEDIATE` outside the `try`, `COMMIT` inside it, `ROLLBACK` under
+  `suppress(sqlite3.Error)`. The observation store's deferred `BEGIN` becomes `BEGIN IMMEDIATE`, its first statement
+  a write; the migrations' block and the catalog copier's per-source copy keep their own transactions, whose
+  contracts differ.
 
 ### Lot 4b
 
