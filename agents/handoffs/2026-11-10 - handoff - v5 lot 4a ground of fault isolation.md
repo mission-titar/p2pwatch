@@ -91,7 +91,7 @@ its three (D21), under `agents/specs/2026-11-04-v5-release-readiness.md` (the um
 | 75 | #708 | `FreeSpaceMeter`'s `InaccessiblePathError`, the cycle, the opening | 202, 18 |
 | 77 | #709 | `CatalogFinder`'s `InaccessiblePathError`, the merge | 152, 10 |
 | 80 | #710 | the amuleapi and YAML adapters' `RecursionError`, real transport failures | 238, 14 |
-| 90 | | the stop during the start: copy, comparison and reclaim interrupted, the plain handler, the 25 s bound | 401, 14 |
+| 90 | | the stop during the start: copy, comparison and reclaim interrupted, the plain handler, the 25 s bound | 404, 15 |
 | 92 | | the catalog's writer contracts: a full and a read-only database | 163, 9 |
 | 94 | | local.db's writer contracts, `FakeCatalogFinder`'s contract | 197, 15 |
 | 96 | | the policy files read once, `backoff_read`, `strerror`, two comments, the records | 220, 17 |
@@ -108,8 +108,8 @@ the workflow's 19 exactly.
   - block 70 (a 706-line, 37-file draft) into 70 (the readers), 72 (the console and the copiers), 74 (stored values);
   - block 75 (estimated about 350 lines, 22 files) into 75 (the meter, the cycle, the opening) and 77 (the finder,
     the merge);
-  - the closing block (981 lines in all) into 90, 92, 94 and 96, committed in green steps on one branch, the
-    lead cutting the branches from the SHAs.
+  - the closing block (984 lines in all, its fix-back included) into 90, 92, 94 and 96, committed in green
+    steps on one branch, the lead cutting the branches from the SHAs.
 - **Departures, per block** (the spec's `(Corrected: ...)` marks are the closing block's):
   - Block 10: the rename covers every matcher identifier, comment and message built on the word, not the type alone,
     so the glossary's "never `condition`" holds across the matcher; `.claude/rules/matching.md` says "token
@@ -276,12 +276,15 @@ The spec's section 6 lists what the pages must say. The blocks add:
 
 ## The lot's counts
 
-- Fix-backs: 1 (block 62: its SIGTERM-during-a-pass wiring test timed out on CI, run 42709632641, judging against the
+- Fix-backs: 2. Block 62: its SIGTERM-during-a-pass wiring test timed out on CI, run 42709632641, judging against the
   shipped `targets.yml` at about 45 ms a file under coverage; fixed in `88b30768` by a one-target `targets.yml`,
-  green on run 42715415304).
-- Cascaded rebases: 1 (blocks 70 to 74 onto the fix, by hand with `git rebase --update-refs`, since
-  `gh stack rebase --upstack` refuses branches not yet pushed). Runs re-triggered by them: 1 (block 62's); none for
-  70 to 74, not yet pushed then.
+  green on run 42715415304. Block 90: runs 42742160739 to 42742184288 failed `build-and-verify` on both arches, the
+  orchestration integration test's `crawler.yml` setting `shutdown_deadline_seconds: 30.0`, which block 90's 25 s
+  bound refuses; fixed in `262023f1` with the shipped 10 s.
+- Cascaded rebases: 2 (blocks 70 to 74 onto block 62's fix, by hand with `git rebase --update-refs`, since
+  `gh stack rebase --upstack` refuses branches not yet pushed; blocks 92 to 96 onto block 90's fix, by
+  `gh stack rebase --upstack`). Runs re-triggered by them: 1 (block 62's; none for 70 to 74, not yet pushed then),
+  then 4 for 90 to 96 once the lead pushes: 5 in all, against 19 blocks.
 - Rebases onto `main`: none so far. Bodies the operator called unreadable: none so far.
 - Splits: 4 (60 in two, 70 in three, 75 in two, the closing block in four), and the lead's re-cut of 30, 33, 36.
 - Class 2 questions: 1 (block 75: one common declared failure for `FreeSpaceMeter` and `CatalogFinder`,
@@ -290,11 +293,14 @@ The spec's section 6 lists what the pages must say. The blocks add:
   `dated decision` line and an `engine.py` docstring; block 72: the merge's `destination.exists()` leak, not in the
   inventory; block 74: the backoff row's decoding, duplicated between two stores, one `backoff_from_row`; block 80:
   the control character's `ReaderError` in `load_yaml`, and `RecursionError` in `p2pwatch_amule`'s three JSON readers).
-- The closing block: no fix-back at the time of writing, no class 1 fix, no class 2 question.
+- The closing block: one fix-back (block 90, above), no class 1 fix, no class 2 question.
 - Spec corrections: every mark the review lists, written by the closing block (block 96).
 
 ## Pitfalls learned
 
+- **The integration suites run outside the local gate**: `uv run poe check` deselects them, so a new bound on a
+  config key must be checked against every config the tests write (`git grep -n <key>` over `packages/*/tests`
+  and `tests/`), the orchestration test's own `crawler.yml` included (block 90's fix-back).
 - **Serena**: `rename_symbol` does not follow a dataclass's keyword argument nor a name inside a PEP 695 `type`
   alias's body (block 10); `find_referencing_symbols` misses the keyword arguments of a dataclass field (block 33); a
   rename from the port after edits made outside Serena wrote at shifted offsets, corrupted two files and left about
@@ -334,8 +340,10 @@ The spec's section 6 lists what the pages must say. The blocks add:
 
 ## Not validated
 
-- No Docker integration suite was run locally by any block, the compose smoke test and the amuleapi suite included;
-  continuous integration runs the compose smoke test.
+- No Docker integration suite was run locally by any block, the compose smoke test and the amuleapi suite included,
+  but `orchestration_integration` after block 90's fix-back (1 passed, against a throwaway
+  `ghcr.io/mission-titar/p2pwatch-amule:latest`, not an image built from the tree); continuous integration runs the
+  compose smoke test.
 - Nothing ran against a real node: the decisions' transaction (block 40), the port-sync's rounds under the VPN
   (block 50), a stop during a real migration of the operator's catalog (block 62).
 - The matching comparison on the real catalog (the spec's "what must not change" row), for block 10's rename: the
