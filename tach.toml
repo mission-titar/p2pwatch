@@ -264,7 +264,7 @@ depends_on = [
 [[modules]]
 path = "p2pwatch.adapters.driven.filesystem_catalog_finder"
 layer = "adapters"
-depends_on = ["p2pwatch.application.ports.driven.catalog_finder"]
+depends_on = ["p2pwatch.application.ports.driven.catalog_finder", "p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.persistence_sqlite"
