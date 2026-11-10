@@ -16,6 +16,7 @@ from p2pwatch.domain.client_errors import (
     DownloadRejectedError,
     SearchFailedError,
 )
+from p2pwatch.domain.declared_failure import DeclaredFailure
 from tests.fakes.fake_amule_api import error
 
 
@@ -30,8 +31,10 @@ def test_transport_failures_are_unreachable() -> None:
 
 
 def test_a_refusal_inherits_no_port_error() -> None:
-    # amuleapi answers every refused operation with one code: each method names its own refusal.
+    # amuleapi answers every refused operation with one code: each method names its own refusal,
+    # and one leaking past its method is the adapter's bug.
     assert not issubclass(ApiRejectedError, ClientError)
+    assert not issubclass(ApiRejectedError, DeclaredFailure)
 
 
 def test_auth_error_is_not_a_loop_error() -> None:

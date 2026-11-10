@@ -1,7 +1,9 @@
 """The errors every client adapter raises, so the application never imports one."""
 
+from p2pwatch.domain.declared_failure import DeclaredFailure
 
-class ClientError(Exception):
+
+class ClientError(DeclaredFailure):
     """Base of the client errors."""
 
 
