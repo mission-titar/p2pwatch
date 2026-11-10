@@ -22,6 +22,7 @@ from tests.support.domain.file_target_decision import (
 )
 from tests.support.domain.observation import draw_file, record_drawn_observation
 from tests.support.draws import draw_instants
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 class DecisionStoreContract(ABC):
@@ -39,6 +40,31 @@ class DecisionStoreContract(ABC):
     @abstractmethod
     def reader(self) -> DecisionReader:
         """The reader of the writer's catalog."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's catalog refuse every write."""
+
+    def test_decisions_their_catalog_refuses_raise_store_error_and_are_none_written(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        writer: DecisionWriter,
+        reader: DecisionReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
+        refuse_writes()
+        record = DecisionRecord(
+            target_id=draw_target_id(randomness),
+            rule_name=draw_long_text(randomness),
+            tier=DecisionTier.NOTIFY,
+        )
+        with pytest.raises(StoreError):
+            writer.record_decisions([draw_dated_decision(randomness, file=file, decision=record)])
+        assert reader.read_latest_decisions(file) == {}
 
     def test_a_file_never_decided_has_no_decision_and_no_candidate(
         self, *, randomness: Random, observation_writer: ObservationWriter, reader: DecisionReader

@@ -21,8 +21,13 @@ from tests.contracts.application.ports.driven.observation_store_contract import 
     ObservationStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.refused_writes import (
+    StorageRefusal,
+    refusing,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import count_observations, insert_file, insert_observation
+from tests.support.refused_writes import RefuseWrites
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _HASH_B = "b" * 32
@@ -76,6 +81,12 @@ class TestSqliteObservationStore(ObservationStoreContract):
     @pytest.fixture
     def reader(self, observation_store: SqliteObservationStore) -> SqliteObservationStore:
         return observation_store
+
+    @pytest.fixture(params=list(StorageRefusal), ids=str)
+    def refuse_writes(
+        self, *, request: pytest.FixtureRequest, connection: sqlite3.Connection
+    ) -> RefuseWrites:
+        return refusing(connection, refusal=request.param)
 
 
 def _file_count(connection: sqlite3.Connection) -> int:

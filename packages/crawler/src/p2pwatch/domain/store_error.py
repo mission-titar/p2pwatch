@@ -3,4 +3,5 @@ use it: the SQLite adapter's ``PersistenceError`` inherits it, the application c
 
 
 class StoreError(Exception):
-    """Persistence failure reported by a store (the adapter reports, it does not decide)."""
+    """Persistence failure reported by a store, a write its storage refuses (full, read-only)
+    included (the adapter reports, it does not decide)."""

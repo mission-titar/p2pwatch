@@ -22,6 +22,10 @@ from p2pwatch.domain.source import LatestPoint, SourceKey, SourceReading
 from tests.contracts.application.ports.driven.source_point_store_contract import (
     SourcePointStoreContract,
 )
+from tests.support.adapters.driven.persistence_sqlite.refused_writes import (
+    StorageRefusal,
+    refusing,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import (
     file_id,
@@ -30,6 +34,7 @@ from tests.support.catalog_rows import (
     insert_source_point,
     insert_source_variant,
 )
+from tests.support.refused_writes import RefuseWrites
 
 _FILE, _OTHER_FILE = "a" * 32, "b" * 32
 _USER, _OTHER_USER = "1f2e" * 8, "c" * 32
@@ -92,6 +97,12 @@ class TestSqliteSourcePointStore(SourcePointStoreContract):
     @pytest.fixture
     def reader(self, source_point_store: SqliteSourcePointStore) -> SqliteSourcePointStore:
         return source_point_store
+
+    @pytest.fixture(params=list(StorageRefusal), ids=str)
+    def refuse_writes(
+        self, *, request: pytest.FixtureRequest, connection: sqlite3.Connection
+    ) -> RefuseWrites:
+        return refusing(connection, refusal=request.param)
 
 
 def _passing() -> SourceReading:

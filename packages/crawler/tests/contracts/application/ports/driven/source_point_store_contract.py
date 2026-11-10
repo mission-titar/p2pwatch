@@ -11,6 +11,7 @@ from p2pwatch.application.ports.driven.observation_writer import ObservationWrit
 from p2pwatch.application.ports.driven.source_point_reader import SourcePointReader
 from p2pwatch.application.ports.driven.source_point_writer import SourcePointWriter
 from p2pwatch.domain.source import LatestPoint, SourcePoint, SourceRole
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.observation import record_drawn_observation
 from tests.support.domain.source import (
     draw_point_read_again,
@@ -19,6 +20,7 @@ from tests.support.domain.source import (
     draw_source_reading,
 )
 from tests.support.draws import draw_instants
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 def _latest_point(point: SourcePoint) -> LatestPoint:
@@ -49,6 +51,36 @@ class SourcePointStoreContract(ABC):
     @abstractmethod
     def reader(self) -> SourcePointReader:
         """The reader of the writer's catalog."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's catalog refuse every write."""
+
+    def test_points_their_catalog_refuses_raise_store_error_and_are_none_written(
+        self,
+        *,
+        randomness: Random,
+        observation_writer: ObservationWriter,
+        writer: SourcePointWriter,
+        reader: SourcePointReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        file = record_drawn_observation(randomness, observation_writer=observation_writer)
+        source = draw_source_key(randomness)
+        observed_at, before = draw_instants(randomness, count=2)
+        point = draw_source_point(
+            randomness,
+            file=file,
+            source=source,
+            role=SourceRole.SENDING,
+            observed_at=observed_at,
+            source_name=draw_long_text(randomness),
+        )
+        refuse_writes()
+        with pytest.raises(StoreError):
+            writer.record_points([point])
+        assert reader.read_earlier_points(source, before=before, node_id=point.node_id) == ()
 
     @pytest.mark.parametrize("role", list(SourceRole), ids=str)
     def test_a_point_is_read_back_as_its_source_s_latest(

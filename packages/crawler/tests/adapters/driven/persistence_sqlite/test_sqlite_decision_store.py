@@ -21,8 +21,13 @@ from tests.contracts.application.ports.driven.decision_store_contract import (
     DecisionStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.refused_writes import (
+    StorageRefusal,
+    refusing,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_catalog
 from tests.support.catalog_rows import insert_decision, insert_file
+from tests.support.refused_writes import RefuseWrites
 
 _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _KEY = FileKey(network=Network.ED2K, native_id=_HASH)
@@ -78,6 +83,12 @@ class TestSqliteDecisionStore(DecisionStoreContract):
     @pytest.fixture
     def reader(self, decision_store: SqliteDecisionStore) -> SqliteDecisionStore:
         return decision_store
+
+    @pytest.fixture(params=list(StorageRefusal), ids=str)
+    def refuse_writes(
+        self, *, request: pytest.FixtureRequest, connection: sqlite3.Connection
+    ) -> RefuseWrites:
+        return refusing(connection, refusal=request.param)
 
 
 def test_record_decision_round_trip(

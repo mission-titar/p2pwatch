@@ -8,8 +8,10 @@ import pytest
 
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
 from p2pwatch.application.ports.driven.observation_writer import ObservationWriter
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.observation import draw_file, draw_file_observation
 from tests.support.draws import draw_instants, draw_quantities, draw_quantity, draw_text
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 class ObservationStoreContract(ABC):
@@ -22,6 +24,29 @@ class ObservationStoreContract(ABC):
     @abstractmethod
     def reader(self) -> ObservationReader:
         """The reader of the writer's catalog."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's catalog refuse every write."""
+
+    def test_an_observation_its_catalog_refuses_raises_store_error_and_is_not_written(
+        self,
+        *,
+        randomness: Random,
+        writer: ObservationWriter,
+        reader: ObservationReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        file = draw_file(randomness)
+        refuse_writes()
+        with pytest.raises(StoreError):
+            writer.record_observation(
+                draw_file_observation(
+                    randomness, file=file, has_media=True, filename=draw_long_text(randomness)
+                )
+            )
+        assert reader.read_latest_observation(file) is None
 
     def test_a_file_never_observed_has_no_observation_and_no_filename(
         self, *, randomness: Random, writer: ObservationWriter, reader: ObservationReader
