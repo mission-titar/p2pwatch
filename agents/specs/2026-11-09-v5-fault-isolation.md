@@ -265,29 +265,37 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 
 ### Lot 4b
 
+(Corrected: re-cut by consumer at the lot's start, the operator agreeing on 2026-11-10. The first table opened with
+four blocks of pure domain whose first user was the supervisor, and vulture, run on `src` alone, refuses a class no
+`src` code reaches; each block now brings the health pieces its first user needs. Root causes and their impact move to
+lot 4c's block 10, the alerts being their only user; each health change is logged in one line, the conditions' first
+user in 4b. Re-measured by `.reviews/v5-lot4b-estimate.md`, the supervisor, the conditions and the restarts each
+split in two.)
+
 | Block | Branch | Content |
 |---|---|---|
-| 10 | `feat/health-outcome` | `DeclaredFailure`, `Outcome`, `Health`, `HealthTransition` |
-| 15 | `feat/health-condition` | `HealthCondition`, its windows and thresholds |
-| 20 | `feat/health-graph` | `Component`, `Dependency`, `Quorum`, propagation |
-| 25 | `feat/health-root-causes` | root causes and their impact |
-| 30 | `feat/supervisor` | `Supervisor`, `run_once`, `time_limit`, bugs condition |
-| 33 | `feat/restart-policy` | `RestartPolicy`, `StateOwner` |
-| 36 | `feat/status-sensor` | the status loop as a sensor component |
-| 40 | `feat/search-channels` | channels and searches as components |
-| 45 | `feat/search-outcomes` | the search worker reports outcomes |
-| 50 | `feat/download-tracking` | download tracking as a component |
-| 53 | `feat/source-tracking` | source tracking as a component |
-| 56 | `feat/disk-space-condition` | disk space low as a condition |
-| 60 | `feat/webui-component` | the webui thread as a component |
-| 65 | `feat/notifier-component` | the notifier as a component |
-| 70 | `docs/lot-4b-wrap` | closing block |
+| 10 | `feat/declared-failure` | `DeclaredFailure`, the base every port's declared failure derives from |
+| 20 | `feat/supervisor` | `Work`, `Outcome`, `Supervisor` with `run_once` and `time_limit`; the status loop its first work, the other loops still run beside it |
+| 23 | `feat/download-work` | the download loop as a work |
+| 25 | `feat/search-works` | one work per keyword and channel, one search a turn; `LoopSupervisor` removed |
+| 30 | `feat/health-condition` | `HealthCondition` entering its states, `Health`, `HealthTransition`, `Component`; the supervisor records outcomes, every work's bugs condition, each health change logged |
+| 33 | `feat/health-hysteresis` | the conditions' exits and "unknown until the window fills" |
+| 40 | `feat/health-graph` | `Dependency`, `Quorum`, propagation, today's graph; a channel's searches failed condition |
+| 50 | `feat/restart-policy` | `StateOwner`, the aMule client's owner, a restart on a failing bugs condition |
+| 53 | `feat/restart-limit` | useless restarts counted, none past three, the count reset on healthy |
+| 56 | `feat/status-sensor` | the status loop as a sensor component |
+| 60 | `feat/download-tracking` | download tracking as a component |
+| 65 | `feat/source-tracking` | source tracking as a component |
+| 70 | `feat/disk-space-condition` | disk space low as a condition |
+| 75 | `feat/webui-component` | the webui thread as a component |
+| 80 | `feat/notifier-component` | the notifier as a component |
+| 90 | `docs/lot-4b-wrap` | closing block |
 
 ### Lot 4c
 
 | Block | Branch | Content |
 |---|---|---|
-| 10 | `feat/health-alerts` | one alert per root cause, with its impact |
+| 10 | `feat/health-alerts` | one alert per root cause, with its impact (Corrected: root causes and their impact built here, moved from lot 4b) |
 | 15 | `feat/alert-grouping` | alerts opened together in one message |
 | 18 | `feat/health-alert-notifications` | the old connectivity and disk events replaced |
 | 20 | `feat/open-alerts-store` | open alerts in `local.db` |
@@ -577,24 +585,29 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 
 ### Lot 4b
 
-- **Blocks 10, 15, 20, 25**: `domain/health/`, pure (no I/O, the clock injected); `DeclaredFailure` at the domain's
-  root, the base of every port's declared failures; tach entries; glossary lines for every D8 name; the condition's
-  tests include section 4's pattern.
-- **Blocks 30, 33**: `application/steps/supervisor.py` replaces `loop_supervisor.py`: it runs each unit's `run_once()`
-  under a `try` and its `time_limit`, records the outcome, and keeps the shutdown's cancellation of every unit; the
-  restart policy subscribes to the transitions. Block 30 is estimated at about 20 files: re-measured at its start, it
-  splits between the supervisor and its wiring if it passes a bound.
-- **Block 36**: the status loop becomes the sensor component; its `_AlertTimer` replaced by conditions whose
+(Corrected: the bullets follow the re-cut of section 5's table; the content is the first table's, redistributed.)
+
+- **Block 10**: `DeclaredFailure` at the domain's root, the base of every port's declared failures; glossary lines.
+- **Blocks 20, 23, 25**: `application/steps/supervisor.py` replaces `loop_supervisor.py`: it runs each work's
+  `run_once()` under a `try` and its `time_limit`, and keeps the shutdown's cancellation of every work; the waits
+  between turns are the supervisor's, outside the time limit (section 6). A bug or a turn past its limit is logged
+  with its trace and the work goes on. Until block 25, `LoopSupervisor` runs the supervisor beside the loops not yet
+  works, and block 25 removes it. In block 25, the search worker lets `SearchFailedError` and
+  `ClientUnreachableError` through after updating the backoff, as today; the backoff registry unchanged.
+- **Blocks 30, 33, 40**: `domain/health/`, pure (no I/O, the clock injected); glossary lines for every D8 name in the
+  block that builds it; the condition's tests include section 4's pattern (block 33). The supervisor records each
+  outcome on the components its work feeds; each health change is logged in one line. Block 40 builds today's graph
+  in the composition and a channel's searches failed condition.
+- **Blocks 50, 53**: the restart policy subscribes to the transitions; `StateOwner` is a port, its contract and fake,
+  the aMule client's owner its first implementation (block 50); the useless restarts and the stop at three (block 53).
+- **Block 56**: the status loop becomes the sensor component; its `_AlertTimer` replaced by conditions whose
   transitions emit today's events (`ClientUnreachableLasting`, `ChannelDegraded` and their ends) until lot 4c; the
   status loop's tests updated for the hysteresis's ends.
-- **Blocks 40, 45**: a component per (client, channel) and per keyword search; the search worker lets
-  `SearchFailedError` and `ClientUnreachableError` through after updating the backoff, as today; the backoff registry
-  unchanged.
-- **Blocks 50, 53, 56**: the download cycle split in download tracking and source tracking; `DiskSpaceLow` produced by
+- **Blocks 60, 65, 70**: the download cycle split in download tracking and source tracking; `DiskSpaceLow` produced by
   the free-space condition's transitions until lot 4c.
-- **Blocks 60, 65**: the webui thread as a unit restarted by the restart policy; the notifier's sends as outcomes per
+- **Blocks 75, 80**: the webui thread as a unit restarted by the restart policy; the notifier's sends as outcomes per
   service.
-- **Block 70**: the handoff, `BACKLOG.md`'s sub-entry 4b deleted, the holistic review's fixes.
+- **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4b deleted, the holistic review's fixes.
 
 ### Lot 4c
 
