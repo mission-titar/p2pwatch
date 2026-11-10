@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Protocol
 
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
-from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError, wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    MigrationError,
+    PersistenceError,
+    wrap_sqlite_errors,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import PendingMigrations
 from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpener
 from p2pwatch.application.ports.driven.ticker import Ticker
@@ -172,7 +176,7 @@ def _same_content(connection: sqlite3.Connection, *, copy: Path, open_reader: Re
     try:
         with closing(open_reader(copy)) as candidate:
             candidate_digest = database_digest(candidate)
-    except sqlite3.Error as error:
+    except (sqlite3.Error, PersistenceError) as error:
         _logger.warning("pre-migration copy: %s cannot be read (%s)", copy, error)
         return False
     return candidate_digest == database_digest(connection)
