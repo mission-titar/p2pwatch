@@ -1,6 +1,7 @@
 """Reads the three config files into the domain's objects."""
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -22,27 +23,35 @@ class FileRead[T](Protocol):
     def __call__(self) -> T: ...
 
 
+@dataclass(kw_only=True, frozen=True)
+class _ParsedFile[T]:
+    """A file's value and the bytes it was parsed from."""
+
+    value: T
+    content: bytes
+
+
 def load_config(
     config_path: Path, *, targets_path: Path, matcher_path: Path, env: Mapping[str, str]
 ) -> LoadedConfig:
     """Loads ``crawler.yml``, ``targets.yml`` and ``matcher.yml``; ``InvalidConfigError`` with
     every problem of the three files, which refuses the crawl.
 
-    The fingerprint hashes the two policy files' RAW bytes, not their parse, so a
-    comment-only edit still triggers one harmless re-evaluation at the next start.
+    The fingerprint hashes the RAW bytes each policy file was parsed from, not their parse, so
+    a comment-only edit still triggers one harmless re-evaluation at the next start.
     """
     problems: list[ConfigProblem] = []
     crawler_config = _read_into(problems, read=lambda: read_crawler_config(config_path, env=env))
-    targets = _read_into(problems, read=lambda: read_targets(targets_path))
-    matcher_config = _read_into(problems, read=lambda: read_matcher_config(matcher_path))
+    targets = _read_into(problems, read=lambda: _parsed_targets(targets_path))
+    matcher_config = _read_into(problems, read=lambda: _parsed_matcher_config(matcher_path))
     if crawler_config is None or targets is None or matcher_config is None:
         raise InvalidConfigError(tuple(problems))
     return LoadedConfig(
         crawler_config=crawler_config,
-        targets=targets,
-        matcher_config=matcher_config,
+        targets=targets.value,
+        matcher_config=matcher_config.value,
         policy_fingerprint=policy_fingerprint(
-            matcher_path.read_bytes(), targets_bytes=targets_path.read_bytes()
+            matcher_config.content, targets_bytes=targets.content
         ),
     )
 
@@ -63,21 +72,31 @@ def read_crawler_config(config_path: Path, *, env: Mapping[str, str]) -> Crawler
 def read_targets(targets_path: Path) -> tuple[TargetSegment, ...]:
     """``targets.yml`` parsed; ``InvalidConfigError`` with every key written twice and the parse's
     problems."""
-    loaded = _document_of(targets_path)
-    return _parsed(
-        loaded.problems,
-        parse=lambda: targets_from_document(loaded.document, file_path=targets_path),
-    )
+    return _parsed_targets(targets_path).value
 
 
 def read_matcher_config(matcher_path: Path) -> MatcherConfig:
     """``matcher.yml`` parsed; ``InvalidConfigError`` with every key written twice and the parse's
     problems."""
+    return _parsed_matcher_config(matcher_path).value
+
+
+def _parsed_targets(targets_path: Path) -> _ParsedFile[tuple[TargetSegment, ...]]:
+    loaded = _document_of(targets_path)
+    targets = _parsed(
+        loaded.problems,
+        parse=lambda: targets_from_document(loaded.document, file_path=targets_path),
+    )
+    return _ParsedFile(value=targets, content=loaded.content)
+
+
+def _parsed_matcher_config(matcher_path: Path) -> _ParsedFile[MatcherConfig]:
     loaded = _document_of(matcher_path)
-    return _parsed(
+    matcher_config = _parsed(
         loaded.problems,
         parse=lambda: matcher_config_from_document(loaded.document, file_path=matcher_path),
     )
+    return _ParsedFile(value=matcher_config, content=loaded.content)
 
 
 def _parsed[T](

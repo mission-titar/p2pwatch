@@ -1,9 +1,16 @@
+import os
+import threading
 import traceback
 from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.config.crawler_config import load_config, read_crawler_config
+from p2pwatch.adapters.driven.config.crawler_config import (
+    load_config,
+    read_crawler_config,
+    read_matcher_config,
+    read_targets,
+)
 from p2pwatch.adapters.driven.config.crawler_config_schema import crawler_config_from_document
 from p2pwatch.adapters.driven.config.interpolation import interpolate_document
 from p2pwatch.adapters.driven.config.matcher_config_schema import matcher_config_from_document
@@ -68,6 +75,51 @@ def test_the_three_files_load_with_the_fingerprint_of_the_policy(tmp_path: Path)
             matcher_path.read_bytes(), targets_bytes=targets_path.read_bytes()
         ),
     )
+
+
+def test_each_policy_file_reads_alone_as_the_three_load(tmp_path: Path) -> None:
+    loaded = _load_with_the_shipped_policy(_write_crawler_config(tmp_path), env=_env())
+    assert read_targets(_DEPLOY / "targets.yml") == loaded.targets
+    assert read_matcher_config(_DEPLOY / "matcher.yml") == loaded.matcher_config
+
+
+def _write_once(fifo: Path, *, content: bytes) -> threading.Thread:
+    """A thread writing ``content`` to ``fifo`` for its first reader: the file has no second."""
+    writer = threading.Thread(target=fifo.write_bytes, args=(content,), daemon=True)
+    writer.start()
+    return writer
+
+
+def test_each_policy_file_is_read_once_its_fingerprint_that_of_the_bytes_parsed(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_crawler_config(tmp_path)
+    content_by_name = {
+        name: (_DEPLOY / name).read_bytes() for name in ("targets.yml", "matcher.yml")
+    }
+    for name, content in content_by_name.items():
+        os.mkfifo(tmp_path / name)
+        _write_once(tmp_path / name, content=content)
+    loaded: list[LoadedConfig] = []
+    load = threading.Thread(
+        target=lambda: loaded.append(
+            load_config(
+                config_path,
+                targets_path=tmp_path / "targets.yml",
+                matcher_path=tmp_path / "matcher.yml",
+                env=_env(),
+            )
+        ),
+        daemon=True,
+    )
+    load.start()
+    # A second read of either file waits for a writer that never comes.
+    load.join(timeout=10)
+    assert [config.policy_fingerprint for config in loaded] == [
+        policy_fingerprint(
+            content_by_name["matcher.yml"], targets_bytes=content_by_name["targets.yml"]
+        )
+    ]
 
 
 def test_a_reference_under_any_key_is_resolved_before_the_parse(tmp_path: Path) -> None:

@@ -16,10 +16,11 @@ _MERGE_TAG = "tag:yaml.org,2002:merge"
 @dataclass(kw_only=True, frozen=True)
 class LoadedDocument:
     """A file's root mapping, a key written twice holding its latest value, each such key a
-    problem in ``problems``."""
+    problem in ``problems``, and the bytes it was parsed from, in ``content``."""
 
     document: dict[str, Any]
     problems: tuple[ConfigProblem, ...]
+    content: bytes
 
 
 def load_yaml(path: Path) -> LoadedDocument:
@@ -27,7 +28,8 @@ def load_yaml(path: Path) -> LoadedDocument:
     absent, unreadable, not UTF-8 nor YAML, nested too deeply, with no root mapping, an alias
     cycle or a surrogate."""
     try:
-        text = path.read_text(encoding="utf-8")
+        content = path.read_bytes()
+        text = content.decode("utf-8")
     except OSError as error:
         raise BrokenInputError(str(error.strerror)) from error
     except UnicodeDecodeError as error:
@@ -44,7 +46,7 @@ def load_yaml(path: Path) -> LoadedDocument:
         _require_well_formed_tree(root, location=(), enclosing_ids=frozenset())
     except ValueError as error:
         raise BrokenInputError(str(error)) from error
-    return LoadedDocument(document=root, problems=keys_written_twice)
+    return LoadedDocument(document=root, problems=keys_written_twice, content=content)
 
 
 def _composed(text: str, *, file_path: Path) -> tuple[Any, tuple[ConfigProblem, ...]]:
