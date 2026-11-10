@@ -34,7 +34,7 @@ class AmuleApiHealthClient(ApiHealthClient):
             return False
         try:
             ec_connected = json.loads(body).get("ec_connected")
-        except (ValueError, AttributeError):
+        except (ValueError, RecursionError, AttributeError):
             ec_connected = None
         if status != 200 or ec_connected is not True:
             _logger.warning("amuleapi reports no link to amuled (%d %r)", status, body[:100])

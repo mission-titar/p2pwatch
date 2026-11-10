@@ -14,6 +14,8 @@ from tests.fakes.fake_gluetun_control_server import FakeGluetunControlServer
 # The module's name, which an operator's filters read (docs/migration-4x.md).
 LOGGER_NAME = "p2pwatch_amule.adapters.driven.gluetun_forwarded_port_client"
 
+_NESTED = b"[" * 100_000 + b"]" * 100_000  # past the recursion limit of json.loads
+
 
 @pytest.fixture
 def gluetun() -> Iterator[FakeGluetunControlServer]:
@@ -65,6 +67,16 @@ def test_a_reply_without_a_positive_integer_port_is_no_port_logged_under_the_mod
     assert reader(gluetun).read_forwarded_port() is None
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.WARNING, f"gluetun reports no forwarded port ({body!r})")
+    ]
+
+
+def test_a_reply_nested_past_the_recursion_limit_is_no_port(
+    *, gluetun: FakeGluetunControlServer, caplog: pytest.LogCaptureFixture
+) -> None:
+    gluetun.body = _NESTED
+    assert reader(gluetun).read_forwarded_port() is None
+    assert _logged_lines(caplog) == [
+        (LOGGER_NAME, logging.WARNING, f"gluetun reports no forwarded port ({_NESTED[:100]!r})")
     ]
 
 
