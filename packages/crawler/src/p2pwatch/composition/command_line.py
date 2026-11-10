@@ -4,7 +4,6 @@ import ctypes
 import logging
 from collections.abc import Mapping
 from pathlib import Path
-from shutil import disk_usage
 
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.config.filesystem_config_checker import FilesystemConfigChecker
@@ -17,6 +16,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
 )
+from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.adapters.driven.threading_ticker import ThreadingTicker
@@ -53,10 +53,10 @@ def build_command_line(
                     SqlitePreMigrationCopier(
                         SystemWallClock(),
                         ticker=ticker,
-                        free_bytes=lambda directory: disk_usage(directory).free,
+                        free_bytes=lambda directory: ShutilFreeSpaceMeter(directory).free_bytes(),
                     ),
                     ticker=ticker,
-                    free_bytes=lambda directory: disk_usage(directory).free,
+                    free_bytes=lambda directory: ShutilFreeSpaceMeter(directory).free_bytes(),
                     # None: the process's own symbols, the C library's included.
                     memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
                     # A merge keeps Python's own Ctrl-C.

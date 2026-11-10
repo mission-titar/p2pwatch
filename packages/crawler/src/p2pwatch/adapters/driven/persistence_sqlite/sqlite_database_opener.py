@@ -50,6 +50,7 @@ from p2pwatch.application.ports.driven.memory_releaser import MemoryReleaser
 from p2pwatch.application.ports.driven.ticker import Ticker
 from p2pwatch.domain.gigabytes import gigabytes
 from p2pwatch.domain.held_database_error import HeldDatabaseError
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)
@@ -410,16 +411,17 @@ def _migration_error(  # noqa: PLR0913
     path: Path,
     free_bytes: FreeBytesMeter,
 ) -> MigrationError | OutOfSpaceError:
-    """``OutOfSpaceError`` for a full disk, ``message``'s ``MigrationError`` otherwise."""
+    """``OutOfSpaceError`` for a full disk, a ``MigrationError`` saying so when its free space
+    cannot be measured, ``message``'s otherwise."""
     if cause.sqlite_errorcode == sqlite3.SQLITE_FULL:
         # The rolled-back frames would count as space taken until the connection closes.
         with suppress(sqlite3.Error):
             connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        try:
+            free = free_bytes(path.parent)
+        except InaccessiblePathError as error:
+            return MigrationError(f"{step}: out of space in {path.parent}, {error}; {outcome}")
         return OutOfSpaceError(
-            step=step,
-            directory=path.parent,
-            free_bytes=free_bytes(path.parent),
-            need_bytes=None,
-            outcome=outcome,
+            step=step, directory=path.parent, free_bytes=free, need_bytes=None, outcome=outcome
         )
     return MigrationError(message)

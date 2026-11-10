@@ -17,6 +17,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.reader_opener import ReaderOpen
 from p2pwatch.application.ports.driven.ticker import Ticker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.gigabytes import gigabytes
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 
 _logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class Linker(Protocol):
 _LINK_REFUSED = frozenset({errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP})
 
 
+# The free bytes of the filesystem holding ``path``, else ``InaccessiblePathError``.
 class FreeBytesMeter(Protocol):
     def __call__(self, path: Path, /) -> int: ...
 
@@ -62,7 +64,7 @@ class SqlitePreMigrationCopier:
         ``MigrationError``."""
         try:
             self._ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
-        except OSError as error:
+        except (OSError, InaccessiblePathError) as error:
             raise MigrationError(f"pre-migration copy of {path} failed: {error}") from error
 
     def _ensure_copy(

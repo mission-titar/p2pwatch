@@ -306,7 +306,7 @@ depends_on = ["p2pwatch.application.ports.driven.jitter_generator"]
 [[modules]]
 path = "p2pwatch.adapters.driven.shutil_free_space_meter"
 layer = "adapters"
-depends_on = ["p2pwatch.application.ports.driven.free_space_meter"]
+depends_on = ["p2pwatch.application.ports.driven.free_space_meter", "p2pwatch.domain"]
 
 [[modules]]
 path = "p2pwatch.adapters.driven.stdlib_logger"

@@ -89,8 +89,17 @@ def database_opener_setting(
     pragma: str, *, free_bytes: FreeBytesMeter | None = None
 ) -> SqliteDatabaseOpener:
     """The same, ``pragma`` run on each connection before its migrations."""
+    return database_opener_preparing(
+        lambda connection: connection.execute(pragma), free_bytes=free_bytes
+    )
+
+
+def database_opener_preparing(
+    prepare: _Preparation, *, free_bytes: FreeBytesMeter | None = None
+) -> SqliteDatabaseOpener:
+    """The same, ``prepare`` called on each connection before its migrations."""
     return SqliteDatabaseOpener(
-        _PreparingCopier(lambda connection: connection.execute(pragma)),
+        _PreparingCopier(prepare),
         ticker=FakeTicker(),
         free_bytes=free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
