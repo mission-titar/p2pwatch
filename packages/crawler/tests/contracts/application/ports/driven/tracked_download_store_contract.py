@@ -10,10 +10,13 @@ from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDow
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.domain.download.states import DownloadState, FailureReason
 from p2pwatch.domain.file_key import FileKey
+from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.download.status import draw_download_status
 from tests.support.domain.file_target_decision import draw_target_id
 from tests.support.domain.observation import draw_file
 from tests.support.draws import draw_instant, draw_instants
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 def _queue_drawn_file(
@@ -39,6 +42,28 @@ class TrackedDownloadStoreContract(ABC):
     @abstractmethod
     def reader(self) -> TrackedDownloadReader:
         """The reader of the writer's store."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's store refuse every write."""
+
+    def test_a_download_its_store_refuses_raises_store_error_and_is_not_tracked(
+        self,
+        *,
+        randomness: Random,
+        writer: TrackedDownloadWriter,
+        reader: TrackedDownloadReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        refuse_writes()
+        with pytest.raises(StoreError):
+            writer.record_queued(
+                draw_file(randomness),
+                target_id=TargetId(draw_long_text(randomness)),
+                queued_at=draw_instant(randomness),
+            )
+        assert reader.read_tracked_states() == {}
 
     def test_no_download_is_read_before_one_is_queued(self, reader: TrackedDownloadReader) -> None:
         assert reader.read_tracked_states() == {}

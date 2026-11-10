@@ -4,6 +4,7 @@ from tests.contracts.application.ports.driven.tracked_download_store_contract im
     TrackedDownloadStoreContract,
 )
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
+from tests.support.refused_writes import RefuseWrites
 
 
 class TestFakeTrackedDownloadStore(TrackedDownloadStoreContract):
@@ -18,3 +19,7 @@ class TestFakeTrackedDownloadStore(TrackedDownloadStoreContract):
     @pytest.fixture
     def reader(self, tracked_download_store: FakeTrackedDownloadStore) -> FakeTrackedDownloadStore:
         return tracked_download_store
+
+    @pytest.fixture
+    def refuse_writes(self) -> RefuseWrites:
+        pytest.skip("a fake's memory refuses no write")

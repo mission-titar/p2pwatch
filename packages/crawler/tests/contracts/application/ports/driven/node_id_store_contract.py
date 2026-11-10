@@ -10,6 +10,7 @@ from p2pwatch.application.ports.driven.node_id_writer import NodeIdWriter
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
 from tests.support.draws import draw_instant, draw_text
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 class NodeIdStoreContract(ABC):
@@ -22,6 +23,26 @@ class NodeIdStoreContract(ABC):
     @abstractmethod
     def reader(self) -> NodeIdReader:
         """The reader of the writer's store."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's store refuse every write."""
+
+    def test_a_node_id_its_store_refuses_raises_store_error_and_is_not_recorded(
+        self,
+        *,
+        randomness: Random,
+        writer: NodeIdWriter,
+        reader: NodeIdReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        refuse_writes()
+        with pytest.raises(StoreError):
+            writer.record_node_id(
+                NodeId(draw_long_text(randomness)), created_at=draw_instant(randomness)
+            )
+        assert reader.read_node_id() is None
 
     def test_no_node_id_is_read_before_one_is_recorded(self, reader: NodeIdReader) -> None:
         assert reader.read_node_id() is None

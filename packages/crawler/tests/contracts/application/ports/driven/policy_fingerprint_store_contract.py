@@ -7,7 +7,9 @@ import pytest
 
 from p2pwatch.application.ports.driven.policy_fingerprint_reader import PolicyFingerprintReader
 from p2pwatch.application.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
+from p2pwatch.domain.store_error import StoreError
 from tests.support.draws import draw_text
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 class PolicyFingerprintStoreContract(ABC):
@@ -20,6 +22,24 @@ class PolicyFingerprintStoreContract(ABC):
     @abstractmethod
     def reader(self) -> PolicyFingerprintReader:
         """The reader of the writer's store."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's store refuse every write."""
+
+    def test_a_fingerprint_its_store_refuses_raises_store_error_and_is_not_set(
+        self,
+        *,
+        randomness: Random,
+        writer: PolicyFingerprintWriter,
+        reader: PolicyFingerprintReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        refuse_writes()
+        with pytest.raises(StoreError):
+            writer.set_policy_fingerprint(draw_long_text(randomness))
+        assert reader.read_policy_fingerprint() is None
 
     def test_no_policy_fingerprint_is_read_before_one_is_set(
         self, reader: PolicyFingerprintReader

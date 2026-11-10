@@ -19,7 +19,12 @@ from tests.contracts.application.ports.driven.tracked_download_store_contract im
     TrackedDownloadStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.refused_writes import (
+    StorageRefusal,
+    refusing,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
+from tests.support.refused_writes import RefuseWrites
 
 _A = FileKey(network=Network.ED2K, native_id="a" * 32)
 _T0 = datetime(2026, 6, 12, 0, 0, 0, 123456, tzinfo=UTC)
@@ -92,6 +97,12 @@ class TestSqliteTrackedDownloadStore(TrackedDownloadStoreContract):
         self, tracked_download_store: SqliteTrackedDownloadStore
     ) -> SqliteTrackedDownloadStore:
         return tracked_download_store
+
+    @pytest.fixture(params=list(StorageRefusal), ids=str)
+    def refuse_writes(
+        self, *, request: pytest.FixtureRequest, connection: sqlite3.Connection
+    ) -> RefuseWrites:
+        return refusing(connection, refusal=request.param)
 
 
 def test_record_queued_keys_the_row_by_file_id_and_keeps_the_file_key(
