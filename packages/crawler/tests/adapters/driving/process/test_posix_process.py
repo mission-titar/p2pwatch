@@ -41,9 +41,9 @@ async def test_a_signal_while_the_start_holds_the_loop_is_seen_at_once_by_its_fl
     shutdown_requester = FakeShutdownRequester()
 
     async with PosixProcess(shutdown_requester) as process:
-        assert not process.is_shutdown_requested()
+        assert not process.is_signalled()
         signal.raise_signal(signal.SIGTERM)
-        requested_at_once = process.is_shutdown_requested()
+        requested_at_once = process.is_signalled()
 
     assert requested_at_once
     assert shutdown_requester.calls == ["request_shutdown"]
@@ -56,11 +56,11 @@ async def test_once_the_loop_runs_a_signal_is_handled_by_the_loop_never_mid_byte
     async with PosixProcess(shutdown_requester) as process:
         await _let_the_loop_run()
         signal.raise_signal(signal.SIGTERM)
-        requested_before_the_loop_ran = process.is_shutdown_requested()
+        requested_before_the_loop_ran = process.is_signalled()
         await asyncio.wait_for(shutdown_requester.requested.wait(), 1.0)
 
     assert not requested_before_the_loop_ran
-    assert process.is_shutdown_requested()
+    assert process.is_signalled()
 
 
 @pytest.mark.parametrize("loop_ran", [False, True], ids=["holding-the-loop", "on-the-loop"])

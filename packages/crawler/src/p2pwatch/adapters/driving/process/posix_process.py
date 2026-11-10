@@ -40,7 +40,7 @@ class PosixProcess:
         for signal_number in _SIGNALS:
             loop.remove_signal_handler(signal_number)
 
-    def is_shutdown_requested(self) -> bool:
+    def is_signalled(self) -> bool:
         """Whether a signal requested the shutdown, set at once while the start holds the loop."""
         return self._signal_count > 0
 

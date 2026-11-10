@@ -81,7 +81,7 @@ def database_opener(
         ticker=FakeTicker(),
         free_bytes=free_bytes,
         memory_releaser=memory_releaser or FakeMemoryReleaser(),
-        shutdown_requested=_never_requested,
+        is_shutdown_requested=_never_requested,
     )
 
 
@@ -103,7 +103,7 @@ def database_opener_preparing(
         ticker=FakeTicker(),
         free_bytes=free_bytes or FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=_never_requested,
+        is_shutdown_requested=_never_requested,
     )
 
 
@@ -114,7 +114,7 @@ def database_opener_ticked_by(ticker: FakeTicker) -> SqliteDatabaseOpener:
         ticker=ticker,
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=_never_requested,
+        is_shutdown_requested=_never_requested,
     )
 
 
@@ -126,7 +126,7 @@ def database_opener_ticked_by_progress(ticker: FakeTicker) -> SqliteDatabaseOpen
         ticker=ticker,
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=_never_requested,
+        is_shutdown_requested=_never_requested,
     )
 
 
@@ -138,7 +138,7 @@ def database_opener_registering(function_name: str) -> SqliteDatabaseOpener:
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=_never_requested,
+        is_shutdown_requested=_never_requested,
     )
 
 
@@ -152,7 +152,7 @@ def database_opener_with_shutdown(shutdown: ShutdownFlag) -> SqliteDatabaseOpene
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=shutdown.is_requested,
+        is_shutdown_requested=shutdown.is_requested,
     )
 
 
@@ -184,7 +184,7 @@ def database_opener_held_at_reopen(
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=_never_requested,
+        is_shutdown_requested=_never_requested,
     )
 
 
