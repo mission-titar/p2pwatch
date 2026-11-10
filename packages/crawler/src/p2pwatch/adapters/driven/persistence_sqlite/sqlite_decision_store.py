@@ -2,7 +2,6 @@
 
 import sqlite3
 from collections.abc import Sequence
-from contextlib import suppress
 
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
@@ -11,6 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     wrap_sqlite_errors,
     wrap_stored_value_errors,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.immediate_transaction import immediate_transaction
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.application.ports.driven.decision_reader import DecisionReader
 from p2pwatch.application.ports.driven.decision_writer import DecisionWriter
@@ -80,17 +80,10 @@ class SqliteDecisionStore(DecisionWriter, DecisionReader):
         """
         for dated_decision in dated_decisions:
             require_canonical_native_id(dated_decision.file)
-        with wrap_sqlite_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                self._connection.executemany(
-                    _INSERT_DECISION, [_row(dated_decision) for dated_decision in dated_decisions]
-                )
-                self._connection.execute("COMMIT")
-            except BaseException:
-                with suppress(sqlite3.Error):
-                    self._connection.execute("ROLLBACK")
-                raise
+        with wrap_sqlite_errors(), immediate_transaction(self._connection):
+            self._connection.executemany(
+                _INSERT_DECISION, [_row(dated_decision) for dated_decision in dated_decisions]
+            )
 
     def read_latest_decisions(self, file: FileKey) -> dict[TargetId, FileTargetDecision]:
         """Latest verdict per target for this file (set-diff anti-redundancy, spec §7), READ.

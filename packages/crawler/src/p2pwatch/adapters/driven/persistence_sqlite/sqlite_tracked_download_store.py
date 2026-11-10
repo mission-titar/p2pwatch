@@ -3,8 +3,7 @@
 Implements persistence of the downloads managed by the crawler. ``downloads`` is NOT
 append-only (mutable state, not the catalog) → UPSERT/UPDATE allowed, no triggers. Same
 disciplines as the other stores (data-model spec §7): the given instant converted BEFORE ``BEGIN``,
-``BEGIN IMMEDIATE`` + rollback on ``BaseException`` (a NON-sqlite failure does not leave the
-connection ``in_transaction``), ``wrap_sqlite_errors``.
+``immediate_transaction``, ``wrap_sqlite_errors``.
 
 Methods take a ``FileKey``; rows are keyed by its ``file_id`` (stage 2 spec D19). Each write
 stores the instant the use-case gives it. ``record_queued`` is dedup-safe (PK = ``file_id``,
@@ -16,7 +15,6 @@ stores the instant the use-case gives it. ``record_queued`` is dedup-safe (PK = 
 
 import sqlite3
 from collections.abc import Iterable
-from contextlib import suppress
 from datetime import datetime
 from typing import Literal
 
@@ -25,6 +23,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     wrap_sqlite_errors,
     wrap_stored_value_errors,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.immediate_transaction import immediate_transaction
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDownloadReader
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
@@ -81,25 +80,18 @@ class SqliteTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
     def record_queued(self, file: FileKey, *, target_id: TargetId, queued_at: datetime) -> None:
         """INSERT of a ``queued`` download (dedup-safe: a duplicate is ignored)."""
         queued_at_micros = instant_to_micros(queued_at)
-        with wrap_sqlite_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                self._connection.execute(
-                    _INSERT_QUEUED,
-                    (
-                        file.file_id,
-                        file.network,
-                        file.native_id,
-                        target_id,
-                        queued_at_micros,
-                        queued_at_micros,
-                    ),
-                )
-                self._connection.execute("COMMIT")
-            except BaseException:
-                with suppress(sqlite3.Error):
-                    self._connection.execute("ROLLBACK")
-                raise
+        with wrap_sqlite_errors(), immediate_transaction(self._connection):
+            self._connection.execute(
+                _INSERT_QUEUED,
+                (
+                    file.file_id,
+                    file.network,
+                    file.native_id,
+                    target_id,
+                    queued_at_micros,
+                    queued_at_micros,
+                ),
+            )
 
     def set_state(
         self,
