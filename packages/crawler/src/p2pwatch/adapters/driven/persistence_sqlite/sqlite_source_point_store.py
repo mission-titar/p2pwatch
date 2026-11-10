@@ -2,13 +2,13 @@
 
 import sqlite3
 from collections.abc import Sequence
-from contextlib import suppress
 from datetime import datetime
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     wrap_sqlite_errors,
     wrap_stored_value_errors,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.immediate_transaction import immediate_transaction
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.variants import source_content_hash
@@ -90,16 +90,9 @@ class SqliteSourcePointStore(SourcePointWriter, SourcePointReader):
 
     def record_points(self, points: Sequence[SourcePoint]) -> None:
         """ONE transaction."""
-        with wrap_sqlite_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                for point in points:
-                    self._record(point)
-                self._connection.execute("COMMIT")
-            except BaseException:
-                with suppress(sqlite3.Error):
-                    self._connection.execute("ROLLBACK")
-                raise
+        with wrap_sqlite_errors(), immediate_transaction(self._connection):
+            for point in points:
+                self._record(point)
 
     def _record(self, point: SourcePoint) -> None:
         """Writes the point's variant and the point."""

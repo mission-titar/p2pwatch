@@ -8,19 +8,17 @@ into ``observations``, each ``ON CONFLICT (<key>) DO NOTHING``, which ignores a 
 raises on any other refusal.
 
 The hash canon (32 lowercase hex, v0.5.0 canon) is validated IN PYTHON before the
-transaction, so that its error names the hash. The rollback catches ``BaseException``
-(same discipline as ``connection._open``): a NON-sqlite failure at binding must not
-leave the connection ``in_transaction``, otherwise the store would be permanently broken.
+transaction, so that its error names the hash. The transaction is ``immediate_transaction``.
 """
 
 import sqlite3
-from contextlib import suppress
 
 from p2pwatch.adapters.driven.persistence_sqlite import observation_read
 from p2pwatch.adapters.driven.persistence_sqlite.canonical_native_id import (
     require_canonical_native_id,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.errors import wrap_sqlite_errors
+from p2pwatch.adapters.driven.persistence_sqlite.immediate_transaction import immediate_transaction
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.variants import content_hash
 from p2pwatch.application.ports.driven.observation_reader import ObservationReader
@@ -78,23 +76,16 @@ class SqliteObservationStore(ObservationWriter, ObservationReader):
             node_id=observation.node_id,
         )
         observed_at_micros = instant_to_micros(observation.observed_at)
-        with wrap_sqlite_errors():
-            self._connection.execute("BEGIN")
-            try:
-                self._connection.execute(
-                    _INSERT_FILE,
-                    (file.file_id, file.network, file.native_id, reported_file.size_bytes),
-                )
-                self._connection.execute(_INSERT_VARIANT, (*variant, variant_content_hash))
-                self._connection.execute(
-                    _INSERT_OBSERVATION,
-                    (observed_at_micros, reported_file.source_count, variant_content_hash),
-                )
-                self._connection.execute("COMMIT")
-            except BaseException:
-                with suppress(sqlite3.Error):
-                    self._connection.execute("ROLLBACK")
-                raise
+        with wrap_sqlite_errors(), immediate_transaction(self._connection):
+            self._connection.execute(
+                _INSERT_FILE,
+                (file.file_id, file.network, file.native_id, reported_file.size_bytes),
+            )
+            self._connection.execute(_INSERT_VARIANT, (*variant, variant_content_hash))
+            self._connection.execute(
+                _INSERT_OBSERVATION,
+                (observed_at_micros, reported_file.source_count, variant_content_hash),
+            )
 
     def read_latest_observation(self, file: FileKey) -> FileObservation | None:
         """The file's latest observation, or ``None`` (read)."""

@@ -2,13 +2,13 @@
 ``backoff_states``, mutable state that no append-only trigger guards."""
 
 import sqlite3
-from contextlib import suppress
 from datetime import timedelta
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     wrap_sqlite_errors,
     wrap_stored_value_errors,
 )
+from p2pwatch.adapters.driven.persistence_sqlite.immediate_transaction import immediate_transaction
 from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros, micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
@@ -61,13 +61,6 @@ class SqliteBackoffStateStore(BackoffStateReader, BackoffStateWriter):
             )
             for backoff_key, state in backoff_state_by_key.items()
         ]
-        with wrap_sqlite_errors():
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                self._connection.execute("DELETE FROM backoff_states")
-                self._connection.executemany(_INSERT, rows)
-                self._connection.execute("COMMIT")
-            except BaseException:
-                with suppress(sqlite3.Error):
-                    self._connection.execute("ROLLBACK")
-                raise
+        with wrap_sqlite_errors(), immediate_transaction(self._connection):
+            self._connection.execute("DELETE FROM backoff_states")
+            self._connection.executemany(_INSERT, rows)
