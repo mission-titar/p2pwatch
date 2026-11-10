@@ -156,7 +156,7 @@ rules:                                  # liste ORDONNÉE, 1re règle vraie gagn
   - { name: numero_titre,        tier: notify,   all: [segment_id, {token: title_hit, min: 0.5}] }
   - { name: keroro_large,        tier: catalog,  any: [keroro_titar] }
 ```
-**Grammaire (EBNF)** :
+**Grammaire (EBNF)** (Corrected: a rule's body is a `token_expression`, the matcher's `TokenExpression`, no longer `condition`; v5 lot 4a's spec, D8) :
 ```
 condition = "all:" "[" operand ("," operand)* "]" | "any:" "[" operand … "]" | "not:" operand
 operand   = token_name | "{ token:" token_name ("," "min:" num)? ("," "fuzz:" num)? "}" | "{" condition "}"

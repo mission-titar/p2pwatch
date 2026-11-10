@@ -249,18 +249,18 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 
 | Block | Branch | Content |
 |---|---|---|
-| 10 | `refactor/token-expression` | the matcher's `Condition` renamed `TokenExpression` |
+| 10 | `refactor/token-expression` | the matcher's `Condition` renamed `TokenExpression` (Corrected: every matcher identifier, comment and message built on the word, not the type alone) |
 | 20 | `fix/backoff-cap` | the delay capped before computing, `factor` and `jitter_ratio` bounded |
-| 30 | `feat/no-pause-webui` | pause routes, buttons, use cases removed |
-| 33 | `refactor/no-pause-consumers` | the loops stop reading the pause |
-| 36 | `refactor/no-pause-run-state` | the run state keeps the shutdown request only |
-| 40 | `fix/decisions-one-transaction` | a file's decisions in one transaction |
+| 30 | `feat/no-pause-webui` | pause routes, buttons, use cases removed (Corrected: re-cut by the lead, vulture refusing a port method left without caller: the pause's write side end to end) |
+| 33 | `refactor/no-pause-consumers` | the loops stop reading the pause (Corrected: the read side end to end, the reader's pause half and the glossary line included, the dashboard's "The crawl is ..." line removed) |
+| 36 | `refactor/no-pause-run-state` | the run state keeps the shutdown request only (Corrected: the operator pages alone, kept apart so 30 stays under 20 files) |
+| 40 | `fix/decisions-one-transaction` | a file's decisions in one transaction (Corrected: no fake `DecisionWriter` existed, so none was added) |
 | 50 | `fix/port-sync-rounds` | every port-sync error logged and retried |
-| 60 | `fix/bounded-shutdown` | signals at start, stop grace, bounded close, exit codes |
-| 70 | `fix/sqlite-leaks` | the SQLite adapters' leaks, their contracts |
-| 75 | `fix/filesystem-leaks` | the filesystem adapters' leaks, their contracts |
+| 60 | `fix/bounded-shutdown` | signals at start, stop grace, bounded close, exit codes (Corrected: split for the bound: 60 the exit codes, the bounded close and the grace; 62, `fix/shutdown-signals-at-start`, the signals at the start) |
+| 70 | `fix/sqlite-leaks` | the SQLite adapters' leaks, their contracts (Corrected: split for the bound: 70 the webui's readers and `open_reader`; 72, `fix/sqlite-copier-leaks`, the console and the copiers; 74, `fix/sqlite-stored-value-leaks`, the stored values) |
+| 75 | `fix/filesystem-leaks` | the filesystem adapters' leaks, their contracts (Corrected: split for the bound: 75 the meter, the download cycle and the opening; 77, `fix/catalog-finder-leaks`, the finder and the merge) |
 | 80 | `fix/amuleapi-yaml-leaks` | the amuleapi and YAML adapters' leaks, their contracts |
-| 90 | `docs/lot-4a-wrap` | closing block |
+| 90 | `docs/lot-4a-wrap` | closing block (Corrected: cut as `fix/lot-4a-review`, then split in four for the bounds: 90 the stop during the start and its 25 s bound, 92 and 94 the writer contracts' refused writes, the catalog's then local.db's, 96 the other findings and the records) |
 
 ### Lot 4b
 
@@ -331,6 +331,11 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 - The old `/health` removed, the three MicroProfile paths; the compose healthcheck.
 - The replaced connectivity and disk alerts and the removed `p2pwatch_crawler_up`, in the migration guide.
 - The pause removed; the restart button kept.
+- (Corrected: three new refusals of `crawler.yml`, breaking for a 4.x one: `search.backoff.factor` at most 10 and
+  `search.backoff.jitter_ratio` at most 1, block 20; `shutdown_deadline_seconds` at most 25, its message naming
+  compose's stop grace, the closing block. The matcher's refusal now reads `exactly one token expression
+  (all/any/not) expected`, where 4.x printed `exactly one condition`, block 10. A YAML file nested too deeply or
+  holding a control character is one problem of its file, `invalid YAML: ...`, block 80.)
 - The new stop grace; a refused password no longer crash-loops; the frozen-loop exit and where its stacks are; the
   port-sync's errors in its log.
 - The new `local.db` migration (open alerts).
@@ -527,10 +532,12 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 - **Blocks 30, 33, 36**: in this order, so each block is green: the web surface (routes, buttons, use cases, driving
   ports, their fakes, the docs' two mentions), then the consumers (`search_task_runner`'s `wait_until_resumed`,
   `summarize_crawl`'s `is_paused`), then the pause half of `RunStateReader` and `RunStateWriter`, their store,
-  contract and fake. 29 files today (appendix C).
+  contract and fake. 29 files today (appendix C). (Corrected: cut by side instead, since vulture refuses a port method
+  whose only callers leave: 30 the write side end to end, 33 the read side end to end, 36 the operator pages.)
 - **Block 40**: a grouped write on `DecisionWriter`, its SQLite store, contract and fake; `FileJudge.rejudge` builds
   the changes and the event before writing; the `RuntimeError` of a file judged without an observation moves before
-  any write.
+  any write. (Corrected: no fake existed; the judge's failure is injected by an SQLite trigger on the real store, and
+  the `RuntimeError` already ran before any write.)
 - **Block 50**: `PortSyncLifecycle` runs each round under a `try`: `ApiNotReadyError` and `ListenPortRejectedError`
   keep their lines, any other exception is logged with its trace, and the next poll runs; the command line still
   exits on `SettingsError`.
@@ -539,13 +546,26 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
   whole, lot 2's D1) and between the reevaluation's files, the pass also yielding the loop per file; the loop handler
   of `PosixProcess` kept for the rest; `stop_grace_period` in `deploy/compose.yml` above `shutdown_deadline_seconds`
   plus the close's bounds; the close after the deadline gets a bound of its own; `_crawl` reports the shutdown
-  deadline from the composition's own signal, not from any `TimeoutError`.
+  deadline from the composition's own signal, not from any `TimeoutError`. (Corrected: split into 60 and 62; the pass
+  reads the run state, not the flag, so the webui's restart stops it too; the closing block sets the progress
+  handler on every connection of the opening, the earlier copy's reader included, so the pre-migration copy, its
+  comparison and the reclaim are interrupted too, and has the plain handler raise nothing, a second signal exiting 1
+  at the loop's first turn instead of meeting `sqlite3`'s swallowed exception; `shutdown_deadline_seconds` is refused
+  past 25 s, compose's grace minus the close.)
 - **Blocks 70, 75, 80**: each leak of appendix C converted where its adapter meets its library, into its port's
   declared failure; the ports that declare none today (`FreeSpaceMeter`, `CatalogFinder`, `ConfigChecker`, the webui's
   readers) gain one, named in their block by the Naming rules; each contract provokes the real failure (a removed or
   unreadable file, a read-only or full SQLite database, a reset connection, a timeout, JSON or YAML nested past the
-  recursion limit, malformed YAML) and expects the declared failure.
-- **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4a deleted, the holistic review's fixes.
+  recursion limit, malformed YAML) and expects the declared failure. (Corrected: 70 split into 70, 72 and 74, 75
+  into 75 and 77. The console's opening failure is a `QueryFailure`, its port's only failure shape, and the merge's
+  unremovable leftover is logged, the source's failure raised (72). A stored value no store writes is tested in each
+  SQLite adapter's own module, a corrupt row existing in SQLite alone (74); so are the amuleapi and YAML adapters'
+  leaks, the client ports and `ConfigChecker` having no contract (80). `FreeSpaceMeter` and `CatalogFinder` share one
+  declared failure, `InaccessiblePathError`, the operator's answer (75); `ConfigChecker` gains none, nested and
+  malformed YAML taking lot 3's path as one `ConfigProblem` (80). The writer contracts' full and read-only databases
+  came in the closing block, their fakes skipping the case, memory refusing no write.)
+- **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4a deleted, the holistic review's fixes. (Corrected: split into
+  90, 92, 94 and 96, as section 5's table says.)
 
 ### Lot 4b
 
