@@ -63,7 +63,7 @@ _BUSY_TIMEOUT_SECONDS = 5.0  # Python's default, which the crawler has always ha
 _SHUTDOWN_CHECK_INSTRUCTIONS = 1000
 
 
-# Whether the shutdown was requested, read on the opening's thread, between its steps.
+# Whether the shutdown was requested, read on the opening's thread, in and between its steps.
 class ShutdownCheck(Protocol):
     def __call__(self) -> bool: ...
 
@@ -107,15 +107,15 @@ class SqliteDatabaseOpener:
         copy, then opens it again and releases the memory the block took; gives back its free
         pages once they are a quarter of the file. A database newer than the ``scripts`` raises
         ``MigrationError``, a lack of disk space ``OutOfSpaceError``, a requested shutdown
-        ``OpeningInterruptedError`` before the block, during it or after it. ``exclusive``, each
+        ``OpeningInterruptedError`` during any of its steps or between them. ``exclusive``, each
         connection holds ``path`` until it closes, and another one raises ``HeldDatabaseError``, at
         the reopen too, the database then migrated."""
         failures = SqlFunctionFailures()
-        connection = _connect(path, exclusive=exclusive, failures=failures)
+        connection = self._connect(path, exclusive=exclusive, failures=failures)
         try:
             pending = _pending_migrations(connection, scripts=scripts)
             self._pre_migration_copier.ensure_copy(
-                connection, path=path, pending=pending, open_reader=self.open_reader
+                connection, path=path, pending=pending, open_reader=self._open_copy_reader
             )
             self._stop_if_requested(path, version=pending.current_version)
             with wrap_sqlite_errors():
@@ -129,12 +129,11 @@ class SqliteDatabaseOpener:
                 ticker=self._ticker,
                 free_bytes=self._free_bytes,
                 failures=failures,
-                is_shutdown_requested=self._is_shutdown_requested,
             )
             if pending.migrations:
                 # Closed, it drops the memos, the page cache and the pragmas the scripts set.
                 connection.close()
-                connection = _connect(path, exclusive=exclusive, failures=failures)
+                connection = self._connect(path, exclusive=exclusive, failures=failures)
                 with wrap_sqlite_errors():
                     connection.execute("PRAGMA temp_store=FILE")
                 self._stop_if_requested(path, version=pending.migrations[-1].version)
@@ -149,6 +148,23 @@ class SqliteDatabaseOpener:
             # Unconditional close: whatever fails, the connection must not leak.
             connection.close()
             raise
+        # Past the opening, a shutdown waits for the statement running.
+        connection.set_progress_handler(None, 0)
+        return connection
+
+    def _connect(
+        self, path: Path, *, exclusive: bool, failures: SqlFunctionFailures
+    ) -> sqlite3.Connection:
+        """``_connect``'s connection, a requested shutdown interrupting its statements."""
+        connection = _connect(path, exclusive=exclusive, failures=failures)
+        # The signal handler runs at the check's own call, inside the statement running.
+        connection.set_progress_handler(self._is_shutdown_requested, _SHUTDOWN_CHECK_INSTRUCTIONS)
+        return connection
+
+    def _open_copy_reader(self, path: Path) -> sqlite3.Connection:
+        """``open_reader``'s connection, a requested shutdown interrupting its statements."""
+        connection = self.open_reader(path)
+        connection.set_progress_handler(self._is_shutdown_requested, _SHUTDOWN_CHECK_INSTRUCTIONS)
         return connection
 
     def _stop_if_requested(self, path: Path, *, version: int) -> None:
@@ -265,7 +281,6 @@ def _apply_migrations(
     ticker: Ticker,
     free_bytes: FreeBytesMeter,
     failures: SqlFunctionFailures,
-    is_shutdown_requested: ShutdownCheck,
 ) -> None:
     """Applies the pending scripts in order in one transaction, the schema version written once,
     at its end, a failure naming the SQL function call that raised it, a requested shutdown
@@ -290,9 +305,6 @@ def _apply_migrations(
             elapsed.total_seconds(),
         )
 
-    # The signal handler runs at the check's own call, inside the block's statements. Left set:
-    # the open closes this connection after the block, whatever its end.
-    connection.set_progress_handler(is_shutdown_requested, _SHUTDOWN_CHECK_INSTRUCTIONS)
     # No finally: a failed block fails the open, which closes the connection.
     try:
         ticker.run(
@@ -383,6 +395,11 @@ def _reclaim(
     try:
         ticker.run(lambda: _vacuum(connection), tick=report_running, period=_PROGRESS_PERIOD)
     except sqlite3.Error as error:
+        if error.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT:
+            raise OpeningInterruptedError(
+                f"the reclaim of {path} stopped, the database at version {version}, "
+                "its free pages not given back"
+            ) from error
         raise _migration_error(
             error,
             connection=connection,

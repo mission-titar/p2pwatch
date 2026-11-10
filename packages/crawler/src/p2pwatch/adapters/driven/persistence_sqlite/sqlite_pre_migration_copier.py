@@ -4,7 +4,8 @@ import errno
 import logging
 import os
 import sqlite3
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from datetime import UTC, timedelta
 from glob import escape
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import Protocol
 from p2pwatch.adapters.driven.persistence_sqlite.database_digest import database_digest
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     MigrationError,
+    OpeningInterruptedError,
     PersistenceError,
     wrap_sqlite_errors,
 )
@@ -65,7 +67,8 @@ class SqlitePreMigrationCopier:
         none was needed: no pending migration is marked ``copy-before``, or the database is new.
         The latest copy is read through ``open_reader``. Short of free space, it raises
         ``OutOfSpaceError`` before writing anything; a file it cannot read or write,
-        ``MigrationError``."""
+        ``MigrationError``; a statement interrupted by the connection's progress handler, the
+        comparison's or the copy's, ``OpeningInterruptedError``."""
         try:
             self._ensure_copy(connection, path=path, pending=pending, open_reader=open_reader)
         except (OSError, InaccessiblePathError) as error:
@@ -85,7 +88,7 @@ class SqlitePreMigrationCopier:
         ):
             return
         prefix = f"{path.name}.pre-{pending.migrations[0].version:04d}"
-        with wrap_sqlite_errors():
+        with wrap_sqlite_errors(), _interruption_as_a_stop(path, version=pending.current_version):
             if self._matches_its_latest_copy(
                 connection, path=path, prefix=prefix, open_reader=open_reader
             ):
@@ -177,9 +180,23 @@ def _same_content(connection: sqlite3.Connection, *, copy: Path, open_reader: Re
         with closing(open_reader(copy)) as candidate:
             candidate_digest = database_digest(candidate)
     except (sqlite3.Error, PersistenceError) as error:
+        if isinstance(error, sqlite3.Error) and error.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT:
+            raise
         _logger.warning("pre-migration copy: %s cannot be read (%s)", copy, error)
         return False
     return candidate_digest == database_digest(connection)
+
+
+@contextmanager
+def _interruption_as_a_stop(path: Path, *, version: int) -> Iterator[None]:
+    try:
+        yield
+    except sqlite3.Error as error:
+        if error.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT:
+            raise OpeningInterruptedError(
+                f"the pre-migration copy of {path} stopped, the database at version {version}"
+            ) from error
+        raise
 
 
 def _live_bytes(connection: sqlite3.Connection) -> int:
