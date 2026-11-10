@@ -41,7 +41,7 @@ class AmuleApiListenPortClient(ListenPortClient):
         _raise_unless_success(status=status, message=message)
         try:
             tcp_port = json.loads(reply)["connection"]["tcp_port"]
-        except (ValueError, LookupError, TypeError):
+        except (ValueError, RecursionError, LookupError, TypeError):
             tcp_port = None
         if type(tcp_port) is not int:  # a JSON true is a Python int too
             raise ListenPortError(
@@ -80,7 +80,7 @@ class AmuleApiListenPortClient(ListenPortClient):
         )
         try:
             token = json.loads(login_reply).get("token")
-        except (ValueError, AttributeError):
+        except (ValueError, RecursionError, AttributeError):
             token = None
         if not (isinstance(token, str) and token):
             raise ListenPortError(

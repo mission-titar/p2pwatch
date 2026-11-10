@@ -33,7 +33,7 @@ class GluetunForwardedPortClient(ForwardedPortClient):
             return None
         try:
             port = json.loads(body).get("port")
-        except (ValueError, AttributeError):
+        except (ValueError, RecursionError, AttributeError):
             port = None
         if not (type(port) is int and 0 < port <= 65535):
             _logger.warning("gluetun reports no forwarded port (%r)", body[:100])

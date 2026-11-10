@@ -12,6 +12,8 @@ from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 # The module's name, which an operator's filters read.
 LOGGER_NAME = "p2pwatch_amule.adapters.driven.amule_api_health_client"
 
+_NESTED = b"[" * 100_000 + b"]" * 100_000  # past the recursion limit of json.loads
+
 
 @pytest.fixture
 def amule_api() -> Iterator[FakeAmuleApiServer]:
@@ -73,6 +75,22 @@ def test_a_200_without_ec_connected_true_is_unhealthy_logged_under_the_module_s_
 
     assert _logged_lines(caplog) == [
         (LOGGER_NAME, logging.WARNING, f"amuleapi reports no link to amuled (200 {body!r})")
+    ]
+
+
+def test_a_200_nested_past_the_recursion_limit_is_unhealthy(
+    *, amule_api: FakeAmuleApiServer, caplog: pytest.LogCaptureFixture
+) -> None:
+    amule_api.health_body = _NESTED
+
+    assert health_client(amule_api).is_api_healthy() is False
+
+    assert _logged_lines(caplog) == [
+        (
+            LOGGER_NAME,
+            logging.WARNING,
+            f"amuleapi reports no link to amuled (200 {_NESTED[:100]!r})",
+        )
     ]
 
 

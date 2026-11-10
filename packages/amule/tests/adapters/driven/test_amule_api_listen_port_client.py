@@ -20,6 +20,8 @@ LOGIN = "POST /api/v1/auth/login?include_token=true HTTP/1.1"
 PATCH = "PATCH /api/v1/preferences HTTP/1.1"
 GET = "GET /api/v1/preferences HTTP/1.1"
 
+_NESTED = b"[" * 100_000 + b"]" * 100_000  # past the recursion limit of json.loads
+
 
 @pytest.fixture
 def amule_api() -> Iterator[FakeAmuleApiServer]:
@@ -108,6 +110,26 @@ def test_a_login_without_a_token_patches_nothing(
 
     assert type(raised.value) is ListenPortError
     assert amule_api.request_lines == [LOGIN]
+
+
+def test_a_login_nested_past_the_recursion_limit_patches_nothing(
+    amule_api: FakeAmuleApiServer,
+) -> None:
+    amule_api.login_body = _NESTED
+
+    with pytest.raises(ListenPortError, match="^amuleapi's login answered without a token"):
+        listen_port_client(amule_api).set_listen_port(40123)
+
+    assert amule_api.request_lines == [LOGIN]
+
+
+def test_preferences_nested_past_the_recursion_limit_are_an_error(
+    amule_api: FakeAmuleApiServer,
+) -> None:
+    amule_api.preferences_body = _NESTED
+
+    with pytest.raises(ListenPortError, match="^amuleapi's preferences answered without a TCP"):
+        listen_port_client(amule_api).read_listen_port()
 
 
 def test_a_fresh_token_refused_is_amuleapi_not_ready_without_a_second_login(
