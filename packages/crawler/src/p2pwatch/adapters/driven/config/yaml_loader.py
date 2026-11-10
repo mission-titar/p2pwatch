@@ -24,27 +24,37 @@ class LoadedDocument:
 
 def load_yaml(path: Path) -> LoadedDocument:
     """``path``'s root mapping, as ``yaml.safe_load`` builds it; ``BrokenInputError`` on a file
-    absent, unreadable, not UTF-8 nor YAML, with no root mapping, an alias cycle or a surrogate."""
+    absent, unreadable, not UTF-8 nor YAML, nested too deeply, with no root mapping, an alias
+    cycle or a surrogate."""
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as error:
         raise BrokenInputError(str(error.strerror)) from error
     except UnicodeDecodeError as error:
         raise BrokenInputError("not UTF-8") from error
-    loader = _RecordingLoader(text, file_path=path)
     try:
-        root = loader.get_single_data()
+        root, keys_written_twice = _composed(text, file_path=path)
     except yaml.YAMLError as error:
         raise BrokenInputError(f"invalid YAML: {_on_one_line(error)}") from error
-    finally:
-        loader.dispose()
+    except RecursionError as error:  # PyYAML composes a document recursively
+        raise BrokenInputError("invalid YAML: nested too deeply") from error
     if not isinstance(root, dict):
         raise BrokenInputError(f"mapping expected at its root, got {type(root).__name__}")
     try:
         _require_well_formed_tree(root, location=(), enclosing_ids=frozenset())
     except ValueError as error:
         raise BrokenInputError(str(error)) from error
-    return LoadedDocument(document=root, problems=tuple(loader.keys_written_twice))
+    return LoadedDocument(document=root, problems=keys_written_twice)
+
+
+def _composed(text: str, *, file_path: Path) -> tuple[Any, tuple[ConfigProblem, ...]]:
+    """``text``'s document and the keys it writes twice; a character YAML refuses raises already
+    as the loader is built."""
+    loader = _RecordingLoader(text, file_path=file_path)
+    try:
+        return loader.get_single_data(), tuple(loader.keys_written_twice)
+    finally:
+        loader.dispose()
 
 
 class _RecordingLoader(yaml.SafeLoader):
