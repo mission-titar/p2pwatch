@@ -104,7 +104,12 @@ def test_a_root_key_absent_is_required(key: str) -> None:
         ("shutdown_deadline_seconds", float("inf"), "Input should be a finite number"),
         ("shutdown_deadline_seconds", float("nan"), "Input should be a finite number"),
         ("shutdown_deadline_seconds", 0, "Input should be greater than 0"),
-        ("shutdown_deadline_seconds", 86_401, "Input should be less than or equal to 86400"),
+        (
+            "shutdown_deadline_seconds",
+            25.001,
+            "Input should be less than or equal to 25: past it, deploy/compose.yml's "
+            "stop_grace_period (30s) kills the crawler before its close ends",
+        ),
         ("amule_api_password", "", "String should have at least 1 character"),
         ("amule_api_password", 1234, "Input should be a valid string"),
         ("catalog_db_path", "", "String should have at least 1 character"),
@@ -115,10 +120,10 @@ def test_a_root_value_out_of_its_type_is_refused(*, key: str, value: object, mes
     assert _problems(_document() | {key: value}) == [(key, message)]
 
 
-def test_a_deadline_of_a_day_is_accepted() -> None:
-    document = _document() | {"shutdown_deadline_seconds": 86_400}
+def test_a_deadline_of_25_s_is_accepted() -> None:
+    document = _document() | {"shutdown_deadline_seconds": 25}
     config = crawler_config_from_document(document, file_path=_FILE)
-    assert config.shutdown_deadline_seconds == 86_400
+    assert config.shutdown_deadline_seconds == 25
 
 
 def _with(path: str, *, value: object) -> dict[str, Any]:

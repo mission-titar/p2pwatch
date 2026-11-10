@@ -4,7 +4,16 @@ from datetime import timedelta
 from pathlib import PurePath
 from typing import Annotated, Any, Literal
 
-from pydantic import Discriminator, Field, GetPydanticSchema, Tag, ValidationError, create_model
+from pydantic import (
+    AfterValidator,
+    Discriminator,
+    Field,
+    GetPydanticSchema,
+    Tag,
+    ValidationError,
+    create_model,
+)
+from pydantic_core import PydanticCustomError
 
 from p2pwatch.adapters.driven.config.validation_problems import (
     TAG_MARK,
@@ -49,7 +58,22 @@ _THIRTY_DAYS_SECONDS = 2_592_000
 # Past it, a delay reaches its cap after a failure or two: a step rather than a backoff.
 _MAX_FACTOR = 10
 
+# deploy/compose.yml's stop_grace_period (30 s) minus the close the composition then allows (5 s).
+MAX_SHUTDOWN_DEADLINE_SECONDS = 25
+
+
+def _within_the_stop_grace(deadline_seconds: float) -> float:
+    if deadline_seconds > MAX_SHUTDOWN_DEADLINE_SECONDS:
+        raise PydanticCustomError(
+            "shutdown_deadline_past_the_stop_grace",
+            f"Input should be less than or equal to {MAX_SHUTDOWN_DEADLINE_SECONDS}: past it, "
+            "deploy/compose.yml's stop_grace_period (30s) kills the crawler before its close ends",
+        )
+    return deadline_seconds
+
+
 _Seconds = Annotated[float, Field(gt=0, le=_A_DAY_SECONDS)]
+_ShutdownDeadline = Annotated[float, Field(gt=0), AfterValidator(_within_the_stop_grace)]
 _Absence = Annotated[float, Field(gt=0, le=_THIRTY_DAYS_SECONDS)]
 _Text = Annotated[str, Field(min_length=1)]
 
@@ -150,7 +174,7 @@ _ObservabilitySchema = create_model(
 
 # mypy reads the keys' class, which a built schema extends: pydantic validates by the schema.
 class _RootKeysSchema(StrictSchema):
-    shutdown_deadline_seconds: _Seconds
+    shutdown_deadline_seconds: _ShutdownDeadline
     amule_api_password: _Text
     catalog_db_path: _Text
     local_db_path: _Text
