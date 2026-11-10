@@ -14,5 +14,5 @@ class FilesystemCatalogFinder(CatalogFinder):
         try:
             exists = catalog.exists()
         except OSError as error:
-            raise InaccessiblePathError(f"cannot examine {path}: {error}") from error
+            raise InaccessiblePathError(f"cannot examine {path}: {error.strerror}") from error
         return catalog.resolve() if exists else None

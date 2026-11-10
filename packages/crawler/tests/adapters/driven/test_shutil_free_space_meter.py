@@ -63,7 +63,5 @@ def test_the_refusal_names_the_directory_and_chains_the_system_s_error(tmp_path:
     removed = tmp_path / "removed"
     with pytest.raises(InaccessiblePathError) as refusal:
         ShutilFreeSpaceMeter(removed).free_bytes()
-    assert str(refusal.value) == (
-        f"free space of {removed} unknown: [Errno 2] No such file or directory: '{removed}'"
-    )
+    assert str(refusal.value) == (f"free space of {removed} unknown: No such file or directory")
     assert isinstance(refusal.value.__cause__, FileNotFoundError)

@@ -822,7 +822,7 @@ def test_a_full_disk_whose_free_space_cannot_be_measured_raises_a_migration_erro
         )
     assert str(refusal.value) == (
         f"migrations of {path} (migration 2): out of space in {directory}, free space of "
-        f"{directory} unknown: [Errno 2] No such file or directory: '{directory}'; "
+        f"{directory} unknown: No such file or directory; "
         "the database left at version 0"
     )
 
