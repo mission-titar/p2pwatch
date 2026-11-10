@@ -488,7 +488,7 @@ def _open(path: Path, *, scripts: tuple[Migration, ...], copier: SqlitePreMigrat
         ticker=FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
-        shutdown_requested=lambda: False,
+        is_shutdown_requested=lambda: False,
     ).open(path, scripts=scripts).close()
 
 

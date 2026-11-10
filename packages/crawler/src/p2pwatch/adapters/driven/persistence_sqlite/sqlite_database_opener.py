@@ -79,10 +79,10 @@ class SqliteDatabaseOpener:
         ticker: Ticker,
         free_bytes: FreeBytesMeter,
         memory_releaser: MemoryReleaser,
-        shutdown_requested: ShutdownCheck,
+        is_shutdown_requested: ShutdownCheck,
     ) -> None:
         self._pre_migration_copier = pre_migration_copier
-        self._shutdown_requested = shutdown_requested
+        self._is_shutdown_requested = is_shutdown_requested
         self._ticker = ticker
         self._free_bytes = free_bytes
         self._memory_releaser = memory_releaser
@@ -129,7 +129,7 @@ class SqliteDatabaseOpener:
                 ticker=self._ticker,
                 free_bytes=self._free_bytes,
                 failures=failures,
-                shutdown_requested=self._shutdown_requested,
+                is_shutdown_requested=self._is_shutdown_requested,
             )
             if pending.migrations:
                 # Closed, it drops the memos, the page cache and the pragmas the scripts set.
@@ -152,7 +152,7 @@ class SqliteDatabaseOpener:
         return connection
 
     def _stop_if_requested(self, path: Path, *, version: int) -> None:
-        if self._shutdown_requested():
+        if self._is_shutdown_requested():
             raise OpeningInterruptedError(
                 f"the opening of {path} stopped, the database at version {version}"
             )
@@ -265,7 +265,7 @@ def _apply_migrations(
     ticker: Ticker,
     free_bytes: FreeBytesMeter,
     failures: SqlFunctionFailures,
-    shutdown_requested: ShutdownCheck,
+    is_shutdown_requested: ShutdownCheck,
 ) -> None:
     """Applies the pending scripts in order in one transaction, the schema version written once,
     at its end, a failure naming the SQL function call that raised it, a requested shutdown
@@ -292,7 +292,7 @@ def _apply_migrations(
 
     # The signal handler runs at the check's own call, inside the block's statements. Left set:
     # the open closes this connection after the block, whatever its end.
-    connection.set_progress_handler(shutdown_requested, _SHUTDOWN_CHECK_INSTRUCTIONS)
+    connection.set_progress_handler(is_shutdown_requested, _SHUTDOWN_CHECK_INSTRUCTIONS)
     # No finally: a failed block fails the open, which closes the connection.
     try:
         ticker.run(

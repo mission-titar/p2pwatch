@@ -362,7 +362,7 @@ class CrawlerComposition(CrawlerRunner):
                 free_bytes=lambda directory: ShutilFreeSpaceMeter(directory).free_bytes(),
                 # None: the process's own symbols, the C library's included.
                 memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
-                shutdown_requested=process.is_shutdown_requested,
+                is_shutdown_requested=process.is_signalled,
             )
             try:
                 catalog_connection = database_opener.open_catalog(
