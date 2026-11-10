@@ -19,8 +19,6 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **v5 release readiness**: the thematic lots below, merged in this order, then release candidates checked on the
   operator's node. Umbrella spec: `agents/specs/2026-11-04-v5-release-readiness.md`.
-  - **Lot 4a, the ground of fault isolation**: the backoff overflow, the pause removed, a file's decisions in one
-    transaction, a bounded shutdown, the adapters' exception leaks. D13 and appendix A "Lot 4" of the umbrella spec.
   - **Lot 4b, the health model running**: health conditions on a graph of components and a supervisor restarting a
     buggy part, so one bug no longer stops the node. D12 of the umbrella spec.
   - **Lot 4c, what the operator sees of health**: alerts per root cause, health metrics, the Node page, `/health` per
