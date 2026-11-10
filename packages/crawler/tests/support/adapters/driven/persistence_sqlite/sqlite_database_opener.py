@@ -17,8 +17,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
     SqlitePreMigrationCopier,
 )
 from p2pwatch.application.ports.driven.memory_releaser import MemoryReleaser
+from p2pwatch.application.ports.driven.ticker import Ticker
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
 from tests.fakes.adapters.driven.fake_memory_releaser import FakeMemoryReleaser
+from tests.fakes.adapters.driven.fake_shutdown_requesting_ticker import (
+    FakeShutdownRequestingTicker,
+)
 from tests.fakes.adapters.driven.fake_ticker import FakeTicker
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
@@ -51,9 +55,11 @@ class _PreparingCopier(SqlitePreMigrationCopier):
     """Prepares each connection where the opener calls its copier: once the connection is
     configured, before the migrations."""
 
-    def __init__(self, prepare: _Preparation) -> None:
+    def __init__(self, prepare: _Preparation, *, ticker: Ticker | None = None) -> None:
         super().__init__(
-            FakeTime().wall, ticker=FakeTicker(), free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes
+            FakeTime().wall,
+            ticker=ticker or FakeTicker(),
+            free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         )
         self._prepare = prepare
 
@@ -142,14 +148,25 @@ def database_opener_registering(function_name: str) -> SqliteDatabaseOpener:
     )
 
 
-def database_opener_with_shutdown(shutdown: ShutdownFlag) -> SqliteDatabaseOpener:
+def database_opener_with_shutdown(
+    shutdown: ShutdownFlag,
+    *,
+    requested_by_the_copier: bool = False,
+    requested_by_the_opener: bool = False,
+) -> SqliteDatabaseOpener:
     """The same, its shutdown read from ``shutdown``, which a migration script requests by
-    ``SELECT request_shutdown();``."""
+    ``SELECT request_shutdown();``; requested as each run of the copier (the comparison, the copy)
+    starts, or of the opener (the migrations, the reclaim)."""
     return SqliteDatabaseOpener(
         _PreparingCopier(
-            lambda connection: connection.create_function("request_shutdown", 0, shutdown.request)
+            lambda connection: connection.create_function("request_shutdown", 0, shutdown.request),
+            ticker=FakeShutdownRequestingTicker(shutdown.request)
+            if requested_by_the_copier
+            else None,
         ),
-        ticker=FakeTicker(),
+        ticker=FakeShutdownRequestingTicker(shutdown.request)
+        if requested_by_the_opener
+        else FakeTicker(),
         free_bytes=FakeFreeBytes(_AMPLE_BYTES).free_bytes,
         memory_releaser=FakeMemoryReleaser(),
         is_shutdown_requested=shutdown.is_requested,

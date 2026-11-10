@@ -674,6 +674,84 @@ def test_a_shutdown_requested_before_the_migrations_stops_the_opening_at_its_ver
     assert _version_and_tables(path) == (1, {"a"})
 
 
+_TWENTY_THOUSAND = "WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM r WHERE x < 20000)"
+# Enough virtual machine instructions to meet the shutdown check, in a copy, a digest or a VACUUM.
+_A_HOLDING_ROWS = f"CREATE TABLE a (x INTEGER);\n{_TWENTY_THOUSAND} INSERT INTO a SELECT x FROM r;"
+_COPIED_AFTER = Migration(version=2, script="CREATE TABLE b (x INTEGER);", copy_before=True)
+
+
+def test_a_shutdown_requested_during_the_pre_migration_copy_stops_it_at_its_version(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "stopped.db"
+    scripts = (Migration(version=1, script=_A_HOLDING_ROWS), _COPIED_AFTER)
+    _open(path, scripts=scripts[:1]).close()
+    opener = database_opener_with_shutdown(ShutdownFlag(), requested_by_the_copier=True)
+    message = f"the pre-migration copy of {path} stopped, the database at version 1"
+    with pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"):
+        opener.open(path, scripts=scripts)
+    assert _version_and_tables(path) == (1, {"a"})
+    assert [name for name in _copy_names(tmp_path) if name.endswith("_UTC")] == []
+
+
+def test_a_shutdown_requested_during_the_comparison_with_an_earlier_copy_stops_it(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "stopped.db"
+    scripts = (Migration(version=1, script="CREATE TABLE a (x INTEGER);"), _COPIED_AFTER)
+    _open(path, scripts=scripts[:1]).close()
+    earlier = tmp_path / "stopped.db.pre-0002.2026-06-11_00-00-00_UTC"
+    # Its digest alone meets the check: the database's own is too short to.
+    with closing(sqlite3.connect(earlier, autocommit=True)) as candidate:
+        candidate.executescript(_A_HOLDING_ROWS)
+    opener = database_opener_with_shutdown(ShutdownFlag(), requested_by_the_copier=True)
+    message = f"the pre-migration copy of {path} stopped, the database at version 1"
+    with (
+        caplog.at_level("INFO"),
+        pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"),
+    ):
+        opener.open(path, scripts=scripts)
+    assert caplog.messages == [
+        f"pre-migration copy of {path}: comparing with {earlier}, the copy an earlier start made, "
+        "to reuse it if it still matches; a stop now costs only the time spent"
+    ]
+    assert _copy_names(tmp_path) == [earlier.name]
+
+
+def test_a_shutdown_requested_during_the_reclaim_stops_it_its_free_pages_kept(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "stopped.db"
+    with closing(sqlite3.connect(path, autocommit=True)) as connection:
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.executescript(f"{_A_HOLDING_ROWS}\nDELETE FROM a WHERE x > 5000;")
+    free_pages = _page_and_free_counts(path)[1]
+    opener = database_opener_with_shutdown(ShutdownFlag(), requested_by_the_opener=True)
+    message = (
+        f"the reclaim of {path} stopped, the database at version 0, its free pages not given back"
+    )
+    with pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"):
+        opener.open(path, scripts=())
+    assert _page_and_free_counts(path)[1] == free_pages
+
+
+@pytest.mark.parametrize(
+    "scripts",
+    [(Migration(version=1, script="CREATE TABLE a (x INTEGER);"),), ()],
+    ids=["after a block", "nothing pending"],
+)
+def test_a_shutdown_requested_once_opened_interrupts_no_statement(
+    *, tmp_path: Path, scripts: tuple[Migration, ...]
+) -> None:
+    shutdown = ShutdownFlag()
+    opener = database_opener_with_shutdown(shutdown)
+    with closing(opener.open(tmp_path / "opened.db", scripts=scripts)) as connection:
+        shutdown.request()
+        assert rows(connection, sql=f"{_TWENTY_THOUSAND} SELECT count(*) AS n FROM r") == [
+            {"n": 20000}
+        ]
+
+
 def test_a_migration_over_an_instant_without_a_time_zone_names_it(tmp_path: Path) -> None:
     path = tmp_path / "naive.db"
     with pytest.raises(

@@ -1,5 +1,6 @@
 import errno
 import os
+import re
 import sqlite3
 from contextlib import closing
 from datetime import timedelta
@@ -7,7 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import MigrationError
+from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    MigrationError,
+    OpeningInterruptedError,
+    PersistenceError,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import (
     Migration,
     PendingMigrations,
@@ -566,3 +571,61 @@ def test_a_candidate_that_cannot_be_opened_is_not_reused(tmp_path: Path) -> None
     second_name = "catalog.db.pre-0003.2026-06-12_00-02-00_UTC"
     assert _copy_names(path.parent) == [_COPY_NAME, second_name]
     assert (path.parent / _COPY_NAME).is_dir()
+
+
+def test_a_copy_sqlite_refuses_raises_persistence_error(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        connection.execute("BEGIN")
+        with pytest.raises(PersistenceError, match="^cannot VACUUM from within a transaction$"):
+            _copier().ensure_copy(
+                connection, path=path, pending=_pending(scripts), open_reader=open_reader
+            )
+
+
+def _interrupting(*_: object) -> bool:
+    return True
+
+
+def test_a_copy_its_connection_interrupts_raises_opening_interrupted_error(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    message = f"the pre-migration copy of {path} stopped, the database at version 2"
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        connection.set_progress_handler(_interrupting, 1)
+        with pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"):
+            _copier().ensure_copy(
+                connection, path=path, pending=_pending(scripts), open_reader=open_reader
+            )
+    assert _copy_names(path.parent) == []
+
+
+def test_a_comparison_its_candidate_interrupts_raises_opening_interrupted_error(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+
+    def interrupting_open_reader(candidate: Path) -> sqlite3.Connection:
+        reader = open_reader(candidate)
+        reader.set_progress_handler(_interrupting, 1)
+        return reader
+
+    message = f"the pre-migration copy of {path} stopped, the database at version 2"
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        _copier().ensure_copy(
+            connection, path=path, pending=_pending(scripts), open_reader=open_reader
+        )
+        with (
+            caplog.at_level("WARNING"),
+            pytest.raises(OpeningInterruptedError, match=f"^{re.escape(message)}$"),
+        ):
+            _copier().ensure_copy(
+                connection,
+                path=path,
+                pending=_pending(scripts),
+                open_reader=interrupting_open_reader,
+            )
+    assert caplog.messages == []
+    assert _copy_names(path.parent) == [_COPY_NAME]
