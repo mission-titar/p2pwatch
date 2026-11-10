@@ -99,6 +99,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/domain/matching/test_golden_corpus.py" = "deploy/matcher.yml, against the golden corpus"
 "tests/fakes/adapters/driven/test_fake_backoff_state_store.py" = "a fake of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_blocking_monotonic_clock.py" = "a double of tests/fakes"
+"tests/fakes/adapters/driven/test_fake_catalog_finder.py" = "a stub of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_decision_reader.py" = "a double of tests/fakes"
 "tests/fakes/adapters/driven/test_fake_logger.py" = "a double of tests/fakes"
 "tests/fakes/adapters/driven/test_fake_loop_monotonic_clock.py" = "a fake of tests/fakes, against its contract"
