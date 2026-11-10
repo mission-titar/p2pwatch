@@ -10,15 +10,13 @@ All SQL lives in module constants, parameterized (no value interpolation).
 from datetime import datetime
 from enum import StrEnum
 
+from p2pwatch.adapters.driven.persistence_sqlite.backoff_read import backoff_from_row
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
     wrap_sqlite_errors,
     wrap_stored_value_errors,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.micros import micros_to_instant
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
-from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
-    backoff_from_row,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
