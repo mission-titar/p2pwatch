@@ -8,8 +8,11 @@ import pytest
 
 from p2pwatch.application.ports.driven.backoff_state_reader import BackoffStateReader
 from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.store_error import StoreError
 from tests.support.domain.search.backoff import draw_backoff_key, draw_backoff_state
+from tests.support.refused_writes import RefuseWrites, draw_long_text
 
 
 def _draw_client_backoff(
@@ -33,6 +36,27 @@ class BackoffStateStoreContract(ABC):
     @abstractmethod
     def reader(self) -> BackoffStateReader:
         """The reader of the writer's store."""
+
+    @pytest.fixture
+    @abstractmethod
+    def refuse_writes(self) -> RefuseWrites:
+        """Makes the writer's store refuse every write."""
+
+    def test_a_save_its_store_refuses_raises_store_error_and_keeps_none(
+        self,
+        *,
+        randomness: Random,
+        writer: BackoffStateWriter,
+        reader: BackoffStateReader,
+        refuse_writes: RefuseWrites,
+    ) -> None:
+        key = draw_backoff_key(
+            randomness, has_channel=False, client_name=ClientName(draw_long_text(randomness))
+        )
+        refuse_writes()
+        with pytest.raises(StoreError):
+            writer.set_backoff_states({key: draw_backoff_state(randomness)})
+        assert reader.read_backoff_states() == {}
 
     def test_no_backoff_state_is_read_before_the_first_save(
         self, reader: BackoffStateReader

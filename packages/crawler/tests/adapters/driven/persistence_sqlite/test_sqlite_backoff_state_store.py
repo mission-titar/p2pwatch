@@ -15,7 +15,12 @@ from tests.contracts.application.ports.driven.backoff_state_store_contract impor
     BackoffStateStoreContract,
 )
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.refused_writes import (
+    StorageRefusal,
+    refusing,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
+from tests.support.refused_writes import RefuseWrites
 
 _STARTED_AT = datetime(2026, 6, 12, 10, 0, 0, 123456, tzinfo=UTC)
 _BACKOFF = {
@@ -52,6 +57,12 @@ class TestSqliteBackoffStateStore(BackoffStateStoreContract):
     @pytest.fixture
     def reader(self, backoff_state_store: SqliteBackoffStateStore) -> SqliteBackoffStateStore:
         return backoff_state_store
+
+    @pytest.fixture(params=list(StorageRefusal), ids=str)
+    def refuse_writes(
+        self, *, request: pytest.FixtureRequest, connection: sqlite3.Connection
+    ) -> RefuseWrites:
+        return refusing(connection, refusal=request.param)
 
 
 def test_the_backoff_states_saved_are_read_back_by_any_later_instance(

@@ -10,7 +10,12 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import Sql
 from p2pwatch.domain.identifiers import NodeId
 from tests.contracts.application.ports.driven.node_id_store_contract import NodeIdStoreContract
 from tests.support.adapters.driven.persistence_sqlite.named_row import rows
+from tests.support.adapters.driven.persistence_sqlite.refused_writes import (
+    StorageRefusal,
+    refusing,
+)
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
+from tests.support.refused_writes import RefuseWrites
 
 _START = datetime(2026, 6, 11, 12, 0, 0, 123456, tzinfo=UTC)
 _NODE_ID = NodeId("0c9d6b5e-2f4a-4e1b-9a7d-3c2b1a0f9e8d")
@@ -40,6 +45,12 @@ class TestSqliteNodeIdStore(NodeIdStoreContract):
     @pytest.fixture
     def reader(self, node_id_store: SqliteNodeIdStore) -> SqliteNodeIdStore:
         return node_id_store
+
+    @pytest.fixture(params=list(StorageRefusal), ids=str)
+    def refuse_writes(
+        self, *, request: pytest.FixtureRequest, connection: sqlite3.Connection
+    ) -> RefuseWrites:
+        return refusing(connection, refusal=request.param)
 
 
 def test_a_recorded_node_id_is_read_back_by_any_later_instance(
