@@ -94,7 +94,7 @@ class DownloadCycle:
         )
         # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated.
         await self._download_tracker.track(listed_statuses, node_id=node_id)
-        # Step 3 - CANDIDATES: NO client I/O → StoreError or InaccessiblePathError, isolated (I2).
+        # Step 3 - CANDIDATES: no client I/O; a refused measure admits nothing, the cycle goes on.
         try:
             await self._download_decider.queue_new_candidates(outstanding_bytes, node_id=node_id)
         except StoreError as error:
