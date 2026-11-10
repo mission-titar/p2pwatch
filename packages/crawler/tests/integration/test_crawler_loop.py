@@ -20,9 +20,10 @@ from tests.integration.conftest import ApiEndpoint
 pytestmark = pytest.mark.orchestration_integration
 
 _DEPLOY = Path(__file__).resolve().parents[4] / "deploy"
-# One keyword: a Kad search lasts 45 s at most, so one returns within a minute.
+# One keyword: a Kad search lasts 45 s at most, so one returns within a minute. The shipped
+# deadline: the stop, deadline then close, fits the test's 30 s wait for the run.
 _CONFIG = """\
-shutdown_deadline_seconds: 30.0
+shutdown_deadline_seconds: 10.0
 search:
   keywords: [titar]
   backoff: {{base_seconds: 2.0, cap_seconds: 60.0, factor: 2.0, jitter_ratio: 0.3}}
