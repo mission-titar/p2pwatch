@@ -549,3 +549,20 @@ def test_an_unreadable_candidate_is_not_reused(tmp_path: Path) -> None:
     second_name = "catalog.db.pre-0003.2026-06-12_00-02-00_UTC"
     assert _copy_names(path.parent) == [_COPY_NAME, junk.name, second_name]
     assert junk.read_bytes() == b"junk" * 1024
+
+
+def test_a_candidate_that_cannot_be_opened_is_not_reused(tmp_path: Path) -> None:
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    time = FakeTime()
+    copier = _copier(time=time)
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        # A directory under the copy's name: open_reader refuses it, as root too.
+        (path.parent / _COPY_NAME).mkdir()
+        time.advance(timedelta(minutes=2))
+        copier.ensure_copy(
+            connection, path=path, pending=_pending(scripts), open_reader=open_reader
+        )
+    second_name = "catalog.db.pre-0003.2026-06-12_00-02-00_UTC"
+    assert _copy_names(path.parent) == [_COPY_NAME, second_name]
+    assert (path.parent / _COPY_NAME).is_dir()
