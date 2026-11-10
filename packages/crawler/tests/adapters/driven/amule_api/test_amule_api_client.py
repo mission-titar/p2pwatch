@@ -437,10 +437,15 @@ async def test_calls_rejected_together_renew_the_token_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_body_that_is_not_json_is_an_unreachable_daemon() -> None:
+@pytest.mark.parametrize(
+    "body",
+    [b"<html>", b"[" * 100_000 + b"]" * 100_000, b'{"a":' * 100_000 + b"1" + b"}" * 100_000],
+    ids=["not json", "arrays nested past the recursion limit", "objects nested past it"],
+)
+async def test_a_body_that_is_not_json_is_an_unreachable_daemon(body: bytes) -> None:
     api = FakeAmuleApi()
     client = await _connected(api)
-    api.overrides[("GET", "/api/v1/status")] = lambda _: httpx.Response(200, content=b"<html>")
+    api.overrides[("GET", "/api/v1/status")] = lambda _: httpx.Response(200, content=body)
 
     with pytest.raises(ApiUnreachableError):
         await client.status()
