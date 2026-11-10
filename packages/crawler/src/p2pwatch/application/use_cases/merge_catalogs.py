@@ -13,6 +13,7 @@ from p2pwatch.application.ports.driving.catalog_merger import (
     NewCatalog,
 )
 from p2pwatch.domain.catalog_copy_error import CatalogCopyError, PartialCopyError
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
 
 
@@ -31,7 +32,7 @@ class MergeCatalogs(CatalogMerger):
         self, source_catalogs: Sequence[PurePath], *, destination: NewCatalog | ListedSourceCatalog
     ) -> None:
         found_sources = [self._find_source(source_catalog) for source_catalog in source_catalogs]
-        found_destination = self._catalog_finder.find_catalog(destination.path)
+        found_destination = self._find(destination.path)
         match destination:
             case NewCatalog(path=path, force=force):
                 if found_destination in found_sources:
@@ -61,7 +62,13 @@ class MergeCatalogs(CatalogMerger):
         self._logger.info("merge done: %s", path)
 
     def _find_source(self, source_catalog: PurePath) -> PurePath:
-        found_source = self._catalog_finder.find_catalog(source_catalog)
+        found_source = self._find(source_catalog)
         if found_source is None:
             raise MergeError(f"source catalog not found: {source_catalog}")
         return found_source
+
+    def _find(self, catalog: PurePath) -> PurePath | None:
+        try:
+            return self._catalog_finder.find_catalog(catalog)
+        except InaccessiblePathError as error:
+            raise MergeError(str(error)) from error

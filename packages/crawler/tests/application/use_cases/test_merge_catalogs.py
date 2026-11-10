@@ -46,6 +46,21 @@ def test_a_missing_source_is_refused_before_anything_is_copied() -> None:
     assert catalog_copier.copies == []
 
 
+@pytest.mark.parametrize("inaccessible", [_B, _OUT], ids=["source", "destination"])
+def test_a_path_that_cannot_be_examined_is_refused_before_anything_is_copied(
+    inaccessible: PurePath,
+) -> None:
+    catalog_finder = FakeCatalogFinder(_SOURCES_RESOLVED, inaccessible=frozenset({inaccessible}))
+    catalog_copier = FakeCatalogCopier()
+
+    with pytest.raises(MergeError, match=f"^cannot examine {inaccessible}$"):
+        MergeCatalogs(
+            catalog_finder, catalog_copier=catalog_copier, logger=FakeLogger()
+        ).merge_catalogs([_A, _B], destination=NewCatalog(path=_OUT, force=False))
+
+    assert catalog_copier.copies == []
+
+
 def test_a_new_catalog_that_exists_is_refused_unless_forced() -> None:
     catalog_finder = FakeCatalogFinder({_A: _A, _OUT: _OUT})
     catalog_copier = FakeCatalogCopier()

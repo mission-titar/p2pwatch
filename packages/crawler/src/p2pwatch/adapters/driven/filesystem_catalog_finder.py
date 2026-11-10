@@ -3,6 +3,7 @@
 from pathlib import Path, PurePath
 
 from p2pwatch.application.ports.driven.catalog_finder import CatalogFinder
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 
 
 class FilesystemCatalogFinder(CatalogFinder):
@@ -10,4 +11,8 @@ class FilesystemCatalogFinder(CatalogFinder):
 
     def find_catalog(self, path: PurePath) -> PurePath | None:
         catalog = Path(path)
-        return catalog.resolve() if catalog.exists() else None
+        try:
+            exists = catalog.exists()
+        except OSError as error:
+            raise InaccessiblePathError(f"cannot examine {path}: {error}") from error
+        return catalog.resolve() if exists else None
