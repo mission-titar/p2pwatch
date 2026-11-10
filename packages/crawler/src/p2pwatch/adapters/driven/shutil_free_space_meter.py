@@ -17,4 +17,6 @@ class ShutilFreeSpaceMeter(FreeSpaceMeter):
         try:
             return disk_usage(self._path).free
         except OSError as error:
-            raise InaccessiblePathError(f"free space of {self._path} unknown: {error}") from error
+            raise InaccessiblePathError(
+                f"free space of {self._path} unknown: {error.strerror}"
+            ) from error

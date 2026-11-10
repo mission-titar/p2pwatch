@@ -69,7 +69,5 @@ def test_the_refusal_names_the_path_and_chains_the_system_s_error(tmp_path: Path
     too_long = tmp_path / ("c" * 256)
     with pytest.raises(InaccessiblePathError) as refusal:
         FilesystemCatalogFinder().find_catalog(too_long)
-    assert str(refusal.value) == (
-        f"cannot examine {too_long}: [Errno 36] File name too long: '{too_long}'"
-    )
+    assert str(refusal.value) == (f"cannot examine {too_long}: File name too long")
     assert isinstance(refusal.value.__cause__, OSError)
