@@ -59,6 +59,35 @@ def test_a_malformed_yaml_is_a_broken_input_on_one_line(tmp_path: Path) -> None:
     assert "\n" not in raised.value.reason
 
 
+# PyYAML composes a document recursively: past Python's recursion limit it raises RecursionError.
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a: " + "[" * 1000 + "]" * 1000 + "\n",
+        "a: " + "{b: " * 1000 + "1" + "}" * 1000 + "\n",
+        "a:\n" + "".join("  " * level + "-\n" for level in range(1, 1001)),
+    ],
+    ids=["flow sequences", "flow mappings", "block sequences"],
+)
+def test_a_document_nested_past_the_recursion_limit_is_a_broken_input(
+    *, tmp_path: Path, text: str
+) -> None:
+    path = tmp_path / "nested.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(BrokenInputError) as raised:
+        load_yaml(path)
+    assert raised.value.reason == "invalid YAML: nested too deeply"
+
+
+def test_a_control_character_is_a_broken_input_on_one_line(tmp_path: Path) -> None:
+    path = tmp_path / "control.yaml"
+    path.write_text("a: 1\x01\n", encoding="utf-8")
+    with pytest.raises(BrokenInputError) as raised:
+        load_yaml(path)
+    assert raised.value.reason.startswith("invalid YAML: unacceptable character #x0001: ")
+    assert "\n" not in raised.value.reason
+
+
 # A YAML escape counts in UTF-16 units, so a UTF-8 file can spell a surrogate, paired or not.
 @pytest.mark.parametrize(
     ("text", "key_path"),

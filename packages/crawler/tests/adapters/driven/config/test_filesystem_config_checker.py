@@ -86,9 +86,14 @@ def test_an_absent_file_is_one_problem_of_it_naming_no_key(
     )
 
 
-def test_a_file_that_is_not_yaml_is_one_problem_of_it(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "text",
+    ["episodes: [1, 2\n", "episodes: " + "[" * 1000 + "]" * 1000 + "\n", "episodes: []\x01\n"],
+    ids=["unclosed", "nested past the recursion limit", "control character"],
+)
+def test_a_file_that_is_not_yaml_is_one_problem_of_it(*, tmp_path: Path, text: str) -> None:
     path = tmp_path / "targets.yml"
-    path.write_text("episodes: [1, 2\n", encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
 
     [problem] = FilesystemConfigChecker(_ENV).check_targets(PurePath(path))
 
