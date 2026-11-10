@@ -20,6 +20,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.micros import instant_to_micros
 from p2pwatch.adapters.driven.persistence_sqlite.migration_scripts import Migration, load_scripts
 from p2pwatch.adapters.driven.persistence_sqlite.named_row import NamedRow
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import read_only_uri
+from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.gigabytes import gigabytes
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
@@ -34,6 +35,7 @@ from tests.support.adapters.driven.persistence_sqlite.older_catalog import (
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     ShutdownFlag,
     database_opener,
+    database_opener_preparing,
     database_opener_registering,
     database_opener_setting,
     database_opener_ticked_by,
@@ -714,6 +716,37 @@ def test_a_full_disk_during_the_block_rolls_it_back_and_raises_out_of_space(
     )
     assert free_bytes.directories == [tmp_path]
     assert _version_and_tables(path) == (0, set())
+
+
+def test_a_full_disk_whose_free_space_cannot_be_measured_raises_a_migration_error(
+    tmp_path: Path,
+) -> None:
+    """The directory moved away under the open connection: ``statvfs`` refuses its old path."""
+    directory = tmp_path / "data"
+    directory.mkdir()
+    path = directory / "full.db"
+
+    def fill_up_then_move_away(connection: sqlite3.Connection) -> None:
+        connection.execute("PRAGMA max_page_count = 8")
+        directory.rename(tmp_path / "moved")
+
+    opener = database_opener_preparing(
+        fill_up_then_move_away,
+        free_bytes=lambda directory: ShutilFreeSpaceMeter(directory).free_bytes(),
+    )
+    with pytest.raises(MigrationError) as refusal:
+        opener.open(
+            path,
+            scripts=(
+                Migration(version=1, script="CREATE TABLE t (b BLOB);"),
+                Migration(version=2, script="INSERT INTO t VALUES (zeroblob(64 * 4096));"),
+            ),
+        )
+    assert str(refusal.value) == (
+        f"migrations of {path} (migration 2): out of space in {directory}, free space of "
+        f"{directory} unknown: [Errno 2] No such file or directory: '{directory}'; "
+        "the database left at version 0"
+    )
 
 
 def test_the_free_space_after_a_full_disk_is_measured_once_the_wal_is_emptied(

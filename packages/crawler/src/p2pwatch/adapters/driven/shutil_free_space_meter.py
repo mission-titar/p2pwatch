@@ -4,6 +4,7 @@ from pathlib import Path
 from shutil import disk_usage
 
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 
 
 class ShutilFreeSpaceMeter(FreeSpaceMeter):
@@ -13,4 +14,7 @@ class ShutilFreeSpaceMeter(FreeSpaceMeter):
         self._path = path
 
     def free_bytes(self) -> int:
-        return disk_usage(self._path).free
+        try:
+            return disk_usage(self._path).free
+        except OSError as error:
+            raise InaccessiblePathError(f"free space of {self._path} unknown: {error}") from error

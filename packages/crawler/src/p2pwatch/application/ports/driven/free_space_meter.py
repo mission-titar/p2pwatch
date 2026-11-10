@@ -14,4 +14,5 @@ class FreeSpaceMeter(ABC):
 
     @abstractmethod
     def free_bytes(self) -> int:
-        """The free bytes of the filesystem the client writes to."""
+        """The free bytes of the filesystem the client writes to; a directory the filesystem
+        refuses to examine raises ``InaccessiblePathError``."""

@@ -21,6 +21,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
     SqlitePreMigrationCopier,
     _rename_without_replacing,
 )
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from tests.fakes.adapters.driven.fake_free_bytes import FakeFreeBytes
 from tests.fakes.adapters.driven.fake_memory_releaser import FakeMemoryReleaser
@@ -297,6 +298,25 @@ def test_one_byte_short_refuses_before_any_write(tmp_path: Path) -> None:
         assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 2}]
     assert _copy_names(path.parent) == []
     assert free_bytes.directories == [path.parent]
+
+
+def test_a_free_space_that_cannot_be_measured_raises_a_migration_error(tmp_path: Path) -> None:
+    # A stub: past the stat of the database and its -wal, statvfs of their directory succeeds.
+    def unmeasurable(directory: Path) -> int:
+        raise InaccessiblePathError(f"free space of {directory} unknown")
+
+    scripts = _scripts(tmp_path / "scripts", _COPY_BEFORE + "DELETE FROM t;")
+    path = tmp_path / "data" / "catalog.db"
+    copier = SqlitePreMigrationCopier(FakeTime().wall, ticker=FakeTicker(), free_bytes=unmeasurable)
+    with closing(_seeded(path, scripts=scripts)) as connection:
+        with pytest.raises(MigrationError) as refusal:
+            copier.ensure_copy(
+                connection, path=path, pending=_pending(scripts), open_reader=open_reader
+            )
+        assert str(refusal.value) == (
+            f"pre-migration copy of {path} failed: free space of {path.parent} unknown"
+        )
+    assert _copy_names(path.parent) == []
 
 
 def test_exactly_the_free_space_needed_copies(tmp_path: Path) -> None:

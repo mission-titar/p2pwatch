@@ -26,7 +26,6 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from importlib.metadata import version
 from pathlib import Path, PurePath
-from shutil import disk_usage
 
 import apprise
 import httpx
@@ -357,10 +356,10 @@ class CrawlerComposition(CrawlerRunner):
                 SqlitePreMigrationCopier(
                     wall_clock,
                     ticker=ticker,
-                    free_bytes=lambda directory: disk_usage(directory).free,
+                    free_bytes=lambda directory: ShutilFreeSpaceMeter(directory).free_bytes(),
                 ),
                 ticker=ticker,
-                free_bytes=lambda directory: disk_usage(directory).free,
+                free_bytes=lambda directory: ShutilFreeSpaceMeter(directory).free_bytes(),
                 # None: the process's own symbols, the C library's included.
                 memory_releaser=GlibcMemoryReleaser(ctypes.CDLL(None)),
                 shutdown_requested=process.is_shutdown_requested,

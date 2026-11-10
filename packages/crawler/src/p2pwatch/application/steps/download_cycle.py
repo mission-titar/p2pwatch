@@ -12,9 +12,9 @@ Three things in it are not obvious:
 - **A download the client does not list is started again**, once per round, until it is listed
   or the TTL fails it: a client may forget its transfers on restart.
 
-Errors: ``ClientUnreachableError``, a refused read and ``OSError`` on the disk measurement skip
-the iteration, ``StoreError`` is logged and the cycle continues. A stalled download is never
-abandoned.
+Errors: ``ClientUnreachableError``, a refused read and ``InaccessiblePathError`` on the disk
+measurement skip the iteration, ``StoreError`` is logged and the cycle continues. A stalled
+download is never abandoned.
 """
 
 from p2pwatch.application.ports.driven.download_client import DownloadClient
@@ -25,6 +25,7 @@ from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.store_error import StoreError
 
 # A read the client refuses is the daemon unavailable.
@@ -93,14 +94,14 @@ class DownloadCycle:
         )
         # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated.
         await self._download_tracker.track(listed_statuses, node_id=node_id)
-        # Step 3 - CANDIDATES: NO client I/O → a StoreError or the disk's OSError, isolated (I2).
+        # Step 3 - CANDIDATES: NO client I/O → StoreError or InaccessiblePathError, isolated (I2).
         try:
             await self._download_decider.queue_new_candidates(outstanding_bytes, node_id=node_id)
         except StoreError as error:
             self._logger.error(
                 "download candidates store failure (%s): step skipped, continues", error
             )
-        except OSError as error:
+        except InaccessiblePathError as error:
             # A missing or unreadable output mount: refuse to admit anything rather than take
             # down the crawler, which also catalogues. Conservative, loud, and retried next cycle.
             self._logger.error(
