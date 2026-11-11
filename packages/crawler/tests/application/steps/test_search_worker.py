@@ -13,6 +13,7 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
+from p2pwatch.domain.client_errors import ClientAuthError, ClientUnreachableError, SearchFailedError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -293,7 +294,8 @@ async def test_search_failure_arms_channel_backoff(
         backoff=registry,
         fake_time=fake_time,
     )
-    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
+    with pytest.raises(SearchFailedError):  # after the backoff: the turn's declared outcome
+        await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
     assert registry.is_in_backoff(_CLIENT) is False  # but not the whole client
 
@@ -317,11 +319,34 @@ async def test_transport_failure_marks_instance_down(
         backoff=registry,
         fake_time=fake_time,
     )
-    await worker.search(Keyword("k1"), channel=Channel("ed2k"))
+    with pytest.raises(ClientUnreachableError):  # after the backoff: the turn's declared outcome
+        await worker.search(Keyword("k1"), channel=Channel("ed2k"))
     assert registry.is_in_backoff(_CLIENT) is True
     fake_time.advance(timedelta(seconds=3.0))
     await worker.search(Keyword("k2"), channel=Channel("ed2k"))
     assert client.searches == [("k1", "ed2k"), ("k2", "ed2k")]  # searched again once it expires
+
+
+@pytest.mark.asyncio
+async def test_a_refused_password_fails_the_search_and_backs_nothing_off(
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+) -> None:
+    fake_time = FakeTime()
+    registry = _registry(fake_time)
+    worker = _worker(
+        FakeSearchClient(search_failures=[ClientAuthError("amuleapi refused the admin password")]),
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=registry,
+        fake_time=fake_time,
+    )
+    with pytest.raises(ClientAuthError):
+        await worker.search(Keyword("k"), channel=Channel("ed2k"))
+    assert registry.snapshot() == {}
 
 
 @pytest.mark.asyncio
@@ -346,7 +371,8 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     )
     delays = []
     for _ in range(4):
-        await worker.search(Keyword("k"), channel=Channel("ed2k"))
+        with pytest.raises(ClientUnreachableError):
+            await worker.search(Keyword("k"), channel=Channel("ed2k"))
         delays.append(registry.time_until_retry(_CLIENT))
         fake_time.advance(registry.time_until_retry(_CLIENT))
     assert delays == [timedelta(seconds=seconds) for seconds in (2, 4, 8, 16)]
@@ -374,7 +400,8 @@ async def test_a_channel_refused_past_a_floats_range_waits_its_cap(
     )
     for _ in range(failures):
         fake_time.advance(worker.time_until_ready(Channel("ed2k")))
-        await worker.search(Keyword("k"), channel=Channel("ed2k"))
+        with pytest.raises(SearchFailedError):
+            await worker.search(Keyword("k"), channel=Channel("ed2k"))
     assert registry.snapshot()[_ED2K].attempts == failures
     assert registry.time_until_retry(_ED2K) == timedelta(seconds=60)
 
@@ -466,7 +493,8 @@ async def test_search_failure_dispatches_search_failed(
         fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
+    with pytest.raises(SearchFailedError):  # after its event
+        await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert observability.logger.lines == [
         LoggedLine(level="warning", message="search failed on ed2k")
     ]
@@ -499,7 +527,8 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
         fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
+    with pytest.raises(ClientUnreachableError):  # after its event
+        await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert observability.logger.lines == [
         LoggedLine(level="warning", message="amule-1 unreachable")
     ]

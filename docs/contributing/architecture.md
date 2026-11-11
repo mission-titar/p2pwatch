@@ -278,9 +278,11 @@ Points clés en chemin :
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
   minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
   pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
-- **Résilience** : `BackoffSaver`, que les recherches partagent, écrit le backoff après chaque
-  recherche qui l'a changé ; une `StoreError` à l'écriture est journalisée, et l'écriture retentée
-  après la recherche suivante.
+- **Résilience** : une recherche refusée ou un client injoignable fait échouer le tour une fois le
+  backoff posé et l'événement émis, et le superviseur le journalise (§3) ; un bug ne touche jamais
+  le backoff. `BackoffSaver`, que les recherches partagent, écrit le backoff après chaque recherche
+  qui l'a changé, échouée comprise ; une `StoreError` à l'écriture est journalisée, et l'écriture
+  retentée après la recherche suivante.
 
 ### 5.1 Une recherche, de bout en bout
 
