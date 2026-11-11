@@ -8,7 +8,7 @@ from p2pwatch.domain.status_reading import StatusReading
 
 
 class StatusReadingWriter(ABC):
-    """Publishes each client's latest status reading, from its status loop."""
+    """Publishes each client's latest status reading, from its status sensor."""
 
     @abstractmethod
     def set_reading(

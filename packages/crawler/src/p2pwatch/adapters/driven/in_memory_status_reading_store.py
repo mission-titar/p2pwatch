@@ -1,4 +1,4 @@
-"""``InMemoryStatusReadingStore``: each client's latest reading, published by its status loop and
+"""``InMemoryStatusReadingStore``: each client's latest reading, published by its status sensor and
 read on the webui's thread."""
 
 from collections.abc import Iterable, Mapping
