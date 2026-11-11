@@ -8,51 +8,30 @@ import asyncio
 from collections.abc import Sequence
 from datetime import timedelta
 
-from p2pwatch.application.ports.driven.backoff_state_writer import BackoffStateWriter
-from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.application.steps.backoff_registry import BackoffRegistry
+from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.search_worker import SearchTask, SearchWorker
-from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from p2pwatch.domain.search.keywords import dedupe_keywords
-from p2pwatch.domain.store_error import StoreError
 
 
 class SearchTaskRunner:
-    """The backoff last saved is the state the tasks share."""
+    """Runs each task the composition enumerated with the worker that searches it."""
 
     def __init__(
         self,
         *,
-        workers: Sequence[SearchWorker],
-        keywords: Sequence[str],
-        backoff: BackoffRegistry,
-        backoff_state_writer: BackoffStateWriter,
+        tasks: Sequence[tuple[SearchWorker, SearchTask]],
+        backoff_saver: BackoffSaver,
         monotonic_clock: MonotonicClock,
-        logger: Logger,
     ) -> None:
-        self._workers = workers
-        self._keywords = keywords
-        self._backoff = backoff
-        self._backoff_state_writer = backoff_state_writer
+        self._tasks = tasks
+        self._backoff_saver = backoff_saver
         self._monotonic_clock = monotonic_clock
-        self._logger = logger
-        self._saved: dict[BackoffKey, BackoffState] = {}
 
     async def run(self) -> None:
         """Runs every task until cancelled."""
-        # Taken here, once the lifecycle resumed the backoff, so no search rewrites what it read.
-        self._saved = self._backoff.snapshot()
-        keywords = dedupe_keywords(self._keywords)
         async with asyncio.TaskGroup() as group:
-            for worker in self._workers:
-                for channel in worker.channels:
-                    for keyword in keywords:
-                        group.create_task(
-                            self._search_forever(
-                                worker, task=SearchTask(keyword=keyword, channel=channel)
-                            )
-                        )
+            for worker, task in self._tasks:
+                group.create_task(self._search_forever(worker, task=task))
 
     async def _search_forever(self, worker: SearchWorker, *, task: SearchTask) -> None:
         while True:
@@ -60,18 +39,7 @@ class SearchTaskRunner:
             if wait > timedelta(0):
                 await self._monotonic_clock.sleep(wait)
                 continue
-            await worker.run_task(task)
-            self._save()
+            with self._backoff_saver.saving():
+                await worker.run_task(task)
             # A yield that reads no clock: a search that never suspends must not starve the loop.
             await asyncio.sleep(0)  # noqa: TID251
-
-    def _save(self) -> None:
-        current = self._backoff.snapshot()
-        if current == self._saved:
-            return
-        try:
-            self._backoff_state_writer.set_backoff_states(current)
-        except StoreError as error:
-            self._logger.error("backoff not saved (%s): retried after the next search", error)
-            return
-        self._saved = current

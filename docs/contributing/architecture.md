@@ -236,8 +236,8 @@ flowchart TB
 ## 5. Les tâches de recherche
 
 C'est le cœur du système et sa raison d'être : **être là 24/7** pour attraper un fichier rare à
-l'instant où une source le partage. Une tâche par *(client, canal, mot-clé)* cherche en boucle,
-toutes en même temps (`application/steps/search_task_runner.py`).
+l'instant où une source le partage. Une tâche par *(client, canal, mot-clé)*, que la composition
+énumère, cherche en boucle, toutes en même temps (`application/steps/search_task_runner.py`).
 
 ```mermaid
 flowchart TD
@@ -273,8 +273,9 @@ Points clés en chemin :
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
   minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
   pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
-- **Résilience** : une `StoreError` à l'écriture du backoff est journalisée, et l'écriture
-  retentée après la recherche suivante.
+- **Résilience** : `BackoffSaver`, que les recherches partagent, écrit le backoff après chaque
+  recherche qui l'a changé ; une `StoreError` à l'écriture est journalisée, et l'écriture retentée
+  après la recherche suivante.
 
 ### 5.1 Une tâche de recherche, de bout en bout
 
@@ -786,7 +787,7 @@ démon sont
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
+| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

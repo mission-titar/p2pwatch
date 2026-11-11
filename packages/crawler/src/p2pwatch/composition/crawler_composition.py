@@ -93,6 +93,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
+from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
@@ -106,7 +107,7 @@ from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
-from p2pwatch.application.steps.search_worker import SearchWorker
+from p2pwatch.application.steps.search_worker import SearchTask, SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_sensor import StatusSensor
 from p2pwatch.application.steps.supervisor import (
@@ -129,6 +130,7 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
+from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
 
@@ -429,8 +431,8 @@ class CrawlerComposition(CrawlerRunner):
                 database_opener=database_opener,
             )
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
-            # (backoff survives restart, spec §3/§7), injected into ALL workers + passed to the
-            # search tasks that persist it. Single writer on the event loop.
+            # (backoff survives restart, spec §3/§7), injected into ALL workers + the saver the
+            # search tasks share. Single writer on the event loop.
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config),
                 wall_clock=wall_clock,
@@ -494,13 +496,20 @@ class CrawlerComposition(CrawlerRunner):
                     for channel in client.channels()
                 },
             )
+            keywords = dedupe_keywords(crawler_config.search.keywords)
             search_task_runner = SearchTaskRunner(
-                workers=workers,
-                keywords=crawler_config.search.keywords,
-                backoff=backoff,
-                backoff_state_writer=backoff_state_store,
+                tasks=[
+                    (worker, SearchTask(keyword=keyword, channel=channel))
+                    for worker in workers
+                    for channel in worker.channels
+                    for keyword in keywords
+                ],
+                backoff_saver=BackoffSaver(
+                    backoff=backoff,
+                    backoff_state_writer=backoff_state_store,
+                    logger=StdlibLogger(BackoffSaver.__module__),
+                ),
                 monotonic_clock=monotonic_clock,
-                logger=StdlibLogger(SearchTaskRunner.__module__),
             )
             loops: list[SupervisedLoop] = [
                 search_task_runner.run,
