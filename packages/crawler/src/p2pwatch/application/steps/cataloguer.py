@@ -38,12 +38,14 @@ class Cataloguer:
         file_judge: FileJudge,
         observability_dispatcher: ObservabilityDispatcher,
         wall_clock: WallClock,
+        node_id: NodeId,
         logger: Logger,
     ) -> None:
         self._observation_writer = observation_writer
         self._file_judge = file_judge
         self._observability_dispatcher = observability_dispatcher
         self._wall_clock = wall_clock
+        self._node_id = node_id
         self._logger = logger
 
     async def catalog(
@@ -52,7 +54,6 @@ class Cataloguer:
         *,
         client_name: ClientName,
         channel: Channel,
-        node_id: NodeId,
     ) -> int:
         """Process ONE observation (spec §7). Returns the number of rows written (0..N).
 
@@ -61,14 +62,16 @@ class Cataloguer:
         try:
             self._observation_writer.record_observation(
                 FileObservation(
-                    reported_file=reported_file, observed_at=self._wall_clock.now(), node_id=node_id
+                    reported_file=reported_file,
+                    observed_at=self._wall_clock.now(),
+                    node_id=self._node_id,
                 )
             )
             await self._observability_dispatcher.dispatch(
                 ObservationRecorded(client_name=client_name, channel=channel)
             )
             return await self._file_judge.rejudge(
-                reported_file.file, base_candidate=reported_file.to_candidate(), node_id=node_id
+                reported_file.file, base_candidate=reported_file.to_candidate()
             )
         except StoreError as error:
             self._logger.error(

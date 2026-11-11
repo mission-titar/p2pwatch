@@ -44,7 +44,7 @@ async def test_new_candidate_is_queued_and_link_added() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
     assert client.started == [
         DownloadRequest(file=key(HASH_A), filename="Keroro.avi", size_bytes=100)
@@ -68,7 +68,7 @@ async def test_already_downloaded_candidate_is_deduped() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert client.started == []  # dedup: no new link
 
 
@@ -109,7 +109,7 @@ async def test_two_segment_candidates_same_hash_dedup_to_one_download() -> None:
         observability_dispatcher=observability.dispatcher,
         targets=targets,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert list(tracked_download_store.states) == [HASH_A]
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
     assert started(client) == [HASH_A]
@@ -140,7 +140,7 @@ async def test_a_candidate_that_would_break_the_disk_floor_defers() -> None:
         free=1_000,
         min_free=600,  # 1000 - 500 < 600 → defers
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
 
@@ -166,7 +166,7 @@ async def test_outstanding_queue_bytes_are_charged_against_the_floor() -> None:
         free=1_000,
         min_free=0,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
 
@@ -192,7 +192,7 @@ async def test_a_nascent_queue_entry_commits_nothing() -> None:
         free=1_000,
         min_free=800,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
 
 
@@ -212,7 +212,7 @@ async def test_candidate_without_observation_is_skipped() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert client.started == []
 
 
@@ -243,7 +243,7 @@ async def test_intra_cycle_floor_accounts_for_links_added_this_cycle() -> None:
         free=1000,
         min_free=0,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert len(client.started) == 1  # only one fit above the floor
 
 
@@ -267,7 +267,7 @@ async def test_candidate_for_unknown_target_is_treated_as_complete() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert client.started == []
     assert HASH_A not in tracked_download_store.states
 
@@ -290,7 +290,7 @@ async def test_dispatches_download_queued() -> None:
         observation_reader=observation_reader,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert LoggedLine(level="info", message="download queued: 062A") in observability.logger.lines
     assert NodeMetricSample(node_metric=NodeCounter.DOWNLOADS_QUEUED, labels=(), value=1.0) in (
         observability.node_metric_store.read_samples()
@@ -306,7 +306,7 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
         free=4_242,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert observability.node_metric_store.read_samples() == (
         NodeMetricSample(node_metric=NodeGauge.DISK_FREE_BYTES, labels=(), value=4_242.0),
     )
@@ -327,7 +327,7 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
     for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
         free_space_meter.free = free
         before = len(observability.notifier.calls)
-        await cycle.run(NODE_ID)
+        await cycle.run()
         warnings_per_cycle.append(len(observability.notifier.calls) - before)
     assert warnings_per_cycle == [1, 0, 0, 1]
     low = "download disk low: 0.0 GiB free, under the 0.0 GiB floor (no new download)"

@@ -32,6 +32,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.composition.crawler_composition import CrawlerComposition
+from p2pwatch.domain.client_errors import ClientAuthError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
@@ -371,6 +372,22 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     sink.server_close()
 
     assert ("p2pwatch - wired-node", "[wired-node]") in FakeNotificationSink.received
+
+
+@pytest.mark.asyncio
+async def test_a_new_node_records_its_id_before_amuled_refuses_its_password(
+    tmp_path: Path,
+) -> None:
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+
+    with (
+        FakeAmuleApiServer(FakeAmuleApi(password="another")) as server,
+        pytest.raises(ClientAuthError),
+    ):
+        await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
+
+    with closing(open_local(tmp_path / "local.db")) as local:
+        assert SqliteNodeIdStore(local).read_node_id() is not None
 
 
 @pytest.mark.asyncio

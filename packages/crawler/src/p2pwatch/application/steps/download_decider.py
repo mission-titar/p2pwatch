@@ -45,6 +45,7 @@ class DownloadDecider:
         download_tracker: DownloadTracker,
         wall_clock: WallClock,
         observability_dispatcher: ObservabilityDispatcher,
+        node_id: NodeId,
         logger: Logger,
     ) -> None:
         self._free_space_meter = free_space_meter
@@ -57,10 +58,11 @@ class DownloadDecider:
         self._download_tracker = download_tracker
         self._wall_clock = wall_clock
         self._observability_dispatcher = observability_dispatcher
+        self._node_id = node_id
         self._logger = logger
         self._disk_low_edge = EdgeState()
 
-    async def queue_new_candidates(self, outstanding_bytes: int, *, node_id: NodeId) -> None:
+    async def queue_new_candidates(self, outstanding_bytes: int) -> None:
         """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
 
         ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's
@@ -73,7 +75,9 @@ class DownloadDecider:
         elif self._disk_low_edge.enter("disk_low"):
             await self._observability_dispatcher.dispatch(
                 DiskSpaceLow(
-                    free_bytes=free_bytes, min_free_bytes=self._min_free_bytes, node_id=node_id
+                    free_bytes=free_bytes,
+                    min_free_bytes=self._min_free_bytes,
+                    node_id=self._node_id,
                 )
             )
         for candidate in self._decision_reader.read_download_candidates():
