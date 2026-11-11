@@ -102,6 +102,8 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.loop_supervisor import (
     LoopSupervisor,
     ShutdownBoundArmer,
@@ -125,10 +127,12 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
+from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE
 
 _logger = logging.getLogger(__name__)
 
@@ -469,6 +473,19 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(SearchWorker.__module__),
                 )
             ]
+            health_recorder = HealthRecorder(
+                logger=StdlibLogger(HealthRecorder.__module__),
+                subscribers=(
+                    HealthEventTranslator(
+                        observability_dispatcher=observability_dispatcher, node_id=node_id
+                    ).translate,
+                ),
+            )
+            client_component = Component(
+                name=f"client {_AMULE_CLIENT_NAME}",
+                labels=ComponentLabels(client_name=_AMULE_CLIENT_NAME),
+                conditions=(CLIENT_UNREACHABLE,),
+            )
             # The status and download loops share the search session: one session per node.
             status_loop = StatusLoop(
                 client_name=_AMULE_CLIENT_NAME,
@@ -479,6 +496,8 @@ class CrawlerComposition(CrawlerRunner):
                 run_state_reader=run_state_store,
                 status_reading_writer=status_reading_store,
                 node_id=node_id,
+                health_recorder=health_recorder,
+                client_component=client_component,
             )
             search_task_runner = SearchTaskRunner(
                 workers=workers,

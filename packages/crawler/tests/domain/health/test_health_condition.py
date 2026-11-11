@@ -1,0 +1,85 @@
+import pytest
+
+from p2pwatch.domain.declared_failure import DeclaredFailure
+from p2pwatch.domain.health.health_condition import (
+    AtLeast,
+    Band,
+    Below,
+    ConditionWindow,
+    Health,
+    HealthCondition,
+)
+from p2pwatch.domain.health.outcome import Outcome, OutcomeSource
+
+U, H, F = Health.UNKNOWN, Health.HEALTHY, Health.FAILING
+
+
+class _Refused(DeclaredFailure):
+    """The reason the condition under test counts."""
+
+
+class _Other(DeclaredFailure):
+    """A reason of the same source the condition does not count."""
+
+
+_CONDITION = HealthCondition(
+    name="refused",
+    source=OutcomeSource(name="a test's answers"),
+    counting=_Refused,
+    failing=Band(enters=AtLeast(count=3, of_last=3), leaves=Below(count=2, of_last=10)),
+)
+
+
+def _healths(pattern: str) -> list[Health]:
+    """The health after each outcome, ``1`` a failure the condition counts, ``0`` a success."""
+    window, healths = ConditionWindow(condition=_CONDITION), []
+    for mark in pattern:
+        window = window.after(Outcome.declared(_Refused()) if mark == "1" else Outcome.success())
+        healths.append(window.health)
+    return healths
+
+
+def test_a_condition_is_unknown_until_its_window_holds_its_entry_s_outcomes() -> None:
+    assert _healths("000") == [U, U, H]
+
+
+def test_a_condition_enters_failing_at_its_entry_s_count_from_the_start() -> None:
+    assert _healths("111") == [U, U, F]
+
+
+def test_the_periodic_pattern_fails_at_its_third_failure_and_never_leaves_until_the_successes() -> (
+    None
+):
+    healths = _healths("000111000111" * 10 + "0" * 10)
+    assert healths[:5] == [U, U, H, H, H]
+    assert healths[5:128] == [F] * 123  # the eighth success still sees two failures among ten
+    assert healths[128:] == [H, H]
+
+
+def test_a_reason_the_condition_does_not_count_is_no_failure() -> None:
+    window = ConditionWindow(condition=_CONDITION)
+    for _ in range(3):
+        window = window.after(Outcome.declared(_Other()))
+    assert window.health is H
+
+
+@pytest.mark.parametrize("bound", [AtLeast, Below])
+@pytest.mark.parametrize(("count", "of_last"), [(0, 3), (4, 3)])
+def test_a_bound_counts_between_one_and_its_window(
+    *, bound: type[AtLeast | Below], count: int, of_last: int
+) -> None:
+    with pytest.raises(ValueError, match=f"^{count} among the last {of_last}: a count from 1"):
+        bound(count=count, of_last=of_last)
+
+
+@pytest.mark.parametrize(
+    "leaves", [Below(count=4, of_last=10), Below(count=2, of_last=2)], ids=["count", "window"]
+)
+def test_a_band_s_exit_is_stricter_than_its_entry(leaves: Below) -> None:
+    with pytest.raises(ValueError, match="^a band leaving below .* is not stricter than"):
+        Band(enters=AtLeast(count=3, of_last=3), leaves=leaves)
+
+
+def test_a_band_may_leave_at_its_first_good_reading_after_entering_at_one_of_one() -> None:
+    band = Band(enters=AtLeast(count=1, of_last=1), leaves=Below(count=1, of_last=1))
+    assert band.leaves.count == 1
