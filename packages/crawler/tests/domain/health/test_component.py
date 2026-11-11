@@ -18,9 +18,11 @@ class _BadField(DeclaredFailure):
 
 
 _NOT_ANSWERING = HealthCondition(
-    name="not answering", source=_ANSWERS, counting=_NoAnswer, failing=_BAND
+    name="not answering", source=_ANSWERS, counting=_NoAnswer, failing=_BAND, degraded=None
 )
-_BAD_FIELD = HealthCondition(name="bad field", source=_FIELDS, counting=_BadField, failing=_BAND)
+_BAD_FIELD = HealthCondition(
+    name="bad field", source=_FIELDS, counting=_BadField, failing=_BAND, degraded=None
+)
 
 
 def _component() -> Component:

@@ -11,7 +11,7 @@ from p2pwatch.domain.health.health_condition import (
 )
 from p2pwatch.domain.health.outcome import Outcome, OutcomeSource
 
-U, H, F = Health.UNKNOWN, Health.HEALTHY, Health.FAILING
+U, H, D, F = Health.UNKNOWN, Health.HEALTHY, Health.DEGRADED, Health.FAILING
 
 
 class _Refused(DeclaredFailure):
@@ -27,12 +27,20 @@ _CONDITION = HealthCondition(
     source=OutcomeSource(name="a test's answers"),
     counting=_Refused,
     failing=Band(enters=AtLeast(count=3, of_last=3), leaves=Below(count=2, of_last=10)),
+    degraded=None,
+)
+_DEGRADING = HealthCondition(
+    name="refused",
+    source=OutcomeSource(name="a test's answers"),
+    counting=_Refused,
+    failing=None,
+    degraded=Band(enters=AtLeast(count=6, of_last=6), leaves=Below(count=1, of_last=20)),
 )
 
 
-def _healths(pattern: str) -> list[Health]:
+def _healths(pattern: str, *, condition: HealthCondition = _CONDITION) -> list[Health]:
     """The health after each outcome, ``1`` a failure the condition counts, ``0`` a success."""
-    window, healths = ConditionWindow(condition=_CONDITION), []
+    window, healths = ConditionWindow(condition=condition), []
     for mark in pattern:
         window = window.after(Outcome.declared(_Refused()) if mark == "1" else Outcome.success())
         healths.append(window.health)
@@ -54,6 +62,28 @@ def test_the_periodic_pattern_fails_at_its_third_failure_and_never_leaves_until_
     assert healths[:5] == [U, U, H, H, H]
     assert healths[5:128] == [F] * 123  # the eighth success still sees two failures among ten
     assert healths[128:] == [H, H]
+
+
+def test_a_degrading_condition_enters_degraded_and_leaves_it_under_its_own_exit() -> None:
+    healths = _healths("1" * 6 + "0" * 20, condition=_DEGRADING)
+    assert healths[:6] == [U] * 5 + [D]
+    assert healths[6:] == [D] * 19 + [H]  # the 19th success still sees a failure among twenty
+
+
+@pytest.mark.parametrize(
+    ("failing", "degraded"),
+    [(None, None), (_CONDITION.failing, _DEGRADING.degraded)],
+    ids=["none", "both"],
+)
+def test_a_condition_holds_one_band(*, failing: Band | None, degraded: Band | None) -> None:
+    with pytest.raises(ValueError, match="^the condition 'refused': one band expected"):
+        HealthCondition(
+            name="refused",
+            source=_CONDITION.source,
+            counting=_Refused,
+            failing=failing,
+            degraded=degraded,
+        )
 
 
 def test_a_reason_the_condition_does_not_count_is_no_failure() -> None:

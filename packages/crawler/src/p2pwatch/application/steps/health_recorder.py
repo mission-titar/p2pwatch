@@ -23,9 +23,8 @@ class HealthRecorder:
 
     async def record(self, outcome: Outcome, *, on: Component, by: OutcomeSource) -> None:
         for transition in on.record(outcome, by=by):
-            log = (
-                self._logger.warning if transition.current is Health.FAILING else self._logger.info
-            )
+            unwell = transition.current in (Health.DEGRADED, Health.FAILING)
+            log = self._logger.warning if unwell else self._logger.info
             log(
                 "%s, %s: %s to %s",
                 on.name,

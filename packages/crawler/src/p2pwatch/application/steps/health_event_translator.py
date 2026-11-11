@@ -1,11 +1,12 @@
 """The health event translator: the readings' transitions become today's connectivity events, an
-alert on entering failing, its end only on a return to healthy after it (spec v5 lot 4, D21)."""
+alert on entering a condition's band, its end only on a return to healthy after it (spec v5 lot 4,
+D21)."""
 
 from collections.abc import Mapping
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import HealthTransition
-from p2pwatch.domain.health.health_condition import Health, HealthCondition
+from p2pwatch.domain.health.health_condition import HealthCondition
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
@@ -16,6 +17,7 @@ from p2pwatch.domain.observability.events import (
     Event,
 )
 from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     lasting_at_entry,
@@ -23,6 +25,7 @@ from p2pwatch.domain.status_reading import (
 
 _CHANNEL_FIELDS: Mapping[HealthCondition, ChannelField] = {
     CHANNEL_NOT_CONNECTED: "connected",
+    CHANNEL_NOT_CONNECTABLE: "connectable",
 }
 
 
@@ -42,9 +45,10 @@ class HealthEventTranslator:
 
     def _event(self, transition: HealthTransition) -> Event | None:
         condition, labels = transition.condition, transition.component.labels
-        if transition.current is Health.FAILING:
+        band, _ = condition.band()
+        if transition.current is band:
             alerts = True
-        elif transition.previous is Health.FAILING:  # unknown to healthy ends no alert
+        elif transition.previous is band:  # unknown to healthy ends no alert
             alerts = False
         else:
             return None

@@ -96,7 +96,6 @@ def _status_loop(
         observability_dispatcher=observability.dispatcher,
         run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
-        node_id=_NODE_ID,
         health_recorder=observability.health_recorder,
         client_component=client_component(client_name),
         channel_components={
@@ -184,28 +183,28 @@ async def test_off_the_network_ends_at_the_ninth_reading_back_on_it() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_good_reading_after_an_alert_recovers() -> None:
-    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, _status(kad=_UP))
+async def test_not_connectable_ends_at_the_twentieth_connectable_reading() -> None:
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, *[_status(kad=_UP)] * 20)
     assert alerts == [
         (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
-        (360.0, _info("amuled kad: connectable again")),
+        (1500.0, _info("amuled kad: connectable again")),
     ]
 
 
 @pytest.mark.asyncio
-async def test_unknown_between_two_degraded_readings_restarts_the_clock() -> None:
+async def test_an_unknown_field_between_two_degraded_runs_records_nothing() -> None:
     unknown = _status(kad=(True, None))
-    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 3, unknown, *[_status(kad=_LOW_ID)] * 6)
-    assert alerts == [(540.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 3, unknown, *[_status(kad=_LOW_ID)] * 3)
+    assert alerts == [(360.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
 
 
 @pytest.mark.asyncio
-async def test_unknown_after_an_alert_is_no_recovery() -> None:
+async def test_an_unknown_field_after_an_alert_is_no_recovery() -> None:
     unknown = _status(kad=(True, None))
-    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, unknown, _status(kad=_UP))
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, unknown, *[_status(kad=_UP)] * 20)
     assert alerts == [
         (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
-        (420.0, _info("amuled kad: connectable again")),
+        (1560.0, _info("amuled kad: connectable again")),
     ]
 
 
@@ -266,12 +265,12 @@ async def test_unreachable_for_one_minute_never_alerts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_while_unreachable_only_the_api_alerts_and_channel_clocks_restart() -> None:
+async def test_while_unreachable_only_the_api_alerts_and_the_channels_keep_their_readings() -> None:
     low = _status(ed2k=_LOW_ID)
     alerts = await _alerts(*[low] * 4, *[_DOWN] * 5, *[low] * 6)
     assert alerts == [  # the client's end held: 4 unanswered among its last 10 readings
         (360.0, _warning("amuled unreachable for 2 min")),
-        (840.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}")),
+        (600.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}")),
     ]
 
 

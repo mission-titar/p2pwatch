@@ -25,19 +25,33 @@ class ChannelNotConnected(DeclaredFailure):
     """A reading of a channel off its network: a reason, never raised."""
 
 
+class ChannelNotConnectable(DeclaredFailure):
+    """A reading of a connected channel peers cannot connect to: a reason, never raised."""
+
+
 STATUS_API_ANSWER = OutcomeSource(name="the status reading's API answer")
 STATUS_CONNECTED_FIELD = OutcomeSource(name="the status reading's connected field")
+STATUS_CONNECTABLE_FIELD = OutcomeSource(name="the status reading's connectable field")
 CLIENT_UNREACHABLE = HealthCondition(
     name="unreachable",
     source=STATUS_API_ANSWER,
     counting=ClientNotAnswering,
     failing=Band(enters=AtLeast(count=3, of_last=3), leaves=Below(count=2, of_last=10)),
+    degraded=None,
 )
 CHANNEL_NOT_CONNECTED = HealthCondition(
     name="not connected",
     source=STATUS_CONNECTED_FIELD,
     counting=ChannelNotConnected,
     failing=Band(enters=AtLeast(count=6, of_last=6), leaves=Below(count=2, of_last=10)),
+    degraded=None,
+)
+CHANNEL_NOT_CONNECTABLE = HealthCondition(
+    name="not connectable",
+    source=STATUS_CONNECTABLE_FIELD,
+    counting=ChannelNotConnectable,
+    failing=None,
+    degraded=Band(enters=AtLeast(count=6, of_last=6), leaves=Below(count=1, of_last=20)),
 )
 
 
@@ -53,13 +67,14 @@ def channel_component(*, client_name: ClientName, channel: Channel) -> Component
     return Component(
         name=f"channel {client_name} {channel}",
         labels=ComponentLabels(client_name=client_name, channel=channel),
-        conditions=(CHANNEL_NOT_CONNECTED,),
+        conditions=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
     )
 
 
 def lasting_at_entry(condition: HealthCondition) -> timedelta:
-    """How long a reading condition has held on entering failing: a period per later reading."""
-    return (condition.failing.enters.count - 1) * STATUS_PERIOD
+    """How long a reading condition has held on entering its band: a period per later reading."""
+    _, band = condition.band()
+    return (band.enters.count - 1) * STATUS_PERIOD
 
 
 def is_reading_fresh(age: timedelta) -> bool:
