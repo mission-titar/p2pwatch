@@ -81,6 +81,7 @@ def _status_loop(
         observability_dispatcher=observability.dispatcher,
         run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
+        node_id=_NODE_ID,
     )
 
 
@@ -95,14 +96,14 @@ async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observabil
             fake_time=fake_time,
             observability=observability,
             run_state=run_state,
-        ).run(_NODE_ID),
+        ).run(),
         timeout=1.0,
     )
     return observability
 
 
 @pytest.mark.asyncio
-async def test_every_alert_is_notified_under_the_node_id_the_loop_runs_with() -> None:
+async def test_every_alert_is_notified_under_the_node_id_the_loop_is_built_with() -> None:
     observability = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
     notifications = observability.notifier.notifications
     assert notifications
@@ -249,7 +250,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
         run_state=run_state,
         status_reading_writer=status_reading_store,
     )
-    await asyncio.wait_for(status_loop.run(_NODE_ID), timeout=1.0)
+    await asyncio.wait_for(status_loop.run(), timeout=1.0)
     read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
     published_at = fake_time.monotonic.now() - timedelta(seconds=60)
     assert status_reading_store.read_readings() == {
@@ -274,7 +275,7 @@ async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> N
             fake_time=fake_time,
             observability=observability,
             run_state=run_state,
-        ).run(_NODE_ID),
+        ).run(),
         timeout=1.0,
     )
     assert observability.notifier.notifications == []

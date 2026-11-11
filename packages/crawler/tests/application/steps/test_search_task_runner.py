@@ -4,7 +4,6 @@ The tasks share one simulated time, so these tests run on the virtual-time loop.
 """
 
 import asyncio
-import sqlite3
 from collections.abc import Coroutine
 from contextlib import suppress
 from datetime import timedelta
@@ -22,10 +21,8 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.domain.client_errors import SearchFailedError
-from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
-from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
@@ -39,7 +36,6 @@ from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.catalog_rows import observation_node_ids
 from tests.support.virtual_time import EPOCH, VirtualLoop
 
 _NODE_ID = NodeId("n1")
@@ -89,12 +85,14 @@ class _Tasks:
             waker=FakeWaker(),
             observability_dispatcher=dispatcher,
             wall_clock=self.wall_clock,
+            node_id=_NODE_ID,
         )
         cataloguer = Cataloguer(
             observation_writer=self.observation_store,
             file_judge=file_judge,
             observability_dispatcher=dispatcher,
             wall_clock=self.wall_clock,
+            node_id=_NODE_ID,
             logger=FakeLogger(),
         )
         worker = SearchWorker(
@@ -112,7 +110,7 @@ class _Tasks:
             backoff_state_writer=self.state,
             monotonic_clock=self.monotonic_clock,
             logger=self.logger,
-        ).run(_NODE_ID)
+        ).run()
 
     def run_for(
         self,
@@ -152,24 +150,6 @@ def test_each_channel_and_keyword_searches_in_its_own_task(tasks: _Tasks) -> Non
         for keyword in ("keroro", "titar")
         for channel in ("x", "y")
     )
-
-
-def test_a_task_records_its_observations_under_the_node_id_the_tasks_run_with(
-    *, tasks: _Tasks, catalog_connection: sqlite3.Connection
-) -> None:
-    reported_file = ReportedFile(
-        file=FileKey(network=Network.ED2K, native_id="a" * 32),
-        filename="keroro.avi",
-        size_bytes=1,
-        source_count=1,
-        keyword=Keyword("keroro"),
-    )
-    tasks.run_for(
-        40.0,
-        client=FakeTimedSearchClient({Channel("x"): 30.0}, reported_files=(reported_file,)),
-        keywords=["keroro"],
-    )
-    assert observation_node_ids(catalog_connection) == {_NODE_ID}
 
 
 def test_channels_do_not_wait_for_each_other(tasks: _Tasks) -> None:

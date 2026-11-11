@@ -88,7 +88,7 @@ from p2pwatch.adapters.driven.uuid4_node_id_generator import Uuid4NodeIdGenerato
 from p2pwatch.adapters.driving.process.posix_process import PosixProcess
 from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
-from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle, NodeLoop
+from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
@@ -102,7 +102,11 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.loop_supervisor import LoopSupervisor, ShutdownBoundArmer
+from p2pwatch.application.steps.loop_supervisor import (
+    LoopSupervisor,
+    ShutdownBoundArmer,
+    SupervisedLoop,
+)
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
@@ -376,6 +380,12 @@ class CrawlerComposition(CrawlerRunner):
                 return
 
             node_id_store = SqliteNodeIdStore(local_connection)
+            node_id = NodeIdResolver(
+                node_id_reader=node_id_store,
+                node_id_writer=node_id_store,
+                node_id_generator=Uuid4NodeIdGenerator(),
+                wall_clock=wall_clock,
+            ).resolve()
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             node_metric_store = InMemoryNodeMetricStore()
@@ -436,12 +446,14 @@ class CrawlerComposition(CrawlerRunner):
                 waker=waker,
                 observability_dispatcher=observability_dispatcher,
                 wall_clock=wall_clock,
+                node_id=node_id,
             )
             cataloguer = Cataloguer(
                 observation_writer=observation_store,
                 file_judge=file_judge,
                 observability_dispatcher=observability_dispatcher,
                 wall_clock=wall_clock,
+                node_id=node_id,
                 logger=StdlibLogger(Cataloguer.__module__),
             )
             client = self._amule_api_client(crawler_config, monotonic_clock=monotonic_clock)
@@ -466,6 +478,7 @@ class CrawlerComposition(CrawlerRunner):
                 observability_dispatcher=observability_dispatcher,
                 run_state_reader=run_state_store,
                 status_reading_writer=status_reading_store,
+                node_id=node_id,
             )
             search_task_runner = SearchTaskRunner(
                 workers=workers,
@@ -475,7 +488,7 @@ class CrawlerComposition(CrawlerRunner):
                 monotonic_clock=monotonic_clock,
                 logger=StdlibLogger(SearchTaskRunner.__module__),
             )
-            loops: list[NodeLoop] = [
+            loops: list[SupervisedLoop] = [
                 search_task_runner.run,
                 status_loop.run,
             ]
@@ -501,6 +514,7 @@ class CrawlerComposition(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                     observability_dispatcher=observability_dispatcher,
+                    node_id=node_id,
                     logger=StdlibLogger(DownloadTracker.__module__),
                 )
                 download_cycle = DownloadCycle(
@@ -517,6 +531,7 @@ class CrawlerComposition(CrawlerRunner):
                         download_tracker=download_tracker,
                         wall_clock=wall_clock,
                         observability_dispatcher=observability_dispatcher,
+                        node_id=node_id,
                         logger=StdlibLogger(DownloadDecider.__module__),
                     ),
                     download_starter=DownloadStarter(
@@ -538,6 +553,7 @@ class CrawlerComposition(CrawlerRunner):
                         wall_clock=wall_clock,
                         monotonic_clock=monotonic_clock,
                         observability_dispatcher=observability_dispatcher,
+                        node_id=node_id,
                         logger=StdlibLogger(SourceWatcher.__module__),
                     ),
                     logger=StdlibLogger(DownloadCycle.__module__),
@@ -552,12 +568,7 @@ class CrawlerComposition(CrawlerRunner):
                 loops.append(download_loop.run)
 
             crawler_lifecycle = CrawlerLifecycle(
-                node_id_resolver=NodeIdResolver(
-                    node_id_reader=node_id_store,
-                    node_id_writer=node_id_store,
-                    node_id_generator=Uuid4NodeIdGenerator(),
-                    wall_clock=wall_clock,
-                ),
+                node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
                 catalog_reevaluator=CatalogReevaluator(
                     policy_fingerprint=config.policy_fingerprint,

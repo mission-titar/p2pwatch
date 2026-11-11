@@ -142,6 +142,7 @@ def build_cycle(
         wall_clock=wall_clock,
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability_dispatcher,
+        node_id=NODE_ID,
         logger=logger,
     )
     return DownloadCycle(
@@ -158,6 +159,7 @@ def build_cycle(
             download_tracker=download_tracker,
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
+            node_id=NODE_ID,
             logger=logger,
         ),
         download_starter=DownloadStarter(
@@ -179,6 +181,7 @@ def build_cycle(
             wall_clock=wall_clock,
             monotonic_clock=fake_time.monotonic,
             observability_dispatcher=observability_dispatcher,
+            node_id=NODE_ID,
             logger=logger,
         ),
         logger=logger,
