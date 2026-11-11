@@ -1,7 +1,8 @@
-"""The status loop: a reading every minute feeds the channel gauges, and a degraded state alerts
-once it has lasted, whatever came before it, boot included (spec stage 2, D15)."""
+"""The status loop: a reading every minute feeds the channel gauges and the conditions of the client
+and of each channel, whose transitions send today's alerts (spec stage 2, D15; v5 lot 4, D21)."""
 
 import asyncio
+from collections.abc import Sequence
 from datetime import timedelta
 
 import pytest
@@ -13,16 +14,16 @@ from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
-    CLIENT_UNREACHABLE,
     ChannelStatus,
     ClientStatus,
     PublishedReading,
     StatusReading,
+    channel_component,
+    client_component,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
@@ -41,6 +42,7 @@ _LOW_ID = (True, False)  # on the network, not connectable
 _DOWN = make_unreachable()
 _NODE_ID = NodeId("titar-node-1")
 _AMULED = ClientName("amuled")
+_CHANNELS = (Channel("ed2k"), Channel("kad"))
 _NOTIFICATION_TIMEOUT_SECONDS = 5.0
 
 
@@ -84,6 +86,7 @@ def _status_loop(
     observability: _Observability,
     run_state: FakeRunStateStore,
     status_reading_writer: StatusReadingWriter | None = None,
+    channels: Sequence[Channel] = _CHANNELS,
 ) -> StatusLoop:
     return StatusLoop(
         client_name=client_name,
@@ -95,15 +98,17 @@ def _status_loop(
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_id=_NODE_ID,
         health_recorder=observability.health_recorder,
-        client_component=Component(
-            name=f"client {client_name}",
-            labels=ComponentLabels(client_name=client_name),
-            conditions=(CLIENT_UNREACHABLE,),
-        ),
+        client_component=client_component(client_name),
+        channel_components={
+            channel: channel_component(client_name=client_name, channel=channel)
+            for channel in channels
+        },
     )
 
 
-async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observability:
+async def _run(
+    *readings: _Reading, client: ClientName = _AMULED, channels: Sequence[Channel] = _CHANNELS
+) -> _Observability:
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     observability = _Observability(fake_time)
     scripted = FakeStatusClient(list(readings), run_state=run_state)
@@ -114,6 +119,7 @@ async def _run(*readings: _Reading, client: ClientName = _AMULED) -> _Observabil
             fake_time=fake_time,
             observability=observability,
             run_state=run_state,
+            channels=channels,
         ).run(),
         timeout=1.0,
     )
@@ -144,9 +150,11 @@ _NOT_CONNECTABLE = "not connectable for 5 min"
 
 
 @pytest.mark.asyncio
-async def test_not_connectable_from_the_first_reading_alerts_at_five_minutes_once() -> None:
-    alerts = await _alerts(*[_status(ed2k=_LOW_ID)] * 10)
-    assert alerts == [(300.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}"))]
+async def test_a_connected_channel_not_connectable_alerts_on_that_field_alone_at_six_readings() -> (
+    None
+):
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 10)
+    assert alerts == [(300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
 
 
 @pytest.mark.asyncio
@@ -157,9 +165,21 @@ async def test_a_degraded_state_lasting_four_minutes_never_alerts_nor_recovers()
 
 @pytest.mark.asyncio
 async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
-    observability = await _run(*[_status(x=(False, None))] * 6, client=ClientName("fake"))
+    observability = await _run(
+        *[_status(x=(False, None))] * 6, client=ClientName("fake"), channels=(Channel("x"),)
+    )
     assert observability.notifier.notifications == [
         (300.0, _warning("fake x: off its network for 5 min"))
+    ]
+
+
+@pytest.mark.asyncio
+async def test_off_the_network_ends_at_the_ninth_reading_back_on_it() -> None:
+    # Ends under 2 failures among the last 10 readings: the eighth still sees two.
+    alerts = await _alerts(*[_status(kad=(False, None))] * 6, *[_status(kad=_UP)] * 9)
+    assert alerts == [
+        (300.0, _warning("amuled kad: off its network for 5 min")),
+        (840.0, _info("amuled kad: back on its network")),
     ]
 
 
@@ -187,6 +207,15 @@ async def test_unknown_after_an_alert_is_no_recovery() -> None:
         (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
         (420.0, _info("amuled kad: connectable again")),
     ]
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_reading_between_two_failed_runs_sends_no_end_nor_second_alert() -> (
+    None
+):
+    off = _status(kad=(False, None))
+    alerts = await _alerts(*[off] * 6, _DOWN, *[off] * 6)
+    assert alerts == [(300.0, _warning("amuled kad: off its network for 5 min"))]
 
 
 @pytest.mark.asyncio
@@ -249,17 +278,20 @@ async def test_while_unreachable_only_the_api_alerts_and_channel_clocks_restart(
 @pytest.mark.asyncio
 async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unknown() -> None:
     observability = await _run(_DOWN, _status(ed2k=_UP, kad=(False, None)), _DOWN)
+    unknown = [
+        LoggedLine(
+            level="debug",
+            message=f"status amuled {channel}: connected unknown, connectable unknown",
+        )
+        for channel in _CHANNELS
+    ]
     assert observability.logger.lines == [
         LoggedLine(level="warning", message="amuled unreachable"),
+        *unknown,
         LoggedLine(level="debug", message="status amuled ed2k: connected yes, connectable yes"),
         LoggedLine(level="debug", message="status amuled kad: connected no, connectable unknown"),
         LoggedLine(level="warning", message="amuled unreachable"),
-        LoggedLine(
-            level="debug", message="status amuled ed2k: connected unknown, connectable unknown"
-        ),
-        LoggedLine(
-            level="debug", message="status amuled kad: connected unknown, connectable unknown"
-        ),
+        *unknown,
     ]
 
 

@@ -127,12 +127,11 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
-from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE
+from p2pwatch.domain.status_reading import channel_component, client_component
 
 _logger = logging.getLogger(__name__)
 
@@ -481,11 +480,6 @@ class CrawlerComposition(CrawlerRunner):
                     ).translate,
                 ),
             )
-            client_component = Component(
-                name=f"client {_AMULE_CLIENT_NAME}",
-                labels=ComponentLabels(client_name=_AMULE_CLIENT_NAME),
-                conditions=(CLIENT_UNREACHABLE,),
-            )
             # The status and download loops share the search session: one session per node.
             status_loop = StatusLoop(
                 client_name=_AMULE_CLIENT_NAME,
@@ -497,7 +491,11 @@ class CrawlerComposition(CrawlerRunner):
                 status_reading_writer=status_reading_store,
                 node_id=node_id,
                 health_recorder=health_recorder,
-                client_component=client_component,
+                client_component=client_component(_AMULE_CLIENT_NAME),
+                channel_components={
+                    channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
+                    for channel in client.channels()
+                },
             )
             search_task_runner = SearchTaskRunner(
                 workers=workers,

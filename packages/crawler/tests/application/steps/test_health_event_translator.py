@@ -6,27 +6,33 @@ import pytest
 from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.declared_failure import DeclaredFailure
-from p2pwatch.domain.health.component import Component, ComponentLabels, HealthTransition
+from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_condition import Health, HealthCondition
-from p2pwatch.domain.identifiers import ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE
+from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTED,
+    CLIENT_UNREACHABLE,
+    channel_component,
+    client_component,
+)
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 
 _NODE_ID = NodeId("titar-node-1")
-_CLIENT = Component(
-    name="client fake",
-    labels=ComponentLabels(client_name=ClientName("fake")),
-    conditions=(CLIENT_UNREACHABLE,),
-)
+_CLIENT = client_component(ClientName("fake"))
+_KAD = channel_component(client_name=ClientName("fake"), channel=Channel("kad"))
 U, H, F = Health.UNKNOWN, Health.HEALTHY, Health.FAILING
 
 
 async def _notified(
-    *, previous: Health, current: Health, condition: HealthCondition = CLIENT_UNREACHABLE
+    *,
+    previous: Health,
+    current: Health,
+    condition: HealthCondition = CLIENT_UNREACHABLE,
+    component: Component = _CLIENT,
 ) -> list[Notification]:
     notifier = FakeNotifier()
     translator = HealthEventTranslator(
@@ -39,7 +45,9 @@ async def _notified(
         node_id=_NODE_ID,
     )
     await translator.translate(
-        HealthTransition(component=_CLIENT, condition=condition, previous=previous, current=current)
+        HealthTransition(
+            component=component, condition=condition, previous=previous, current=current
+        )
     )
     return [notification for _, notification in notifier.calls]
 
@@ -66,6 +74,42 @@ async def test_the_client_healthy_again_after_failing_ends_its_alert() -> None:
 @pytest.mark.asyncio
 async def test_the_client_known_healthy_at_its_first_readings_sends_nothing() -> None:
     assert await _notified(previous=U, current=H) == []
+
+
+def _warning(message: str) -> RelayedLogLine:
+    return RelayedLogLine(message=message, severity=Severity.WARNING, node_id=_NODE_ID)
+
+
+def _info(message: str) -> RelayedLogLine:
+    return RelayedLogLine(message=message, severity=Severity.INFO, node_id=_NODE_ID)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("condition", "band", "alert", "end"),
+    [
+        (CHANNEL_NOT_CONNECTED, F, "off its network for 5 min", "back on its network"),
+    ],
+    ids=["not connected"],
+)
+async def test_a_channel_entering_its_band_alerts_and_leaving_it_ends_the_alert(
+    *, condition: HealthCondition, band: Health, alert: str, end: str
+) -> None:
+    notified = [
+        await _notified(previous=previous, current=current, condition=condition, component=_KAD)
+        for previous, current in [(U, band), (H, band), (band, H), (U, H)]
+    ]
+    assert notified == [
+        [_warning(f"fake kad: {alert}")],
+        [_warning(f"fake kad: {alert}")],
+        [_info(f"fake kad: {end}")],
+        [],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_channel_s_condition_on_a_component_naming_no_channel_sends_nothing() -> None:
+    assert await _notified(previous=H, current=F, condition=CHANNEL_NOT_CONNECTED) == []
 
 
 class _Other(DeclaredFailure):

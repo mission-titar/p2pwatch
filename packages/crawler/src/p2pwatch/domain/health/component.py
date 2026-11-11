@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from p2pwatch.domain.health.health_condition import ConditionWindow, Health, HealthCondition
 from p2pwatch.domain.health.outcome import Outcome, OutcomeSource
-from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.identifiers import Channel, ClientName
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -12,6 +12,7 @@ class ComponentLabels:
     """What the events and the metrics name a component by."""
 
     client_name: ClientName
+    channel: Channel | None = None  # None: a component of the whole client
 
 
 @dataclass(kw_only=True, frozen=True)
