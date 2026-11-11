@@ -1,6 +1,6 @@
 """The download loop: reconcile → completions → new candidates → sources → sleep/wake (spec §5).
 
-One serial task. ``DownloadCycle.run`` runs ONE iteration;
+One serial task. ``DownloadCycle.run_once`` runs ONE iteration;
 ``DownloadLoop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
 Three things in it are not obvious:
 
@@ -51,7 +51,7 @@ class DownloadCycle:
         self._source_watcher = source_watcher
         self._logger = logger
 
-    async def run(self) -> None:
+    async def run_once(self) -> None:
         """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
 
         Two distinct error DOCTRINES (item I2 - anti-starvation):
