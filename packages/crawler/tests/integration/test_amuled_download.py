@@ -34,6 +34,7 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         port=amuled.port,
         password=amuled.password,
         timeout_seconds=30.0,
+        request_bound_seconds=180.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
