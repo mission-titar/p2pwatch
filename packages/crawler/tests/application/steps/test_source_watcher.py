@@ -23,6 +23,7 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
+from p2pwatch.domain.store_error import StoreError
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -221,16 +222,25 @@ async def test_a_client_unavailable_reading_sources_ends_the_turn(failure: Excep
 
 
 @pytest.mark.asyncio
-async def test_a_store_failure_reading_the_tracked_downloads_reads_no_source() -> None:
+async def test_a_store_failure_reading_the_tracked_downloads_fails_the_turn() -> None:
     source_client, logger = FakeSourceClient(), FakeLogger()
-    await build_watcher(
+    watcher = build_watcher(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
         source_client=source_client,
         tracked_download_store=FakeTrackedDownloadStore(fail_tracked_states=True),
         logger=logger,
-    ).run_once()  # does not raise
+    )
+    with pytest.raises(StoreError):  # the supervisor's declared outcome
+        await watcher.run_once()
     assert source_client.source_reads == []
-    assert [line.level for line in logger.lines] == ["error"]
+    assert logger.lines == []
+
+
+def test_the_supervisor_names_the_work_source_tracking() -> None:
+    watcher = build_watcher(
+        client=FakeDownloadClient(), tracked_download_store=FakeTrackedDownloadStore()
+    )
+    assert str(watcher) == "source tracking"
 
 
 @pytest.mark.asyncio

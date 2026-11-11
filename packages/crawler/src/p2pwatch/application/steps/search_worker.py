@@ -47,6 +47,10 @@ class SearchWorker:
         self._logger = logger
 
     @property
+    def client_name(self) -> ClientName:
+        return self._client_name
+
+    @property
     def channels(self) -> tuple[Channel, ...]:
         """The channels its client declares."""
         return self._client.channels()

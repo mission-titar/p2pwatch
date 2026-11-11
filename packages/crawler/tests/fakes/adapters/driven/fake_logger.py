@@ -8,6 +8,7 @@ from p2pwatch.application.ports.driven.logger import Logger
 class LoggedLine:
     level: Literal["debug", "info", "warning", "error"]
     message: str
+    error: BaseException | None = None  # the exception whose trace the line carries
 
 
 class FakeLogger(Logger):
@@ -27,6 +28,11 @@ class FakeLogger(Logger):
 
     def error(self, message: str, *args: object) -> None:
         self.lines.append(LoggedLine(level="error", message=_formatted(message, args=args)))
+
+    def exception(self, message: str, *args: object, error: BaseException) -> None:
+        self.lines.append(
+            LoggedLine(level="error", message=_formatted(message, args=args), error=error)
+        )
 
 
 def _formatted(message: str, *, args: tuple[object, ...]) -> str:

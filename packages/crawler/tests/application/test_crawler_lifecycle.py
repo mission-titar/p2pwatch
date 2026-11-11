@@ -50,6 +50,9 @@ class _StartedWork(Work):
         self._name = name
         self._crawl = crawl
 
+    def __str__(self) -> str:
+        return self._name
+
     async def wait_for_next_turn(self) -> None:
         """Waits for nothing."""
 
@@ -116,7 +119,11 @@ class _Crawl:
             backoff=self.backoff,
             works=[self._work("search"), self._work("status")],
             download_enabled=download_enabled,
-            supervisor=Supervisor(run_state_reader=self.run_state),
+            supervisor=Supervisor(
+                run_state_reader=self.run_state,
+                monotonic_clock=self.fake_time.monotonic,
+                logger=FakeLogger(),
+            ),
             logger=self.logger,
         )
 

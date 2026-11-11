@@ -1,7 +1,7 @@
 """Source tracking, a work: reads the sources of our downloads, records their points and alerts.
 
-Errors: an unavailable client skips the turn, a ``StoreError`` reading the tracked downloads too,
-one writing a download's points skips that download's; the next turn retries.
+Errors: an unavailable client skips the turn, a ``StoreError`` reading the tracked downloads fails
+it, one writing a download's points skips that download's; the next turn retries.
 """
 
 from dataclasses import dataclass, field
@@ -89,6 +89,9 @@ class SourceWatcher(Work):
         self._logger = logger
         self._turn_started_at: MonotonicInstant | None = None
 
+    def __str__(self) -> str:
+        return "source tracking"
+
     async def wait_for_next_turn(self) -> None:
         """Waits ``sources_interval`` since the last turn started, failed or not (source points
         spec, D3), on the monotonic clock; nothing before the first."""
@@ -105,8 +108,6 @@ class SourceWatcher(Work):
             await self._record_sources(await self._download_client.downloads())
         except _UNAVAILABLE as error:
             self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
-        except StoreError as error:
-            self._logger.error("download sources store failure (%s): step skipped, retry", error)
 
     async def _record_sources(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
         """Records the sources of each of our downloads the client lists, completed ones aside,
