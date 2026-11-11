@@ -12,11 +12,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_worker import (
-    SEARCH_BUDGET_SECONDS,
-    SearchTask,
-    SearchWorker,
-)
+from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -213,7 +209,7 @@ async def test_successful_task_records_observation(
         backoff=_registry(fake_time),
         fake_time=fake_time,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert client.searches == [("keroro", "ed2k")]
     assert count_decisions(catalog_connection) == 1
     assert rows(catalog_connection, sql="SELECT observed_at_micros FROM observations") == [
@@ -250,7 +246,7 @@ async def test_multiple_observations_some_unchanged_are_all_processed(
         backoff=_registry(fake_time),
         fake_time=fake_time,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert count_observations(catalog_connection) == 2
     assert count_decisions(catalog_connection) == 1
 
@@ -275,7 +271,7 @@ async def test_backoff_expires_and_item_runs_again(
         fake_time=fake_time,
     )
     fake_time.advance(timedelta(seconds=3.0))  # the channel is no longer in backoff
-    await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("kad")))
+    await worker.search(Keyword("k"), channel=Channel("kad"))
     assert client.searches == [("k", "kad")]
 
 
@@ -297,7 +293,7 @@ async def test_search_failure_arms_channel_backoff(
         backoff=registry,
         fake_time=fake_time,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert registry.is_in_backoff(_ED2K) is True  # channel in backoff
     assert registry.is_in_backoff(_CLIENT) is False  # but not the whole client
 
@@ -321,10 +317,10 @@ async def test_transport_failure_marks_instance_down(
         backoff=registry,
         fake_time=fake_time,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("k1"), channel=Channel("ed2k")))
+    await worker.search(Keyword("k1"), channel=Channel("ed2k"))
     assert registry.is_in_backoff(_CLIENT) is True
     fake_time.advance(timedelta(seconds=3.0))
-    await worker.run_task(SearchTask(keyword=Keyword("k2"), channel=Channel("ed2k")))
+    await worker.search(Keyword("k2"), channel=Channel("ed2k"))
     assert client.searches == [("k1", "ed2k"), ("k2", "ed2k")]  # searched again once it expires
 
 
@@ -350,11 +346,11 @@ async def test_the_client_backoff_grows_until_a_search_succeeds(
     )
     delays = []
     for _ in range(4):
-        await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")))
+        await worker.search(Keyword("k"), channel=Channel("ed2k"))
         delays.append(registry.time_until_retry(_CLIENT))
         fake_time.advance(registry.time_until_retry(_CLIENT))
     assert delays == [timedelta(seconds=seconds) for seconds in (2, 4, 8, 16)]
-    await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")))
+    await worker.search(Keyword("k"), channel=Channel("ed2k"))
     assert _CLIENT not in registry.snapshot()
 
 
@@ -378,7 +374,7 @@ async def test_a_channel_refused_past_a_floats_range_waits_its_cap(
     )
     for _ in range(failures):
         fake_time.advance(worker.time_until_ready(Channel("ed2k")))
-        await worker.run_task(SearchTask(keyword=Keyword("k"), channel=Channel("ed2k")))
+        await worker.search(Keyword("k"), channel=Channel("ed2k"))
     assert registry.snapshot()[_ED2K].attempts == failures
     assert registry.time_until_retry(_ED2K) == timedelta(seconds=60)
 
@@ -400,7 +396,7 @@ async def test_a_task_is_one_search_given_the_cores_budget(
         backoff=_registry(fake_time),
         fake_time=fake_time,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("kad")))
+    await worker.search(Keyword("keroro"), channel=Channel("kad"))
     assert client.searches == [("keroro", "kad")]
     assert client.budgets == [SEARCH_BUDGET_SECONDS] == [120.0]
 
@@ -429,7 +425,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
         fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert observability.logger.lines == [
         LoggedLine(level="debug", message="search ed2k: 1 observation(s)"),
         LoggedLine(level="debug", message="observation recorded (ed2k)"),
@@ -470,7 +466,7 @@ async def test_search_failure_dispatches_search_failed(
         fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert observability.logger.lines == [
         LoggedLine(level="warning", message="search failed on ed2k")
     ]
@@ -503,7 +499,7 @@ async def test_transport_failure_during_search_dispatches_client_unreachable(
         fake_time=fake_time,
         observability_dispatcher=observability.dispatcher,
     )
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
     assert observability.logger.lines == [
         LoggedLine(level="warning", message="amule-1 unreachable")
     ]
@@ -540,7 +536,7 @@ async def test_a_search_logs_on_the_worker_logger_and_a_failed_observation_on_it
         cataloguer_logger=cataloguer_logger,
     )
 
-    await worker.run_task(SearchTask(keyword=Keyword("keroro"), channel=Channel("ed2k")))
+    await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
 
     assert logger.lines == [
         LoggedLine(level="info", message="client amule-1: 'keroro'/ed2k → 0 verdict(s) changed"),

@@ -1,7 +1,6 @@
-"""One client's searches: a task's search, its observations recorded, and the backoff a failure
+"""One client's searches: a keyword's search, its observations recorded, and the backoff a failure
 earns, per client when unreachable and per channel when refused (stage 2, D4 and D7)."""
 
-from dataclasses import dataclass
 from datetime import timedelta
 
 from p2pwatch.application.ports.driven.logger import Logger
@@ -23,18 +22,10 @@ from p2pwatch.domain.search.backoff import BackoffKey
 SEARCH_BUDGET_SECONDS = 120.0
 
 
-@dataclass(kw_only=True, frozen=True)
-class SearchTask:
-    """A unit of work: a keyword on a channel (spec §4)."""
-
-    keyword: Keyword
-    channel: Channel
-
-
 class SearchWorker:
-    """Runs one client's search tasks; never closes the client, which composition owns.
+    """Runs one client's searches; never closes the client, which composition owns.
 
-    ``backoff`` is the registry every worker and the search tasks share.
+    ``backoff`` is the registry every worker and the search works share.
     """
 
     def __init__(
@@ -88,24 +79,24 @@ class SearchWorker:
                 changed += 1
         return changed
 
-    async def run_task(self, task: SearchTask) -> None:
+    async def search(self, keyword: Keyword, *, channel: Channel) -> None:
         """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
-        channel_backoff_key = BackoffKey(client_name=self._client_name, channel=task.channel)
+        channel_backoff_key = BackoffKey(client_name=self._client_name, channel=channel)
         try:
             answer = await self._client.search(
-                task.keyword, channel=task.channel, budget_seconds=SEARCH_BUDGET_SECONDS
+                keyword, channel=channel, budget_seconds=SEARCH_BUDGET_SECONDS
             )
         except SearchFailedError as error:
             delay = self._backoff.record_failure(channel_backoff_key)
             self._logger.warning(
                 "client %s channel %s failed (%s): backoff %.1fs",
                 self._client_name,
-                task.channel,
+                channel,
                 error,
                 delay.total_seconds(),
             )
             await self._observability_dispatcher.dispatch(
-                SearchFailed(client_name=self._client_name, channel=task.channel)
+                SearchFailed(client_name=self._client_name, channel=channel)
             )
             return
         except ClientUnreachableError as error:
@@ -120,13 +111,13 @@ class SearchWorker:
                 ClientUnreachable(client_name=self._client_name)
             )
             return
-        changed = await self._record_observations(task.channel, answer=answer)
+        changed = await self._record_observations(channel, answer=answer)
         self._backoff.reset(channel_backoff_key)
         self._backoff.reset(self._client_backoff_key)
         self._logger.info(
             "client %s: '%s'/%s → %d verdict(s) changed",
             self._client_name,
-            task.keyword,
-            task.channel,
+            keyword,
+            channel,
             changed,
         )
