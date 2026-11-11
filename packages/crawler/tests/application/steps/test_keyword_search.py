@@ -3,8 +3,6 @@
 The works share one simulated time, so these tests run on the virtual-time loop.
 """
 
-import asyncio
-from contextlib import suppress
 from datetime import timedelta
 
 import pytest
@@ -20,6 +18,7 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.keyword_search import KeywordSearch
 from p2pwatch.application.steps.search_worker import SearchWorker
+from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -29,6 +28,7 @@ from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerato
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
@@ -122,15 +122,13 @@ class _Searches:
         client: SearchClient,
         keywords: list[str],
     ) -> None:
-        works = self.works(client, keywords=keywords)
-
-        async def bounded() -> None:
-            with suppress(TimeoutError):
-                async with asyncio.timeout(seconds), asyncio.TaskGroup() as group:
-                    for work in works:
-                        group.create_task(work.run())
-
-        self.loop.run_until_complete(bounded())
+        run_state = FakeRunStateStore()
+        self.loop.call_later(seconds, run_state.set_shutdown_requested)
+        self.loop.run_until_complete(
+            Supervisor(run_state_reader=run_state).supervise(
+                self.works(client, keywords=keywords), arm_shutdown_bound=lambda: None
+            )
+        )
 
 
 @pytest.fixture
