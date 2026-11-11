@@ -1,3 +1,6 @@
+import asyncio
+from datetime import timedelta
+
 import pytest
 
 from p2pwatch.domain.client_errors import (
@@ -7,13 +10,17 @@ from p2pwatch.domain.client_errors import (
 )
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.wake_subject import WakeSubject
+from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
@@ -344,3 +351,78 @@ async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
     )
     await cycle.run_once()
     assert source_client.source_reads == []
+
+
+@pytest.mark.asyncio
+async def test_the_first_turn_waits_for_nothing() -> None:
+    waker = FakeWaker()
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        waker=waker,
+        wait_clock=FakeBlockingMonotonicClock(),
+    )
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
+    assert waker.waited_subjects == []
+
+
+@pytest.mark.asyncio
+async def test_a_later_turn_waits_the_poll_interval() -> None:
+    fake_time = FakeTime()
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        fake_time=fake_time,
+        poll_interval_seconds=30.0,
+    )
+    await cycle.run_once()
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
+    assert fake_time.sleeps == [timedelta(seconds=30)]
+
+
+@pytest.mark.asyncio
+async def test_a_turn_that_raised_still_makes_the_next_wait_the_poll_interval() -> None:
+    fake_time = FakeTime()
+    cycle = build_cycle(
+        client=FakeDownloadClient(list_failures=[RuntimeError("bug")]),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        fake_time=fake_time,
+    )
+    with pytest.raises(RuntimeError):
+        await cycle.run_once()
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
+    assert fake_time.sleeps == [timedelta(seconds=30)]
+
+
+@pytest.mark.asyncio
+async def test_the_download_wake_ends_the_wait_and_cancels_the_pending_sleep() -> None:
+    waker = FakeWaker()
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        waker=waker,
+        wait_clock=FakeBlockingMonotonicClock(),  # the sleep never ends: the wake must win
+    )
+    await cycle.run_once()
+    waker.wake(WakeSubject.DOWNLOAD)
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
+    assert waker.waited_subjects == [WakeSubject.DOWNLOAD]
+
+
+@pytest.mark.asyncio
+async def test_a_wait_cancelled_at_shutdown_propagates_the_cancellation() -> None:
+    waker = FakeWaker()
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        waker=waker,
+        wait_clock=FakeBlockingMonotonicClock(),
+    )
+    await cycle.run_once()
+    task = asyncio.ensure_future(cycle.wait_for_next_turn())
+    while WakeSubject.DOWNLOAD not in waker.waited_subjects:
+        await asyncio.sleep(0)  # noqa: TID251
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert task.cancelled()
