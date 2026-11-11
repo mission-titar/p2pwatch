@@ -1,4 +1,4 @@
-"""Download tracking, a work: reconcile → completions → new candidates → sources (spec §5).
+"""Download tracking, a work: reconcile → completions → new candidates → starts (spec §5).
 
 One serial task. ``DownloadCycle.run_once`` runs ONE round; before every round but the first, it
 waits ``poll_interval`` or the download wake.
@@ -28,7 +28,6 @@ from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
-from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
@@ -40,7 +39,7 @@ _UNAVAILABLE = (ClientUnreachableError, ReadRejectedError)
 
 
 class DownloadCycle(Work):
-    """A download round over the four stages, under one error doctrine, at each turn."""
+    """A download round over its stages, under one error doctrine, at each turn."""
 
     def __init__(
         self,
@@ -49,7 +48,6 @@ class DownloadCycle(Work):
         download_tracker: DownloadTracker,
         download_decider: DownloadDecider,
         download_starter: DownloadStarter,
-        source_watcher: SourceWatcher,
         poll_interval_seconds: float,
         monotonic_clock: MonotonicClock,
         waker: Waker,
@@ -59,7 +57,6 @@ class DownloadCycle(Work):
         self._download_tracker = download_tracker
         self._download_decider = download_decider
         self._download_starter = download_starter
-        self._source_watcher = source_watcher
         self._poll_interval = timedelta(seconds=poll_interval_seconds)
         self._monotonic_clock = monotonic_clock
         self._waker = waker
@@ -87,17 +84,16 @@ class DownloadCycle(Work):
 
         Two distinct error DOCTRINES (item I2 - anti-starvation):
 
-        - An unavailable client (``ClientUnreachableError`` from step 0, ``start_unlisted`` or the
-          sources step; on the two reads, also a refused read, ``ReadRejectedError``) = dead
-          client → ABORT the iteration ("a dead client makes everything fail"). We skip the
-          rest; the next iteration retries.
+        - An unavailable client (``ClientUnreachableError`` from step 0 or ``start_unlisted``; on
+          the read, also a refused read, ``ReadRejectedError``) = dead client → ABORT the
+          iteration ("a dead client makes everything fail"). We skip the rest; the next
+          iteration retries.
         - ``StoreError`` (persistence failure, NO client I/O) → ISOLATED PER STEP: a store
           failure in one step must NOT starve the others. Each step that can raise
-          ``StoreError`` is wrapped separately (log + ``continue`` to the next step), and the
-          sources step per download. ``start_unlisted`` re-reads ``read_tracked_states``
-          FRESHLY, so it runs even if an upstream step partially failed. "NEVER abandon a
-          stalled download": the 1→2→3→4 order is preserved, each step is best-effort, and
-          step 5, the sources, only observes, so it comes last (stage 4, D8).
+          ``StoreError`` is wrapped separately (log + ``continue`` to the next step).
+          ``start_unlisted`` re-reads ``read_tracked_states`` FRESHLY, so it runs even if an
+          upstream step partially failed. "NEVER abandon a stalled download": the 1→2→3→4 order
+          is preserved, each step is best-effort.
 
         The stores are sync → cancellation (shutdown) lands at the network ``await``, never
         mid-write.
@@ -149,10 +145,3 @@ class DownloadCycle(Work):
             return
         except StoreError as error:
             self._logger.error("download start store failure (%s): step skipped, retry", error)
-        # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
-        try:
-            await self._source_watcher.record_sources(listed_statuses)
-        except _UNAVAILABLE as error:
-            self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
-        except StoreError as error:
-            self._logger.error("download sources store failure (%s): step skipped, retry", error)

@@ -16,15 +16,12 @@ from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenF
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
-from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
-from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
-    HASH_C,
     build_cycle,
     candidate,
     observation,
@@ -289,68 +286,6 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     assert HASH_A not in tracked_download_store.states
     assert observability.logger.lines == []
     assert observability.node_metric_store.read_samples() == ()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("failure", _UNAVAILABLE, ids=["unreachable", "rejected"])
-async def test_a_daemon_unavailable_while_reading_sources_ends_the_round_after_the_starts(
-    failure: Exception,
-) -> None:
-    # The sources step only observes: it runs last, so its failure never skips a start.
-    client = FakeDownloadClient(listed=[(status(HASH_A), status(HASH_B))])
-    source_client = FakeSourceClient(source_failures=[failure])
-    tracked_download_store = FakeTrackedDownloadStore()
-    for native_id in (HASH_A, HASH_B):
-        tracked_download_store.states[native_id] = DownloadState.DOWNLOADING
-    tracked_download_store.states[HASH_C] = DownloadState.QUEUED
-    observation_reader = FakeObservationReader(
-        observations={HASH_C: observation(HASH_C, filename="c.avi", size_bytes=1)}
-    )
-    sources = FakeSourcePointStore()
-    await build_cycle(
-        client=client,
-        source_client=source_client,
-        tracked_download_store=tracked_download_store,
-        observation_reader=observation_reader,
-        sources=sources,
-    ).run_once()  # does not raise
-    assert started(client) == [HASH_C]
-    assert source_client.source_reads == [HASH_A]
-    assert sources.recorded == []
-
-
-@pytest.mark.asyncio
-async def test_a_store_failure_reading_the_tracked_downloads_reads_no_source() -> None:
-    client = FakeDownloadClient(listed=[(status(HASH_A),)])
-    source_client = FakeSourceClient()
-    tracked_download_store = FakeTrackedDownloadStore(fail_tracked_states=True)
-    cycle = build_cycle(
-        client=client, source_client=source_client, tracked_download_store=tracked_download_store
-    )
-    await cycle.run_once()  # does not raise
-    assert source_client.source_reads == []
-
-
-@pytest.mark.asyncio
-async def test_a_daemon_unreachable_at_the_start_reads_no_source() -> None:
-    client = FakeDownloadClient(
-        listed=[(status(HASH_A),)], start_failures=[ClientUnreachableError("down")]
-    )
-    tracked_download_store = FakeTrackedDownloadStore()
-    tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    tracked_download_store.states[HASH_C] = DownloadState.QUEUED
-    observation_reader = FakeObservationReader(
-        observations={HASH_C: observation(HASH_C, filename="c.avi", size_bytes=1)}
-    )
-    source_client = FakeSourceClient()
-    cycle = build_cycle(
-        client=client,
-        source_client=source_client,
-        tracked_download_store=tracked_download_store,
-        observation_reader=observation_reader,
-    )
-    await cycle.run_once()
-    assert source_client.source_reads == []
 
 
 @pytest.mark.asyncio

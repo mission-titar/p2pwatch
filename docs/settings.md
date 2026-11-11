@@ -91,9 +91,8 @@ relancez le crawler (`docker compose restart p2pwatch`) après l'avoir changée.
 
 `download.sources_interval_seconds` (`300` par défaut, soit 5 minutes) règle tous les combien le
 crawler relève les sources de ses téléchargements
-([Historique des sources](operate.md#historique-des-sources)). Le relevé a lieu au premier tour de
-la boucle de téléchargement qui suit cet intervalle : deux relevés sont donc espacés de l'intervalle,
-plus un tour de la boucle au plus (`download.poll_interval_seconds` et la durée du cycle).
+([Historique des sources](operate.md#historique-des-sources)). L'intervalle sépare les débuts de
+deux relevés ; un relevé plus long que l'intervalle est suivi du suivant dès sa fin.
 
 Chaque relevé ajoute au catalogue un point par source : à 5 minutes, de l'ordre de 0,13 Go par an
 pour une cinquantaine de sources (estimation du 2026-10-13). Plus court, l'historique est plus fin
@@ -110,8 +109,8 @@ après l'avoir changée.
 
 `webui.source_period_gap_seconds` (`990` par défaut) règle l'affichage de l'historique des sources
 dans le catalogue web : deux points d'une même source plus éloignés que ce nombre de secondes ouvrent
-une nouvelle période. 990, c'est 3 x (300 + 30), trois écarts entre relevés aux réglages par défaut,
-pour qu'une lecture manquée ne coupe pas une période. Si vous changez
+une nouvelle période. 990, c'est 3 x (300 + 30), trois intervalles entre relevés aux réglages par
+défaut et leur marge, pour qu'une lecture manquée ne coupe pas une période. Si vous changez
 `download.sources_interval_seconds` ou `download.poll_interval_seconds`, gardez-le à
 3 x (`sources_interval_seconds` + `poll_interval_seconds`).
 

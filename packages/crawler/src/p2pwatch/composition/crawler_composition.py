@@ -555,27 +555,29 @@ class CrawlerComposition(CrawlerRunner):
                         observation_reader=observation_store,
                         logger=StdlibLogger(DownloadStarter.__module__),
                     ),
-                    source_watcher=SourceWatcher(
-                        source_client=client,
-                        tracked_download_reader=tracked_download_store,
-                        source_point_writer=source_point_store,
-                        source_point_reader=source_point_store,
-                        download_labeler=download_labeler,
-                        reappeared_after=download_config.reappeared_after,
-                        sources_interval=download_config.sources_interval,
-                        time_between_source_reads=download_config.time_between_source_reads,
-                        wall_clock=wall_clock,
-                        monotonic_clock=monotonic_clock,
-                        observability_dispatcher=observability_dispatcher,
-                        node_id=node_id,
-                        logger=StdlibLogger(SourceWatcher.__module__),
-                    ),
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     monotonic_clock=monotonic_clock,
                     waker=waker,
                     logger=StdlibLogger(DownloadCycle.__module__),
                 )
                 loops.append(download_cycle.run)
+                source_watcher = SourceWatcher(
+                    download_client=client,
+                    source_client=client,
+                    tracked_download_reader=tracked_download_store,
+                    source_point_writer=source_point_store,
+                    source_point_reader=source_point_store,
+                    download_labeler=download_labeler,
+                    reappeared_after=download_config.reappeared_after,
+                    sources_interval=download_config.sources_interval,
+                    time_between_source_reads=download_config.time_between_source_reads,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
+                    observability_dispatcher=observability_dispatcher,
+                    node_id=node_id,
+                    logger=StdlibLogger(SourceWatcher.__module__),
+                )
+                loops.append(source_watcher.run)
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
