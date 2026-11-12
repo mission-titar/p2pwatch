@@ -161,8 +161,8 @@ plancher, dégradé dès une mesure basse et rétabli à la première bonne, com
 d'aujourd'hui. Quand la condition « bugs » d'un composant passe à
 failing, la politique de redémarrage (`RestartPolicy`) redémarre son propriétaire, celui que la
 composition lui nomme, aujourd'hui le client aMule (`AmuleClientOwner`) pour chaque composant sauf
-celui de la webui, dont le propriétaire est son thread (`WebuiThreadOwner`) ; un composant sans
-propriétaire est seulement journalisé. Dans une tâche à lui, le superviseur annule et attend les
+celui de la webui, dont le propriétaire est son thread (`WebuiThreadOwner`), et celui du notifieur,
+qui n'en a pas encore ; un composant sans propriétaire est seulement journalisé. Dans une tâche à lui, le superviseur annule et attend les
 works qui alimentent ses composants ; le propriétaire du client ferme sa session, reconstruit le
 client et chaque objet qui le tient, celui de la webui arrête l'ancien thread et sert la webui,
 reconstruite, sur un thread neuf ; chacun rend ses works au superviseur, et seules les fenêtres « bugs » de ses composants sont vidées, celles des
@@ -799,7 +799,12 @@ par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de b
 
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
 démon sont
-**absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
+**absorbés** (dégradation). Le dispatcher enregistre l'issue de chaque notification sur le
+composant du notifieur : un refus d'un service (`NotificationRefused`) et un envoi au-delà de
+`observability.notification_timeout_seconds` (`NotificationTimedOut`) sont déclarés, toute autre
+exception est un bug, journalisé avec sa trace, que seule sa condition « bugs » compte. Le
+traducteur ne change aucune transition du notifieur en événement : un notifieur en échec ne notifie
+jamais de lui-même ; un échec dans un composant in-process testé à 100 % (par exemple
 `InMemoryNodeMetricStore`) est un bug, pas un transitoire : il fait échouer son tour, journalisé
 avec sa trace, et le superviseur espace le tour suivant d'au moins son plancher ; répété, il
 redémarre le propriétaire de son composant (§3).
@@ -839,7 +844,7 @@ redémarre le propriétaire de son composant (§3).
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, conditions, transitions), `domain/work_components.py` (les composants des works), `domain/search/searches_failed.py` (les recherches refusées d'un canal), `domain/download/disk_space.py` (l'espace libre sous le plancher), `domain/declared_failure.py`, `application/steps/health_recorder.py` (chaque issue enregistrée, chaque transition journalisée), `application/steps/health_event_translator.py` (les transitions en événements d'aujourd'hui), `application/steps/restart_policy.py` (`RestartPolicy`, les redémarrages), le port `application/ports/driven/state_owner.py` (`StateOwner`), `composition/amule_client_owner.py` (`AmuleClientOwner`) |
+| Santé | `domain/health/` (composants, conditions, transitions), `domain/work_components.py` (les composants des works), `domain/observability/notifier_outcomes.py` (les échecs déclarés d'une notification, le composant du notifieur), `domain/search/searches_failed.py` (les recherches refusées d'un canal), `domain/download/disk_space.py` (l'espace libre sous le plancher), `domain/declared_failure.py`, `application/steps/health_recorder.py` (chaque issue enregistrée, chaque transition journalisée), `application/steps/health_event_translator.py` (les transitions en événements d'aujourd'hui), `application/steps/restart_policy.py` (`RestartPolicy`, les redémarrages), le port `application/ports/driven/state_owner.py` (`StateOwner`), `composition/amule_client_owner.py` (`AmuleClientOwner`) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

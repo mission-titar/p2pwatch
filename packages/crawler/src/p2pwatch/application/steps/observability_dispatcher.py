@@ -1,16 +1,28 @@
 """The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies its audience.
-A notification failing or timing out is absorbed and logged: it never breaks the crawl (E-D13)."""
+Each notification's outcome is recorded on the notifier's component, a refusal or a send past the
+timeout declared, any other exception a bug: none breaks the crawl (E-D13, spec v5 lot 4, D3)."""
 
 import asyncio
-from typing import assert_never
+from typing import Protocol, assert_never
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.outcome import TURNS, Outcome, OutcomeSource
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.node_metric import CounterIncrement
+from p2pwatch.domain.observability.notification import Notification
+from p2pwatch.domain.observability.notifier_outcomes import (
+    NotificationRefused,
+    NotificationTimedOut,
+)
 from p2pwatch.domain.observability.policy import audience_of, plan_observability
 from p2pwatch.domain.observability.severity import Severity
+
+
+class OutcomeRecorder(Protocol):
+    async def __call__(self, outcome: Outcome, *, on: Component, by: OutcomeSource) -> None: ...
 
 
 class ObservabilityDispatcher:
@@ -23,11 +35,15 @@ class ObservabilityDispatcher:
         node_metric_writer: NodeMetricWriter,
         notifier: Notifier,
         notification_timeout_seconds: float,
+        record_outcome: OutcomeRecorder,
+        notifier_component: Component,
     ) -> None:
         self._logger = logger
         self._node_metric_writer = node_metric_writer
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
+        self._record_outcome = record_outcome
+        self._notifier_component = notifier_component
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
@@ -37,16 +53,30 @@ class ObservabilityDispatcher:
                 self._node_metric_writer.record_increment(instruction)
             else:
                 self._node_metric_writer.set_gauge(instruction)
-        if plan.notification is None:
-            return
-        audience = audience_of(plan.notification)
+        if plan.notification is not None:
+            outcome = await self._outcome_of(plan.notification)
+            await self._record_outcome(outcome, on=self._notifier_component, by=TURNS)
+
+    async def _outcome_of(self, notification: Notification) -> Outcome:
+        audience = audience_of(notification)
         try:
             await asyncio.wait_for(
-                self._notifier.notify(audience, notification=plan.notification),
+                self._notifier.notify(audience, notification=notification),
                 timeout=self._notification_timeout_seconds,
             )
-        except Exception as error:  # Notifications never break the crawl.
-            self._logger.warning("notification %s failed (%s)", audience.value, error)
+        except NotificationRefused as refusal:
+            self._logger.warning("notification %s: %s", audience.value, refusal)
+            return Outcome.declared(refusal)
+        except TimeoutError:
+            timed_out = NotificationTimedOut(
+                f"past its timeout of {self._notification_timeout_seconds} s"
+            )
+            self._logger.warning("notification %s: %s", audience.value, timed_out)
+            return Outcome.declared(timed_out)
+        except Exception as error:  # the send's boundary, by design: any other is a bug
+            self._logger.exception("bug in notification %s", audience.value, error=error)
+            return Outcome.bug(repr(error))
+        return Outcome.success()
 
     def _log_at_severity(self, severity: Severity, *, message: str) -> None:
         """Writes ``message`` at the level ``severity`` maps to, a success being an info."""

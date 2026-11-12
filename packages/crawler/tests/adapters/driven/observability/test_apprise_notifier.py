@@ -2,6 +2,7 @@
 them, node_id in the title, routes by tag, writes each kind's Markdown and notify type,
 mentions neutralised, a relayed log line sent untitled."""
 
+import socket
 from datetime import timedelta
 
 import apprise
@@ -22,6 +23,7 @@ from p2pwatch.domain.observability.notification import (
     SourceAlertKind,
     TierRise,
 )
+from p2pwatch.domain.observability.notifier_outcomes import NotificationRefused
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
@@ -33,10 +35,14 @@ _SOURCE = SourceKey(network=Network.ED2K, native_id="1f2e3d4c" * 4)
 _062A = TargetTitle(target_id=TargetId("062A"), title="Les demoiselles cambrioleuses")
 _062B = TargetTitle(target_id=TargetId("062B"), title="Le grand combat sous-marin")
 _LINE = RelayedLogLine(message="online", severity=Severity.INFO, node_id=_NODE_ID)
+_SUCCESS, _NOMATCH = apprise.AppriseResultStatus.SUCCESS, apprise.AppriseResultStatus.NOMATCH
 
 
-def _notifier() -> tuple[AppriseNotifier, list[FakeApprise]]:
-    """The notifier and every apprise group it builds, in order."""
+def _notifier(
+    *statuses: apprise.AppriseResultStatus,
+) -> tuple[AppriseNotifier, list[FakeApprise]]:
+    """The notifier and every apprise group it builds, in order, the nth answering the nth of
+    ``statuses``, a success past them."""
     targets = (
         ("discord://x", Audience.COMMUNITY, True),
         ("discord://y", Audience.OPERATIONS, True),
@@ -45,7 +51,8 @@ def _notifier() -> tuple[AppriseNotifier, list[FakeApprise]]:
     groups: list[FakeApprise] = []
 
     def factory(*, asset: apprise.AppriseAsset) -> FakeApprise:
-        groups.append(FakeApprise(asset=asset))
+        status = statuses[len(groups)] if len(groups) < len(statuses) else _SUCCESS
+        groups.append(FakeApprise(asset=asset, status=status))
         return groups[-1]
 
     return AppriseNotifier(targets, apprise_factory=factory), groups
@@ -325,3 +332,43 @@ async def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
 async def test_a_real_apprise_with_no_url_notifies_nothing() -> None:
     notifier = AppriseNotifier((), apprise_factory=apprise.Apprise)
     await notifier.notify(Audience.COMMUNITY, notification=_LINE)  # does not raise
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [_SUCCESS, _NOMATCH])
+async def test_a_success_or_a_group_without_a_service_for_the_audience_raises_nothing(
+    status: apprise.AppriseResultStatus,
+) -> None:
+    notifier, _ = _notifier(status, _NOMATCH)
+    await notifier.notify(Audience.COMMUNITY, notification=_LINE)  # does not raise
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "refused",
+    [
+        apprise.AppriseResultStatus.FAILURE,
+        apprise.AppriseResultStatus.PARTIAL,
+        apprise.AppriseResultStatus.TIMEOUT,
+    ],
+)
+async def test_a_group_refusing_raises_notification_refused_once_both_groups_are_sent(
+    refused: apprise.AppriseResultStatus,
+) -> None:
+    notifier, groups = _notifier(refused)
+    with pytest.raises(NotificationRefused, match=rf"^a service refused it \({refused.name}\)$"):
+        await notifier.notify(Audience.COMMUNITY, notification=_LINE)
+    assert [len(group.sent) for group in groups] == [1, 1]
+
+
+@pytest.mark.asyncio
+async def test_a_real_apprise_whose_service_refuses_its_connection_raises_a_refusal() -> None:
+    with socket.socket() as probe:  # a port no one listens on once it is closed
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    notifier = AppriseNotifier(
+        ((f"json://127.0.0.1:{port}/", Audience.COMMUNITY, False),),
+        apprise_factory=apprise.Apprise,
+    )
+    with pytest.raises(NotificationRefused):
+        await notifier.notify(Audience.COMMUNITY, notification=_LINE)
