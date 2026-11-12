@@ -368,7 +368,9 @@ reader; 18 blocks.)
 - **No static guarantee of the declared failures** (D6): the default `Bug`, the contracts and the rc's fault injection
   stand in for it.
 - **A notification is still lost if the process dies between a decision's commit and its send, or if the notifier
-  refuses it**, as today (D20).
+  refuses it**, as today (D20). (Corrected by lot 4b's closing block, the holistic review's MAJOR 3: a restart or a
+  time limit cancelling the turn in between loses none, the sends after a decision's or a completion's write shielded
+  from the turn's cancellation, the operator's answer of 2026-11-12.)
 - **The windows restart empty after a crawler restart**, unknown until they fill (D13).
 - **Compose keeps `restart: unless-stopped` for `p2pwatch`**, so a refusal at start (an invalid configuration, a
   failed migration) restarts in a loop, spaced by Docker up to once a minute, its one line saying what to do: the

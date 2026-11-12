@@ -102,7 +102,7 @@ class FileJudge:
                 and new_decision.tier is DecisionTier.DOWNLOAD
             ):
                 self._waker.wake(WakeSubject.DOWNLOAD)
-        await self._observability_dispatcher.dispatch(event)
+        await self._observability_dispatcher.dispatch_shielded(event)
         return len(event.changes)
 
     def _change(

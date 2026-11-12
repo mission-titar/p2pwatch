@@ -2,6 +2,7 @@
 together, each send's outcome recorded on its service's component, a refusal or a timeout
 declared, any other exception a bug."""
 
+import asyncio
 from dataclasses import dataclass
 from typing import Literal
 
@@ -36,6 +37,7 @@ from p2pwatch.domain.observability.notifier_outcomes import (
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
@@ -372,3 +374,18 @@ async def test_each_send_reaches_the_notifier_current_then() -> None:
     current = rebuilt
     await dispatcher.dispatch(_COMPLETED)
     assert (len(first.calls), len(rebuilt.calls)) == (1, 1)
+
+
+@pytest.mark.asyncio
+async def test_a_shielded_dispatch_whose_caller_is_cancelled_sends_to_its_end() -> None:
+    notifier = FakeHeldNotifier()
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier)
+    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
+    await notifier.reached.wait()
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    notifier.released.set()
+
+    await asyncio.wait_for(notifier.sent.wait(), timeout=1.0)

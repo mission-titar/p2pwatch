@@ -25,7 +25,7 @@ rule:
     - kind: aliased_import
       inside: { kind: import_from_statement, has: { field: module_name, regex: ^pathlib$ } }
 constraints:
-  ASYNCIO: { not: { regex: ^(CancelledError|FIRST_COMPLETED|Queue|Task|TaskGroup|ensure_future|sleep|wait|wait_for)$ } }
+  ASYNCIO: { not: { regex: ^(CancelledError|FIRST_COMPLETED|Queue|Task|TaskGroup|ensure_future|shield|sleep|wait|wait_for)$ } }
   UUID: { not: { regex: ^(NAMESPACE_URL|uuid5)$ } }
   IO: { not: { regex: ^StringIO$ } }
   JSON: { not: { regex: ^(dumps|loads)$ } }
