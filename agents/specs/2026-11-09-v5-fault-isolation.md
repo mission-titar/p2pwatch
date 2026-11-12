@@ -616,8 +616,11 @@ reader; 18 blocks.)
   2. a bugs condition of these components fails again with no return to healthy: that restart was useless;
   3. after three useless restarts, the policy stops for that owner, and the alert says restarting repaired nothing;
   4. a return to healthy resets the count (Corrected: when every bugs condition of the owner's components is healthy
-     again, the owner then repaired; after three useless restarts the node runs on, its webui up, the owner's
-     components failing, nothing of the owner's work running until the container restarts).
+     again, the owner then repaired; after three useless restarts the node runs on, its webui up. Corrected by lot
+     4b's closing block, the holistic review's MAJOR 1: three rebuilds that raised leave the owner's components
+     failing and nothing of its work running until the container restarts; three restarts whose rebuilds succeeded
+     leave its works running, only the buggy turns failing, and the count resets once every bugs condition of its
+     components is healthy again, so a later bug gets three restarts more; the operator's answer of 2026-11-12, "A").
 
   Three bugs in a row are needed to fail again, which spaces the attempts with no delay to tune; three echoes OTP's
   bounded restart intensity before it gives up. A deterministic bug on one keyword costs at most three restarts of

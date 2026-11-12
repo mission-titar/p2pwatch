@@ -134,6 +134,23 @@ async def test_every_bugs_condition_of_the_owner_healthy_again_resets_the_count(
     assert await policy.requested() == [policy.owner]  # a fourth restart: the count reset
 
 
+async def test_an_owner_given_up_whose_works_heal_restarts_again_at_a_later_bug() -> None:
+    # Its rebuilds succeeded, so its works run on: only the buggy turns fail (D1).
+    policy = _Policy()
+    await policy.fail(policy.search)
+    for _ in range(3):
+        await policy.requested()
+        await policy.rebuild()
+        await policy.fail(policy.search)
+    assert await policy.requested() == []  # given up
+    await policy.record(Outcome.success(), on=policy.status, times=3)
+    await policy.record(Outcome.success(), on=policy.search, times=10)
+
+    await policy.fail(policy.status)
+
+    assert await policy.requested() == [policy.owner]
+
+
 async def test_one_component_alone_healthy_again_keeps_the_count() -> None:
     policy = _Policy()
     await policy.fail(policy.search)
