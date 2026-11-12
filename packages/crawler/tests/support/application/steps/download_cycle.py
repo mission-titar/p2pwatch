@@ -154,6 +154,7 @@ def build_cycle(
         logger=logger,
     )
     return DownloadCycle(
+        client_name=ClientName("amuled"),
         download_client=client,
         download_tracker=download_tracker,
         download_decider=DownloadDecider(

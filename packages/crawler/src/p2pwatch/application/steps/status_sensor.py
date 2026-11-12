@@ -70,7 +70,7 @@ class StatusSensor(Work):
         self._latest_turn_ended_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
-        return f"status reading of {self._client_name}"
+        return f"status sensor {self._client_name}"
 
     async def wait_for_next_turn(self) -> None:
         """Waits the period left since the latest turn ended, nothing before the first."""

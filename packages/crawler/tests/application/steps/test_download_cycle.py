@@ -9,8 +9,10 @@ from p2pwatch.domain.client_errors import (
     ReadRejectedError,
 )
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.wake_subject import WakeSubject
+from p2pwatch.domain.work_components import download_tracking_component
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
@@ -363,8 +365,8 @@ async def test_a_wait_cancelled_at_shutdown_propagates_the_cancellation() -> Non
     assert task.cancelled()
 
 
-def test_the_supervisor_names_the_work_download_tracking() -> None:
+def test_the_work_is_named_as_the_component_it_feeds() -> None:
     cycle = build_cycle(
         client=FakeDownloadClient(), tracked_download_store=FakeTrackedDownloadStore()
     )
-    assert str(cycle) == "download tracking"
+    assert str(cycle) == download_tracking_component(ClientName("amuled")).name

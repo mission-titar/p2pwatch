@@ -235,6 +235,7 @@ class _DownloadSteps:
     to build those holding it."""
 
     config: DownloadConfig
+    client_name: ClientName
     tracking: Component
     source_tracking: Component
     tracked_download_store: SqliteTrackedDownloadStore
@@ -252,6 +253,7 @@ class _DownloadSteps:
     def works(self, client: AmuleApiClient) -> tuple[tuple[Work, Component], ...]:
         """Download tracking and source tracking over ``client``, each with its component."""
         download_cycle = DownloadCycle(
+            client_name=self.client_name,
             download_client=client,
             download_tracker=self.tracker,
             download_decider=self.decider,
@@ -268,6 +270,7 @@ class _DownloadSteps:
             logger=StdlibLogger(DownloadCycle.__module__),
         )
         source_watcher = SourceWatcher(
+            client_name=self.client_name,
             download_client=client,
             source_client=client,
             tracked_download_reader=self.tracked_download_store,
@@ -325,6 +328,7 @@ def _download_steps(
     )
     return _DownloadSteps(
         config=download_config,
+        client_name=_AMULE_CLIENT_NAME,
         tracking=tracking,
         source_tracking=source_tracking,
         tracked_download_store=tracked_download_store,

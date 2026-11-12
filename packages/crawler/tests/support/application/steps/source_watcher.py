@@ -9,6 +9,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store impor
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.source_watcher import SourceWatcher
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.models import TargetSegment
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
@@ -40,6 +41,7 @@ def build_watcher(
     fake_time = fake_time or FakeTime()
     sources = sources or FakeSourcePointStore()
     return SourceWatcher(
+        client_name=ClientName("amuled"),
         download_client=client,
         source_client=source_client or FakeSourceClient(),
         tracked_download_reader=tracked_download_store,

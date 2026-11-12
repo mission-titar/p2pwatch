@@ -12,6 +12,7 @@ from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
@@ -24,6 +25,7 @@ from p2pwatch.domain.source import (
     SourceRole,
 )
 from p2pwatch.domain.store_error import StoreError
+from p2pwatch.domain.work_components import source_tracking_component
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -236,11 +238,11 @@ async def test_a_store_failure_reading_the_tracked_downloads_fails_the_turn() ->
     assert logger.lines == []
 
 
-def test_the_supervisor_names_the_work_source_tracking() -> None:
+def test_the_work_is_named_as_the_component_it_feeds() -> None:
     watcher = build_watcher(
         client=FakeDownloadClient(), tracked_download_store=FakeTrackedDownloadStore()
     )
-    assert str(watcher) == "source tracking"
+    assert str(watcher) == source_tracking_component(ClientName("amuled")).name
 
 
 @pytest.mark.asyncio

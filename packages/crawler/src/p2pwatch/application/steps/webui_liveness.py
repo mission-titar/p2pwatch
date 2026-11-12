@@ -24,7 +24,7 @@ class WebuiLiveness(Work):
         self._monotonic_clock = monotonic_clock
 
     def __str__(self) -> str:
-        return "webui liveness"
+        return "webui"
 
     async def wait_for_next_turn(self) -> None:
         await self._monotonic_clock.sleep(STATUS_PERIOD)
