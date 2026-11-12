@@ -10,9 +10,8 @@ from typing import Protocol
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
-from p2pwatch.application.ports.driven.state_owner import StateOwner
 from p2pwatch.application.steps.health_recorder import HealthRecorder
-from p2pwatch.application.steps.restart_policy import RestartPolicy
+from p2pwatch.application.steps.restart_policy import RestartPolicy, RestartRequest
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component
@@ -115,33 +114,30 @@ class Supervisor:
         """Starts each restart the policy requests in a task of its own, never in the turn whose
         outcome triggered it, which the restart cancels."""
         while True:
-            owner = await self._restart_policy.requested()
-            self._start(self._restart(owner), group=group)
+            request = await self._restart_policy.requested()
+            self._start(self._restart(request), group=group)
 
-    async def _restart(self, owner: StateOwner) -> None:
-        """Stops the works feeding ``owner``'s components, then restarts it until it is rebuilt
-        or the policy gives up, a floor after a bug between two tries; rebuilt, its components'
-        bugs windows are emptied, their other windows kept."""
-        components = self._restart_policy.components_of(owner)
-        await self._stop_works_feeding(components)
+    async def _restart(self, request: RestartRequest) -> None:
+        """Restarts the request's owner until it is rebuilt or given up, the works feeding its
+        components stopped before each attempt, a floor after a bug between two."""
         while True:
+            # A raising rebuild may have added works over a state the next attempt closes.
+            await self._stop_works_feeding(request.components)
             try:
-                await owner.restart()
+                await request.owner.restart()
             except Exception as error:  # the rebuild's boundary, by design
-                self._logger.exception("restart of %s raised", owner, error=error)
-                for component in components:
+                self._logger.exception("restart of %s raised", request.owner, error=error)
+                for component in request.components:
                     await self._health_recorder.record(
                         Outcome.bug(repr(error)), on=component, by=UNITS_OF_WORK
                     )
-                if not self._restart_policy.rebuild_raised(owner):
+                if not request.rebuild_raised():
                     return
                 await self._monotonic_clock.sleep(FLOOR_AFTER_A_BUG)
                 continue
             # The new works start at the next suspension, after the windows are emptied.
-            for component in components:
-                component.empty_windows(of=UNITS_OF_WORK)
-            self._restart_policy.rebuilt(owner)
-            self._logger.info("%s restarted", owner)
+            request.rebuilt()
+            self._logger.info("%s restarted", request.owner)
             return
 
     async def _stop_works_feeding(self, components: Sequence[Component]) -> None:

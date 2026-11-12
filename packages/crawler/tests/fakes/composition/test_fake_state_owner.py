@@ -34,3 +34,16 @@ async def test_a_raising_restart_builds_nothing_and_keeps_its_attempt() -> None:
     assert str(owner) == "client"
     assert len(owner.attempts) == 2
     assert relied_on == [owner.state] and owner.state is not first
+
+
+@pytest.mark.asyncio
+async def test_a_restart_raising_after_adding_adds_its_works_first() -> None:
+    relied_on: list[object] = []
+    owner = FakeStateOwner(
+        add_works=relied_on.append, raising=[LookupError("down")], raising_after_adding=True
+    )
+
+    with pytest.raises(LookupError, match="down"):
+        await owner.restart()
+
+    assert relied_on == [owner.state]

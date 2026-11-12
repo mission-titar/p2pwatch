@@ -440,13 +440,15 @@ def _supervise_owned(
     seconds: float,
     owned: Sequence[Component] = (),
     raising: Sequence[Exception] = (),
+    raising_after_adding: bool = False,
     unowned: _Unowned = lambda recorder: (),
+    owned_by_another: Sequence[Component] = (),
     logger: FakeLogger | None = None,
     health_logger: FakeLogger | None = None,
 ) -> tuple[FakeStateOwner, list[list[SupervisedWork]]]:
     """Supervises ``build()``'s works and ``unowned``'s; one owner owns the components the first
-    build's works feed, and ``owned``, each of its restarts adding ``build()``'s works again.
-    Returns the owner and each build."""
+    build's works feed, and ``owned``, each of its restarts adding ``build()``'s works again;
+    ``unowned``'s feed ``owned_by_another``, another owner's. Returns the owner and each build."""
     builds = [build()]
     run_state = FakeRunStateStore()
     loop.call_later(seconds, run_state.set_shutdown_requested)
@@ -457,9 +459,15 @@ def _supervise_owned(
         for supervised in builds[-1]:
             supervisor.add(supervised)
 
-    owner = FakeStateOwner("client", add_works=add_works, raising=raising)
+    owner = FakeStateOwner(
+        "client", add_works=add_works, raising=raising, raising_after_adding=raising_after_adding
+    )
     components = {c for supervised in builds[0] for c in supervised.feeds} | set(owned)
-    policy = RestartPolicy(owners=dict.fromkeys(components, owner), logger=logger)
+    another = FakeStateOwner("another")
+    policy = RestartPolicy(
+        owners={**dict.fromkeys(components, owner), **dict.fromkeys(owned_by_another, another)},
+        logger=logger,
+    )
     recorder = HealthRecorder(logger=health_logger or FakeLogger(), subscribers=(policy,))
     supervisor = Supervisor(
         run_state_reader=run_state,
@@ -514,6 +522,7 @@ def test_a_restart_stops_the_works_feeding_its_owner_s_components_and_those_alon
         build=lambda: [_broken(search), _steady(status)],
         seconds=_FIRST_RESTART + 25.0,
         unowned=lambda recorder: _supervised(unowned, feeds=(webui,)),
+        owned_by_another=(webui,),
     )
 
     turns = [[w.work.turns for w in build if isinstance(w.work, _PacedWork)] for build in builds]
@@ -554,6 +563,27 @@ def test_a_rebuild_that_raises_records_a_bug_on_each_component_and_is_tried_afte
     )
     rebuilt = [w.work.turns for w in builds[1] if isinstance(w.work, _PacedWork)]
     assert rebuilt == [[owner.attempts[-1] + 1.0], [owner.attempts[-1] + 10.0]]
+
+
+def test_the_works_a_raising_rebuild_added_are_stopped_before_the_next_attempt(
+    virtual_loop: VirtualLoop,
+) -> None:
+    search, status = _component("search"), _component("status")
+
+    owner, builds = _supervise_owned(
+        virtual_loop,
+        build=lambda: [_broken(search), _steady(status)],
+        seconds=_FIRST_RESTART + 2 * _FLOOR,
+        raising=[LookupError("login refused")],
+        raising_after_adding=True,
+    )
+
+    assert owner.attempts == [_FIRST_RESTART, _FIRST_RESTART + _FLOOR]
+    # The first attempt's works stopped at the second's head, its steady work's last turn before.
+    [_, after_raising, _] = builds
+    steady = after_raising[1].work
+    assert isinstance(steady, _PacedWork)
+    assert steady.turns[-1] < owner.attempts[-1]
 
 
 def test_three_raising_rebuilds_give_the_owner_up_its_works_stopped_the_node_running(
@@ -605,6 +635,7 @@ def test_an_owner_whose_components_no_work_feeds_is_restarted_all_the_same(
         unowned=lambda recorder: _supervised(
             _BugRecorder(recorder=recorder, on=notifier), feeds=(recorder_s,)
         ),
+        owned_by_another=(recorder_s,),
     )
 
     assert owner.attempts == [30.0]

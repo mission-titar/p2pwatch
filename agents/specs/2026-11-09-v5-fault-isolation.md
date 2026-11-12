@@ -394,8 +394,9 @@ reader; 18 blocks.)
   work's turns, about 15 lines block 38 moves into the supervisor; in block 38 an exception of a turn still ends the
   node, as today, until block 40; from block 36 to block 40, `BackoffSaver` saves after each turn, then in a
   `finally`.
-- **A webui or notifier component without its owner** (blocks 65 and 70) is only logged when its bugs condition
-  fails, until its owner arrives in the next block.
+- (Corrected by lot 4b's closing block, the holistic review's MINOR 3: the limit "a webui or notifier component
+  without its owner is only logged" removed with its branch, every component owned since block 72, a component
+  without an owner a `KeyError`.)
 
 ### For lot 7 (umbrella D19)
 
@@ -882,7 +883,7 @@ decision or rule it names, the operator's, or the lead's where its row says so.
 | 52 | `StateOwner`'s surface | a port file with its tach entry and a `StateOwnerContract` each owner and its fake subclass | `.claude/CLAUDE.md`, a contract per contracted port |
 | 52 | what the client's owner rebuilds | every object holding the client (`SearchWorker`, `StatusLoop`, `DownloadCycle`, `DownloadStarter`, `SourceWatcher`); the tracker's loss deadlines, the backoff and the cataloguer kept | D5 clears the owner's memory, not the steps' |
 | 52 | what the resource stack closes | the owner's current instance | the stack registers the first one: the live session would never log out |
-| 52, 65, 68, 72 | how the policy finds an owner | the composition names each component's owner; a failing component without one is only logged (from block 65, the webui's before 68) | one mapping for every owner, the notifier included, which feeds no work |
+| 52, 65, 68, 72 | how the policy finds an owner | the composition names each component's owner; a failing component without one is only logged (from block 65, the webui's before 68) (Corrected by the closing block: that branch deleted once every component had its owner; a restart's sequence carried by one `RestartRequest` the policy hands the supervisor, the holistic review's MINOR 13) | one mapping for every owner, the notifier included, which feeds no work |
 | 60 | the disk condition | enters at 1 of 1 and leaves at the first good reading | D21 over D9's single failure (D9's mark): today's `EdgeState` re-arms at the first good reading, so a second dip alerts again |
 | 65 | the webui's turn | a liveness turn each status period (60 s), a fallen thread a `Bug` | D4: a turn that serves until the thread falls has no limit, and no asyncio cancellation reaches a thread (Kubernetes' liveness probe); the period the lead's |
 | 65 | where the webui's work lives | the composition or a core step over a callback, never the webui adapter | the webui adapter depends on driving ports and the domain only (`tach.toml`) |
