@@ -13,6 +13,8 @@ import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.domain.client_errors import ClientUnreachableError
+from p2pwatch.domain.identifiers import ClientName
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.fake_amule_api import PASSWORD
 
@@ -26,15 +28,20 @@ class ConnectionHandler(Protocol):
 def _client(
     port: int, *, timeout_seconds: float = 5.0, request_bound_seconds: float = 10.0
 ) -> AmuleApiClient:
+    fake_time, search_start_store = FakeTime(), FakeSearchStartStore()
     return AmuleApiClient(
         "127.0.0.1",
+        client_name=ClientName("amuled"),
         port=port,
         password=PASSWORD,
         timeout_seconds=timeout_seconds,
         request_bound_seconds=request_bound_seconds,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
-        monotonic_clock=FakeTime().monotonic,
+        monotonic_clock=fake_time.monotonic,
+        wall_clock=fake_time.wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
         transport_factory=httpx.AsyncHTTPTransport,
     )
 

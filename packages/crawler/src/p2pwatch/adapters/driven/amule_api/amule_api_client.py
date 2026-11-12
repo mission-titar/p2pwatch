@@ -1,7 +1,8 @@
 """Drives ``amuled`` over amuleapi, implementing ``SearchClient``, ``StatusClient``,
 ``DownloadClient`` and ``SourceClient``.
 
-``search()`` waits for its own search and paces its starts by the networks' rules. Beyond pacing,
+``search()`` waits for its own search and paces its starts by the networks' rules, from the
+latest starts a client of its name wrote, so a client built anew keeps that spacing. Beyond pacing,
 no retry but the single re-login a ``401`` mandates and Kad's "already on search list": the
 adapter signals, the caller decides.
 """
@@ -37,8 +38,11 @@ from p2pwatch.adapters.driven.amule_api.mapping import (
 from p2pwatch.application.ports.driven.download_client import DownloadClient
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.search_client import SearchClient
+from p2pwatch.application.ports.driven.search_start_reader import SearchStartReader
+from p2pwatch.application.ports.driven.search_start_writer import SearchStartWriter
 from p2pwatch.application.ports.driven.source_client import SourceClient
 from p2pwatch.application.ports.driven.status_client import StatusClient
+from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.client_errors import (
     ClientError,
     DownloadRejectedError,
@@ -49,13 +53,20 @@ from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.domain.persisted_wait import remaining_wait
 from p2pwatch.domain.search.answer import SearchAnswer
+from p2pwatch.domain.search.latest_search_start import LatestSearchStart
 from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
+from p2pwatch.domain.store_error import StoreError
 
-_SEARCH_TYPES = {Channel("ed2k"): "global", Channel("kad"): "kad"}
+_ED2K = Channel("ed2k")
+_KAD = Channel("kad")
+_SEARCH_TYPES = {_ED2K: "global", _KAD: "kad"}
+# One ed2k start at a time on a client: its spacing spans the whole channel, never a Kad word.
+_ED2K_SCOPE = ""
 
 # Least time between two ed2k starts, and between two Kad starts on one Kad word (spec stage 2,
 # D5): rules of the networks, not settings, since a key would invite lowering them until the ban.
@@ -79,6 +90,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         self,
         host: str,
         *,
+        client_name: ClientName,
         port: int,
         password: str,
         timeout_seconds: float,
@@ -86,8 +98,12 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         page_size: int,
         progress_poll_interval: timedelta,
         monotonic_clock: MonotonicClock,
+        wall_clock: WallClock,
+        search_start_writer: SearchStartWriter,
+        search_start_reader: SearchStartReader,
         transport_factory: TransportFactory,
     ) -> None:
+        """Reads the latest starts of ``client_name`` once, here, each the start of a wait."""
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
         self._timeout_seconds = timeout_seconds
@@ -97,15 +113,34 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         # One transport per session: closing a session closes its transport.
         self._transport_factory = transport_factory
         self._monotonic_clock = monotonic_clock
+        self._wall_clock = wall_clock
+        self._client_name = client_name
+        self._search_start_writer = search_start_writer
         self._http: httpx.AsyncClient | None = None
         self._closed = False
         self._login_lock = asyncio.Lock()
         self._login_count = 0  # lets a call rejected with 401 tell whether another renewed it
         # Held from an ed2k start to its end: aMule's core keeps one ed2k search anchor.
         self._ed2k_lock = asyncio.Lock()
-        self._ed2k_next_start: MonotonicInstant | None = None  # no ed2k start yet
-        self._kad_next_start: dict[str, MonotonicInstant] = {}
+        # By channel and scope: ed2k's one scope, a Kad word, or a keyword without one on Kad.
+        self._next_start = self._next_starts(search_start_reader)
         self._keywords_without_kad_word: set[Keyword] = set()
+
+    def _next_starts(
+        self, search_start_reader: SearchStartReader
+    ) -> dict[tuple[Channel, str], MonotonicInstant]:
+        """Each stored start's next allowed one, never more than a spacing ahead; none unread."""
+        try:
+            starts = search_start_reader.read_latest_starts(self._client_name)
+        except StoreError as error:
+            _logger.error("latest search starts not read (%s): the first starts not spaced", error)
+            return {}
+        monotonic_now, wall_now = self._monotonic_clock.now(), self._wall_clock.now()
+        return {
+            (start.channel, start.scope): monotonic_now
+            + remaining_wait(start.started_at, duration=_START_SPACING, now=wall_now)
+            for start in starts
+        }
 
     def channels(self) -> tuple[Channel, ...]:
         return tuple(_SEARCH_TYPES)
@@ -173,9 +208,10 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 await self._await_end(search_id, budget_seconds=budget_seconds, widen=True)
             else:
                 async with self._ed2k_lock:
-                    if self._ed2k_next_start is not None:
-                        await self._sleep_until(self._ed2k_next_start)
-                    self._ed2k_next_start = self._monotonic_clock.now() + _START_SPACING
+                    next_start = self._next_start.get((_ED2K, _ED2K_SCOPE))
+                    if next_start is not None:
+                        await self._sleep_until(next_start)
+                    self._reserve(_ED2K, scope=_ED2K_SCOPE, slot=self._monotonic_clock.now())
                     search_id = await self._post_search(keyword, search_type=search_type)
                     await self._await_end(search_id, budget_seconds=budget_seconds, widen=False)
             rows = await self._collect(f"/search/{search_id}/results", list_key="results")
@@ -189,10 +225,13 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         Kad word. A held Kad word is retried each poll, for one budget from the first attempt."""
         kad_word = _kad_word(keyword)
         # A keyword without a Kad word splits on a separator or is under 3 bytes: never a Kad word.
-        slot_key = kad_word or keyword
+        slot_key = (_KAD, kad_word or keyword)
         now = self._monotonic_clock.now()
-        slot = max(now, self._kad_next_start.get(slot_key, now))
-        self._kad_next_start[slot_key] = slot + _START_SPACING
+        slot = max(now, self._next_start.get(slot_key, now))
+        if kad_word is None:
+            self._next_start[slot_key] = slot + _START_SPACING
+        else:
+            self._reserve(_KAD, scope=kad_word, slot=slot)
         await self._sleep_until(slot)
         if kad_word is None:
             if keyword not in self._keywords_without_kad_word:
@@ -208,6 +247,19 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 if _KAD_WORD_HELD not in str(refusal) or remaining <= timedelta(0):
                     raise
                 await self._monotonic_clock.sleep(min(self._progress_poll_interval, remaining))
+
+    def _reserve(self, channel: Channel, *, scope: str, slot: MonotonicInstant) -> None:
+        """Spaces the next start from ``slot`` and writes ``slot`` on the wall clock, a write
+        refused leaving the search going on."""
+        self._next_start[channel, scope] = slot + _START_SPACING
+        started_at = self._wall_clock.now() + (slot - self._monotonic_clock.now())
+        start = LatestSearchStart(channel=channel, scope=scope, started_at=started_at)
+        try:
+            self._search_start_writer.set_latest_start(self._client_name, start=start)
+        except StoreError as error:
+            _logger.error(
+                "search start not written (%s): a client built anew may start early", error
+            )
 
     async def _sleep_until(self, moment: MonotonicInstant) -> None:
         delay = moment - self._monotonic_clock.now()
