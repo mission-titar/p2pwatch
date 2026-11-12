@@ -34,6 +34,10 @@ def source_tracking_component(client_name: ClientName) -> Component:
     return _client_work_component("source tracking", client_name=client_name)
 
 
+def webui_component() -> Component:
+    return Component(name="webui", labels=ComponentLabels(), conditions=(BUGS,))
+
+
 def _client_work_component(work: str, *, client_name: ClientName) -> Component:
     return Component(
         name=f"{work} {client_name}",

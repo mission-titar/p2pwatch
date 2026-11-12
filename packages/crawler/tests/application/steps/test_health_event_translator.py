@@ -22,7 +22,7 @@ from p2pwatch.domain.status_reading import (
     channel_component,
     client_component,
 )
-from p2pwatch.domain.work_components import download_tracking_component
+from p2pwatch.domain.work_components import download_tracking_component, webui_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -148,8 +148,14 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         (BUGS, _KAD),
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, download_tracking_component(ClientName("fake"))),
+        (BUGS, webui_component()),
     ],
-    ids=["a channel's bugs", "a channel's searches failed", "connected to no network"],
+    ids=[
+        "a channel's bugs",
+        "a channel's searches failed",
+        "connected to no network",
+        "the webui's bugs",
+    ],
 )
 async def test_a_condition_without_an_event_of_today_sends_nothing(
     *, previous: Health, current: Health, condition: HealthCondition, component: Component

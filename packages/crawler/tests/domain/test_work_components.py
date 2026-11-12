@@ -9,6 +9,7 @@ from p2pwatch.domain.work_components import (
     keyword_search_component,
     source_tracking_component,
     status_sensor_component,
+    webui_component,
 )
 
 _AMULED = ClientName("amuled")
@@ -41,6 +42,12 @@ def test_the_client_s_other_works_components_are_named_by_their_work_and_client(
         for name in ("status sensor amuled", "download tracking amuled", "source tracking amuled")
     ]
     assert all(_fails_on_three_bugs(component) for component in components)
+
+
+def test_the_webui_s_component_is_named_by_no_client() -> None:
+    component = webui_component()
+    assert (component.name, component.labels) == ("webui", ComponentLabels())
+    assert _fails_on_three_bugs(component)
 
 
 def test_download_tracking_fails_at_six_readings_of_a_client_connected_to_no_network() -> None:

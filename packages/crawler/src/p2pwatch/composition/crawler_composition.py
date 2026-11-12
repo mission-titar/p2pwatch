@@ -10,9 +10,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
   shares; its owner, ``AmuleClientOwner``, rebuilds it and every object holding it at a restart.
 
-Works: one search work per channel and keyword (``KeywordSearch``), the status sensor's work, and
-download and source tracking's when configured, which ``CrawlerLifecycle`` runs until
-``PosixProcess`` or the webui requests the shutdown.
+Works: one search work per channel and keyword (``KeywordSearch``), the status sensor's work, the
+webui's liveness, and download and source tracking's when configured, which ``CrawlerLifecycle``
+runs until ``PosixProcess`` or the webui requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the works (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
@@ -122,6 +122,7 @@ from p2pwatch.application.steps.supervisor import (
     SupervisedWork,
     Supervisor,
 )
+from p2pwatch.application.steps.webui_liveness import WebuiLiveness
 from p2pwatch.application.steps.work import Work
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
@@ -134,7 +135,7 @@ from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_owner import AmuleClientOwner
-from p2pwatch.composition.turn_time_limits import AmuleTurnTimeLimits
+from p2pwatch.composition.turn_time_limits import TIME_LIMIT_ALLOWANCE, AmuleTurnTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, DownloadConfig, LoadedConfig
 from p2pwatch.domain.health.component import Component
@@ -149,6 +150,7 @@ from p2pwatch.domain.work_components import (
     keyword_search_component,
     source_tracking_component,
     status_sensor_component,
+    webui_component,
 )
 
 _logger = logging.getLogger(__name__)
@@ -402,7 +404,7 @@ class CrawlerComposition(CrawlerRunner):
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         database_opener: SqliteDatabaseOpener,
-    ) -> None:
+    ) -> UvicornServerThread:
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
         the parsed config (immutable), the engine and the clocks (no state after their
         construction), the status reading and node metric stores (whole snapshots swapped, never
@@ -483,6 +485,7 @@ class CrawlerComposition(CrawlerRunner):
         )
         stack.push_async_callback(server_thread.stop)
         await server_thread.start()
+        return server_thread
 
     async def run_crawler(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
@@ -574,7 +577,7 @@ class CrawlerComposition(CrawlerRunner):
             # synchronous work. A crash degrades (spec §17.1). Its graceful stop is on ``stack`` →
             # runs at the normal shutdown unwind (after the database connections are pushed, so it
             # stops the thread before those close in LIFO teardown).
-            await self._start_webui(
+            webui_thread = await self._start_webui(
                 config=config,
                 stack=stack,
                 status_reading_store=status_reading_store,
@@ -796,7 +799,17 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                works=client_works(client),
+                works=[
+                    *client_works(client),
+                    # No owner yet: its bugs condition failing is only logged.
+                    SupervisedWork(
+                        work=WebuiLiveness(
+                            thread_alive=webui_thread.is_alive, monotonic_clock=monotonic_clock
+                        ),
+                        time_limit=TIME_LIMIT_ALLOWANCE,  # no await in its turn
+                        feeds=(webui_component(),),
+                    ),
+                ],
                 download_enabled=download_config is not None,
                 supervisor=supervisor,
                 logger=StdlibLogger(CrawlerLifecycle.__module__),

@@ -43,11 +43,13 @@ async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
     try:
         async with httpx.AsyncClient() as http:
             response = await http.get(f"http://{host}:{port}/")
+        alive_while_serving = server_thread.is_alive()
     finally:
         await server_thread.stop()
     assert (host, response.text) == ("127.0.0.1", "ok")
     assert port != 0
     assert f"webui serving on 127.0.0.1:{port} (own thread)" in caplog.messages
+    assert (alive_while_serving, server_thread.is_alive()) == (True, False)
     assert _webui_threads() == []
 
 
