@@ -8,21 +8,25 @@ The timed tests share one simulated time, on the virtual-time loop.
 import asyncio
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import Protocol
 
 import pytest
 
 from p2pwatch.application.steps.health_recorder import HealthRecorder
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.supervisor import FLOOR_AFTER_A_BUG, SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component, ComponentLabels
-from p2pwatch.domain.health.health_condition import BUGS
+from p2pwatch.domain.health.health_condition import BUGS, Health
+from p2pwatch.domain.health.outcome import TURNS, Outcome
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.status_reading import client_component
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
+from tests.fakes.composition.fake_state_owner import FakeStateOwner
 from tests.support.virtual_time import VirtualLoop
 
 _FLOOR = FLOOR_AFTER_A_BUG.total_seconds()
@@ -161,6 +165,7 @@ def _supervisor(*, run_state: FakeRunStateStore) -> Supervisor:
         run_state_reader=run_state,
         monotonic_clock=FakeBlockingMonotonicClock(),
         health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=()),
+        restart_policy=RestartPolicy(owners={}, logger=FakeLogger()),
         logger=FakeLogger(),
     )
 
@@ -180,6 +185,7 @@ def _supervise_until(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(loop),
         health_recorder=HealthRecorder(logger=health_logger or FakeLogger(), subscribers=()),
+        restart_policy=RestartPolicy(owners={}, logger=FakeLogger()),
         logger=logger or FakeLogger(),
     )
     loop.run_until_complete(
@@ -388,3 +394,224 @@ async def test_a_wait_that_raises_escapes_as_an_exception_group_without_arming_t
         )
 
     assert events == ["status cancelled"]
+
+
+class _BugRecorder(Work):
+    """Records a bug on a component no work feeds, as a step outside the supervisor would."""
+
+    def __init__(self, *, recorder: HealthRecorder, on: Component) -> None:
+        self._recorder = recorder
+        self._on = on
+
+    def __str__(self) -> str:
+        return "bug recorder"
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.sleep(10.0)  # noqa: TID251
+
+    async def run_once(self) -> None:
+        await self._recorder.record(Outcome.bug("KeyError('x')"), on=self._on, by=TURNS)
+
+
+def _broken(component: Component) -> SupervisedWork:
+    """A work raising a bug at each turn, its own wait 1 s, so its turns are a floor apart."""
+    work = _PacedWork("broken", wait_seconds=1.0, raising=[RuntimeError("bug")], always=True)
+    return SupervisedWork(work=work, time_limit=_DAY, feeds=(component,))
+
+
+def _steady(component: Component) -> SupervisedWork:
+    return SupervisedWork(
+        work=_PacedWork("steady", wait_seconds=10.0), time_limit=_DAY, feeds=(component,)
+    )
+
+
+class _Build(Protocol):
+    def __call__(self) -> list[SupervisedWork]: ...
+
+
+class _Unowned(Protocol):
+    def __call__(self, recorder: HealthRecorder, /) -> Sequence[SupervisedWork]: ...
+
+
+def _supervise_owned(
+    loop: VirtualLoop,
+    *,
+    build: _Build,
+    seconds: float,
+    owned: Sequence[Component] = (),
+    raising: Sequence[Exception] = (),
+    unowned: _Unowned = lambda recorder: (),
+    logger: FakeLogger | None = None,
+    health_logger: FakeLogger | None = None,
+) -> tuple[FakeStateOwner, list[list[SupervisedWork]]]:
+    """Supervises ``build()``'s works and ``unowned``'s; one owner owns the components the first
+    build's works feed, and ``owned``, each of its restarts adding ``build()``'s works again.
+    Returns the owner and each build."""
+    builds = [build()]
+    run_state = FakeRunStateStore()
+    loop.call_later(seconds, run_state.set_shutdown_requested)
+    logger = logger or FakeLogger()
+
+    def add_works(_state: object) -> None:
+        builds.append(build())
+        for supervised in builds[-1]:
+            supervisor.add(supervised)
+
+    owner = FakeStateOwner("client", add_works=add_works, raising=raising)
+    components = {c for supervised in builds[0] for c in supervised.feeds} | set(owned)
+    policy = RestartPolicy(owners=dict.fromkeys(components, owner), logger=logger)
+    recorder = HealthRecorder(logger=health_logger or FakeLogger(), subscribers=(policy,))
+    supervisor = Supervisor(
+        run_state_reader=run_state,
+        monotonic_clock=FakeLoopMonotonicClock(loop),
+        health_recorder=recorder,
+        restart_policy=policy,
+        logger=logger,
+    )
+    loop.run_until_complete(
+        supervisor.supervise([*builds[0], *unowned(recorder)], arm_shutdown_bound=lambda: None)
+    )
+    return owner, builds
+
+
+# A broken work's third bug, the first restart: its turns at 1 s, then a floor apart.
+_FIRST_RESTART = 1.0 + 2 * _FLOOR
+
+
+def test_a_bugs_condition_failing_restarts_its_owner_three_times_then_never(
+    virtual_loop: VirtualLoop,
+) -> None:
+    logger = FakeLogger()
+    search = _component("search")
+
+    owner, builds = _supervise_owned(
+        virtual_loop, build=lambda: [_broken(search)], seconds=20 * _FLOOR, logger=logger
+    )
+
+    # Each rebuilt work needs three bugs of its own to fail again.
+    assert owner.attempts == [_FIRST_RESTART + n * (1.0 + 2 * _FLOOR) for n in range(3)]
+    assert len(builds) == 4
+    last = builds[-1][0].work
+    assert isinstance(last, _PacedWork)
+    assert last.turns[-1] > 4 * _FIRST_RESTART  # given up, the work runs on
+    assert (
+        LoggedLine(
+            level="error",
+            message="client: 3 useless restarts, its components failing; not restarted again",
+        )
+        in logger.lines
+    )
+
+
+def test_a_restart_stops_the_works_feeding_its_owner_s_components_and_those_alone(
+    virtual_loop: VirtualLoop,
+) -> None:
+    search, status, webui = _component("search"), _component("status"), _component("webui")
+    unowned = _PacedWork("webui", wait_seconds=10.0)
+
+    _, builds = _supervise_owned(
+        virtual_loop,
+        build=lambda: [_broken(search), _steady(status)],
+        seconds=_FIRST_RESTART + 25.0,
+        unowned=lambda recorder: _supervised(unowned, feeds=(webui,)),
+    )
+
+    turns = [[w.work.turns for w in build if isinstance(w.work, _PacedWork)] for build in builds]
+    assert turns == [
+        [[1.0, 1.0 + _FLOOR, _FIRST_RESTART], [10.0 * n for n in range(1, 13)]],
+        [[_FIRST_RESTART + 1.0], [_FIRST_RESTART + 10.0, _FIRST_RESTART + 20.0]],
+    ]
+    assert unowned.turns == [10.0 * n for n in range(1, 15)]
+
+
+def test_a_rebuild_that_raises_records_a_bug_on_each_component_and_is_tried_after_the_floor(
+    virtual_loop: VirtualLoop,
+) -> None:
+    logger, health_logger = FakeLogger(), FakeLogger()
+    search, status = _component("search"), _component("status")
+    refused = LookupError("login refused")
+    between: list[Health | None] = []
+    for attempt in range(2):
+        at = _FIRST_RESTART + attempt * _FLOOR + 30.0
+        virtual_loop.call_at(at, lambda: between.append(search.health_of(BUGS)))
+
+    owner, builds = _supervise_owned(
+        virtual_loop,
+        build=lambda: [_broken(search), _steady(status)],
+        seconds=_FIRST_RESTART + 2 * _FLOOR + 15.0,
+        raising=[refused, refused],
+        logger=logger,
+        health_logger=health_logger,
+    )
+
+    assert owner.attempts == [_FIRST_RESTART + n * _FLOOR for n in range(3)]
+    assert between == [Health.FAILING, Health.FAILING]
+    raised = LoggedLine(level="error", message="restart of client raised", error=refused)
+    assert [line for line in logger.lines if line.error is refused] == [raised, raised]
+    # Healthy on its ten successes, degraded at its second bug among its last ten.
+    assert health_logger.lines[-1] == LoggedLine(
+        level="warning", message="status, bugs: healthy to degraded"
+    )
+    rebuilt = [w.work.turns for w in builds[1] if isinstance(w.work, _PacedWork)]
+    assert rebuilt == [[owner.attempts[-1] + 1.0], [owner.attempts[-1] + 10.0]]
+
+
+def test_three_raising_rebuilds_give_the_owner_up_its_works_stopped_the_node_running(
+    virtual_loop: VirtualLoop,
+) -> None:
+    logger = FakeLogger()
+    search = _component("search")
+
+    owner, builds = _supervise_owned(
+        virtual_loop,
+        build=lambda: [_broken(search)],
+        seconds=_FIRST_RESTART + 5 * _FLOOR,
+        raising=[LookupError("login refused")] * 3,
+        logger=logger,
+    )
+
+    assert owner.attempts == [_FIRST_RESTART + n * _FLOOR for n in range(3)]
+    [[broken]] = builds
+    assert isinstance(broken.work, _PacedWork)
+    assert broken.work.turns == [1.0, 1.0 + _FLOOR, _FIRST_RESTART]  # stopped for good
+    assert logger.lines[-1] == LoggedLine(
+        level="error",
+        message="client: 3 useless restarts, its components failing; not restarted again",
+    )
+
+
+def test_a_restart_in_flight_is_cancelled_at_the_shutdown(virtual_loop: VirtualLoop) -> None:
+    search = _component("search")
+    owner, _ = _supervise_owned(
+        virtual_loop,
+        build=lambda: [_broken(search)],
+        seconds=_FIRST_RESTART + 30.0,
+        raising=[LookupError("login refused")] * 3,
+    )
+    assert owner.attempts == [_FIRST_RESTART]
+    assert virtual_loop.time() == _FIRST_RESTART + 30.0
+
+
+def test_an_owner_whose_components_no_work_feeds_is_restarted_all_the_same(
+    virtual_loop: VirtualLoop,
+) -> None:
+    notifier, recorder_s = _component("notifier"), _component("bug recorder")
+
+    owner, _ = _supervise_owned(
+        virtual_loop,
+        build=list,
+        seconds=35.0,
+        owned=(notifier,),
+        unowned=lambda recorder: _supervised(
+            _BugRecorder(recorder=recorder, on=notifier), feeds=(recorder_s,)
+        ),
+    )
+
+    assert owner.attempts == [30.0]
+
+
+def test_a_work_added_while_none_runs_is_refused() -> None:
+    supervisor = _supervisor(run_state=FakeRunStateStore())
+    [supervised] = _supervised(_CountedWork())
+    with pytest.raises(RuntimeError, match="^counted: added while no work runs$"):
+        supervisor.add(supervised)

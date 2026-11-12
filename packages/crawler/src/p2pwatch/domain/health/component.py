@@ -39,6 +39,17 @@ class Component:
         """Whether a condition of it reads ``source``."""
         return any(window.condition.source == source for window in self._windows)
 
+    def health_of(self, condition: HealthCondition) -> Health | None:
+        """The health ``condition`` gives it, ``None`` when it does not carry it."""
+        return next((w.health for w in self._windows if w.condition == condition), None)
+
+    def empty_windows(self, *, of: OutcomeSource) -> None:
+        """Forgets the outcomes of ``of``: its conditions unknown again, giving no transition."""
+        self._windows = [
+            ConditionWindow(condition=w.condition) if w.condition.source == of else w
+            for w in self._windows
+        ]
+
     def record(self, outcome: Outcome, *, by: OutcomeSource) -> tuple[HealthTransition, ...]:
         """Feeds ``outcome`` to each condition reading ``by``; returns the changes it caused."""
         transitions: list[HealthTransition] = []

@@ -17,6 +17,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_recorder import HealthRecorder
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.file_key import FileKey, Network
@@ -127,6 +128,7 @@ class _Crawl:
                 run_state_reader=self.run_state,
                 monotonic_clock=FakeBlockingMonotonicClock(),  # no limit expires
                 health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=()),
+                restart_policy=RestartPolicy(owners={}, logger=FakeLogger()),
                 logger=FakeLogger(),
             ),
             logger=self.logger,

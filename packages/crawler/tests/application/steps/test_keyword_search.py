@@ -21,10 +21,12 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.keyword_search import KeywordSearch
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.composition.turn_time_limits import AmuleTurnTimeLimits
 from p2pwatch.domain.client_errors import SearchFailedError
+from p2pwatch.domain.health.component import HealthTransition
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -40,6 +42,7 @@ from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.composition.fake_state_owner import FakeStateOwner
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import EPOCH, MONOTONIC_EPOCH, VirtualLoop
@@ -160,21 +163,39 @@ class _Searches:
         time_limit_of: _TimeLimitOf = lambda _keyword, *, channel: _DAY,
         logger: FakeLogger | None = None,
         health_logger: FakeLogger | None = None,
-    ) -> None:
+        restarting: bool = False,
+    ) -> FakeStateOwner:
+        """Runs the works for ``seconds``; ``restarting``, one owner owns their components, each
+        of its restarts adding the same works again. Returns that owner."""
         run_state = FakeRunStateStore()
         self.loop.call_later(seconds, run_state.set_shutdown_requested)
-        health_recorder = HealthRecorder(logger=health_logger or FakeLogger(), subscribers=())
+
+        async def restart_policy(transition: HealthTransition) -> None:
+            await policy(transition)
+
+        health_recorder = HealthRecorder(
+            logger=health_logger or FakeLogger(), subscribers=(restart_policy,)
+        )
         works = self.works(
             client, keywords=keywords, health_recorder=health_recorder, time_limit_of=time_limit_of
         )
-        self.loop.run_until_complete(
-            Supervisor(
-                run_state_reader=run_state,
-                monotonic_clock=self.monotonic_clock,
-                health_recorder=health_recorder,
-                logger=logger or FakeLogger(),
-            ).supervise(works, arm_shutdown_bound=lambda: None)
+
+        def add_works(_state: object) -> None:
+            for supervised in works:
+                supervisor.add(supervised)
+
+        owner = FakeStateOwner(add_works=add_works)
+        components = {c for supervised in works for c in supervised.feeds} if restarting else ()
+        policy = RestartPolicy(owners=dict.fromkeys(components, owner), logger=FakeLogger())
+        supervisor = Supervisor(
+            run_state_reader=run_state,
+            monotonic_clock=self.monotonic_clock,
+            health_recorder=health_recorder,
+            restart_policy=policy,
+            logger=logger or FakeLogger(),
         )
+        self.loop.run_until_complete(supervisor.supervise(works, arm_shutdown_bound=lambda: None))
+        return owner
 
 
 @pytest.fixture
@@ -231,6 +252,21 @@ def test_a_bug_on_one_keywords_searches_leaves_the_other_keywords_searching(
         "channel amuled kad, bugs: healthy to degraded",
         "search 'keroro' amuled kad, bugs: unknown to failing",
     ]
+
+
+def test_a_bug_on_one_keyword_s_searches_restarts_its_client_three_times_at_most(
+    searches: _Searches,
+) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, broken_keywords=frozenset({Keyword("keroro")})
+    )
+
+    owner = searches.run_for(_HOUR, client=client, keywords=["keroro", "titar"], restarting=True)
+
+    # Its third bug restarts the client, each rebuilt search taking three bugs to fail again.
+    assert owner.attempts == [120.0, 240.0, 360.0]
+    titar = [start for start, keyword, _ in client.searches if keyword == "titar"]
+    assert titar[-1] >= _HOUR - 30.0  # the other keyword searching to the end
 
 
 def test_a_bug_on_every_kad_search_leaves_the_ed2k_searches_going_on(searches: _Searches) -> None:
