@@ -265,24 +265,23 @@ def _download_tracking_lines(observability: _Observability) -> list[LoggedLine]:
 
 
 @pytest.mark.asyncio
-async def test_a_client_connected_to_no_network_fails_download_tracking_at_its_third_reading() -> (
+async def test_a_client_connected_to_no_network_fails_download_tracking_at_its_sixth_reading() -> (
     None
 ):
     off = _status(ed2k=(False, None), kad=(False, None))
-    observability = await _run(off, off, off, download=True)
+    observability = await _run(*[off] * 6, download=True)
     assert _download_tracking_lines(observability) == [
         LoggedLine(
             level="warning",
             message="download tracking amuled, connected to no network: unknown to failing",
         )
     ]
-    assert observability.notifier.notifications == []  # its first reader is the log line
 
 
 @pytest.mark.asyncio
 async def test_one_channel_connected_keeps_download_tracking_connected() -> None:
     half = _status(ed2k=_UP, kad=(False, None))
-    observability = await _run(half, half, half, download=True)
+    observability = await _run(*[half] * 6, download=True)
     assert _download_tracking_lines(observability) == [
         LoggedLine(
             level="info",
@@ -293,14 +292,10 @@ async def test_one_channel_connected_keeps_download_tracking_connected() -> None
 
 @pytest.mark.asyncio
 async def test_an_unanswered_reading_records_nothing_on_download_tracking() -> None:
+    # Six readings: a failure or a success recorded for either unanswered one would judge it.
     off = _status(ed2k=(False, None), kad=(False, None))
-    observability = await _run(off, off, _DOWN, _DOWN, _DOWN, off, download=True)
-    assert _download_tracking_lines(observability) == [
-        LoggedLine(
-            level="warning",
-            message="download tracking amuled, connected to no network: unknown to failing",
-        )
-    ]
+    observability = await _run(*[off] * 4, _DOWN, _DOWN, download=True)
+    assert _download_tracking_lines(observability) == []
 
 
 @pytest.mark.asyncio

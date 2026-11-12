@@ -60,11 +60,12 @@ CHANNEL_NOT_CONNECTABLE = HealthCondition(
     degraded=Band(enters=AtLeast(count=6, of_last=6), leaves=Below(count=1, of_last=20)),
 )
 
-# No alert of today to keep: the default failing band, as the unreachable condition's.
+# The channels' band: it never fails before the "not connected" it sums up.
 CONNECTED_TO_NO_NETWORK = HealthCondition(
     name="connected to no network",
     source=STATUS_CONNECTED_CHANNELS,
     counting=NoChannelConnected,
+    failing=CHANNEL_NOT_CONNECTED.failing,
     degraded=None,
 )
 

@@ -42,14 +42,14 @@ def test_the_client_s_other_works_components_are_named_by_their_work_and_client(
     assert all(_fails_on_three_bugs(component) for component in components)
 
 
-def test_download_tracking_fails_on_three_readings_of_a_client_connected_to_no_network() -> None:
+def test_download_tracking_fails_at_six_readings_of_a_client_connected_to_no_network() -> None:
     component = download_tracking_component(_AMULED)
     transitions = [
         component.record(Outcome.declared(NoChannelConnected()), by=STATUS_CONNECTED_CHANNELS)
-        for _ in range(3)
+        for _ in range(6)
     ]
+    # Never before the channels' "not connected" it sums up: their band.
     assert [[(t.condition.name, t.current) for t in each] for each in transitions] == [
-        [],
-        [],
+        *[[]] * 5,
         [("connected to no network", Health.FAILING)],
     ]
