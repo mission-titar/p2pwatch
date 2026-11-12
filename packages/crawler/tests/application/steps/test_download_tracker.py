@@ -296,7 +296,7 @@ async def test_a_download_amuled_no_longer_knows_becomes_failed() -> None:
     assert (
         LoggedLine(
             level="warning",
-            message=f"file={HASH_A} unseen by the client for 3600.0s: marked failed",
+            message=f"file={HASH_A} unseen by the client for 3600 s: marked failed",
         )
         in logger.lines
     )

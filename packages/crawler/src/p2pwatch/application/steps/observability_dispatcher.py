@@ -94,7 +94,7 @@ class ObservabilityDispatcher:
             return Outcome.declared(refusal)
         except TimeoutError:
             timed_out = NotificationTimedOut(
-                f"past its timeout of {self._notification_timeout_seconds} s"
+                f"past its timeout of {self._notification_timeout_seconds:g} s"
             )
             self._logger.warning("%s: %s", named, timed_out)
             return Outcome.declared(timed_out)

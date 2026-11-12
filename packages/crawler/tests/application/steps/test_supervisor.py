@@ -248,7 +248,7 @@ def test_a_turn_past_its_time_limit_is_cut_as_a_bug_and_its_work_goes_on(
     # Cut at its limit, then the floor after a bug before the next turn.
     assert work.turns == [0.0, 30.0 + _FLOOR, 2 * (30.0 + _FLOOR)]
     assert work.cut_at == [30.0, 2 * 30.0 + _FLOOR, 2 * (30.0 + _FLOOR) + 1.0]
-    message = "hung: past its time limit of 0:00:30"
+    message = "hung: past its time limit of 30 s"
     assert logger.lines == [LoggedLine(level="error", message=message)] * 2
 
 

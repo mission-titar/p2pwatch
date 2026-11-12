@@ -181,8 +181,9 @@ class Supervisor:
             return Outcome.declared(failure)
         except TurnPastItsLimit:
             # No trace: it would show where the cancellation landed, not why the turn was slow.
-            self._logger.error("%s: past its time limit of %s", work, supervised.time_limit)
-            return Outcome.bug(f"past its time limit of {supervised.time_limit}")
+            past = f"past its time limit of {supervised.time_limit.total_seconds():g} s"
+            self._logger.error("%s: %s", work, past)
+            return Outcome.bug(past)
         except Exception as error:  # the work's boundary, by design: any other is a bug
             self._logger.exception("bug in %s", work, error=error)
             return Outcome.bug(repr(error))
