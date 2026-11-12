@@ -13,7 +13,7 @@ from p2pwatch.domain.health.health_condition import BUGS, Health, HealthConditio
 from p2pwatch.domain.health.outcome import Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.notifier_outcomes import notifier_component
+from p2pwatch.domain.observability.notifier_outcomes import SENDS_REFUSED, notifier_components
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.search.searches_failed import SEARCHES_FAILED
 from p2pwatch.domain.status_reading import (
@@ -27,11 +27,12 @@ from p2pwatch.domain.status_reading import (
 from p2pwatch.domain.work_components import download_tracking_component, webui_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
-from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 
 _NODE_ID = NodeId("titar-node-1")
 _CLIENT = client_component(ClientName("fake"))
 _KAD = channel_component(client_name=ClientName("fake"), channel=Channel("kad"))
+[_SERVICE, *_] = notifier_components(ONE_SERVICE_PER_AUDIENCE).values()
 U, H, D, F = Health.UNKNOWN, Health.HEALTHY, Health.DEGRADED, Health.FAILING
 
 
@@ -51,7 +52,7 @@ async def _notified(
             current_notifier=lambda: notifier,
             notification_timeout_seconds=5.0,
             record_outcome=HealthRecorder(logger=FakeLogger(), subscribers=()).record,
-            notifier_component=notifier_component(),
+            service_components=notifier_components(notifier.services()),
         ),
         node_id=_NODE_ID,
     )
@@ -153,14 +154,16 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, download_tracking_component(ClientName("fake"))),
         (BUGS, webui_component()),
-        (BUGS, notifier_component()),  # so a failing notifier never notifies of itself
+        (BUGS, _SERVICE),  # so a failing notifier never notifies of itself
+        (SENDS_REFUSED, _SERVICE),
     ],
     ids=[
         "a channel's bugs",
         "a channel's searches failed",
         "connected to no network",
         "the webui's bugs",
-        "the notifier's bugs",
+        "a notifier service's bugs",
+        "a notifier service's sends refused",
     ],
 )
 async def test_a_condition_without_an_event_of_today_sends_nothing(

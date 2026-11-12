@@ -148,7 +148,7 @@ from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
-from p2pwatch.domain.observability.notifier_outcomes import notifier_component
+from p2pwatch.domain.observability.notifier_outcomes import notifier_components
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
@@ -559,7 +559,7 @@ class CrawlerComposition(CrawlerRunner):
                     apprise_factory=apprise.Apprise,
                 )
             )
-            notifier_part = notifier_component()
+            notifier_parts = notifier_components(notifier_owner.notifier().services())
             # A cycle: the dispatcher records on the recorder, whose translator dispatches. The
             # translator turns none of the notifier's transitions into an event, which bounds it.
             health_recorder: HealthRecorder
@@ -571,7 +571,7 @@ class CrawlerComposition(CrawlerRunner):
                 record_outcome=lambda outcome, *, on, by: health_recorder.record(
                     outcome, on=on, by=by
                 ),
-                notifier_component=notifier_part,
+                service_components=notifier_parts,
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
@@ -695,7 +695,7 @@ class CrawlerComposition(CrawlerRunner):
                 owners={
                     **dict.fromkeys(amule_parts, amule_owner),
                     webui_part: webui_owner,
-                    notifier_part: notifier_owner,
+                    **dict.fromkeys(notifier_parts.values(), notifier_owner),
                 },
                 logger=StdlibLogger(RestartPolicy.__module__),
             )

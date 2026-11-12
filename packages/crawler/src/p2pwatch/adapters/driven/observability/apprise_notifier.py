@@ -1,16 +1,15 @@
-"""Apprise notifier: routes a notification per AUDIENCE via apprise tags (E-D7).
+"""Apprise notifier: one service per target URL, its audience the config's (E-D7).
 
-ADAPTER ring (implements ``Notifier``). On a ``node_id``'s first notification:
-``add(url, tag=audience)`` for each target, into one of two apprise groups: prefixed or bare
-(``node_prefix``). ``notify`` sends the title PREFIXED with the ``node_id`` (distributed network)
-to the first group and as is to the second, since apprise sends one message to every URL of a
-tag. A community kind's title, Markdown body and notify type are written here; a relayed log
+ADAPTER ring (implements ``Notifier``). Each target is a service, named by its URL's scheme and
+its audience, never by its URL, which carries a webhook's token. On a ``node_id``'s first
+notification to a service, one apprise object holds that service's URL alone, so each send has
+its own answer. A ``node_prefix`` service's title is PREFIXED with the ``node_id`` (distributed
+network). A community kind's title, Markdown body and notify type are written here; a relayed log
 line is sent untitled, its severity mapped. Every message is markdown (a Discord embed) with
-every ``@`` neutralised, and both groups share an asset naming the node (spec
-discord-embed-notifications §4). No URL → natural no-op (apprise with no service answers
-``NOMATCH``); a group whose services did not all take it raises ``NotificationRefused`` once both
-are sent. ``apprise_factory`` builds a group: ``apprise.Apprise`` from the composition. The
-timeout lives in the dispatch step (E-D13).
+every ``@`` neutralised, and each object's asset names the node (spec
+discord-embed-notifications §4). Any answer but a success, a URL apprise could not load
+(``NOMATCH``) included, raises ``NotificationRefused``. ``apprise_factory`` builds an object:
+``apprise.Apprise`` from the composition. The timeout lives in the dispatch step (E-D13).
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
@@ -38,7 +37,10 @@ from p2pwatch.domain.observability.notification import (
     SourceAlertKind,
     TierRise,
 )
-from p2pwatch.domain.observability.notifier_outcomes import NotificationRefused
+from p2pwatch.domain.observability.notifier_outcomes import (
+    NotificationRefused,
+    NotificationService,
+)
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 
@@ -127,9 +129,6 @@ def _message(notification: Notification) -> tuple[str, str, object]:
             assert_never(notification)
 
 
-# A group without a service for the audience sends nothing, and refuses nothing.
-_DELIVERED = (apprise.AppriseResultStatus.SUCCESS, apprise.AppriseResultStatus.NOMATCH)
-
 # apprise extracts "@word", "<@id>" and "<@&id>" from markdown into pings: a zero-width space breaks
 # every one of them, and p2pwatch never mentions anyone.
 _NO_MENTION = "@\u200b"
@@ -139,19 +138,44 @@ class AppriseFactory(Protocol):
     def __call__(self, *, asset: apprise.AppriseAsset) -> apprise.Apprise: ...
 
 
+def _scheme(url: str) -> str:
+    """The URL's scheme, ``unknown`` without one: the rest of a URL may be a token."""
+    scheme, separator, _ = url.partition("://")
+    return scheme.lower() if separator else "unknown"
+
+
+def _services(targets: AppriseTargets) -> tuple[NotificationService, ...]:
+    """A service per target, a second of the same scheme and audience told apart by its ordinal."""
+    services: list[NotificationService] = []
+    for url, audience, _ in targets:
+        scheme = _scheme(url)
+        alike = sum((s.scheme, s.audience) == (scheme, audience) for s in services)
+        services.append(NotificationService(scheme=scheme, audience=audience, ordinal=alike + 1))
+    return tuple(services)
+
+
 class AppriseNotifier(Notifier):
-    """``Notifier`` adapter: one apprise tag per audience, in a prefixed group and a bare one."""
+    """``Notifier`` adapter: a service per target URL, sent to through an apprise object of its
+    own per node."""
 
     def __init__(self, targets: AppriseTargets, *, apprise_factory: AppriseFactory) -> None:
-        self._targets = targets
+        self._targets_by_service = {
+            service: (url, node_prefix)
+            for service, (url, _, node_prefix) in zip(_services(targets), targets, strict=True)
+        }
         self._apprise_factory = apprise_factory
-        self._groups_by_node_id: dict[NodeId, tuple[apprise.Apprise, apprise.Apprise]] = {}
+        self._apprise_by_node_and_service: dict[
+            tuple[NodeId, NotificationService], apprise.Apprise
+        ] = {}
 
-    def _groups(self, node_id: NodeId) -> tuple[apprise.Apprise, apprise.Apprise]:
-        """The node's prefixed and bare groups, built on its first notification."""
-        # Per node: apprise hands the asset, its username, to each URL when it is added.
-        if node_id in self._groups_by_node_id:
-            return self._groups_by_node_id[node_id]
+    def services(self) -> tuple[NotificationService, ...]:
+        return tuple(self._targets_by_service)
+
+    def _apprise(self, service: NotificationService, *, node_id: NodeId) -> apprise.Apprise:
+        """The object sending the node's notifications to ``service``, built on the first one."""
+        # Per node: apprise hands the asset, its username, to the URL when it is added.
+        if (node_id, service) in self._apprise_by_node_and_service:
+            return self._apprise_by_node_and_service[node_id, service]
         # No image: a Discord webhook keeps its own avatar.
         asset = apprise.AppriseAsset(
             app_id=f"p2pwatch - {node_id}",
@@ -159,29 +183,21 @@ class AppriseNotifier(Notifier):
             image_url_mask="",
             image_url_logo="",
         )
-        prefixed_group = self._apprise_factory(asset=asset)
-        bare_group = self._apprise_factory(asset=asset)
-        for url, audience, node_prefix in self._targets:
-            group = prefixed_group if node_prefix else bare_group
-            group.add(url, tag=audience.value)
-        self._groups_by_node_id[node_id] = (prefixed_group, bare_group)
-        return prefixed_group, bare_group
+        sender = self._apprise_factory(asset=asset)
+        sender.add(self._targets_by_service[service][0])
+        self._apprise_by_node_and_service[node_id, service] = sender
+        return sender
 
-    async def notify(self, audience: Audience, *, notification: Notification) -> None:
+    async def notify(self, service: NotificationService, *, notification: Notification) -> None:
         title, body, notify_type = _message(notification)
         node_id = notification.node_id
-        prefixed_group, bare_group = self._groups(node_id)
-        prefixed = f"[{node_id}] {title}".rstrip()
-        refused: list[str] = []
-        for group, heading in ((prefixed_group, prefixed), (bare_group, title)):
-            result = await group.async_notify(
-                title=heading.replace("@", _NO_MENTION),
-                body=body.replace("@", _NO_MENTION),
-                body_format=apprise.NotifyFormat.MARKDOWN,
-                notify_type=notify_type,
-                tag=audience.value,
-            )
-            if result.status not in _DELIVERED:
-                refused.append(result.status.name)
-        if refused:
-            raise NotificationRefused(f"a service refused it ({', '.join(refused)})")
+        _, node_prefix = self._targets_by_service[service]
+        heading = f"[{node_id}] {title}".rstrip() if node_prefix else title
+        result = await self._apprise(service, node_id=node_id).async_notify(
+            title=heading.replace("@", _NO_MENTION),
+            body=body.replace("@", _NO_MENTION),
+            body_format=apprise.NotifyFormat.MARKDOWN,
+            notify_type=notify_type,
+        )
+        if result.status is not apprise.AppriseResultStatus.SUCCESS:
+            raise NotificationRefused(f"refused ({result.status.name})")
