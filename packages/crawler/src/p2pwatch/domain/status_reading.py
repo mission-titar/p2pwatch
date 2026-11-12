@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
+from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import AtLeast, Band, Below, HealthCondition
 from p2pwatch.domain.health.outcome import OutcomeSource
-from p2pwatch.domain.identifiers import Channel
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
@@ -20,13 +21,40 @@ class ClientNotAnswering(DeclaredFailure):
     raised."""
 
 
+class ChannelNotConnected(DeclaredFailure):
+    """A reading of a channel off its network: a reason, never raised."""
+
+
 STATUS_API_ANSWER = OutcomeSource(name="the status reading's API answer")
+STATUS_CONNECTED_FIELD = OutcomeSource(name="the status reading's connected field")
 CLIENT_UNREACHABLE = HealthCondition(
     name="unreachable",
     source=STATUS_API_ANSWER,
     counting=ClientNotAnswering,
     failing=Band(enters=AtLeast(count=3, of_last=3), leaves=Below(count=2, of_last=10)),
 )
+CHANNEL_NOT_CONNECTED = HealthCondition(
+    name="not connected",
+    source=STATUS_CONNECTED_FIELD,
+    counting=ChannelNotConnected,
+    failing=Band(enters=AtLeast(count=6, of_last=6), leaves=Below(count=2, of_last=10)),
+)
+
+
+def client_component(client_name: ClientName) -> Component:
+    return Component(
+        name=f"client {client_name}",
+        labels=ComponentLabels(client_name=client_name),
+        conditions=(CLIENT_UNREACHABLE,),
+    )
+
+
+def channel_component(*, client_name: ClientName, channel: Channel) -> Component:
+    return Component(
+        name=f"channel {client_name} {channel}",
+        labels=ComponentLabels(client_name=client_name, channel=channel),
+        conditions=(CHANNEL_NOT_CONNECTED,),
+    )
 
 
 def lasting_at_entry(condition: HealthCondition) -> timedelta:
