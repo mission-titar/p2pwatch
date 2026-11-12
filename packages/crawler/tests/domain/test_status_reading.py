@@ -7,7 +7,7 @@ from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import ConditionWindow, Health, HealthCondition
-from p2pwatch.domain.health.outcome import TURNS, Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome, OutcomeSource
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.searches_failed import SEARCHES
 from p2pwatch.domain.status_reading import (
@@ -136,5 +136,5 @@ def test_a_channel_s_component_is_judged_on_its_two_fields_its_searches_and_its_
         (STATUS_CONNECTED_FIELD, Outcome.declared(ChannelNotConnected())),
         (STATUS_CONNECTABLE_FIELD, Outcome.declared(ChannelNotConnectable())),
         (SEARCHES, Outcome.declared(SearchFailedError("refused"))),
-        (TURNS, Outcome.bug("KeyError('channels')")),
+        (UNITS_OF_WORK, Outcome.bug("KeyError('channels')")),
     ) == ["not connected", "not connectable", "searches failed", "bugs"]

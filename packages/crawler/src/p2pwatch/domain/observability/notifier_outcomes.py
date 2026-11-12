@@ -20,7 +20,7 @@ class NotificationTimedOut(DeclaredFailure):
 
 
 SENDS = OutcomeSource(name="a notification's success or declared failure")
-SENDS_REFUSED = HealthCondition(name="sends refused", source=SENDS, counting=NotificationRefused)
+SENDS_FAILED = HealthCondition(name="sends refused", source=SENDS, counting=NotificationRefused)
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -45,7 +45,7 @@ def notifier_components(
         service: Component(
             name=f"notifier {service}",
             labels=ComponentLabels(),
-            conditions=(BUGS, SENDS_REFUSED),
+            conditions=(BUGS, SENDS_FAILED),
         )
         for service in services
     }

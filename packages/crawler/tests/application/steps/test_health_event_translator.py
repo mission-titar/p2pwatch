@@ -13,7 +13,7 @@ from p2pwatch.domain.health.health_condition import BUGS, Health, HealthConditio
 from p2pwatch.domain.health.outcome import Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.notifier_outcomes import SENDS_REFUSED, notifier_components
+from p2pwatch.domain.observability.notifier_outcomes import SENDS_FAILED, notifier_components
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.search.searches_failed import SEARCHES_FAILED
 from p2pwatch.domain.status_reading import (
@@ -155,7 +155,7 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         (CONNECTED_TO_NO_NETWORK, download_tracking_component(ClientName("fake"))),
         (BUGS, webui_component()),
         (BUGS, _SERVICE),  # so a failing notifier never notifies of itself
-        (SENDS_REFUSED, _SERVICE),
+        (SENDS_FAILED, _SERVICE),
     ],
     ids=[
         "a channel's bugs",

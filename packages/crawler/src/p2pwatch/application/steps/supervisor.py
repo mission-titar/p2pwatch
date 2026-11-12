@@ -17,7 +17,7 @@ from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Bug, Outcome
 
 # The least wait after a bug, so a bug before the client's own pacing never reruns at full speed:
 # the client's start spacing, a starting value tuned at the release candidate.
@@ -36,7 +36,7 @@ class SupervisedWork:
     def __post_init__(self) -> None:
         if self.time_limit <= timedelta(0):
             raise ValueError(f"{self.work}: a time limit must be positive, not {self.time_limit}")
-        if not self.feeds or not all(component.reads(TURNS) for component in self.feeds):
+        if not self.feeds or not all(component.reads(UNITS_OF_WORK) for component in self.feeds):
             raise ValueError(f"{self.work}: a component at least expected, each reading its turns")
 
 
@@ -131,7 +131,7 @@ class Supervisor:
                 self._logger.exception("restart of %s raised", owner, error=error)
                 for component in components:
                     await self._health_recorder.record(
-                        Outcome.bug(repr(error)), on=component, by=TURNS
+                        Outcome.bug(repr(error)), on=component, by=UNITS_OF_WORK
                     )
                 if not self._restart_policy.rebuild_raised(owner):
                     return
@@ -139,7 +139,7 @@ class Supervisor:
                 continue
             # The new works start at the next suspension, after the windows are emptied.
             for component in components:
-                component.empty_windows(of=TURNS)
+                component.empty_windows(of=UNITS_OF_WORK)
             self._restart_policy.rebuilt(owner)
             self._logger.info("%s restarted", owner)
             return
@@ -161,7 +161,7 @@ class Supervisor:
             await self._wait(supervised.work, after=outcome)
             outcome = await self._outcome_of(supervised)
             for component in supervised.feeds:
-                await self._health_recorder.record(outcome, on=component, by=TURNS)
+                await self._health_recorder.record(outcome, on=component, by=UNITS_OF_WORK)
 
     async def _wait(self, work: Work, *, after: Outcome) -> None:
         """The work's own wait; after a bug, the later of it and the floor, never their sum."""

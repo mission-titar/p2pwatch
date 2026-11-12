@@ -10,7 +10,7 @@ from p2pwatch.domain.health.health_condition import (
     Health,
     HealthCondition,
 )
-from p2pwatch.domain.health.outcome import TURNS, Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome, OutcomeSource
 
 U, H, D, F = Health.UNKNOWN, Health.HEALTHY, Health.DEGRADED, Health.FAILING
 
@@ -131,7 +131,7 @@ def test_a_condition_holds_a_band_at_least() -> None:
 
 
 def test_the_bugs_condition_counts_the_bugs_of_the_turns_under_both_bands() -> None:
-    assert BUGS.source == TURNS
+    assert BUGS.source == UNITS_OF_WORK
     assert (BUGS.failing, BUGS.degraded) == (_BOTH_BANDS.failing, _BOTH_BANDS.degraded)
     assert _healths("111", condition=BUGS, failure=Outcome.bug("KeyError")) == [U, U, F]
     assert _healths("111", condition=BUGS) == [U, U, H]  # a declared failure is no bug

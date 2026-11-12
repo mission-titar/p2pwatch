@@ -1,7 +1,7 @@
 from p2pwatch.domain.download.disk_space import FREE_SPACE_READING, FreeSpaceBelowFloor
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import Health
-from p2pwatch.domain.health.outcome import TURNS, Outcome
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from p2pwatch.domain.status_reading import STATUS_CONNECTED_CHANNELS, NoChannelConnected
 from p2pwatch.domain.work_components import (
@@ -16,7 +16,7 @@ _AMULED = ClientName("amuled")
 
 
 def _fails_on_three_bugs(component: Component) -> bool:
-    transitions = [component.record(Outcome.bug("KeyError"), by=TURNS) for _ in range(3)]
+    transitions = [component.record(Outcome.bug("KeyError"), by=UNITS_OF_WORK) for _ in range(3)]
     return [(t.condition.name, t.current) for t in transitions[2]] == [("bugs", Health.FAILING)]
 
 

@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Self
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
-from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Bug, Outcome, OutcomeSource
 
 
 class Health(Enum):
@@ -120,4 +120,4 @@ class ConditionWindow:
         return sum(isinstance(o.reason, self.condition.counting) for o in outcomes[-of_last:])
 
 
-BUGS = HealthCondition(name="bugs", source=TURNS, counting=Bug)
+BUGS = HealthCondition(name="bugs", source=UNITS_OF_WORK, counting=Bug)

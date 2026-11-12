@@ -67,16 +67,16 @@ class StatusSensor(Work):
         self._client_component = client_component
         self._channel_components = channel_components
         self._download_tracking_component = download_tracking_component
-        self._last_turn_ended_at: MonotonicInstant | None = None
+        self._latest_turn_ended_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
         return f"status reading of {self._client_name}"
 
     async def wait_for_next_turn(self) -> None:
-        """Waits the period left since the last turn ended, nothing before the first."""
-        if self._last_turn_ended_at is None:
+        """Waits the period left since the latest turn ended, nothing before the first."""
+        if self._latest_turn_ended_at is None:
             return
-        left = STATUS_PERIOD - (self._monotonic_clock.now() - self._last_turn_ended_at)
+        left = STATUS_PERIOD - (self._monotonic_clock.now() - self._latest_turn_ended_at)
         if left > timedelta(0):
             await self._monotonic_clock.sleep(left)
 
@@ -85,7 +85,7 @@ class StatusSensor(Work):
         try:
             await self._read()
         finally:  # a turn that raised still paces the next one
-            self._last_turn_ended_at = self._monotonic_clock.now()
+            self._latest_turn_ended_at = self._monotonic_clock.now()
 
     async def _read(self) -> None:
         try:
