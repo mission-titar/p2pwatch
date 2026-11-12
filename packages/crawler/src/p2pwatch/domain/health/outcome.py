@@ -13,6 +13,9 @@ class OutcomeSource:
     name: str
 
 
+TURNS = OutcomeSource(name="the supervisor's outcome of a turn")
+
+
 @dataclass(kw_only=True, frozen=True)
 class Bug:
     """An outcome's reason outside every contract: an undeclared exception (spec v5 lot 4, D3)."""

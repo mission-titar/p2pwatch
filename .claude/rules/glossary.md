@@ -71,9 +71,10 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `bug` | `Bug`, an outcome's reason outside every contract: a turn raising anything but a declared failure | an `unexpected error` |
 | `floor after a bug` | `FLOOR_AFTER_A_BUG`, the least wait before a turn that follows a bug, the later of it and the work's own wait | a backoff, which is the network's |
 | `time limit` | the longest a work's turn may take, a `SupervisedWork` carrying both: the sum of the bounds on its turn's path plus a fixed allowance, `AmuleTurnTimeLimits` deriving it; a turn past it is cut, a `TurnPastItsLimit` recorded as a `Bug` | a `timeout`, a request's; a `deadline`, the shutdown's |
-| `outcome source` | `OutcomeSource`, what records an outcome (`STATUS_API_ANSWER`): a condition reads one source, whose successes count for it alone | `origin` |
-| `health` | `Health`, a condition's state: `unknown` until its window holds its entry's outcomes, `healthy`, `degraded`, `failing` | `status`, a client's |
-| `health condition` | `HealthCondition`, the failures of one reason among a component's last outcomes of one source, entering its `Band`, `failing` or `degraded`, at `AtLeast` and leaving under a stricter `Below`; its `ConditionWindow` the component's state | a bare `condition`, a token expression |
+| `outcome source` | `OutcomeSource`, what records an outcome (`STATUS_API_ANSWER`, `TURNS` the supervisor's outcome of a turn): a condition reads one source, whose successes count for it alone | `origin` |
+| `health` | `Health`, a condition's state: `unknown` until its window holds its smallest entry's outcomes, `healthy`, `degraded`, `failing` | `status`, a client's |
+| `health condition` | `HealthCondition`, the failures of one reason among a component's last outcomes of one source, entering a `Band`, `failing` or `degraded`, both by default, at `AtLeast` and leaving under a stricter `Below`, a milder band entering by its own entry alone; its `ConditionWindow` the component's state | a bare `condition`, a token expression |
+| `bugs condition` | `BUGS`, the health condition counting the `Bug` outcomes of `TURNS` under the default bands, carried by every component a work feeds | a condition over every failure |
 | `component` | `Component`, a part of the node judged by its conditions, its `ComponentLabels` naming it to the events and metrics | `unit`, `service` |
 | `health transition` | `HealthTransition`, one condition of one component changing its health | `event`, the observability's |
 | `health recorder` | `HealthRecorder`, every outcome's one path: recorded on its component, each transition logged in one line and handed to its subscribers in order | `registry` |
@@ -99,7 +100,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `use case` | an operation called from outside through a driving port, in `application/use_cases/`: `ValidateConfig` | `service`, `interactor` |
 | `step` | a stage of the program the composition builds, behind no driving port: a class in `application/steps/`, one per module, `NodeIdResolver` | a use case |
 | `work`, `turn` | `Work`, what the supervisor runs again and again, an ABC a step subclasses (`StatusSensor`): a turn is one call to `run_once()`, after `wait_for_next_turn()`, the first turn included, the wait computed from the work's own state | a `loop`; a `task`, asyncio's |
-| `supervisor` | `Supervisor`, runs each work's turns until the shutdown is requested, then cancels them; a turn that raises or passes its time limit fails alone, its outcome logged | `LoopSupervisor` |
+| `supervisor` | `Supervisor`, runs each work's turns until the shutdown is requested, then cancels them; a turn that raises or passes its time limit fails alone, its outcome logged and recorded by `TURNS` on the components its `SupervisedWork` feeds | `LoopSupervisor` |
 | `lifecycle` | the program from its start to its stop, which the composition runs: `CrawlerLifecycle`, `PortSyncLifecycle`, behind no driving port | `app` |
 | `micros` | an integer of microseconds: an instant counts from the epoch; a column holding one is named `<x>_micros` too | a bare `_at` on an `int`, a column's included |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd`, `uid`, `gid` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process; `uid`, `gid`: POSIX's user and group ids) | `dir` for `directory` |

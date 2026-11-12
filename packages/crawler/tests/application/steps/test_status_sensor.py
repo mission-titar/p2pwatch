@@ -26,6 +26,7 @@ from p2pwatch.domain.status_reading import (
     channel_component,
     client_component,
 )
+from p2pwatch.domain.work_components import status_sensor_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
@@ -416,13 +417,22 @@ def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
     run_state, logger = FakeRunStateStore(), FakeLogger()
     virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)
     supervisor = Supervisor(
-        run_state_reader=run_state, monotonic_clock=monotonic_clock, logger=logger
+        run_state_reader=run_state,
+        monotonic_clock=monotonic_clock,
+        health_recorder=observability.health_recorder,
+        logger=logger,
     )
 
     # Returns at the stop, no ``ExceptionGroup``: the node runs on.
     virtual_loop.run_until_complete(
         supervisor.supervise(
-            [SupervisedWork(work=sensor, time_limit=timedelta(hours=1))],
+            [
+                SupervisedWork(
+                    work=sensor,
+                    time_limit=timedelta(hours=1),
+                    feeds=(status_sensor_component(_AMULED),),
+                )
+            ],
             arm_shutdown_bound=lambda: None,
         )
     )

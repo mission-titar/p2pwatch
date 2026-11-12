@@ -7,7 +7,7 @@ from p2pwatch.application.steps.health_event_translator import HealthEventTransl
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component, HealthTransition
-from p2pwatch.domain.health.health_condition import Health, HealthCondition
+from p2pwatch.domain.health.health_condition import BUGS, Health, HealthCondition
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -128,3 +128,11 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         degraded=None,
     )
     assert await _notified(previous=H, current=F, condition=other) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("previous", "current"), [(U, D), (D, F), (F, H)])
+async def test_a_channel_s_bugs_condition_sends_nothing(
+    *, previous: Health, current: Health
+) -> None:
+    assert await _notified(previous=previous, current=current, condition=BUGS, component=_KAD) == []

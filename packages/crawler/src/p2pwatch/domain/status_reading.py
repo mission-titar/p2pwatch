@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component, ComponentLabels
-from p2pwatch.domain.health.health_condition import AtLeast, Band, Below, HealthCondition
+from p2pwatch.domain.health.health_condition import BUGS, AtLeast, Band, Below, HealthCondition
 from p2pwatch.domain.health.outcome import OutcomeSource
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
@@ -67,13 +67,13 @@ def channel_component(*, client_name: ClientName, channel: Channel) -> Component
     return Component(
         name=f"channel {client_name} {channel}",
         labels=ComponentLabels(client_name=client_name, channel=channel),
-        conditions=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
+        conditions=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, BUGS),
     )
 
 
 def lasting_at_entry(condition: HealthCondition) -> timedelta:
     """How long a reading condition has held on entering its band: a period per later reading."""
-    _, band = condition.band()
+    [(_, band)] = condition.bands()  # a reading's condition holds one band
     return (band.enters.count - 1) * STATUS_PERIOD
 
 

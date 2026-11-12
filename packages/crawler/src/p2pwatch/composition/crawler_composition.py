@@ -138,6 +138,12 @@ from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
+from p2pwatch.domain.work_components import (
+    download_tracking_component,
+    keyword_search_component,
+    source_tracking_component,
+    status_sensor_component,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -504,6 +510,11 @@ class CrawlerComposition(CrawlerRunner):
                     ).translate,
                 ),
             )
+            # One per channel: the status reading's fields and the channel's searches feed it.
+            channel_components = {
+                channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
+                for channel in client.channels()
+            }
             # The status sensor and download tracking share the search session: one per node.
             status_sensor = StatusSensor(
                 client_name=_AMULE_CLIENT_NAME,
@@ -514,10 +525,7 @@ class CrawlerComposition(CrawlerRunner):
                 status_reading_writer=status_reading_store,
                 health_recorder=health_recorder,
                 client_component=client_component(_AMULE_CLIENT_NAME),
-                channel_components={
-                    channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
-                    for channel in client.channels()
-                },
+                channel_components=channel_components,
             )
             keywords = dedupe_keywords(crawler_config.search.keywords)
             time_limits = AmuleTurnTimeLimits(
@@ -541,6 +549,12 @@ class CrawlerComposition(CrawlerRunner):
                         monotonic_clock=monotonic_clock,
                     ),
                     time_limit=time_limits.of_search(keyword, channel=channel),
+                    feeds=(
+                        keyword_search_component(
+                            keyword=keyword, client_name=worker.client_name, channel=channel
+                        ),
+                        channel_components[channel],
+                    ),
                 )
                 for worker in workers
                 for channel in worker.channels
@@ -550,6 +564,7 @@ class CrawlerComposition(CrawlerRunner):
                 SupervisedWork(
                     work=status_sensor,
                     time_limit=time_limits.of_status_reading(channel_count=len(client.channels())),
+                    feeds=(status_sensor_component(_AMULE_CLIENT_NAME),),
                 )
             )
 
@@ -607,7 +622,11 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(DownloadCycle.__module__),
                 )
                 works.append(
-                    SupervisedWork(work=download_cycle, time_limit=time_limits.of_tracking())
+                    SupervisedWork(
+                        work=download_cycle,
+                        time_limit=time_limits.of_tracking(),
+                        feeds=(download_tracking_component(_AMULE_CLIENT_NAME),),
+                    )
                 )
                 source_watcher = SourceWatcher(
                     download_client=client,
@@ -626,7 +645,11 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(SourceWatcher.__module__),
                 )
                 works.append(
-                    SupervisedWork(work=source_watcher, time_limit=time_limits.of_tracking())
+                    SupervisedWork(
+                        work=source_watcher,
+                        time_limit=time_limits.of_tracking(),
+                        feeds=(source_tracking_component(_AMULE_CLIENT_NAME),),
+                    )
                 )
 
             crawler_lifecycle = CrawlerLifecycle(
@@ -649,6 +672,7 @@ class CrawlerComposition(CrawlerRunner):
                 supervisor=Supervisor(
                     run_state_reader=run_state_store,
                     monotonic_clock=monotonic_clock,
+                    health_recorder=health_recorder,
                     logger=StdlibLogger(Supervisor.__module__),
                 ),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),

@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Self
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
-from p2pwatch.domain.health.outcome import Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome, OutcomeSource
 
 
 class Health(Enum):
@@ -58,50 +58,66 @@ class Band:
             )
 
 
+# The starting values, tuned at the release candidate (spec v5 lot 4, appendix A, "Conditions").
+_FAILING_BY_DEFAULT = Band(enters=AtLeast(count=3, of_last=3), leaves=Below(count=2, of_last=10))
+_DEGRADED_BY_DEFAULT = Band(enters=AtLeast(count=2, of_last=10), leaves=Below(count=1, of_last=20))
+
+
 @dataclass(kw_only=True, frozen=True)
 class HealthCondition:
     """Counts the outcomes of ``source`` whose reason is a ``counting``; a success counts for it.
-    It holds one band, ``failing`` or ``degraded``."""
+    It holds a band at least, ``failing`` or ``degraded``, both by default."""
 
     name: str
     source: OutcomeSource
-    counting: type[DeclaredFailure]
-    failing: Band | None
-    degraded: Band | None
+    counting: type[DeclaredFailure | Bug]
+    failing: Band | None = _FAILING_BY_DEFAULT
+    degraded: Band | None = _DEGRADED_BY_DEFAULT
 
     def __post_init__(self) -> None:
-        self.band()
+        if not self.bands():
+            raise ValueError(f"the condition {self.name!r}: a band at least expected")
 
-    def band(self) -> tuple[Health, Band]:
-        """Its band, and the health it gives on entering it."""
-        match self.failing, self.degraded:
-            case (Band() as band, None):
-                return Health.FAILING, band
-            case (None, Band() as band):
-                return Health.DEGRADED, band
-        raise ValueError(f"the condition {self.name!r}: one band expected, failing or degraded")
+    def bands(self) -> tuple[tuple[Health, Band], ...]:
+        """Its bands, the worst first, each with the health it gives on entering it."""
+        return tuple(
+            (health, band)
+            for health, band in ((Health.FAILING, self.failing), (Health.DEGRADED, self.degraded))
+            if band is not None
+        )
 
 
 @dataclass(kw_only=True, frozen=True)
 class ConditionWindow:
-    """A condition's last outcomes and the health they gave, unknown until they fill its entry."""
+    """A condition's last outcomes and the health they gave, unknown until they fill its smallest
+    entry."""
 
     condition: HealthCondition
     outcomes: tuple[Outcome, ...] = ()
     health: Health = Health.UNKNOWN
 
     def after(self, outcome: Outcome) -> Self:
-        severity, band = self.condition.band()
-        outcomes = (*self.outcomes, outcome)[-max(band.enters.of_last, band.leaves.of_last) :]
-        if len(outcomes) < band.enters.of_last:
-            health = Health.UNKNOWN
-        elif self.health is severity:
-            leaves = self._failures(outcomes, of_last=band.leaves.of_last) < band.leaves.count
-            health = Health.HEALTHY if leaves else severity
-        else:
-            enters = self._failures(outcomes, of_last=band.enters.of_last) >= band.enters.count
-            health = severity if enters else Health.HEALTHY
-        return replace(self, outcomes=outcomes, health=health)
+        bands = self.condition.bands()
+        kept = max(max(band.enters.of_last, band.leaves.of_last) for _, band in bands)
+        outcomes = (*self.outcomes, outcome)[-kept:]
+        if len(outcomes) < min(band.enters.of_last for _, band in bands):
+            return replace(self, outcomes=outcomes, health=Health.UNKNOWN)
+        return replace(self, outcomes=outcomes, health=self._judged(outcomes, bands=bands))
+
+    def _judged(
+        self, outcomes: tuple[Outcome, ...], *, bands: tuple[tuple[Health, Band], ...]
+    ) -> Health:
+        # Leaving a band, a milder one enters by its own entry only: an ended pattern then heals.
+        for severity, band in bands:
+            if self.health is severity:
+                if self._failures(outcomes, of_last=band.leaves.of_last) >= band.leaves.count:
+                    return severity
+            elif self._failures(outcomes, of_last=band.enters.of_last) >= band.enters.count:
+                return severity
+        return Health.HEALTHY
 
     def _failures(self, outcomes: tuple[Outcome, ...], *, of_last: int) -> int:
         return sum(isinstance(o.reason, self.condition.counting) for o in outcomes[-of_last:])
+
+
+BUGS = HealthCondition(name="bugs", source=TURNS, counting=Bug)

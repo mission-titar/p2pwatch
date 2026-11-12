@@ -70,3 +70,9 @@ def test_an_outcome_of_a_source_no_condition_reads_changes_nothing() -> None:
 def test_a_component_holds_its_name_and_labels() -> None:
     component = _component()
     assert (component.name, component.labels.client_name) == ("client amuled", "amuled")
+
+
+def test_a_component_reads_the_sources_of_its_conditions_alone() -> None:
+    component = _component()
+    assert (component.reads(_ANSWERS), component.reads(_FIELDS)) == (True, True)
+    assert component.reads(OutcomeSource(name="the turns")) is False
