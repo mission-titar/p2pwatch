@@ -90,6 +90,7 @@ class _Searches:
         client: SearchClient,
         *,
         keywords: list[str],
+        health_recorder: HealthRecorder,
         time_limit_of: _TimeLimitOf = lambda _keyword, *, channel: _DAY,
     ) -> list[SupervisedWork]:
         """One work per channel and keyword, in that order, as the composition enumerates them."""
@@ -135,6 +136,8 @@ class _Searches:
                     search_worker=worker,
                     backoff_saver=backoff_saver,
                     monotonic_clock=self.monotonic_clock,
+                    health_recorder=health_recorder,
+                    channel_component=channel_components[channel],
                 ),
                 time_limit=time_limit_of(Keyword(keyword), channel=channel),
                 feeds=(
@@ -160,14 +163,15 @@ class _Searches:
     ) -> None:
         run_state = FakeRunStateStore()
         self.loop.call_later(seconds, run_state.set_shutdown_requested)
-        works = self.works(client, keywords=keywords, time_limit_of=time_limit_of)
+        health_recorder = HealthRecorder(logger=health_logger or FakeLogger(), subscribers=())
+        works = self.works(
+            client, keywords=keywords, health_recorder=health_recorder, time_limit_of=time_limit_of
+        )
         self.loop.run_until_complete(
             Supervisor(
                 run_state_reader=run_state,
                 monotonic_clock=self.monotonic_clock,
-                health_recorder=HealthRecorder(
-                    logger=health_logger or FakeLogger(), subscribers=()
-                ),
+                health_recorder=health_recorder,
                 logger=logger or FakeLogger(),
             ).supervise(works, arm_shutdown_bound=lambda: None)
         )
@@ -257,6 +261,58 @@ def _unwell(health_logger: FakeLogger) -> list[str]:
     return [line.message for line in health_logger.lines if line.level == "warning"]
 
 
+def _health_lines(health_logger: FakeLogger, *, of: str) -> list[str]:
+    return [line.message for line in health_logger.lines if line.message.startswith(of)]
+
+
+def test_three_refused_searches_in_a_row_fail_their_channel_s_searches(searches: _Searches) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, search_failures=[SearchFailedError("refused")] * 3
+    )
+    health_logger = FakeLogger()
+    searches.run_for(200.0, client=client, keywords=["keroro"], health_logger=health_logger)
+    assert [start for start, *_ in client.searches] == [0.0, 60.0, 180.0]
+    # A refused search is a declared outcome: no bug, the turns' conditions healthy.
+    assert _unwell(health_logger) == ["channel amuled kad, searches failed: unknown to failing"]
+
+
+def test_searches_answered_keep_their_channel_s_searches_healthy(searches: _Searches) -> None:
+    health_logger = FakeLogger()
+    searches.run_for(
+        100.0,
+        client=FakeTimedSearchClient({Channel("kad"): 30.0}),
+        keywords=["keroro"],
+        health_logger=health_logger,
+    )
+    assert _health_lines(health_logger, of="channel amuled kad, searches failed") == [
+        "channel amuled kad, searches failed: unknown to healthy"
+    ]
+
+
+def test_a_bug_between_refused_searches_records_nothing_on_their_channel_s_searches(
+    searches: _Searches,
+) -> None:
+    refused = SearchFailedError("refused")
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, search_failures=[refused, refused, RuntimeError("bug"), refused]
+    )
+    health_logger = FakeLogger()
+    searches.run_for(250.0, client=client, keywords=["keroro"], health_logger=health_logger)
+    assert [start for start, *_ in client.searches] == [0.0, 60.0, 180.0, 240.0]
+    assert _health_lines(health_logger, of="channel amuled kad, searches failed") == [
+        "channel amuled kad, searches failed: unknown to failing"
+    ]
+
+
+def test_an_unreachable_client_is_no_refused_search(searches: _Searches) -> None:
+    client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=[make_unreachable()] * 3)
+    health_logger = FakeLogger()
+    searches.run_for(200.0, client=client, keywords=["keroro"], health_logger=health_logger)
+    assert _health_lines(health_logger, of="channel amuled kad, searches failed") == [
+        "channel amuled kad, searches failed: unknown to healthy"
+    ]
+
+
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:
     client = FakeTimedSearchClient(
         {Channel("kad"): 30.0}, search_failures=[SearchFailedError("refused")]
@@ -318,7 +374,11 @@ def test_a_backoff_the_previous_run_saved_delays_the_first_search(searches: _Sea
 def test_the_supervisor_names_the_work_after_its_keyword_client_and_channel(
     searches: _Searches,
 ) -> None:
-    [work] = searches.works(FakeTimedSearchClient({Channel("kad"): 30.0}), keywords=["keroro"])
+    [work] = searches.works(
+        FakeTimedSearchClient({Channel("kad"): 30.0}),
+        keywords=["keroro"],
+        health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=()),
+    )
     assert str(work.work) == "search 'keroro' on amuled/kad"
 
 

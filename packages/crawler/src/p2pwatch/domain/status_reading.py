@@ -10,6 +10,7 @@ from p2pwatch.domain.health.health_condition import BUGS, AtLeast, Band, Below, 
 from p2pwatch.domain.health.outcome import OutcomeSource
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.domain.search.searches_failed import SEARCHES_FAILED
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 STATUS_PERIOD = timedelta(minutes=1)
@@ -29,9 +30,14 @@ class ChannelNotConnectable(DeclaredFailure):
     """A reading of a connected channel peers cannot connect to: a reason, never raised."""
 
 
+class NoChannelConnected(DeclaredFailure):
+    """A reading of a client none of whose channels is connected: a reason, never raised."""
+
+
 STATUS_API_ANSWER = OutcomeSource(name="the status reading's API answer")
 STATUS_CONNECTED_FIELD = OutcomeSource(name="the status reading's connected field")
 STATUS_CONNECTABLE_FIELD = OutcomeSource(name="the status reading's connectable field")
+STATUS_CONNECTED_CHANNELS = OutcomeSource(name="the status reading's connected channels")
 CLIENT_UNREACHABLE = HealthCondition(
     name="unreachable",
     source=STATUS_API_ANSWER,
@@ -54,6 +60,14 @@ CHANNEL_NOT_CONNECTABLE = HealthCondition(
     degraded=Band(enters=AtLeast(count=6, of_last=6), leaves=Below(count=1, of_last=20)),
 )
 
+# No alert of today to keep: the default failing band, as the unreachable condition's.
+CONNECTED_TO_NO_NETWORK = HealthCondition(
+    name="connected to no network",
+    source=STATUS_CONNECTED_CHANNELS,
+    counting=NoChannelConnected,
+    degraded=None,
+)
+
 
 def client_component(client_name: ClientName) -> Component:
     return Component(
@@ -67,7 +81,7 @@ def channel_component(*, client_name: ClientName, channel: Channel) -> Component
     return Component(
         name=f"channel {client_name} {channel}",
         labels=ComponentLabels(client_name=client_name, channel=channel),
-        conditions=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, BUGS),
+        conditions=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, SEARCHES_FAILED, BUGS),
     )
 
 

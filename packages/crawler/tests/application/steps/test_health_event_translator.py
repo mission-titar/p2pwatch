@@ -11,13 +11,16 @@ from p2pwatch.domain.health.health_condition import BUGS, Health, HealthConditio
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
+from p2pwatch.domain.search.searches_failed import SEARCHES_FAILED
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    CONNECTED_TO_NO_NETWORK,
     channel_component,
     client_component,
 )
+from p2pwatch.domain.work_components import download_tracking_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -132,7 +135,21 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("previous", "current"), [(U, D), (D, F), (F, H)])
-async def test_a_channel_s_bugs_condition_sends_nothing(
-    *, previous: Health, current: Health
+@pytest.mark.parametrize(
+    ("condition", "component"),
+    [
+        (BUGS, _KAD),
+        (SEARCHES_FAILED, _KAD),
+        (CONNECTED_TO_NO_NETWORK, download_tracking_component(ClientName("fake"))),
+    ],
+    ids=["a channel's bugs", "a channel's searches failed", "connected to no network"],
+)
+async def test_a_condition_without_an_event_of_today_sends_nothing(
+    *, previous: Health, current: Health, condition: HealthCondition, component: Component
 ) -> None:
-    assert await _notified(previous=previous, current=current, condition=BUGS, component=_KAD) == []
+    assert (
+        await _notified(
+            previous=previous, current=current, condition=condition, component=component
+        )
+        == []
+    )

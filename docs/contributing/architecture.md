@@ -149,7 +149,10 @@ ligne, toute autre exception est un bug, journalisé avec sa trace, et le tour s
 attend alors au moins un plancher de 60 s (le plus tardif du plancher et de son attente propre).
 L'issue de chaque tour est enregistrée sur les composants que son work alimente, dont la condition
 « bugs » compte les bugs seuls : une recherche alimente le sien et celui de son canal, le statut, le
-suivi des téléchargements et celui des sources chacun le sien. À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
+suivi des téléchargements et celui des sources chacun le sien. Le composant d'un canal compte
+aussi ses recherches refusées par le réseau (`SearchFailedError`), d'après l'issue déclarée de
+chaque recherche, un bug n'y comptant rien ; celui du suivi des téléchargements, les lectures du
+statut où aucun canal du client n'est connecté. À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
 chaque work. Une recherche attend la fin du
 backoff de son client et de son canal (§5) ; le statut, le reste de la minute depuis la fin de son
 dernier tour ; le suivi des téléchargements, rien au premier tour, puis
@@ -817,7 +820,7 @@ avec sa trace, et le superviseur espace le tour suivant d'au moins son plancher 
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, conditions, transitions), `domain/work_components.py` (les composants que seuls les tours alimentent), `domain/declared_failure.py`, `application/steps/health_recorder.py` (chaque issue enregistrée, chaque transition journalisée), `application/steps/health_event_translator.py` (les transitions en événements d'aujourd'hui) |
+| Santé | `domain/health/` (composants, conditions, transitions), `domain/work_components.py` (les composants des works), `domain/search/searches_failed.py` (les recherches refusées d'un canal), `domain/declared_failure.py`, `application/steps/health_recorder.py` (chaque issue enregistrée, chaque transition journalisée), `application/steps/health_event_translator.py` (les transitions en événements d'aujourd'hui) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

@@ -26,7 +26,7 @@ from p2pwatch.domain.status_reading import (
     channel_component,
     client_component,
 )
-from p2pwatch.domain.work_components import status_sensor_component
+from p2pwatch.domain.work_components import download_tracking_component, status_sensor_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
@@ -91,6 +91,7 @@ def _status_sensor(
     observability: _Observability,
     status_reading_writer: StatusReadingWriter | None = None,
     channels: Sequence[Channel] = _CHANNELS,
+    download: bool = False,
 ) -> StatusSensor:
     return StatusSensor(
         client_name=client_name,
@@ -105,6 +106,7 @@ def _status_sensor(
             channel: channel_component(client_name=client_name, channel=channel)
             for channel in channels
         },
+        download_tracking_component=download_tracking_component(client_name) if download else None,
     )
 
 
@@ -115,7 +117,10 @@ async def _take_turns(sensor: StatusSensor, *, turns: int) -> None:
 
 
 async def _run(
-    *readings: _Reading, client: ClientName = _AMULED, channels: Sequence[Channel] = _CHANNELS
+    *readings: _Reading,
+    client: ClientName = _AMULED,
+    channels: Sequence[Channel] = _CHANNELS,
+    download: bool = False,
 ) -> _Observability:
     fake_time = FakeTime()
     observability = _Observability(fake_time)
@@ -125,6 +130,7 @@ async def _run(
         fake_time=fake_time,
         observability=observability,
         channels=channels,
+        download=download,
     )
     await _take_turns(sensor, turns=len(readings))
     return observability
@@ -247,6 +253,53 @@ async def test_unreachable_fails_the_client_s_unreachable_condition_at_its_third
     observability = await _run(_DOWN, _DOWN, _DOWN)
     assert observability.health_logger.lines == [
         LoggedLine(level="warning", message="client amuled, unreachable: unknown to failing")
+    ]
+
+
+def _download_tracking_lines(observability: _Observability) -> list[LoggedLine]:
+    return [
+        line
+        for line in observability.health_logger.lines
+        if line.message.startswith("download tracking")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_client_connected_to_no_network_fails_download_tracking_at_its_third_reading() -> (
+    None
+):
+    off = _status(ed2k=(False, None), kad=(False, None))
+    observability = await _run(off, off, off, download=True)
+    assert _download_tracking_lines(observability) == [
+        LoggedLine(
+            level="warning",
+            message="download tracking amuled, connected to no network: unknown to failing",
+        )
+    ]
+    assert observability.notifier.notifications == []  # its first reader is the log line
+
+
+@pytest.mark.asyncio
+async def test_one_channel_connected_keeps_download_tracking_connected() -> None:
+    half = _status(ed2k=_UP, kad=(False, None))
+    observability = await _run(half, half, half, download=True)
+    assert _download_tracking_lines(observability) == [
+        LoggedLine(
+            level="info",
+            message="download tracking amuled, connected to no network: unknown to healthy",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unanswered_reading_records_nothing_on_download_tracking() -> None:
+    off = _status(ed2k=(False, None), kad=(False, None))
+    observability = await _run(off, off, _DOWN, _DOWN, _DOWN, off, download=True)
+    assert _download_tracking_lines(observability) == [
+        LoggedLine(
+            level="warning",
+            message="download tracking amuled, connected to no network: unknown to failing",
+        )
     ]
 
 
@@ -413,6 +466,7 @@ def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
         health_recorder=observability.health_recorder,
         client_component=client_component(_AMULED),
         channel_components={},
+        download_tracking_component=None,
     )
     run_state, logger = FakeRunStateStore(), FakeLogger()
     virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)

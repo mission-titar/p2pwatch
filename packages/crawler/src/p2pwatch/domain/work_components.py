@@ -1,8 +1,10 @@
-"""The components only the works' turns feed, each judged on its bugs (spec v5 lot 4, D10)."""
+"""The works' components, each judged on its bugs, download tracking on its client connected to no
+network too (spec v5 lot 4, D10)."""
 
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import BUGS
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
+from p2pwatch.domain.status_reading import CONNECTED_TO_NO_NETWORK
 
 
 def keyword_search_component(
@@ -20,7 +22,11 @@ def status_sensor_component(client_name: ClientName) -> Component:
 
 
 def download_tracking_component(client_name: ClientName) -> Component:
-    return _client_work_component("download tracking", client_name=client_name)
+    return Component(
+        name=f"download tracking {client_name}",
+        labels=ComponentLabels(client_name=client_name),
+        conditions=(BUGS, CONNECTED_TO_NO_NETWORK),
+    )
 
 
 def source_tracking_component(client_name: ClientName) -> Component:

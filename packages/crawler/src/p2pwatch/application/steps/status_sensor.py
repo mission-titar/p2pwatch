@@ -1,6 +1,6 @@
 """One client's status sensor, a work: a reading every minute feeds the channel gauges, the client's
-unreachable condition and each channel's two fields' conditions, whose transitions alert (spec
-stage 2, D15; v5 lot 4, D21).
+unreachable condition, each channel's two fields' conditions, whose transitions alert, and download
+tracking's client connected to no network (spec stage 2, D15; v5 lot 4, D21).
 
 An unknown field records nothing: while the API does not answer, each channel's conditions keep the
 readings they held.
@@ -26,6 +26,7 @@ from p2pwatch.domain.observability.events import ChannelStatusSampled, ClientUnr
 from p2pwatch.domain.status_reading import (
     STATUS_API_ANSWER,
     STATUS_CONNECTABLE_FIELD,
+    STATUS_CONNECTED_CHANNELS,
     STATUS_CONNECTED_FIELD,
     STATUS_PERIOD,
     ChannelNotConnectable,
@@ -33,13 +34,14 @@ from p2pwatch.domain.status_reading import (
     ChannelStatus,
     ClientNotAnswering,
     ClientStatus,
+    NoChannelConnected,
     StatusReading,
 )
 
 
 class StatusSensor(Work):
     """One client's status sensor, recording each reading on the client's and its channels'
-    components."""
+    components, and on download tracking's when the node downloads."""
 
     def __init__(
         self,
@@ -53,6 +55,7 @@ class StatusSensor(Work):
         health_recorder: HealthRecorder,
         client_component: Component,
         channel_components: Mapping[Channel, Component],
+        download_tracking_component: Component | None,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -63,6 +66,7 @@ class StatusSensor(Work):
         self._health_recorder = health_recorder
         self._client_component = client_component
         self._channel_components = channel_components
+        self._download_tracking_component = download_tracking_component
         self._last_turn_ended_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
@@ -95,11 +99,22 @@ class StatusSensor(Work):
             )
             channels: dict[Channel, ChannelStatus] = {}
             answer = Outcome.declared(ClientNotAnswering())
+            connected_to_a_network = None  # unknown: records nothing
         else:
             self._publish(status)
             channels = {c.channel: c for c in status.channels}
             answer = Outcome.success()
+            connected_to_a_network = any(c.connected for c in status.channels)
         await self._health_recorder.record(answer, on=self._client_component, by=STATUS_API_ANSWER)
+        if connected_to_a_network is not None and self._download_tracking_component is not None:
+            outcome = (
+                Outcome.success()
+                if connected_to_a_network
+                else Outcome.declared(NoChannelConnected())
+            )
+            await self._health_recorder.record(
+                outcome, on=self._download_tracking_component, by=STATUS_CONNECTED_CHANNELS
+            )
         for channel, component in self._channel_components.items():
             await self._read_channel(channel, reading=channels.get(channel), on=component)
 
