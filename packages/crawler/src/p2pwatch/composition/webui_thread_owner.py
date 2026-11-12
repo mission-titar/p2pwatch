@@ -36,7 +36,7 @@ class WebuiThreadOwner(StateOwner):
         self._add_work = add_work
 
     def __str__(self) -> str:
-        return "webui thread"
+        return "owner of the webui"
 
     async def restart(self) -> None:
         """Stops the old thread, then serves the webui on a thread built anew, and adds the works

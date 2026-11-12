@@ -21,7 +21,7 @@ class NotifierOwner(StateOwner):
         self._notifier = build_notifier()
 
     def __str__(self) -> str:
-        return "notifier"
+        return "owner of the notifier"
 
     def notifier(self) -> Notifier:
         """The notifier built latest."""

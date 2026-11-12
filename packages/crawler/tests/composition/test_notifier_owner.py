@@ -72,7 +72,7 @@ class TestNotifierOwner(StateOwnerContract):
 
 
 def test_the_owner_is_named_after_the_notifier() -> None:
-    assert str(NotifierOwner(build_notifier=FakeNotifier)) == "notifier"
+    assert str(NotifierOwner(build_notifier=FakeNotifier)) == "owner of the notifier"
 
 
 def test_a_notifier_failing_on_its_bugs_restarts_its_owner_the_sends_then_reaching_the_new_one(
@@ -128,6 +128,7 @@ def test_a_notifier_failing_on_its_bugs_restarts_its_owner_the_sends_then_reachi
     assert community.health_of(BUGS) is Health.HEALTHY
     assert policy_logger.lines == [
         LoggedLine(
-            level="warning", message="notifier fake community, bugs failing: restarting notifier"
+            level="warning",
+            message="notifier fake community, bugs failing: restarting owner of the notifier",
         )
     ]

@@ -42,7 +42,7 @@ class AmuleClientOwner(StateOwner):
         self._add_work = add_work
 
     def __str__(self) -> str:
-        return f"client {self._client_name}"
+        return f"owner of client {self._client_name}"
 
     async def restart(self) -> None:
         """Logs the session out, then logs a client built anew in, its first starts spaced from
