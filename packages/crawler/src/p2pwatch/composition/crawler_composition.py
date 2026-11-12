@@ -111,11 +111,14 @@ from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.keyword_search import KeywordSearch
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_worker import SearchWorker
+from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_sensor import StatusSensor
-from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
-from p2pwatch.application.steps.work import Work
+from p2pwatch.application.steps.supervisor import (
+    ShutdownBoundArmer,
+    SupervisedWork,
+    Supervisor,
+)
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -126,6 +129,7 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
+from p2pwatch.composition.turn_time_limits import AmuleTurnTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
@@ -516,24 +520,38 @@ class CrawlerComposition(CrawlerRunner):
                 },
             )
             keywords = dedupe_keywords(crawler_config.search.keywords)
+            time_limits = AmuleTurnTimeLimits(
+                request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
+                search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
+                notification_timeout=timedelta(seconds=observability.notification_timeout_seconds),
+                keywords=keywords,
+            )
             backoff_saver = BackoffSaver(
                 backoff=backoff,
                 backoff_state_writer=backoff_state_store,
                 logger=StdlibLogger(BackoffSaver.__module__),
             )
-            works: list[Work] = [
-                KeywordSearch(
-                    keyword=keyword,
-                    channel=channel,
-                    search_worker=worker,
-                    backoff_saver=backoff_saver,
-                    monotonic_clock=monotonic_clock,
+            works = [
+                SupervisedWork(
+                    work=KeywordSearch(
+                        keyword=keyword,
+                        channel=channel,
+                        search_worker=worker,
+                        backoff_saver=backoff_saver,
+                        monotonic_clock=monotonic_clock,
+                    ),
+                    time_limit=time_limits.of_search(keyword, channel=channel),
                 )
                 for worker in workers
                 for channel in worker.channels
                 for keyword in keywords
             ]
-            works.append(status_sensor)
+            works.append(
+                SupervisedWork(
+                    work=status_sensor,
+                    time_limit=time_limits.of_status_reading(channel_count=len(client.channels())),
+                )
+            )
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its works
             # share the catalog's stores and ``local_connection`` (one writer, on the event loop),
@@ -588,7 +606,9 @@ class CrawlerComposition(CrawlerRunner):
                     waker=waker,
                     logger=StdlibLogger(DownloadCycle.__module__),
                 )
-                works.append(download_cycle)
+                works.append(
+                    SupervisedWork(work=download_cycle, time_limit=time_limits.of_tracking())
+                )
                 source_watcher = SourceWatcher(
                     download_client=client,
                     source_client=client,
@@ -605,7 +625,9 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     logger=StdlibLogger(SourceWatcher.__module__),
                 )
-                works.append(source_watcher)
+                works.append(
+                    SupervisedWork(work=source_watcher, time_limit=time_limits.of_tracking())
+                )
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
