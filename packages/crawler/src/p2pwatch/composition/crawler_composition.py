@@ -140,6 +140,7 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_owner import AmuleClientOwner
 from p2pwatch.composition.notifier_owner import NotifierOwner
+from p2pwatch.composition.parts_built_later import PartsBuiltLater
 from p2pwatch.composition.turn_time_limits import TIME_LIMIT_ALLOWANCE, AmuleTurnTimeLimits
 from p2pwatch.composition.webui_thread_owner import WebuiThreadOwner
 from p2pwatch.domain.console_query import ConsoleDatabase
@@ -564,17 +565,16 @@ class CrawlerComposition(CrawlerRunner):
                 )
             )
             notifier_parts = notifier_components(notifier_owner.notifier().services())
-            # A cycle: the dispatcher records on the recorder, whose translator dispatches. The
-            # translator turns none of the notifier's transitions into an event, which bounds it.
-            health_recorder: HealthRecorder
+            # Two cycles: the dispatcher records on the recorder, whose translator dispatches (none
+            # of the notifier's transitions is an event, which bounds it), and each owner adds its
+            # works to the supervisor running its restarts.
+            later = PartsBuiltLater()
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
                 current_notifier=notifier_owner.notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
-                record_outcome=lambda outcome, *, on, by: health_recorder.record(
-                    outcome, on=on, by=by
-                ),
+                record_outcome=later.record,
                 service_components=notifier_parts,
             )
             observation_store = SqliteObservationStore(catalog_connection)
@@ -605,14 +605,12 @@ class CrawlerComposition(CrawlerRunner):
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. A crash degrades (spec §17.1), and its owner rebuilds it.
             webui_thread = build_webui()
-            # A cycle: the policy holds the owners, the works the recorder calling the policy. Each
-            # owner reaches its works' factory and the supervisor at its restarts only.
-            supervisor: Supervisor
+            # Each owner reaches its works' factory and the supervisor at its restarts only.
             webui_owner = WebuiThreadOwner(
                 webui_thread,
                 build_thread=build_webui,
                 build_works=lambda rebuilt: webui_works(rebuilt),
-                add_work=lambda supervised: supervisor.add(supervised),
+                add_work=later.add_work,
             )
             # The thread held then, stopped at the unwind before the database connections close.
             stack.push_async_callback(webui_owner.close)
@@ -663,7 +661,7 @@ class CrawlerComposition(CrawlerRunner):
                 client_name=_AMULE_CLIENT_NAME,
                 build_client=build_client,
                 build_works=lambda rebuilt: client_works(rebuilt),
-                add_work=lambda supervised: supervisor.add(supervised),
+                add_work=later.add_work,
             )
             # The client held then, not this first one, whose rebuilt successor would never log out.
             stack.push_async_callback(amule_owner.close)
@@ -712,6 +710,7 @@ class CrawlerComposition(CrawlerRunner):
                     restart_policy,
                 ),
             )
+            later.health_recorder = health_recorder
             download_steps = (
                 None
                 if download_config is None
@@ -739,6 +738,7 @@ class CrawlerComposition(CrawlerRunner):
                 restart_policy=restart_policy,
                 logger=StdlibLogger(Supervisor.__module__),
             )
+            later.supervisor = supervisor
             time_limits = AmuleTurnTimeLimits(
                 request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
                 search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
