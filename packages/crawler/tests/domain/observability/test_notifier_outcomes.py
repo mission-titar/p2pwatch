@@ -5,6 +5,7 @@ from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome
 from p2pwatch.domain.observability.notifier_outcomes import (
     SENDS,
     SENDS_FAILED,
+    NotificationFailed,
     NotificationRefused,
     NotificationService,
     NotificationTimedOut,
@@ -15,9 +16,10 @@ from p2pwatch.domain.observability.policy import Audience
 _DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY)
 
 
-def test_a_refusal_and_a_timeout_are_declared_failures_apart() -> None:
-    assert issubclass(NotificationRefused, DeclaredFailure)
-    assert issubclass(NotificationTimedOut, DeclaredFailure)
+def test_a_refusal_and_a_timeout_are_failed_sends_apart() -> None:
+    assert issubclass(NotificationFailed, DeclaredFailure)
+    assert issubclass(NotificationRefused, NotificationFailed)
+    assert issubclass(NotificationTimedOut, NotificationFailed)
     assert not issubclass(NotificationRefused, NotificationTimedOut)
     assert not issubclass(NotificationTimedOut, NotificationRefused)
 
@@ -52,7 +54,7 @@ def test_a_service_s_declared_failures_never_fail_its_bugs_condition() -> None:
     assert component.health_of(BUGS) is Health.HEALTHY
 
 
-def test_a_service_s_sends_refused_fails_on_three_refusals_its_sends_alone_counting() -> None:
+def test_a_service_s_sends_failed_fails_on_three_refusals_its_sends_alone_counting() -> None:
     component = notifier_components((_DISCORD,))[_DISCORD]
     component.record(Outcome.declared(NotificationRefused("403")), by=UNITS_OF_WORK)
     assert component.health_of(SENDS_FAILED) is Health.UNKNOWN
@@ -60,12 +62,12 @@ def test_a_service_s_sends_refused_fails_on_three_refusals_its_sends_alone_count
         component.record(Outcome.declared(NotificationRefused("403")), by=SENDS) for _ in range(3)
     ]
     assert [(t.condition.name, t.current) for t in transitions[2]] == [
-        ("sends refused", Health.FAILING)
+        ("sends failed", Health.FAILING)
     ]
 
 
-def test_a_timeout_is_no_refusal_for_sends_refused() -> None:
+def test_a_service_that_only_times_out_fails_its_sends_failed() -> None:
     component = notifier_components((_DISCORD,))[_DISCORD]
     for _ in range(3):
         component.record(Outcome.declared(NotificationTimedOut("past 5 s")), by=SENDS)
-    assert component.health_of(SENDS_FAILED) is Health.HEALTHY
+    assert component.health_of(SENDS_FAILED) is Health.FAILING

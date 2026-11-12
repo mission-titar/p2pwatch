@@ -327,14 +327,14 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_logged_with_its_trac
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("error", "bugs", "sends_refused", "failing"),
+    ("error", "bugs", "sends_failed", "failing"),
     [
-        (NotificationRefused("403"), Health.HEALTHY, Health.FAILING, "sends refused"),
+        (NotificationRefused("403"), Health.HEALTHY, Health.FAILING, "sends failed"),
         (KeyError("embeds"), Health.FAILING, Health.UNKNOWN, "bugs"),
     ],
 )
-async def test_three_bugs_fail_a_service_s_bugs_condition_three_refusals_its_sends_refused(
-    *, error: Exception, bugs: Health, sends_refused: Health, failing: str
+async def test_three_bugs_fail_a_service_s_bugs_condition_three_refusals_its_sends_failed(
+    *, error: Exception, bugs: Health, sends_failed: Health, failing: str
 ) -> None:
     notifier, health_logger = FakeRaisingNotifier(error), FakeLogger()
     components = notifier_components(notifier.services())
@@ -349,7 +349,7 @@ async def test_three_bugs_fail_a_service_s_bugs_condition_three_refusals_its_sen
     for _ in range(3):
         await dispatcher.dispatch(_COMPLETED)
     component = components[ONE_SERVICE_PER_AUDIENCE[0]]
-    assert (component.health_of(BUGS), component.health_of(SENDS_FAILED)) == (bugs, sends_refused)
+    assert (component.health_of(BUGS), component.health_of(SENDS_FAILED)) == (bugs, sends_failed)
     # The log line, the conditions' one reader in lot 4b.
     assert health_logger.lines[-1] == LoggedLine(
         level="warning", message=f"notifier fake community, {failing}: unknown to failing"

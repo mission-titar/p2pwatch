@@ -574,7 +574,7 @@ reader; 18 blocks.)
   | download tracking | free disk space below the current floor (Corrected: entering at 1 of 1 and leaving at the first good reading, today's, D9) | degraded |
   | a database | its writes' declared failures | the table's thresholds |
   | the webui | a fall of its unit, which serves until it falls (Corrected: a liveness turn each period, a fallen thread a `Bug`: no asyncio cancellation reaches a thread, D4) | a `Bug` |
-  | the notifier | its sends refused, per service (Corrected: one component per service, block 74; a refusal `NotificationRefused`, a timeout `NotificationTimedOut`, both declared, any other exception a `Bug`) | the table's thresholds |
+  | the notifier | its sends refused, per service (Corrected: one component per service, block 74; a refusal `NotificationRefused`, a timeout `NotificationTimedOut`, both declared, any other exception a `Bug`. Corrected by lot 4b's closing block: "sends failed", counting a timeout as a refusal, both a `NotificationFailed`, so a service that only times out fails; the operator's answer of 2026-11-12, "on ne gagne pas à distinguer") | the table's thresholds |
   | the reevaluation (4c) | its files' failures | failing until a complete pass |
 
 - **The graph for today's node** (D11; Corrected: built in lot 4c, blocks 05 and 07). A dependency's quorum says how many of the components it names a component

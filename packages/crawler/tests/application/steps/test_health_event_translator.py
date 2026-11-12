@@ -163,7 +163,7 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         "connected to no network",
         "the webui's bugs",
         "a notifier service's bugs",
-        "a notifier service's sends refused",
+        "a notifier service's sends failed",
     ],
 )
 async def test_a_condition_without_an_event_of_today_sends_nothing(
