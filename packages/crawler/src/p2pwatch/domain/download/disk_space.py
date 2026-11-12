@@ -1,5 +1,5 @@
-"""The download disk's free space under its floor, judged at each reading as today's alert did:
-entering at one low reading, leaving at the first good one (spec v5 lot 4, D9's mark)."""
+"""The download disk's free space under its floor, entering at one low reading and leaving at the
+first good one, so a second dip alerts again as today's alert does (spec v5 lot 4, D9, D21)."""
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.health_condition import AtLeast, Band, Below, HealthCondition

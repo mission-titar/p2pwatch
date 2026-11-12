@@ -6,7 +6,7 @@ from typing import Protocol
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.application.ports.driven.state_owner import StateOwner
-from p2pwatch.application.steps.supervisor import SupervisedWork
+from p2pwatch.application.steps.supervisor import SupervisedWork, WorkAdder
 from p2pwatch.domain.identifiers import ClientName
 
 
@@ -17,10 +17,6 @@ class ClientBuilder(Protocol):
 # Every work over ``client``, each object holding it built anew.
 class ClientWorks(Protocol):
     def __call__(self, client: AmuleApiClient, /) -> Sequence[SupervisedWork]: ...
-
-
-class WorkAdder(Protocol):
-    def __call__(self, supervised: SupervisedWork, /) -> None: ...
 
 
 class AmuleClientOwner(StateOwner):
