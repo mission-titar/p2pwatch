@@ -8,13 +8,17 @@ import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
+from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
+from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
+    CLIENT_UNREACHABLE,
     ChannelStatus,
     ClientStatus,
     PublishedReading,
@@ -41,7 +45,8 @@ _NOTIFICATION_TIMEOUT_SECONDS = 5.0
 
 
 class _Observability:
-    """The dispatch step over fakes, each notification timed: an alert is one."""
+    """The dispatch step over fakes, each notification timed: an alert is one; the health recorder
+    logs apart, as its own module's logger does."""
 
     def __init__(self, fake_time: FakeTime) -> None:
         self.logger = FakeLogger()
@@ -51,6 +56,13 @@ class _Observability:
             node_metric_writer=FakeNodeMetricStore(),
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
+        )
+        self.health_logger = FakeLogger()
+        translator = HealthEventTranslator(
+            observability_dispatcher=self.dispatcher, node_id=_NODE_ID
+        )
+        self.health_recorder = HealthRecorder(
+            logger=self.health_logger, subscribers=(translator.translate,)
         )
 
 
@@ -82,6 +94,12 @@ def _status_loop(
         run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_id=_NODE_ID,
+        health_recorder=observability.health_recorder,
+        client_component=Component(
+            name=f"client {client_name}",
+            labels=ComponentLabels(client_name=client_name),
+            conditions=(CLIENT_UNREACHABLE,),
+        ),
     )
 
 
@@ -172,16 +190,31 @@ async def test_unknown_after_an_alert_is_no_recovery() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unreachable_alerts_at_two_minutes_and_recovers_when_it_answers() -> None:
-    observability = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
+async def test_unreachable_alerts_at_two_minutes_and_ends_at_the_ninth_answer() -> None:
+    # Ends under 2 unanswered among the last 10 readings: the eighth answer still sees two.
+    observability = await _run(_DOWN, _DOWN, _DOWN, *[_status(ed2k=_UP)] * 9)
     assert observability.notifier.notifications == [
         (120.0, _warning("amuled unreachable for 2 min")),
-        (180.0, _info("amuled reachable again")),
+        (660.0, _info("amuled reachable again")),
     ]
     assert (
         observability.logger.lines.count(LoggedLine(level="warning", message="amuled unreachable"))
         == 3
     )
+
+
+@pytest.mark.asyncio
+async def test_eight_answers_after_an_unreachable_alert_end_nothing() -> None:
+    alerts = await _alerts(_DOWN, _DOWN, _DOWN, *[_status(ed2k=_UP)] * 8)
+    assert alerts == [(120.0, _warning("amuled unreachable for 2 min"))]
+
+
+@pytest.mark.asyncio
+async def test_unreachable_fails_the_client_s_unreachable_condition_at_its_third_reading() -> None:
+    observability = await _run(_DOWN, _DOWN, _DOWN)
+    assert observability.health_logger.lines == [
+        LoggedLine(level="warning", message="client amuled, unreachable: unknown to failing")
+    ]
 
 
 @pytest.mark.asyncio
@@ -207,9 +240,8 @@ async def test_unreachable_for_one_minute_never_alerts() -> None:
 async def test_while_unreachable_only_the_api_alerts_and_channel_clocks_restart() -> None:
     low = _status(ed2k=_LOW_ID)
     alerts = await _alerts(*[low] * 4, *[_DOWN] * 5, *[low] * 6)
-    assert alerts == [
+    assert alerts == [  # the client's end held: 4 unanswered among its last 10 readings
         (360.0, _warning("amuled unreachable for 2 min")),
-        (540.0, _info("amuled reachable again")),
         (840.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}")),
     ]
 

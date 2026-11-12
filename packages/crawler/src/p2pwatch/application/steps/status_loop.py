@@ -1,8 +1,9 @@
-"""One client's status loop: a reading every minute feeds the channel gauges, and a degraded state
-alerts once it has lasted, whatever came before it, boot included (spec stage 2, D15).
+"""One client's status loop: a reading every minute feeds the channel gauges and the client's
+unreachable condition, and a degraded channel alerts once it has lasted, whatever came before it,
+boot included (spec stage 2, D15).
 
-The alert timers live in memory, on the monotonic clock: a restart restarts them, so an ongoing
-degradation alerts at most one delay later.
+The channels' alert timers live in memory, on the monotonic clock: a restart restarts them, so an
+ongoing degradation alerts at most one delay later.
 """
 
 from datetime import timedelta
@@ -13,8 +14,11 @@ from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.outcome import Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
@@ -22,15 +26,18 @@ from p2pwatch.domain.observability.events import (
     ChannelField,
     ChannelRecovered,
     ChannelStatusSampled,
-    ClientReachableAgain,
     ClientUnreachable,
-    ClientUnreachableLasting,
     Event,
 )
-from p2pwatch.domain.status_reading import STATUS_PERIOD, ClientStatus, StatusReading
+from p2pwatch.domain.status_reading import (
+    STATUS_API_ANSWER,
+    STATUS_PERIOD,
+    ClientNotAnswering,
+    ClientStatus,
+    StatusReading,
+)
 
 CHANNEL_ALERT_AFTER = timedelta(minutes=5)
-UNREACHABLE_ALERT_AFTER = timedelta(minutes=2)
 
 
 class _AlertTimer:
@@ -59,7 +66,7 @@ class _AlertTimer:
 
 
 class StatusLoop:
-    """One client's status loop; its alert timers are its own state."""
+    """One client's status loop; its channels' alert timers are its own state."""
 
     def __init__(
         self,
@@ -72,6 +79,8 @@ class StatusLoop:
         run_state_reader: RunStateReader,
         status_reading_writer: StatusReadingWriter,
         node_id: NodeId,
+        health_recorder: HealthRecorder,
+        client_component: Component,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -81,7 +90,8 @@ class StatusLoop:
         self._run_state_reader = run_state_reader
         self._status_reading_writer = status_reading_writer
         self._node_id = node_id
-        self._api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
+        self._health_recorder = health_recorder
+        self._client_component = client_component
         self._channel_timers: dict[tuple[Channel, ChannelField], _AlertTimer] = {}
 
     async def run(self) -> None:
@@ -101,20 +111,13 @@ class StatusLoop:
                     (channel, None, None)
                     for channel in dict.fromkeys(c for c, _ in self._channel_timers)
                 ]
-                reachable = False
+                answer = Outcome.declared(ClientNotAnswering())
             else:
                 self._publish(status)
                 readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
-                reachable = True
-            await self._observe(
-                self._api_timer,
-                healthy=reachable,
-                alert=ClientUnreachableLasting(
-                    client_name=self._client_name,
-                    unreachable_for_seconds=UNREACHABLE_ALERT_AFTER.total_seconds(),
-                    node_id=self._node_id,
-                ),
-                recovery=ClientReachableAgain(client_name=self._client_name, node_id=self._node_id),
+                answer = Outcome.success()
+            await self._health_recorder.record(
+                answer, on=self._client_component, by=STATUS_API_ANSWER
             )
             for channel, connected, connectable in readings:
                 await self._observability_dispatcher.dispatch(

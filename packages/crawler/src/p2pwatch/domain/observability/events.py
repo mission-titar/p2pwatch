@@ -110,7 +110,7 @@ class ChannelRecovered:
 
 @dataclass(kw_only=True, frozen=True)
 class ClientUnreachableLasting:
-    # No answer from the client's API for ``unreachable_for_seconds``: emitted once until one comes.
+    # No answer from the client's API for ``unreachable_for_seconds``: once until it heals.
     client_name: ClientName
     unreachable_for_seconds: float
     node_id: NodeId
