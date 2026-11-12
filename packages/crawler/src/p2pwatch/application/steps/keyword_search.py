@@ -9,7 +9,7 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.work import Work
-from p2pwatch.domain.declared_failure import DeclaredFailure
+from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.outcome import Outcome
 from p2pwatch.domain.identifiers import Channel, Keyword
@@ -50,12 +50,13 @@ class KeywordSearch(Work):
 
     async def run_once(self) -> None:
         """Searches the keyword once, saves the backoff if the search changed it, then records a
-        success or a declared failure on the channel; a bug records nothing there."""
+        success or a refused search on the channel; any other failure records nothing there."""
         try:
             with self._backoff_saver.saving():
                 await self._search_worker.search(self._keyword, channel=self._channel)
-        except DeclaredFailure as failure:
-            await self._record(Outcome.declared(failure))
+        except SearchFailedError as refusal:
+            # An unreachable client or a refused password says nothing of the network's answer.
+            await self._record(Outcome.declared(refusal))
             raise
         await self._record(Outcome.success())
 

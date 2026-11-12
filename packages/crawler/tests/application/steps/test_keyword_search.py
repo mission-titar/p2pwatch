@@ -340,12 +340,27 @@ def test_a_bug_between_refused_searches_records_nothing_on_their_channel_s_searc
     ]
 
 
-def test_an_unreachable_client_is_no_refused_search(searches: _Searches) -> None:
+def test_an_unreachable_client_records_nothing_on_its_channel_s_searches(
+    searches: _Searches,
+) -> None:
     client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=[make_unreachable()] * 3)
     health_logger = FakeLogger()
     searches.run_for(200.0, client=client, keywords=["keroro"], health_logger=health_logger)
+    assert _health_lines(health_logger, of="channel amuled kad, searches failed") == []
+
+
+def test_nine_unreachable_turns_leave_a_failing_channel_s_searches_failing(
+    searches: _Searches,
+) -> None:
+    failures: list[Exception] = [SearchFailedError("refused")] * 3
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, search_failures=[*failures, *[make_unreachable()] * 9]
+    )
+    health_logger = FakeLogger()
+    searches.run_for(4_000.0, client=client, keywords=["keroro"], health_logger=health_logger)
+    assert len(client.searches) == 12
     assert _health_lines(health_logger, of="channel amuled kad, searches failed") == [
-        "channel amuled kad, searches failed: unknown to healthy"
+        "channel amuled kad, searches failed: unknown to failing"
     ]
 
 
