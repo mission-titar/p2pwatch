@@ -48,7 +48,7 @@ async def _notified(
         observability_dispatcher=ObservabilityDispatcher(
             logger=FakeLogger(),
             node_metric_writer=FakeNodeMetricStore(),
-            notifier=notifier,
+            current_notifier=lambda: notifier,
             notification_timeout_seconds=5.0,
             record_outcome=HealthRecorder(logger=FakeLogger(), subscribers=()).record,
             notifier_component=notifier_component(),

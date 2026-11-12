@@ -21,6 +21,11 @@ from p2pwatch.domain.observability.policy import audience_of, plan_observability
 from p2pwatch.domain.observability.severity import Severity
 
 
+# The notifier each send reaches: its owner may build it anew between two sends.
+class CurrentNotifier(Protocol):
+    def __call__(self) -> Notifier: ...
+
+
 class OutcomeRecorder(Protocol):
     async def __call__(self, outcome: Outcome, *, on: Component, by: OutcomeSource) -> None: ...
 
@@ -33,14 +38,14 @@ class ObservabilityDispatcher:
         *,
         logger: Logger,
         node_metric_writer: NodeMetricWriter,
-        notifier: Notifier,
+        current_notifier: CurrentNotifier,
         notification_timeout_seconds: float,
         record_outcome: OutcomeRecorder,
         notifier_component: Component,
     ) -> None:
         self._logger = logger
         self._node_metric_writer = node_metric_writer
-        self._notifier = notifier
+        self._current_notifier = current_notifier
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_outcome = record_outcome
         self._notifier_component = notifier_component
@@ -61,7 +66,7 @@ class ObservabilityDispatcher:
         audience = audience_of(notification)
         try:
             await asyncio.wait_for(
-                self._notifier.notify(audience, notification=notification),
+                self._current_notifier().notify(audience, notification=notification),
                 timeout=self._notification_timeout_seconds,
             )
         except NotificationRefused as refusal:

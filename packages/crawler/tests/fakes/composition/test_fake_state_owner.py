@@ -17,8 +17,8 @@ class TestFakeStateOwner(StateOwnerContract):
         assert isinstance(owner, FakeStateOwner)
         return owner.state
 
-    def states_relied_on(self, owner: StateOwner) -> list[object]:
-        return self._relied_on
+    async def state_relied_on(self, owner: StateOwner) -> object:
+        return self._relied_on[-1]
 
 
 @pytest.mark.asyncio

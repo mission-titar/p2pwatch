@@ -98,8 +98,8 @@ class TestAmuleClientOwner(StateOwnerContract):
     def state_of(self, owner: StateOwner) -> object:
         return self._owned.built[-1]
 
-    def states_relied_on(self, owner: StateOwner) -> list[object]:
-        return self._owned.relied_on
+    async def state_relied_on(self, owner: StateOwner) -> object:
+        return self._owned.relied_on[-1]
 
 
 def test_the_owner_is_named_after_its_client() -> None:

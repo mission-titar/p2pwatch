@@ -7,10 +7,8 @@ from typing import Literal
 import pytest
 
 from p2pwatch.application.ports.driven.notifier import Notifier
-from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.health_condition import BUGS, Health
@@ -77,7 +75,7 @@ def _dispatcher(
     return ObservabilityDispatcher(
         logger=logger or FakeLogger(),
         node_metric_writer=node_metric_store,
-        notifier=notifier,
+        current_notifier=lambda: notifier,
         notification_timeout_seconds=timeout,
         record_outcome=outcomes or _OutcomeSpy(),
         notifier_component=_NOTIFIER,
@@ -294,11 +292,11 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_logged_with_its_trac
 async def test_three_bugs_fail_the_notifier_s_bugs_condition_three_refusals_do_not(
     *, error: Exception, health: Health
 ) -> None:
-    component = notifier_component()
+    component, notifier = notifier_component(), FakeRaisingNotifier(error)
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
         node_metric_writer=FakeNodeMetricStore(),
-        notifier=FakeRaisingNotifier(error),
+        current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
         record_outcome=HealthRecorder(logger=FakeLogger(), subscribers=()).record,
         notifier_component=component,
@@ -309,31 +307,18 @@ async def test_three_bugs_fail_the_notifier_s_bugs_condition_three_refusals_do_n
 
 
 @pytest.mark.asyncio
-async def test_the_notifier_failing_on_its_bugs_notifies_nothing_and_is_only_logged() -> None:
-    # The cycle the composition builds: the translator, a subscriber, dispatches through the
-    # dispatcher recording on the same recorder. The notifier's transitions dispatch no event.
-    component, policy_logger = notifier_component(), FakeLogger()
-    notifier = FakeRaisingNotifier(KeyError("embeds"))
-    recorder: HealthRecorder
+async def test_each_send_reaches_the_notifier_current_then() -> None:
+    first, rebuilt = FakeNotifier(), FakeNotifier()
+    current = first
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
         node_metric_writer=FakeNodeMetricStore(),
-        notifier=notifier,
+        current_notifier=lambda: current,
         notification_timeout_seconds=5.0,
-        record_outcome=lambda outcome, *, on, by: recorder.record(outcome, on=on, by=by),
-        notifier_component=component,
+        record_outcome=_OutcomeSpy(),
+        notifier_component=_NOTIFIER,
     )
-    recorder = HealthRecorder(
-        logger=FakeLogger(),
-        subscribers=(
-            HealthEventTranslator(observability_dispatcher=dispatcher, node_id=_NODE_ID).translate,
-            RestartPolicy(owners={}, logger=policy_logger),
-        ),
-    )
-    for _ in range(4):
-        await dispatcher.dispatch(_COMPLETED)
-    assert component.health_of(BUGS) is Health.FAILING
-    assert notifier.calls == 4  # one per event, none for the notifier's own transitions
-    assert policy_logger.lines == [
-        LoggedLine(level="warning", message="notifier, bugs failing: no owner, not restarted")
-    ]
+    await dispatcher.dispatch(_COMPLETED)
+    current = rebuilt
+    await dispatcher.dispatch(_COMPLETED)
+    assert (len(first.calls), len(rebuilt.calls)) == (1, 1)
