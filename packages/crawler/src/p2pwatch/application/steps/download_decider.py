@@ -10,8 +10,10 @@ from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDow
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.download_tracker import DownloadTracker
-from p2pwatch.application.steps.health_recorder import HealthRecorder
-from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.observability_dispatcher import (
+    ObservabilityDispatcher,
+    OutcomeRecorder,
+)
 from p2pwatch.domain.download.disk_space import FREE_SPACE_READING, FreeSpaceBelowFloor
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
 from p2pwatch.domain.health.component import Component
@@ -48,7 +50,7 @@ class DownloadDecider:
         download_tracker: DownloadTracker,
         wall_clock: WallClock,
         observability_dispatcher: ObservabilityDispatcher,
-        health_recorder: HealthRecorder,
+        record_outcome: OutcomeRecorder,
         download_tracking_component: Component,
         logger: Logger,
     ) -> None:
@@ -62,7 +64,7 @@ class DownloadDecider:
         self._download_tracker = download_tracker
         self._wall_clock = wall_clock
         self._observability_dispatcher = observability_dispatcher
-        self._health_recorder = health_recorder
+        self._record_outcome = record_outcome
         self._download_tracking_component = download_tracking_component
         self._logger = logger
 
@@ -74,7 +76,7 @@ class DownloadDecider:
         """
         free_bytes = self._free_space_meter.free_bytes()
         await self._observability_dispatcher.dispatch(FreeSpaceSampled(free_bytes=free_bytes))
-        await self._health_recorder.record(
+        await self._record_outcome(
             Outcome.success()
             if free_bytes >= self._min_free_bytes
             else Outcome.declared(

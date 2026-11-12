@@ -116,7 +116,10 @@ from p2pwatch.application.steps.health_event_translator import HealthEventTransl
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.keyword_search import KeywordSearch
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
-from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.observability_dispatcher import (
+    ObservabilityDispatcher,
+    OutcomeRecorder,
+)
 from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
@@ -304,7 +307,7 @@ def _download_steps(
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
     observability_dispatcher: ObservabilityDispatcher,
-    health_recorder: HealthRecorder,
+    record_outcome: OutcomeRecorder,
     node_id: NodeId,
 ) -> _DownloadSteps:
     """The download steps sharing the catalog's stores and ``local_connection`` (one writer, on
@@ -347,7 +350,7 @@ def _download_steps(
             download_tracker=tracker,
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
-            health_recorder=health_recorder,
+            record_outcome=record_outcome,
             download_tracking_component=tracking,
             logger=StdlibLogger(DownloadDecider.__module__),
         ),
@@ -727,7 +730,7 @@ class CrawlerComposition(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                     observability_dispatcher=observability_dispatcher,
-                    health_recorder=health_recorder,
+                    record_outcome=health_recorder.record,
                     node_id=node_id,
                 )
             )
