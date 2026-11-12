@@ -240,9 +240,6 @@ class _DownloadSteps:
     observability_dispatcher: ObservabilityDispatcher
     node_id: NodeId
 
-    def components(self) -> tuple[Component, Component]:
-        return self.tracking, self.source_tracking
-
     def works(self, client: AmuleApiClient) -> tuple[tuple[Work, Component], ...]:
         """Download tracking and source tracking over ``client``, each with its component."""
         download_cycle = DownloadCycle(
@@ -283,6 +280,8 @@ class _DownloadSteps:
 def _download_steps(
     download_config: DownloadConfig,
     *,
+    tracking: Component,
+    source_tracking: Component,
     config: LoadedConfig,
     local_connection: sqlite3.Connection,
     catalog_connection: sqlite3.Connection,
@@ -292,6 +291,7 @@ def _download_steps(
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
     observability_dispatcher: ObservabilityDispatcher,
+    health_recorder: HealthRecorder,
     node_id: NodeId,
 ) -> _DownloadSteps:
     """The download steps sharing the catalog's stores and ``local_connection`` (one writer, on
@@ -316,9 +316,8 @@ def _download_steps(
     )
     return _DownloadSteps(
         config=download_config,
-        # Its turns' bugs and the status reading's connected channels feed it.
-        tracking=download_tracking_component(_AMULE_CLIENT_NAME),
-        source_tracking=source_tracking_component(_AMULE_CLIENT_NAME),
+        tracking=tracking,
+        source_tracking=source_tracking,
         tracked_download_store=tracked_download_store,
         source_point_store=SqliteSourcePointStore(catalog_connection),
         labeler=labeler,
@@ -334,7 +333,8 @@ def _download_steps(
             download_tracker=tracker,
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
-            node_id=node_id,
+            health_recorder=health_recorder,
+            download_tracking_component=tracking,
             logger=StdlibLogger(DownloadDecider.__module__),
         ),
         observation_store=observation_store,
@@ -657,23 +657,9 @@ class CrawlerComposition(CrawlerRunner):
             status_sensor_part = status_sensor_component(_AMULE_CLIENT_NAME)
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
-            download_steps = (
-                None
-                if download_config is None
-                else _download_steps(
-                    download_config,
-                    config=config,
-                    local_connection=local_connection,
-                    catalog_connection=catalog_connection,
-                    observation_store=observation_store,
-                    decision_store=decision_store,
-                    waker=waker,
-                    wall_clock=wall_clock,
-                    monotonic_clock=monotonic_clock,
-                    observability_dispatcher=observability_dispatcher,
-                    node_id=node_id,
-                )
-            )
+            # Built before the policy naming their owner, the download steps after the recorder.
+            tracking_part = download_tracking_component(_AMULE_CLIENT_NAME)
+            source_tracking_part = source_tracking_component(_AMULE_CLIENT_NAME)
             # Built once: a restart empties their bugs windows and keeps the readings' windows.
             restart_policy = RestartPolicy(
                 owners=dict.fromkeys(
@@ -681,7 +667,7 @@ class CrawlerComposition(CrawlerRunner):
                         *keyword_components.values(),
                         *channel_components.values(),
                         status_sensor_part,
-                        *(() if download_steps is None else download_steps.components()),
+                        *(() if download_config is None else (tracking_part, source_tracking_part)),
                     ),
                     amule_owner,
                 ),
@@ -695,6 +681,26 @@ class CrawlerComposition(CrawlerRunner):
                     ).translate,
                     restart_policy,
                 ),
+            )
+            download_steps = (
+                None
+                if download_config is None
+                else _download_steps(
+                    download_config,
+                    tracking=tracking_part,
+                    source_tracking=source_tracking_part,
+                    config=config,
+                    local_connection=local_connection,
+                    catalog_connection=catalog_connection,
+                    observation_store=observation_store,
+                    decision_store=decision_store,
+                    waker=waker,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
+                    observability_dispatcher=observability_dispatcher,
+                    health_recorder=health_recorder,
+                    node_id=node_id,
+                )
             )
             supervisor = Supervisor(
                 run_state_reader=run_state_store,

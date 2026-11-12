@@ -1,13 +1,17 @@
 import pytest
 
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.health.health_condition import Health
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observability.node_metric import NodeCounter, NodeGauge, NodeMetricSample
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
+from p2pwatch.domain.work_components import download_tracking_component
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
@@ -336,3 +340,22 @@ async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> Non
         RelayedLogLine(message=low, severity=Severity.WARNING, node_id=NODE_ID),
     )
     assert observability.notifier.calls == [relayed, relayed]
+
+
+@pytest.mark.asyncio
+async def test_each_free_space_reading_is_judged_on_download_tracking_s_disk_condition() -> None:
+    free_space_meter = FakeFreeSpaceMeter(500)
+    tracking = download_tracking_component(ClientName("amuled"))
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        free_space_meter=free_space_meter,
+        min_free=600,
+        tracking_component=tracking,
+    )
+    healths: list[Health | None] = []
+    for free in (500, 600):
+        free_space_meter.free = free
+        await cycle.run_once()
+        healths.append(tracking.health_of(DISK_SPACE_LOW))
+    assert healths == [Health.DEGRADED, Health.HEALTHY]

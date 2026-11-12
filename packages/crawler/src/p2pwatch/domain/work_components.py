@@ -1,6 +1,7 @@
 """The works' components, each judged on its bugs, download tracking on its client connected to no
-network too (spec v5 lot 4, D10)."""
+network and on its disk's free space too (spec v5 lot 4, D10)."""
 
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import BUGS
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
@@ -25,7 +26,7 @@ def download_tracking_component(client_name: ClientName) -> Component:
     return Component(
         name=f"download tracking {client_name}",
         labels=ComponentLabels(client_name=client_name),
-        conditions=(BUGS, CONNECTED_TO_NO_NETWORK),
+        conditions=(BUGS, CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW),
     )
 
 

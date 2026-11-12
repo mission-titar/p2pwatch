@@ -17,12 +17,13 @@ class ComponentLabels:
 
 @dataclass(kw_only=True, frozen=True)
 class HealthTransition:
-    """One condition of one component changing its health."""
+    """One condition of one component changing its health, and the outcome that changed it."""
 
     component: "Component"
     condition: HealthCondition
     previous: Health
     current: Health
+    outcome: Outcome  # its reason carries the reading today's events quote
 
 
 class Component:
@@ -64,6 +65,7 @@ class Component:
                         condition=window.condition,
                         previous=window.health,
                         current=after.health,
+                        outcome=outcome,
                     )
                 )
         return tuple(transitions)

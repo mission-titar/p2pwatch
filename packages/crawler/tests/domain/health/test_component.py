@@ -44,6 +44,7 @@ def test_a_component_gives_a_transition_when_one_of_its_conditions_changes() -> 
             condition=_NOT_ANSWERING,
             previous=Health.UNKNOWN,
             current=Health.FAILING,
+            outcome=failure,
         ),
     )
     assert component.record(failure, by=_ANSWERS) == ()  # still failing: no change

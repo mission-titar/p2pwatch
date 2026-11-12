@@ -1,10 +1,11 @@
-"""The health event translator: the readings' transitions become today's connectivity events, an
-alert on entering a condition's band, its end only on a return to healthy after it (spec v5 lot 4,
-D21)."""
+"""The health event translator: the readings' transitions become today's connectivity and disk
+events, an alert on entering a condition's band, its end only on a return to healthy after it (spec
+v5 lot 4, D21)."""
 
 from collections.abc import Mapping
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW, FreeSpaceBelowFloor
 from p2pwatch.domain.health.component import HealthTransition
 from p2pwatch.domain.health.health_condition import Health, HealthCondition
 from p2pwatch.domain.identifiers import NodeId
@@ -14,6 +15,7 @@ from p2pwatch.domain.observability.events import (
     ChannelRecovered,
     ClientReachableAgain,
     ClientUnreachableLasting,
+    DiskSpaceLow,
     Event,
 )
 from p2pwatch.domain.status_reading import (
@@ -61,6 +63,15 @@ class HealthEventTranslator:
                     node_id=self._node_id,
                 )
             return ClientReachableAgain(client_name=labels.client_name, node_id=self._node_id)
+        if condition == DISK_SPACE_LOW:
+            reason = transition.outcome.reason  # entering at one low reading: that reading
+            if not alerts or not isinstance(reason, FreeSpaceBelowFloor):
+                return None  # today's disk alert has no end
+            return DiskSpaceLow(
+                free_bytes=reason.free_bytes,
+                min_free_bytes=reason.min_free_bytes,
+                node_id=self._node_id,
+            )
         field, channel = _CHANNEL_FIELDS.get(condition), labels.channel
         if field is None or channel is None:
             return None

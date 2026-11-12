@@ -56,6 +56,7 @@ async def test_a_transition_reaches_every_subscriber_in_order() -> None:
         condition=CLIENT_UNREACHABLE,
         previous=Health.UNKNOWN,
         current=Health.FAILING,
+        outcome=_NO_ANSWER,
     )
     assert subscribers.received == [("first", transition), ("second", transition)]
 
