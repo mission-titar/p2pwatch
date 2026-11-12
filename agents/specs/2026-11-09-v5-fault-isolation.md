@@ -197,9 +197,10 @@ found around it.
   for a bug); at the end of 4b the model runs and the current alerts are produced by its conditions, the only change
   the operator sees being an alert's end, now held by the hysteresis; 4c replaces the surfaces.* (Corrected: lot 4b
   holds the supervisor, its works, the conditions and the restarts, the graph and the root causes lot 4c's. Lot 4b
-  also changes what the operator sees: a password refused while the node runs no longer stops it, a minute's wait
-  before the first searches at each start, each health change in the log, a failed search logged by the worker and
-  the supervisor; no release ships between the two lots.)
+  also changes what the operator sees: a password refused while the node runs no longer stops it, each health
+  change in the log, a failed search logged by the worker and the supervisor, a node restarted within a minute of
+  a search holding that channel's first search until the spacing ends (Corrected 2026-11-12: in place of a
+  minute's wait at every start); no release ships between the two lots.)
 
 ## 4. Acceptance
 
@@ -240,6 +241,7 @@ fields" down added by the re-cut of 2026-11-11.)
 | A password refused while the node runs | a declared outcome each turn, the node running | the crawler stops, at every start |
 | Ten eD2k keywords queued on the client's lock | no turn past its time limit | n/a, no limit |
 | A channel backed off when the node restarts | its first search after the persisted wait | its first search after the persisted wait |
+| A client rebuilt, or the node restarted, within a minute of a search start (Corrected: added 2026-11-12) | its next start one spacing after that start, none delayed when no start is due | a restart forgets the last start |
 
 ### Lot 4c
 
@@ -298,7 +300,7 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 (Corrected: re-cut by consumer at the lot's start, the operator agreeing on 2026-11-11: each block brings the health
 pieces its first user needs, with that user, where the first table opened with four blocks of pure domain no
 production code reached. The graph and the root causes move to lot 4c; three pairs merge past a bound rather than
-leave code for one block without its user ("On fusionne les paires de blocs"); the stack of 21 blocks, past the
+leave code for one block without its user ("On fusionne les paires de blocs"); the stack of 22 rows, past the
 workflow's 19, is accepted by the operator on 2026-11-11 ("Je préfère un seul lot"). The reasons, appendix A "Lot 4b";
 the figures, appendix C "Estimates".)
 
@@ -313,7 +315,8 @@ the figures, appendix C "Estimates".)
 | 36 | `refactor/search-works` | one work per client, channel and keyword; `SearchTaskRunner` removed |
 | 38 | `refactor/supervisor-runs-the-works` | the turn loop in the supervisor, the shutdown its own |
 | 40 | `feat/turn-outcomes` | each turn's outcome, a bug failing its turn alone, the floor after a `Bug` |
-| 45 | `fix/amuleapi-request-bound` | a request's total bound; a new client's first starts one spacing away |
+| 45 | `fix/amuleapi-request-bound` | a request's total bound (Corrected: the first starts' spacing moved to block 46, the operator's answer of 2026-11-12) |
+| 46 | `feat/persisted-search-starts` | each client's latest search starts kept in `local.db`, a client built anew spacing its first starts from them (past both bounds, accepted by the operator on 2026-11-12) |
 | 47 | `feat/turn-time-limits` | each work's time limit |
 | 50 | `feat/bugs-condition` | the bugs condition and every work's component |
 | 51 | `feat/network-conditions` | a channel's searches failed, download tracking's client connected to no network |
@@ -406,7 +409,8 @@ reader; 18 blocks.)
   holding a control character is one problem of its file, `invalid YAML: ...`, block 80.)
 - The new stop grace; a refused password no longer crash-loops; the frozen-loop exit and where its stacks are; the
   port-sync's errors in its log.
-- The new `local.db` migration (open alerts).
+- The new `local.db` migration (open alerts). (Corrected: and lot 4b's block 46, the `latest_search_starts` table; a
+  node restarted within a minute of a search holds that channel's first search until the spacing ends.)
 
 ### Adjacent backlog items
 
@@ -414,7 +418,8 @@ reader; 18 blocks.)
 - **Lot 5, the webui** (its sub-entry): its `/health` row ("under 100 ms while a page sleeps") and its Node page
   actions meet 4c's health paths and Node page; they stay lot 5's, since moving the database reads off the event loop
   is its subject.
-- **Multi network stage 5**: D11's graph by roles prepares it, and its "free-space check per client output directory"
+- **Multi network stage 5**: (Corrected: lot 4b's block 46 writes its latest search starts by client, channel and
+  scope, for its clients too.) D11's graph by roles prepares it, and its "free-space check per client output directory"
   will be one disk condition per download client; nothing of it is built; it stays open.
 - **Contract tests for the fakes of outside systems**: D6's contract tests provoke the real failures against the real
   adapter, not the fakes against the real system; it stays open.
@@ -488,7 +493,7 @@ reader; 18 blocks.)
       async def restart(self) -> None:
           # the supervisor has cancelled and awaited the works feeding this owner's components
           await self._client.close()
-          self._client = AmuleApiClient(...)  # a new session and caches, its first starts one spacing away
+          self._client = AmuleApiClient(...)  # a new session and caches, its first starts spaced from the persisted ones (Corrected)
           # every object holding the client built anew, each work added again
           for work, feeds, time_limit in self._build_works(self._client):
               self._supervisor.add(work, feeds=feeds, time_limit=time_limit)
@@ -722,8 +727,49 @@ are settled under "Lot 4b, settled at its start", below.)
   `finally`. If it passes a bound: 40 the outcomes and the status work, 41 the search worker raising.
 - **Block 45**: a request's total bound in the amuleapi adapter, 60 s, its expiry a `ClientUnreachableError` (httpx
   bounds each phase, never the whole request, so a server trickling its bytes kept a call alive past every limit,
-  D6); a client built anew waits one full start spacing before its first eD2k start and its first start on each Kad
-  word, at the process's start included.
+  D6). (Corrected: the first starts' spacing is block 46's.)
+- **Block 46** (Corrected: added on 2026-11-12, by block 45's class 2 question): each client's latest search starts,
+  kept in `local.db` as the starts of persisted waits whose duration is the adapter's spacing, so a client built
+  anew, by a restart of its owner or at the process's start, spaces its first starts from the previous ones by its
+  network's rule, and waits for nothing when no start is due.
+  - **Generic over networks and clients**, since multi network stage 5 adds clients: a row holds a client's name, a
+    channel, a scope its adapter chooses within the channel (`''` for a channel-wide spacing, as eD2k's lock; the Kad
+    word for Kad; its own for a later network), so no scope of one channel collides with another channel's, and the
+    start's instant in micros. The spacing's value stays each adapter's constant, a network rule and never a setting
+    (`agents/specs/2026-10-23-crawler-design-fixes.md`, its D8).
+  - **The shapes**: `LatestSearchStart` in `domain/search/` (`channel`, `scope` a `str`, `started_at`); the
+    `SearchStartWriter` and `SearchStartReader` pair, `set_latest_start(client_name, *, start: LatestSearchStart)`
+    replacing the row of the same client, channel and scope, and `read_latest_starts(client_name)` returning a
+    tuple; their `SearchStartStoreContract`; `FakeSearchStartStore`; `SqliteSearchStartStore` over `local.db`'s
+    migration 0016, `latest_search_starts (client_name TEXT NOT NULL, channel TEXT NOT NULL, scope TEXT NOT NULL,
+    started_at_micros INTEGER NOT NULL, PRIMARY KEY (client_name, channel, scope)) STRICT`, the opener's tests
+    gaining its version and its table.
+  - **The wiring**: the composition gives each client it builds its name, `WallClock`, and the one store as both
+    ports, as it gives `MonotonicClock`; `tach.toml` gains the amuleapi adapter's dependency on the wall clock port
+    and on the pair, and the composition's and `persistence_sqlite`'s entries on the pair; `.claude/rules/stores.md`
+    names `WallClock` among the clocks the amuleapi adapter holds; `docs/contributing/architecture.md` its
+    `local.db` tables and schema version.
+  - **What is written**: the start's own instant, as the start is reserved: eD2k's `wall_clock.now()` when it takes
+    its next start under the lock, before the search is posted; a Kad slot as `wall_clock.now() + (slot -
+    monotonic_clock.now())`, the slot lying ahead when two keywords share a Kad word; a keyword without a Kad word,
+    which spaces no network start, nothing. A failed post or a held Kad word spends its spacing, as today. The read,
+    once at the client's construction, turns each row into its next allowed start through `remaining_wait`, so a
+    wall clock stepped back never lengthens a wait past one spacing. A write is synchronous on the loop, as the
+    backoff's: a few milliseconds (median 1.3 ms, max 2.2 ms over 300 `BEGIN IMMEDIATE` writes in WAL with
+    `synchronous=FULL`, measured 2026-11-12 by the spec's review; the backoff ports' docstrings say under a
+    millisecond, corrected when a block touches them).
+  - **What is kept**: a scope no longer searched keeps its row, the table bounded by the client names, channels and
+    Kad words ever configured. A `StoreError` on the read is logged and the client starts as today, without the
+    earlier starts, where the backoff's read lets it through: a spacing lost costs one early start, a backoff lost a
+    burst of refused searches. On the write it is logged and the search goes on, as the backoff's save (D2).
+  - **The wiring test that restarts the node three times on one `local.db`**
+    (`test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_changed`) deletes the starts' rows between
+    its runs, as it already writes `local.db` between them, since each run must read a search within 10 s.
+  - The glossary gains `latest search start`, its scope included. `docs/migration-4x.md` is lot 7's: the new table is
+    listed in section 6, "For lot 7".
+  - Past both bounds (about 700 lines, 28 files, `.reviews/v5-lot4b-block-46-estimate.md`'s rows recounted by the
+    spec's review), accepted by the operator on 2026-11-12: no cut leaves each part under both bounds with a production user,
+    the eD2k-then-Kad cut leaving its first part at about 570 lines and 24 files.
 - **Block 47**: each work's time limit, the turn raced against `MonotonicClock.sleep` with
   `asyncio.wait(FIRST_COMPLETED)`, as `download_loop.py` does, a turn past it a `TurnPastItsLimit`, recorded as a
   `Bug`. Each limit is the sum of the bounds on its turn's path, measured on `efba50c5` (`S` the 60 s start spacing,
@@ -808,7 +854,10 @@ decision or rule it names, the operator's, or the lead's where its row says so.
 | 40 | after a `Bug` | the next turn waits at least a floor, 60 s, the later of the floor and the work's own wait, never their sum | the lead's: without it a bug before the client's pacing reruns at full speed, a trace per turn (Kubernetes' CrashLoopBackOff); 60 s is the client's own start spacing, a starting value tuned at the release candidate |
 | 40 | a failed search | raised after the backoff and the events | recorded as a success, a declared failure would break the bugs window's streak |
 | 45 | a request's total duration | 60 s in the amuleapi adapter, its expiry a `ClientUnreachableError` | the lead's: httpx bounds each phase only (D6); six times the per-phase 10 s, so a page answering within its phases never meets it |
-| 45 | a client built anew | its first eD2k start and its first start on each Kad word one full spacing away, at the process's start too | the lead's: a new client forgets its last starts, and the spacing is the network's rule (`amule_api_client.py:60-62`); Docker can restart the node within a minute of a search; it costs a minute at each start |
+| 46 | a client built anew | its first starts spaced from its latest ones, persisted in `local.db`, after a restart of its owner and at the process's start (Corrected: the lead's first answer, a minute's wait at every start, failed the wiring tests' real-clock bound) | the operator, 2026-11-12 ("stockant dans local.db la date et heure de dernier lancement ... Ça résoudrait les deux cas"): a new client forgets its last starts, and the spacing is the network's rule (`amule_api_client.py:60-62`) |
+| 46 | what is written | the start's own instant, as it is reserved: eD2k's at its reservation under the lock, a Kad slot's converted to the wall clock; a keyword without a Kad word nothing | the lead's: behaviour as today, a failed post or a held Kad word still spacing the next start; writing the next start instead would wait up to two spacings, and the reservation's own instant would let a Kad word restart one second after a start |
+| 46 | the row's key | the client's name, the channel, a scope within it | the lead's, to meet the operator's "ça doit être générique pour généraliser ça à d'autres réseaux p2p ... et donc clients" (2026-11-12): the core knows no network's pacing, each adapter names its scopes; a Kad word may be spelt `ed2k`, so a single key would collide; by client as the backoff's rows, since an eD2k server counts two clients of one address apart, the operator's account of 2026-11-12 ("2 clients sur la même IP ... sont comptés différemment, mais un 3e compte comme un acteur malicieux"), so two clients never share a spacing |
+| 46 | a `StoreError` on the starts | logged; on the read the client starts as today, on the write the search goes on | the lead's: a store failure never fails the network's work (D2); the read departs from the backoff's, which lets it through, since a spacing lost costs one early start and a backoff lost a burst of refused searches |
 | 47 | each work's time limit | the sum of the bounds on its turn's path, plus a fixed allowance of 5 minutes for the live counts | a limit under that sum cuts a healthy turn as a `Bug`; the turns growing with the tracked downloads, their sources and the files of an answer stay under a per-turn limit, the operator's answer of 2026-11-11 ("sur un crawler à la recherche de lost media le nombre de téléchargements est par définition faible"); the allowance's value the lead's |
 | 47 | the turn's timeout | raced against `MonotonicClock.sleep`, the loser cancelled | the lead's: `asyncio.timeout` is refused in the core (`core-import-names.yml:28`), and the race needs no new port operation |
 | 50 | how two bands combine | while failing holds, degraded is not held; on leaving failing, degraded enters only by its own entry | section 4's pattern ends healthy, which two independent latches do not |
@@ -885,6 +934,7 @@ decision or rule it names, the operator's, or the lead's where its row says so.
 | Floor after a `Bug` (Corrected: added 2026-11-11) | a supervisor test whose work raises at once; fails if two turns start closer than the floor |
 | Raising rebuild (Corrected: added 2026-11-11) | a restart policy test whose owner's `restart()` raises twice, then succeeds; fails on a stop, if the owner's components are not failing between the attempts, if two attempts start closer than the floor, or if the works do not run again after the third |
 | Password refused while running (Corrected: added 2026-11-11) | a supervisor test whose client raises `ClientAuthError` at every call; fails on an `ExceptionGroup`, or if a turn records anything but a declared outcome |
+| Persisted starts (Corrected: added 2026-11-12) | adapter tests: a client building over a store holding a start 20 s old, then one 70 s old, fails if its first start does not wait 40 s, or if it waits after the 70 s one; a client starting a search, then a second built over the same store, fails if the second's first start on that channel and scope does not wait the spacing minus the elapsed time, run for eD2k and for one Kad word sharing its slot with a second keyword; a stored start ahead of the wall clock fails if it waits past one spacing |
 | Persisted backoff at start (Corrected: added 2026-11-11) | a search work test with a backoff restored by `resume_waits`; fails if the first search starts before the persisted wait ends |
 | Time limits (Corrected: added 2026-11-11) | a supervisor test with ten eD2k keywords queued on the real adapter's lock over `FakeAmuleApiServer`, each search held for its budget; fails on any `Bug` |
 | One alert per root cause | a graph and alert test, the client unreachable; fails on more than one alert or a missing impact |
@@ -1022,8 +1072,10 @@ supervisor block (4b's 30) is about 20 files.
 
 **Lot 4b's re-cut** (Sonnet, three passes on 2026-11-11, on `main` at `efba50c5`, estimated on code not yet written,
 ranges, `.reviews/v5-lot4b-recut-estimate-3.md` the last, adjusted by the review's corrections): 21 blocks, the
-closing one included. Past a bound and accepted by the operator: 10 (340 to 470 lines, 26 to 28 files), 20 (660 to 900,
-21 to 26), 52 (710 to 990, 20 to 27, the limit merged in). Near a bound, re-measured at their start, each with its
+closing one included (Corrected: 22 rows with block 46 of 2026-11-12, and the splits of 25, 33 and 40 made in Act,
+which the closing block records). Past a bound and accepted by the operator: 10 (340 to 470 lines, 26 to 28 files), 20
+(660 to 900, 21 to 26), 52 (710 to 990, 20 to 27, the limit merged in); 46 (about 700 lines, 28 files) accepted by the
+operator on 2026-11-12. Near a bound, re-measured at their start, each with its
 lever: 25 (350 to 520: by field), 36 (350 to 540: the enumeration first), 40 (450 to 660, 17 to 22 files, every
 port's failure re-based: the search worker's raising apart, as 41), 47 (250 to 400), 50 (380 to 600, 14 to 19 files:
 the download components to 51), 74 (300 to 420, 10 to 13 files). The others under 460 lines. The review's recount of the
