@@ -9,6 +9,8 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
   shares; its owner, ``AmuleClientOwner``, rebuilds it and every object holding it at a restart.
+- ONE ``UvicornServerThread`` at a time serving the webui; its owner, ``WebuiThreadOwner``,
+  rebuilds it and the webui it serves at a restart.
 
 Works: one search work per channel and keyword (``KeywordSearch``), the status sensor's work, the
 webui's liveness, and download and source tracking's when configured, which ``CrawlerLifecycle``
@@ -136,6 +138,7 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_owner import AmuleClientOwner
 from p2pwatch.composition.turn_time_limits import TIME_LIMIT_ALLOWANCE, AmuleTurnTimeLimits
+from p2pwatch.composition.webui_thread_owner import WebuiThreadOwner
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, DownloadConfig, LoadedConfig
 from p2pwatch.domain.health.component import Component
@@ -391,27 +394,24 @@ class CrawlerComposition(CrawlerRunner):
             transport_factory=httpx.AsyncHTTPTransport,
         )
 
-    async def _start_webui(
+    def _webui_server_thread(
         self,
         *,
         config: LoadedConfig,
-        stack: AsyncExitStack,
         status_reading_store: InMemoryStatusReadingStore,
         node_metric_store: InMemoryNodeMetricStore,
-        run_state_store: AsyncioRunStateStore,
         shutdown_requester: RequestShutdown,
         engine: MatchingEngine,
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         database_opener: SqliteDatabaseOpener,
     ) -> UvicornServerThread:
-        """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
-        the parsed config (immutable), the engine and the clocks (no state after their
+        """The read-only webui on its OWN thread + loop (spec §5), not started. It shares with the
+        crawler the parsed config (immutable), the engine and the clocks (no state after their
         construction), the status reading and node metric stores (whole snapshots swapped, never
         mutated) and the run state (every change scheduled on the crawler's loop).
         It reads through its OWN ``ThreadReadConnections``, one connection per thread, each opened
-        by ``database_opener``. Its stop is registered on ``stack`` so it runs during the normal
-        LIFO unwind, AFTER the works stop."""
+        by ``database_opener``."""
         crawler_config = config.crawler_config
         webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
         local_db_path = Path(crawler_config.local_db_path)
@@ -476,16 +476,13 @@ class CrawlerComposition(CrawlerRunner):
             node_metric_lister=ListNodeMetrics(node_metric_store),
             amule_url=crawler_config.webui.amule_url,
         )
-        server_thread = UvicornServerThread(
+        return UvicornServerThread(
             app,
             address=self._webui_address,
             start_timeout_seconds=_WEBUI_START_TIMEOUT_SECONDS,
             join_timeout_seconds=_WEBUI_JOIN_TIMEOUT_SECONDS,
             serving_resources=(catalog_read_connections, local_read_connections),
         )
-        stack.push_async_callback(server_thread.stop)
-        await server_thread.start()
-        return server_thread
 
     async def run_crawler(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
@@ -572,23 +569,36 @@ class CrawlerComposition(CrawlerRunner):
                 max_filename_length=_MAX_FILENAME_LENGTH,
             )
             status_reading_store = InMemoryStatusReadingStore((_AMULE_CLIENT_NAME,))
+
+            def build_webui() -> UvicornServerThread:
+                return self._webui_server_thread(
+                    config=config,
+                    status_reading_store=status_reading_store,
+                    node_metric_store=node_metric_store,
+                    shutdown_requester=shutdown_requester,
+                    engine=engine,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
+                    database_opener=database_opener,
+                )
+
+            webui_part = webui_component()
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
-            # synchronous work. A crash degrades (spec §17.1). Its graceful stop is on ``stack`` →
-            # runs at the normal shutdown unwind (after the database connections are pushed, so it
-            # stops the thread before those close in LIFO teardown).
-            webui_thread = await self._start_webui(
-                config=config,
-                stack=stack,
-                status_reading_store=status_reading_store,
-                node_metric_store=node_metric_store,
-                run_state_store=run_state_store,
-                shutdown_requester=shutdown_requester,
-                engine=engine,
-                wall_clock=wall_clock,
-                monotonic_clock=monotonic_clock,
-                database_opener=database_opener,
+            # synchronous work. A crash degrades (spec §17.1), and its owner rebuilds it.
+            webui_thread = build_webui()
+            # A cycle: the policy holds the owners, the works the recorder calling the policy. Each
+            # owner reaches its works' factory and the supervisor at its restarts only.
+            supervisor: Supervisor
+            webui_owner = WebuiThreadOwner(
+                webui_thread,
+                build_thread=build_webui,
+                build_works=lambda rebuilt: webui_works(rebuilt),
+                add_work=lambda supervised: supervisor.add(supervised),
             )
+            # The thread held then, stopped at the unwind before the database connections close.
+            stack.push_async_callback(webui_owner.close)
+            await webui_thread.start()
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
             # (backoff survives restart, spec §3/§7), injected into ALL workers + the saver the
             # search works share. Single writer on the event loop.
@@ -630,9 +640,6 @@ class CrawlerComposition(CrawlerRunner):
                 )
 
             client = build_client()
-            # A cycle: the policy holds the owner, the works the recorder calling the policy. The
-            # owner reaches the works' factory and the supervisor at its restarts only.
-            supervisor: Supervisor
             amule_owner = AmuleClientOwner(
                 client,
                 client_name=_AMULE_CLIENT_NAME,
@@ -664,16 +671,14 @@ class CrawlerComposition(CrawlerRunner):
             tracking_part = download_tracking_component(_AMULE_CLIENT_NAME)
             source_tracking_part = source_tracking_component(_AMULE_CLIENT_NAME)
             # Built once: a restart empties their bugs windows and keeps the readings' windows.
+            amule_parts = (
+                *keyword_components.values(),
+                *channel_components.values(),
+                status_sensor_part,
+                *(() if download_config is None else (tracking_part, source_tracking_part)),
+            )
             restart_policy = RestartPolicy(
-                owners=dict.fromkeys(
-                    (
-                        *keyword_components.values(),
-                        *channel_components.values(),
-                        status_sensor_part,
-                        *(() if download_config is None else (tracking_part, source_tracking_part)),
-                    ),
-                    amule_owner,
-                ),
+                owners={**dict.fromkeys(amule_parts, amule_owner), webui_part: webui_owner},
                 logger=StdlibLogger(RestartPolicy.__module__),
             )
             health_recorder = HealthRecorder(
@@ -784,6 +789,18 @@ class CrawlerComposition(CrawlerRunner):
                     )
                 return works
 
+            def webui_works(thread: UvicornServerThread) -> list[SupervisedWork]:
+                """The liveness of the webui ``thread`` serves."""
+                return [
+                    SupervisedWork(
+                        work=WebuiLiveness(
+                            thread_alive=thread.is_alive, monotonic_clock=monotonic_clock
+                        ),
+                        time_limit=TIME_LIMIT_ALLOWANCE,  # no await in its turn
+                        feeds=(webui_part,),
+                    )
+                ]
+
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
@@ -799,17 +816,7 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                works=[
-                    *client_works(client),
-                    # No owner yet: its bugs condition failing is only logged.
-                    SupervisedWork(
-                        work=WebuiLiveness(
-                            thread_alive=webui_thread.is_alive, monotonic_clock=monotonic_clock
-                        ),
-                        time_limit=TIME_LIMIT_ALLOWANCE,  # no await in its turn
-                        feeds=(webui_component(),),
-                    ),
-                ],
+                works=[*client_works(client), *webui_works(webui_thread)],
                 download_enabled=download_config is not None,
                 supervisor=supervisor,
                 logger=StdlibLogger(CrawlerLifecycle.__module__),

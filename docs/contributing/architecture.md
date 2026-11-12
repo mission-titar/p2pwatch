@@ -161,10 +161,11 @@ plancher, dégradé dès une mesure basse et rétabli à la première bonne, com
 d'aujourd'hui. Quand la condition « bugs » d'un composant passe à
 failing, la politique de redémarrage (`RestartPolicy`) redémarre son propriétaire, celui que la
 composition lui nomme, aujourd'hui le client aMule (`AmuleClientOwner`) pour chaque composant sauf
-celui de la webui, qui n'en a pas encore et dont l'échec est seulement journalisé :
-dans une tâche à lui, le superviseur annule et attend les works qui alimentent ses composants, le
-propriétaire ferme sa session, reconstruit le client et chaque objet qui le tient, puis rend ses
-works au superviseur, et seules les fenêtres « bugs » de ses composants sont vidées, celles des
+celui de la webui, dont le propriétaire est son thread (`WebuiThreadOwner`) ; un composant sans
+propriétaire est seulement journalisé. Dans une tâche à lui, le superviseur annule et attend les
+works qui alimentent ses composants ; le propriétaire du client ferme sa session, reconstruit le
+client et chaque objet qui le tient, celui de la webui arrête l'ancien thread et sert la webui,
+reconstruite, sur un thread neuf ; chacun rend ses works au superviseur, et seules les fenêtres « bugs » de ses composants sont vidées, celles des
 lectures du statut gardées. Une reconstruction qui lève enregistre un bug sur chacun de ses
 composants et est retentée après le plancher. Après trois redémarrages inutiles (un composant du
 propriétaire de nouveau failing sur ses bugs sans retour à healthy, ou une reconstruction qui lève),
