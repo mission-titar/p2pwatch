@@ -268,8 +268,9 @@ L'audience *operations* reçoit l'état du nœud, et rien d'autre :
 - l'espace disque passé sous le plancher (voir [Planification disque](#planification-disque)) ;
 - un canal d'un client (`ed2k` ou `kad` pour aMule) **hors de son réseau** ou **non joignable par
   les pairs** depuis 5 minutes, puis son retour ;
-- l'API d'un client **injoignable** depuis 2 minutes, puis son retour. Tant qu'elle l'est, l'état de
-  ses canaux est inconnu et ne déclenche aucune alerte de canal.
+- l'API d'un client **injoignable** depuis 2 minutes, puis son retour. Tant qu'elle l'est, ses
+  canaux gardent l'état de leurs dernières lectures : aucune alerte de canal ne part ni ne se
+  termine.
 
 Une alerte part sur un état dégradé qui dure, quel que soit l'état d'avant, démarrage compris : un
 nœud qui démarre en Low-ID est signalé au bout de 5 minutes, et la fenêtre où Kad se croit derrière
