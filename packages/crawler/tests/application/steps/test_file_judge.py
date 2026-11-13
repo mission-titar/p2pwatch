@@ -5,6 +5,7 @@ Real engine + real SQLite stores + the real dispatch step over fakes; ``waker`` 
 catalog knows.
 """
 
+import asyncio
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -28,6 +29,7 @@ from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -757,3 +759,36 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
             "decided_at_micros": instant_to_micros(start + timedelta(minutes=2)),
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_turn_cancelled_between_a_decision_s_write_and_its_send_still_notifies(
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+    wall_clock: FakeWallClock,
+) -> None:
+    # The next judgement sees no change, so a send lost there would be lost for good.
+    observability, notifier = ObservabilityOverFakes(), FakeHeldNotifier()
+    observability.notifier = notifier
+    turn = asyncio.create_task(
+        _record(
+            _HASH_DL,
+            filename=_DL_NAME,
+            observation_store=observation_store,
+            decision_store=decision_store,
+            engine=engine,
+            waker=FakeWaker(),
+            observability=observability,
+            wall_clock=wall_clock,
+        )
+    )
+    await notifier.reached.wait()
+
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    notifier.released.set()
+
+    await asyncio.wait_for(notifier.sent.wait(), timeout=1.0)

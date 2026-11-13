@@ -51,6 +51,7 @@ class ObservabilityDispatcher:
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_outcome = record_outcome
         self._service_components = service_components
+        self._shielded: set[asyncio.Task[None]] = set()
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
@@ -62,6 +63,15 @@ class ObservabilityDispatcher:
                 self._node_metric_writer.set_gauge(instruction)
         if plan.notification is not None:
             await self._notify(plan.notification)
+
+    async def dispatch_shielded(self, event: Event) -> None:
+        """Dispatches ``event`` in a task the caller's cancellation does not reach, so a write
+        already made is notified, its sends ending within their timeout (spec v5 lot 4, D20)."""
+        dispatch = asyncio.ensure_future(self.dispatch(event))
+        # Held here: the loop keeps a weak reference to a task alone.
+        self._shielded.add(dispatch)
+        dispatch.add_done_callback(self._shielded.discard)
+        await asyncio.shield(dispatch)
 
     async def _notify(self, notification: Notification) -> None:
         """Sends to each service of its audience together, so a notification takes one timeout

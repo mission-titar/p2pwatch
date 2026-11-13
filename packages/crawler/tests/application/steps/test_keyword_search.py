@@ -165,8 +165,8 @@ class _Searches:
         health_logger: FakeLogger | None = None,
         restarting: bool = False,
     ) -> FakeStateOwner:
-        """Runs the works for ``seconds``; ``restarting``, one owner owns their components, each
-        of its restarts adding the same works again. Returns that owner."""
+        """Runs the works for ``seconds``, one owner owning their components, each of its restarts
+        adding the same works again; ``restarting``, the policy reads their health. Returns it."""
         run_state = FakeRunStateStore()
         self.loop.call_later(seconds, run_state.set_shutdown_requested)
 
@@ -174,7 +174,8 @@ class _Searches:
             await policy(transition)
 
         health_recorder = HealthRecorder(
-            logger=health_logger or FakeLogger(), subscribers=(restart_policy,)
+            logger=health_logger or FakeLogger(),
+            subscribers=(restart_policy,) if restarting else (),
         )
         works = self.works(
             client, keywords=keywords, health_recorder=health_recorder, time_limit_of=time_limit_of
@@ -185,7 +186,7 @@ class _Searches:
                 supervisor.add(supervised)
 
         owner = FakeStateOwner(add_works=add_works)
-        components = {c for supervised in works for c in supervised.feeds} if restarting else ()
+        components = {c for supervised in works for c in supervised.feeds}
         policy = RestartPolicy(owners=dict.fromkeys(components, owner), logger=FakeLogger())
         supervisor = Supervisor(
             run_state_reader=run_state,

@@ -1,6 +1,6 @@
 """The restart policy: a bugs condition entering failing restarts its component's owner, at most
 three times in vain; every bugs condition of the owner's components healthy again resets the
-count; a component without an owner is only logged."""
+count; each restart a request the supervisor completes."""
 
 import asyncio
 
@@ -8,9 +8,9 @@ import pytest
 
 from p2pwatch.application.ports.driven.state_owner import StateOwner
 from p2pwatch.application.steps.health_recorder import HealthRecorder
-from p2pwatch.application.steps.restart_policy import RestartPolicy
+from p2pwatch.application.steps.restart_policy import RestartPolicy, RestartRequest
 from p2pwatch.domain.health.component import Component, ComponentLabels
-from p2pwatch.domain.health.health_condition import BUGS
+from p2pwatch.domain.health.health_condition import BUGS, Health
 from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.status_reading import (
@@ -43,6 +43,7 @@ class _Policy:
             owners={self.search: self.owner, self.status: self.owner}, logger=self.logger
         )
         self.recorder = HealthRecorder(logger=FakeLogger(), subscribers=(self.policy,))
+        self.latest: RestartRequest  # the latest request taken
 
     async def record(self, outcome: Outcome, *, on: Component, times: int) -> None:
         for _ in range(times):
@@ -53,12 +54,10 @@ class _Policy:
 
     async def rebuild(self) -> None:
         """What the supervisor does once the owner's restart built it anew."""
-        for component in self.policy.components_of(self.owner):
-            component.empty_windows(of=UNITS_OF_WORK)
-        self.policy.rebuilt(self.owner)
+        self.latest.rebuilt()
 
     async def requested(self) -> list[StateOwner]:
-        """The restarts requested so far, taken from the policy."""
+        """The owners of the restarts requested so far, taken from the policy."""
         owners: list[StateOwner] = []
         while True:
             request = asyncio.ensure_future(self.policy.requested())
@@ -66,7 +65,8 @@ class _Policy:
             if not request.done():
                 request.cancel()
                 return owners
-            owners.append(request.result())
+            self.latest = request.result()
+            owners.append(self.latest.owner)
 
 
 async def test_a_bugs_condition_entering_failing_requests_its_owner_s_restart() -> None:
@@ -134,6 +134,23 @@ async def test_every_bugs_condition_of_the_owner_healthy_again_resets_the_count(
     assert await policy.requested() == [policy.owner]  # a fourth restart: the count reset
 
 
+async def test_an_owner_given_up_whose_works_heal_restarts_again_at_a_later_bug() -> None:
+    # Its rebuilds succeeded, so its works run on: only the buggy turns fail (D1).
+    policy = _Policy()
+    await policy.fail(policy.search)
+    for _ in range(3):
+        await policy.requested()
+        await policy.rebuild()
+        await policy.fail(policy.search)
+    assert await policy.requested() == []  # given up
+    await policy.record(Outcome.success(), on=policy.status, times=3)
+    await policy.record(Outcome.success(), on=policy.search, times=10)
+
+    await policy.fail(policy.status)
+
+    assert await policy.requested() == [policy.owner]
+
+
 async def test_one_component_alone_healthy_again_keeps_the_count() -> None:
     policy = _Policy()
     await policy.fail(policy.search)
@@ -150,7 +167,7 @@ async def test_a_raising_rebuild_counts_useless_the_third_giving_up() -> None:
     await policy.fail(policy.search)
     await policy.requested()
 
-    tries = [policy.policy.rebuild_raised(policy.owner) for _ in range(3)]
+    tries = [policy.latest.rebuild_raised() for _ in range(3)]
 
     assert tries == [True, True, False]
     await policy.fail(policy.status)
@@ -161,8 +178,8 @@ async def test_a_rebuild_after_raising_ones_keeps_their_count() -> None:
     policy = _Policy()
     await policy.fail(policy.search)
     await policy.requested()
-    policy.policy.rebuild_raised(policy.owner)
-    policy.policy.rebuild_raised(policy.owner)
+    policy.latest.rebuild_raised()
+    policy.latest.rebuild_raised()
     await policy.rebuild()
 
     await policy.fail(policy.search)
@@ -181,23 +198,24 @@ async def test_a_condition_but_bugs_failing_restarts_nothing() -> None:
     assert policy.logger.lines == []
 
 
-async def test_a_component_without_an_owner_failing_on_bugs_is_logged_and_restarts_nothing() -> (
-    None
-):
+async def test_a_request_carries_the_components_the_composition_names_its_owner_s() -> None:
     policy = _Policy()
-    webui = _component("webui")
-    await policy.fail(webui)
-    await policy.record(Outcome.success(), on=webui, times=10)
-    assert await policy.requested() == []
-    assert policy.logger.lines == [
-        LoggedLine(level="warning", message="webui, bugs failing: no owner, not restarted")
-    ]
+    await policy.fail(policy.status)
+    await policy.requested()
+    assert policy.latest.components == (policy.search, policy.status)
 
 
-async def test_each_owner_s_components_are_those_the_composition_names() -> None:
+async def test_a_rebuilt_request_empties_its_components_bugs_windows() -> None:
     policy = _Policy()
-    assert policy.policy.components_of(policy.owner) == (policy.search, policy.status)
-    assert policy.policy.components_of(FakeStateOwner()) == ()
+    await policy.fail(policy.search)
+    await policy.requested()
+
+    await policy.rebuild()
+
+    assert (policy.search.health_of(BUGS), policy.status.health_of(BUGS)) == (
+        Health.UNKNOWN,
+        Health.UNKNOWN,
+    )
 
 
 async def test_a_component_carrying_no_bugs_condition_is_refused() -> None:

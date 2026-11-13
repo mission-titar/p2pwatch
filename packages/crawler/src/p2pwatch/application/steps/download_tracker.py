@@ -122,7 +122,7 @@ class DownloadTracker:
         """
         self._tracked_download_writer.set_completed(file, completed_at=self._wall_clock.now())
         states[file] = DownloadState.COMPLETED
-        await self._observability_dispatcher.dispatch(
+        await self._observability_dispatcher.dispatch_shielded(
             DownloadCompleted(
                 file=file,
                 filename=self._download_labeler.best_filename(file),
