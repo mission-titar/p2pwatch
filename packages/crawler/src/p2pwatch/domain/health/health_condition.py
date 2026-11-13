@@ -12,6 +12,7 @@ from p2pwatch.domain.health.outcome import Outcome, OutcomeSource
 class Health(Enum):
     UNKNOWN = "unknown"
     HEALTHY = "healthy"
+    DEGRADED = "degraded"
     FAILING = "failing"
 
 
@@ -59,12 +60,26 @@ class Band:
 
 @dataclass(kw_only=True, frozen=True)
 class HealthCondition:
-    """Counts the outcomes of ``source`` whose reason is a ``counting``; a success counts for it."""
+    """Counts the outcomes of ``source`` whose reason is a ``counting``; a success counts for it.
+    It holds one band, ``failing`` or ``degraded``."""
 
     name: str
     source: OutcomeSource
     counting: type[DeclaredFailure]
-    failing: Band
+    failing: Band | None
+    degraded: Band | None
+
+    def __post_init__(self) -> None:
+        self.band()
+
+    def band(self) -> tuple[Health, Band]:
+        """Its band, and the health it gives on entering it."""
+        match self.failing, self.degraded:
+            case (Band() as band, None):
+                return Health.FAILING, band
+            case (None, Band() as band):
+                return Health.DEGRADED, band
+        raise ValueError(f"the condition {self.name!r}: one band expected, failing or degraded")
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -76,16 +91,16 @@ class ConditionWindow:
     health: Health = Health.UNKNOWN
 
     def after(self, outcome: Outcome) -> Self:
-        band = self.condition.failing
+        severity, band = self.condition.band()
         outcomes = (*self.outcomes, outcome)[-max(band.enters.of_last, band.leaves.of_last) :]
         if len(outcomes) < band.enters.of_last:
             health = Health.UNKNOWN
-        elif self.health is Health.FAILING:
+        elif self.health is severity:
             leaves = self._failures(outcomes, of_last=band.leaves.of_last) < band.leaves.count
-            health = Health.HEALTHY if leaves else Health.FAILING
+            health = Health.HEALTHY if leaves else severity
         else:
             enters = self._failures(outcomes, of_last=band.enters.of_last) >= band.enters.count
-            health = Health.FAILING if enters else Health.HEALTHY
+            health = severity if enters else Health.HEALTHY
         return replace(self, outcomes=outcomes, health=health)
 
     def _failures(self, outcomes: tuple[Outcome, ...], *, of_last: int) -> int:

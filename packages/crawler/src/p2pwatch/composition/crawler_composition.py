@@ -489,7 +489,6 @@ class CrawlerComposition(CrawlerRunner):
                 observability_dispatcher=observability_dispatcher,
                 run_state_reader=run_state_store,
                 status_reading_writer=status_reading_store,
-                node_id=node_id,
                 health_recorder=health_recorder,
                 client_component=client_component(_AMULE_CLIENT_NAME),
                 channel_components={

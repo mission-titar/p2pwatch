@@ -1,5 +1,5 @@
 """The health event translator: the transitions of the readings' conditions become today's
-connectivity events, an alert on entering failing, its end only on a return to healthy after it."""
+connectivity events, an alert on entering its band, its end only on a return to healthy after it."""
 
 import pytest
 
@@ -12,6 +12,7 @@ from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     channel_component,
@@ -24,7 +25,7 @@ from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 _NODE_ID = NodeId("titar-node-1")
 _CLIENT = client_component(ClientName("fake"))
 _KAD = channel_component(client_name=ClientName("fake"), channel=Channel("kad"))
-U, H, F = Health.UNKNOWN, Health.HEALTHY, Health.FAILING
+U, H, D, F = Health.UNKNOWN, Health.HEALTHY, Health.DEGRADED, Health.FAILING
 
 
 async def _notified(
@@ -89,8 +90,9 @@ def _info(message: str) -> RelayedLogLine:
     ("condition", "band", "alert", "end"),
     [
         (CHANNEL_NOT_CONNECTED, F, "off its network for 5 min", "back on its network"),
+        (CHANNEL_NOT_CONNECTABLE, D, "not connectable for 5 min", "connectable again"),
     ],
-    ids=["not connected"],
+    ids=["not connected", "not connectable"],
 )
 async def test_a_channel_entering_its_band_alerts_and_leaving_it_ends_the_alert(
     *, condition: HealthCondition, band: Health, alert: str, end: str
@@ -123,5 +125,6 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         source=CLIENT_UNREACHABLE.source,
         counting=_Other,
         failing=CLIENT_UNREACHABLE.failing,
+        degraded=None,
     )
     assert await _notified(previous=H, current=F, condition=other) == []

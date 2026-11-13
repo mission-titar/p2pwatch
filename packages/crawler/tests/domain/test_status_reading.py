@@ -9,11 +9,14 @@ from p2pwatch.domain.health.health_condition import ConditionWindow, Health, Hea
 from p2pwatch.domain.health.outcome import Outcome, OutcomeSource
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     STATUS_API_ANSWER,
+    STATUS_CONNECTABLE_FIELD,
     STATUS_CONNECTED_FIELD,
     STATUS_PERIOD,
+    ChannelNotConnectable,
     ChannelNotConnected,
     ChannelStatus,
     ClientNotAnswering,
@@ -62,10 +65,11 @@ def test_a_client_status_holds_a_valid_non_ascii_version_or_none(version: str | 
     [
         (CLIENT_UNREACHABLE, ClientNotAnswering, [Health.UNKNOWN] * 2 + [Health.FAILING]),
         (CHANNEL_NOT_CONNECTED, ChannelNotConnected, [Health.UNKNOWN] * 5 + [Health.FAILING]),
+        (CHANNEL_NOT_CONNECTABLE, ChannelNotConnectable, [Health.UNKNOWN] * 5 + [Health.DEGRADED]),
     ],
-    ids=["unreachable", "not connected"],
+    ids=["unreachable", "not connected", "not connectable"],
 )
-def test_a_reading_condition_enters_failing_at_today_s_alert(
+def test_a_reading_condition_enters_its_band_at_today_s_alert(
     *, condition: HealthCondition, reason: type[DeclaredFailure], entered: list[Health]
 ) -> None:
     window = ConditionWindow(condition=condition)
@@ -77,16 +81,18 @@ def test_a_reading_condition_enters_failing_at_today_s_alert(
 
 
 def test_each_reading_condition_reads_its_own_field_of_the_reading() -> None:
-    sources = [c.source for c in (CLIENT_UNREACHABLE, CHANNEL_NOT_CONNECTED)]
-    assert sources == [STATUS_API_ANSWER, STATUS_CONNECTED_FIELD]
+    sources = [
+        c.source for c in (CLIENT_UNREACHABLE, CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE)
+    ]
+    assert sources == [STATUS_API_ANSWER, STATUS_CONNECTED_FIELD, STATUS_CONNECTABLE_FIELD]
 
 
 @pytest.mark.parametrize(
     ("condition", "lasted"),
-    [(CLIENT_UNREACHABLE, 2), (CHANNEL_NOT_CONNECTED, 5)],
-    ids=["unreachable", "not connected"],
+    [(CLIENT_UNREACHABLE, 2), (CHANNEL_NOT_CONNECTED, 5), (CHANNEL_NOT_CONNECTABLE, 5)],
+    ids=["unreachable", "not connected", "not connectable"],
 )
-def test_a_reading_condition_entering_failing_has_lasted_a_period_per_reading_after_the_first(
+def test_a_reading_condition_entering_its_band_has_lasted_a_period_per_reading_after_the_first(
     *, condition: HealthCondition, lasted: int
 ) -> None:
     # Today's alerts, "for 2 min" and "for 5 min".
@@ -115,7 +121,7 @@ def test_a_client_s_component_is_judged_on_its_unreachable_condition() -> None:
     ) == ["unreachable"]
 
 
-def test_a_channel_s_component_is_judged_on_its_connected_field() -> None:
+def test_a_channel_s_component_is_judged_on_its_two_fields() -> None:
     component = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
     assert (component.name, component.labels) == (
         "channel amuled kad",
@@ -124,4 +130,5 @@ def test_a_channel_s_component_is_judged_on_its_connected_field() -> None:
     assert _conditions_entered(
         component,
         (STATUS_CONNECTED_FIELD, Outcome.declared(ChannelNotConnected())),
-    ) == ["not connected"]
+        (STATUS_CONNECTABLE_FIELD, Outcome.declared(ChannelNotConnectable())),
+    ) == ["not connected", "not connectable"]
