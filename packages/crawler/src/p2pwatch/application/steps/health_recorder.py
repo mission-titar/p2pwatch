@@ -1,4 +1,4 @@
-"""The health recorder: every outcome goes through it, so each change of health is logged once."""
+"""The health recorder: the one place every outcome goes through."""
 
 from collections.abc import Sequence
 from typing import Protocol
@@ -8,16 +8,18 @@ from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_condition import Health, HealthCondition, Outcome
 
 
+# What the recorder passes each change of health to, such as HealthAlerts.send.
 class HealthSubscriber(Protocol):
     async def __call__(self, transition: HealthTransition) -> None: ...
 
 
 class HealthRecorder:
-    """Logs each change of health an outcome causes, then passes it to each subscriber in order."""
+    """Updates a part's health with each new outcome, logs every change, and passes the change on
+    to the alerts (and, later, to the restarts)."""
 
     def __init__(self, *, logger: Logger, subscribers: Sequence[HealthSubscriber]) -> None:
         self._logger = logger
-        self._subscribers = tuple(subscribers)  # the alerts today, the restarts to come
+        self._subscribers = tuple(subscribers)  # called in this order
 
     async def record(self, outcome: Outcome, *, on: Component, condition: HealthCondition) -> None:
         transition = on.record(outcome, condition=condition)

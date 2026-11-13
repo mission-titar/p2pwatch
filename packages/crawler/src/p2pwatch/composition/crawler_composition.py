@@ -102,7 +102,7 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
+from p2pwatch.application.steps.health_alerts import HealthAlerts
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.loop_supervisor import (
     LoopSupervisor,
@@ -476,9 +476,9 @@ class CrawlerComposition(CrawlerRunner):
             health_recorder = HealthRecorder(
                 logger=StdlibLogger(HealthRecorder.__module__),
                 subscribers=(
-                    HealthEventTranslator(
+                    HealthAlerts(
                         observability_dispatcher=observability_dispatcher, node_id=node_id
-                    ).translate,
+                    ).send,
                 ),
             )
             # The status and download loops share the search session: one session per node.

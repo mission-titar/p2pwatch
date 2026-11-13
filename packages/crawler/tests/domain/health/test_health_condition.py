@@ -3,73 +3,101 @@ import pytest
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.health_condition import Health, HealthCondition, Outcome, Threshold
 
-U, H, F = Health.UNKNOWN, Health.HEALTHY, Health.FAILING
-_THREE_OF_THREE = Threshold(failures=3, among_last=3)
-_TWO_OF_TEN = Threshold(failures=2, among_last=10)
-
 
 class _Refused(DeclaredFailure):
     """The failure the condition under test counts."""
 
 
-_REFUSAL = _Refused("amuled refused the search")
 _REFUSED = HealthCondition(
-    name="refused", counts=_Refused, fails_at=_THREE_OF_THREE, recovers_under=_TWO_OF_TEN
+    name="refused",
+    counts=_Refused,
+    fails_at=Threshold(failures=3, among_last=3),
+    recovers_under=Threshold(failures=2, among_last=10),
 )
+_WORKED = Outcome.success()
+_FAILED = Outcome.failed(_Refused("amuled refused the search"))
 
 
-def _healths(pattern: str, *, failure: DeclaredFailure = _REFUSAL) -> list[Health]:
-    """The health after each outcome of ``pattern``: ``1`` a failure, ``0`` a success."""
+def _health_after_each(outcomes: list[Outcome]) -> list[Health]:
+    """The condition's health after each of ``outcomes``, in order."""
     latest: tuple[Outcome, ...] = ()
-    health, healths = U, []
-    for mark in pattern:
-        outcome = Outcome.failed(failure) if mark == "1" else Outcome.success()
+    health = Health.UNKNOWN
+    healths = []
+    for outcome in outcomes:
         latest = (*latest, outcome)[-_REFUSED.outcomes_kept :]
         health = _REFUSED.health_after(latest, previous=health)
         healths.append(health)
     return healths
 
 
-def test_an_outcome_is_a_success_or_the_failure_it_failed_with() -> None:
-    assert (Outcome.success().reason, Outcome.failed(_REFUSAL).reason) == (None, _REFUSAL)
+def _changes(outcomes: list[Outcome]) -> list[tuple[int, Health]]:
+    """Each change of health, with the number of the attempt that caused it, counted from 1."""
+    healths = [Health.UNKNOWN, *_health_after_each(outcomes)]
+    return [(n, healths[n]) for n in range(1, len(healths)) if healths[n] is not healths[n - 1]]
 
 
-def test_a_condition_is_unknown_until_it_has_as_many_outcomes_as_its_failing_threshold() -> None:
-    assert (_healths("000"), _healths("111")) == ([U, U, H], [U, U, F])
+def test_an_outcome_either_worked_or_holds_the_failure_it_failed_with() -> None:
+    refusal = _Refused("amuled refused the search")
+    assert Outcome.success().reason is None
+    assert Outcome.failed(refusal).reason is refusal
 
 
-def test_a_repeating_pattern_fails_once_and_recovers_only_once_it_stops() -> None:
-    healths = _healths("000111" * 20 + "0" * 10)
-    assert healths[:5] == [U, U, H, H, H]
-    assert healths[5:128] == [F] * 123  # the eighth success still sees two failures among ten
-    assert healths[128:] == [H, H]
+def test_the_health_is_unknown_until_the_third_attempt() -> None:
+    assert _health_after_each([_WORKED] * 3) == [Health.UNKNOWN, Health.UNKNOWN, Health.HEALTHY]
 
 
-def test_a_failure_the_condition_does_not_count_is_a_success_for_it() -> None:
-    assert _healths("111", failure=DeclaredFailure("another failure")) == [U, U, H]
+def test_3_failures_in_a_row_from_the_start_make_it_failing() -> None:
+    assert _health_after_each([_FAILED] * 3) == [Health.UNKNOWN, Health.UNKNOWN, Health.FAILING]
+
+
+def test_after_failing_it_recovers_at_the_ninth_success() -> None:
+    # At the eighth success, 2 of the last 10 attempts still failed.
+    assert _changes([_FAILED] * 3 + [_WORKED] * 9) == [(3, Health.FAILING), (12, Health.HEALTHY)]
+
+
+def test_3_successes_then_3_failures_over_and_over_fail_once_and_recover_after_they_stop() -> None:
+    pattern = ([_WORKED] * 3 + [_FAILED] * 3) * 20
+    assert _changes(pattern + [_WORKED] * 9) == [
+        (3, Health.HEALTHY),
+        (6, Health.FAILING),
+        (129, Health.HEALTHY),  # the ninth success after the pattern stopped
+    ]
+
+
+def test_a_failure_the_condition_does_not_count_is_like_a_success() -> None:
+    other = Outcome.failed(DeclaredFailure("another failure"))
+    assert _health_after_each([other] * 3)[-1] is Health.HEALTHY
 
 
 @pytest.mark.parametrize("failures", [0, 4])
-def test_a_threshold_counts_from_one_failure_to_all_of_its_outcomes(failures: int) -> None:
-    with pytest.raises(
-        ValueError, match=rf"^Threshold\(failures={failures}, among_last=3\): from 1"
-    ):
+def test_a_threshold_needs_from_1_failure_to_all_of_its_attempts(failures: int) -> None:
+    with pytest.raises(ValueError, match="needs from 1 failure to all of its attempts"):
         Threshold(failures=failures, among_last=3)
 
 
-@pytest.mark.parametrize(
-    "recovers_under", [Threshold(failures=3, among_last=10), Threshold(failures=2, among_last=2)]
-)
-def test_a_condition_refuses_to_recover_on_the_failures_that_made_it_fail(
-    recovers_under: Threshold,
-) -> None:
+def test_a_condition_refuses_to_recover_under_more_failures_than_made_it_fail() -> None:
     with pytest.raises(ValueError, match="^'x' would recover on the failures that made it fail$"):
         HealthCondition(
-            name="x", counts=_Refused, fails_at=_TWO_OF_TEN, recovers_under=recovers_under
+            name="x",
+            counts=_Refused,
+            fails_at=Threshold(failures=2, among_last=10),
+            recovers_under=Threshold(failures=3, among_last=10),
         )
 
 
-def test_a_condition_may_fail_at_one_failure_and_recover_at_the_next_success() -> None:
-    once = Threshold(failures=1, among_last=1)
-    condition = HealthCondition(name="once", counts=_Refused, fails_at=once, recovers_under=once)
-    assert condition.health_after((Outcome.success(),), previous=F) is H
+def test_a_condition_refuses_to_recover_on_fewer_attempts_than_made_it_fail() -> None:
+    with pytest.raises(ValueError, match="^'x' would recover on the failures that made it fail$"):
+        HealthCondition(
+            name="x",
+            counts=_Refused,
+            fails_at=Threshold(failures=2, among_last=10),
+            recovers_under=Threshold(failures=2, among_last=2),
+        )
+
+
+def test_a_condition_may_fail_at_1_failure_and_recover_at_the_next_success() -> None:
+    one_of_one = Threshold(failures=1, among_last=1)
+    condition = HealthCondition(
+        name="disk", counts=_Refused, fails_at=one_of_one, recovers_under=one_of_one
+    )
+    assert condition.health_after((_WORKED,), previous=Health.FAILING) is Health.HEALTHY

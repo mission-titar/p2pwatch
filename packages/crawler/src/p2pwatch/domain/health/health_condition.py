@@ -1,4 +1,4 @@
-"""A health condition: one way a component can fail, judged on its latest outcomes."""
+"""How a part's latest attempts decide its health."""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -9,9 +9,9 @@ from p2pwatch.domain.declared_failure import DeclaredFailure
 
 @dataclass(kw_only=True, frozen=True)
 class Outcome:
-    """What one attempt gave: a success, or the failure it failed with."""
+    """Whether one attempt worked, and if not, why."""
 
-    reason: DeclaredFailure | None  # None for a success
+    reason: DeclaredFailure | None  # None when it worked
 
     @classmethod
     def success(cls) -> Self:
@@ -23,49 +23,51 @@ class Outcome:
 
 
 class Health(Enum):
-    UNKNOWN = "unknown"  # too few outcomes yet to tell
+    """What a condition says of its part: unknown at first, then healthy or failing."""
+
+    UNKNOWN = "unknown"  # not enough attempts yet to tell
     HEALTHY = "healthy"
     FAILING = "failing"
 
 
 @dataclass(kw_only=True, frozen=True)
 class Threshold:
-    """``failures`` failed outcomes among the latest ``among_last``."""
+    """A number of failures among the latest attempts, such as "2 of the last 10"."""
 
     failures: int
     among_last: int
 
     def __post_init__(self) -> None:
         if not 1 <= self.failures <= self.among_last:
-            raise ValueError(f"{self}: from 1 failure to all of its outcomes expected")
+            raise ValueError(f"{self}: needs from 1 failure to all of its attempts")
 
 
 @dataclass(kw_only=True, frozen=True)
 class HealthCondition:
-    """Failing once ``fails_at`` is met, healthy again once under ``recovers_under``, a stricter
-    threshold so that a repeating pattern of failures does not alert again and again."""
+    """One way a part can be unwell, such as "aMule does not answer": failing after 3 failures in a
+    row, healthy again once fewer than 2 of the last 10 failed."""
 
     name: str
-    counts: type[DeclaredFailure]  # the failure it counts: any other outcome is a success for it
+    counts: type[DeclaredFailure]  # such as ClientNotAnswering; any other outcome counts as working
     fails_at: Threshold
     recovers_under: Threshold
 
     def __post_init__(self) -> None:
-        # Turning failing, its failures must still meet ``recovers_under``, or a success heals it.
+        # Otherwise the failures that just made it fail would let it recover at the next attempt.
         fails, recovers = self.fails_at, self.recovers_under
         if recovers.failures > fails.failures or recovers.among_last < fails.among_last:
             raise ValueError(f"{self.name!r} would recover on the failures that made it fail")
 
     @property
     def outcomes_kept(self) -> int:
-        """How many latest outcomes it reads: the recovery's window, its longest."""
+        """How many latest attempts it must remember: 10 for "fewer than 2 of the last 10"."""
         return self.recovers_under.among_last
 
     def health_after(self, latest: tuple[Outcome, ...], *, previous: Health) -> Health:
-        """The health ``latest`` outcomes give, newest last; ``previous`` is the health before."""
+        """The health once the newest of ``latest`` is counted; ``previous`` is the one before."""
         if len(latest) < self.fails_at.among_last:
             return Health.UNKNOWN
-        # While failing, it stays failing until under ``recovers_under``.
+        # A failing part needs ``recovers_under`` to recover; any other needs ``fails_at`` to fail.
         threshold = self.recovers_under if previous is Health.FAILING else self.fails_at
         failures = sum(isinstance(o.reason, self.counts) for o in latest[-threshold.among_last :])
         return Health.FAILING if failures >= threshold.failures else Health.HEALTHY

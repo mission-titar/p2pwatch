@@ -8,7 +8,7 @@ import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
-from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
+from p2pwatch.application.steps.health_alerts import HealthAlerts
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
@@ -56,12 +56,8 @@ class _Observability:
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
         )
-        translator = HealthEventTranslator(
-            observability_dispatcher=self.dispatcher, node_id=_NODE_ID
-        )
-        self.health_recorder = HealthRecorder(
-            logger=FakeLogger(), subscribers=(translator.translate,)
-        )
+        alerts = HealthAlerts(observability_dispatcher=self.dispatcher, node_id=_NODE_ID)
+        self.health_recorder = HealthRecorder(logger=FakeLogger(), subscribers=(alerts.send,))
 
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:

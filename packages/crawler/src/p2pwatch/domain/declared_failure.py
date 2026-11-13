@@ -1,3 +1,3 @@
 class DeclaredFailure(Exception):
-    """A failure the code expects, named by its subclass: the reason an outcome failed. An exception
-    so that ports can raise one too; a status reading records one without raising it."""
+    """A failure the code expects, such as aMule not answering, as opposed to a bug. An exception,
+    so that the errors the aMule client raises can later be recorded the same way."""

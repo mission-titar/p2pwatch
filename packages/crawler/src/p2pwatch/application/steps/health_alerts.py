@@ -1,4 +1,4 @@
-"""The health event translator: the alerts "unreachable for 2 min", then "reachable again"."""
+"""The client's alerts, sent when its health changes."""
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import HealthTransition
@@ -8,8 +8,9 @@ from p2pwatch.domain.observability.events import ClientReachableAgain, ClientUnr
 from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, UNREACHABLE_ALERT_AFTER
 
 
-class HealthEventTranslator:
-    """A subscriber of the health recorder, dispatching the event a change of health stands for."""
+class HealthAlerts:
+    """Sends the client's alerts when its health changes: "amuled unreachable for 2 min" when it
+    starts failing, "amuled reachable again" when it recovers."""
 
     def __init__(
         self, *, observability_dispatcher: ObservabilityDispatcher, node_id: NodeId
@@ -17,7 +18,7 @@ class HealthEventTranslator:
         self._observability_dispatcher = observability_dispatcher
         self._node_id = node_id
 
-    async def translate(self, transition: HealthTransition) -> None:
+    async def send(self, transition: HealthTransition) -> None:
         if transition.condition != CLIENT_UNREACHABLE:
             return
         client_name = transition.component.client_name
@@ -29,7 +30,7 @@ class HealthEventTranslator:
                     node_id=self._node_id,
                 )
             )
-        elif transition.previous is Health.FAILING:  # from unknown to healthy, no alert to end
+        elif transition.previous is Health.FAILING:  # healthy from its first readings: none to end
             await self._observability_dispatcher.dispatch(
                 ClientReachableAgain(client_name=client_name, node_id=self._node_id)
             )
