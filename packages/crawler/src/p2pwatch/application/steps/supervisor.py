@@ -1,6 +1,5 @@
-"""Runs each work's turns until the shutdown is requested, then cancels them all; a turn that raises
-or passes its time limit fails alone, each turn's outcome recorded on the components its work feeds;
-each restart the policy decides runs in a task of its own (spec v5 lot 4, D1, D3, D4, D5, D10)."""
+"""Runs each work's turns, a turn that raises or passes its time limit failing alone, and each
+restart the policy requests, until the shutdown cancels them (spec v5 lot 4, D1, D3 to D5, D10)."""
 
 import asyncio
 from collections.abc import Coroutine, Sequence
@@ -40,6 +39,10 @@ class SupervisedWork:
             raise ValueError(f"{self.work}: a component at least expected, each reading its turns")
 
 
+class WorkAdder(Protocol):
+    def __call__(self, supervised: SupervisedWork, /) -> None: ...
+
+
 class TurnPastItsLimit(Exception):
     """A turn cut at its work's time limit, recorded as a bug."""
 
@@ -75,11 +78,8 @@ class Supervisor:
         *,
         arm_shutdown_bound: ShutdownBoundArmer,
     ) -> None:
-        """Runs each work's turns and the restarts until the shutdown is requested, arms the
-        bound, then cancels them all.
-
-        A turn that raises or passes its time limit fails alone, logged; a wait's error escapes
-        as an ``ExceptionGroup``; the cancellation raises nothing."""
+        """Runs the works and the restarts until the shutdown is requested, arms the bound, then
+        cancels them all; a wait's error escapes as an ``ExceptionGroup``."""
         async with asyncio.TaskGroup() as group:
             self._group = group
             try:
@@ -181,18 +181,17 @@ class Supervisor:
             return Outcome.declared(failure)
         except TurnPastItsLimit:
             # No trace: it would show where the cancellation landed, not why the turn was slow.
-            self._logger.error("%s: past its time limit of %s", work, supervised.time_limit)
-            return Outcome.bug(f"past its time limit of {supervised.time_limit}")
+            past = f"past its time limit of {supervised.time_limit.total_seconds():g} s"
+            self._logger.error("%s: %s", work, past)
+            return Outcome.bug(past)
         except Exception as error:  # the work's boundary, by design: any other is a bug
             self._logger.exception("bug in %s", work, error=error)
             return Outcome.bug(repr(error))
         return Outcome.success()
 
     async def _within_its_limit(self, supervised: SupervisedWork) -> None:
-        """The work's turn raced against its time limit, the loser cancelled.
-
-        The turn runs in the task that waited for it, so nothing runs between the wait's end and
-        the turn's start; the race's end suspends even a turn that never does."""
+        """The turn raced against its limit in the task that waited for it, so nothing runs between
+        the wait's end and the turn; the race's end suspends even a turn that never does."""
         try:
             async with asyncio.TaskGroup() as group:
                 expiry = group.create_task(self._expire(supervised.time_limit))

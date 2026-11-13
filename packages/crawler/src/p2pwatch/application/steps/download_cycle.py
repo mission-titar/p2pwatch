@@ -86,7 +86,8 @@ class DownloadCycle(Work):
                         await task
 
     async def run_once(self) -> None:
-        """ONE download round (spec §5). Never raises: tolerates/absorbs.
+        """ONE download round (spec §5). It absorbs an unavailable client and a store failure; a
+        refused password or a bug leaves it, the turn's outcome (spec v5 lot 4, D3).
 
         Two distinct error DOCTRINES (item I2 - anti-starvation):
 

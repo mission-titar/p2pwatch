@@ -793,7 +793,9 @@ are settled under "Lot 4b, settled at its start", below.)
   components its work feeds. The log line of block 20 is its first reader. If it passes a bound, download and source
   tracking's components move to block 51.
 - **Block 51**: a channel's "searches failed", reading the search turns' declared outcomes and counting
-  `SearchFailedError` alone; download tracking's "the client connected to no network", recorded by the status
+  `SearchFailedError` alone (Corrected by lot 4b's closing block, the holistic review's MINOR 4: a search turn records
+  by `SEARCHES` a success or a `SearchFailedError` only, an unreachable client or a refused password recording
+  nothing, as the status sensor's unknown reading, so an aMule outage never heals the condition); download tracking's "the client connected to no network", recorded by the status
   reading; the log line their first reader.
 - **Block 52**: the `StateOwner` port, its `StateOwnerContract` and fake; `RestartPolicy` subscribed to the recorder;
   the restart in a task of the supervisor, the old works cancelled and awaited first, the bugs windows emptied;

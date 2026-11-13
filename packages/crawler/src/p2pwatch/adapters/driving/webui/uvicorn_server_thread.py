@@ -81,7 +81,7 @@ class UvicornServerThread:
         settled = await asyncio.to_thread(self._settled.wait, self._start_timeout_seconds)
         if not settled:
             _logger.error(
-                "webui degraded: uvicorn did not start within %s s", self._start_timeout_seconds
+                "webui degraded: uvicorn did not start within %g s", self._start_timeout_seconds
             )
         elif self._server.started:
             _logger.info("webui serving on %s:%d (own thread)", *self.bound_address)

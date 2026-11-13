@@ -1,10 +1,5 @@
-"""One client's status sensor, a work: a reading every minute feeds the channel gauges, the client's
-unreachable condition, each channel's two fields' conditions, whose transitions alert, and download
-tracking's client connected to no network (spec stage 2, D15; v5 lot 4, D21).
-
-An unknown field records nothing: while the API does not answer, each channel's conditions keep the
-readings they held.
-"""
+"""One client's status sensor, a work: a reading a minute, recorded on the client's, its channels'
+and download tracking's components; an unknown field records nothing (spec stage 2, D15; v5 D21)."""
 
 from collections.abc import Mapping
 from datetime import timedelta

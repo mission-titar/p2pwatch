@@ -1,6 +1,5 @@
-"""The notifier's owner: the notifier and the apprise groups it built, built anew by a restart;
-the dispatcher reaches the notifier through the owner at each send, so it sends to the rebuilt one
-unchanged (spec v5 lot 4, D5)."""
+"""The notifier's owner: the notifier and its apprise objects, one per URL, built anew by a restart;
+the dispatcher reaches the notifier through it at each send (spec v5 lot 4, D5)."""
 
 from typing import Protocol
 

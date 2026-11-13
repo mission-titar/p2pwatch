@@ -193,7 +193,7 @@ class DownloadTracker:
                 file, state=DownloadState.FAILED, failure_reason=FailureReason.LOST
             )
             self._logger.warning(
-                "file=%s unseen by the client for %ss: marked failed",
+                "file=%s unseen by the client for %g s: marked failed",
                 file.native_id,
                 self._lost_after.total_seconds(),
             )

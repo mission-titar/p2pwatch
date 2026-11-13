@@ -1,8 +1,5 @@
-"""Source tracking, a work: reads the sources of our downloads, records their points and alerts.
-
-Errors: an unavailable client skips the turn, a ``StoreError`` reading the tracked downloads fails
-it, one writing a download's points skips that download's; the next turn retries.
-"""
+"""Source tracking, a work: reads the sources of our downloads, records their points and alerts; an
+unavailable client skips the turn, a store failure reading the downloads fails it."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta

@@ -1,7 +1,5 @@
-"""The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies each service of
-its audience, all together. Each send's outcome is recorded on its service's component, a refusal
-or a send past the timeout declared, any other exception a bug: none breaks the crawl (E-D13,
-spec v5 lot 4, D3)."""
+"""The dispatch step: an ``Event`` logged, its node metrics written, each service of its audience
+notified, each send's outcome recorded on its service's component (E-D13, spec v5 lot 4, D3)."""
 
 import asyncio
 from collections.abc import Mapping
@@ -94,7 +92,7 @@ class ObservabilityDispatcher:
             return Outcome.declared(refusal)
         except TimeoutError:
             timed_out = NotificationTimedOut(
-                f"past its timeout of {self._notification_timeout_seconds} s"
+                f"past its timeout of {self._notification_timeout_seconds:g} s"
             )
             self._logger.warning("%s: %s", named, timed_out)
             return Outcome.declared(timed_out)

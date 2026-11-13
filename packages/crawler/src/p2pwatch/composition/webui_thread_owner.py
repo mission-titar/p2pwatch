@@ -6,8 +6,7 @@ from typing import Protocol
 
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 from p2pwatch.application.ports.driven.state_owner import StateOwner
-from p2pwatch.application.steps.supervisor import SupervisedWork
-from p2pwatch.composition.amule_client_owner import WorkAdder
+from p2pwatch.application.steps.supervisor import SupervisedWork, WorkAdder
 
 
 class ThreadBuilder(Protocol):

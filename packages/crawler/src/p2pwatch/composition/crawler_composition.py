@@ -215,7 +215,7 @@ async def shutdown_bound(*, deadline_seconds: float) -> AsyncIterator[ShutdownBo
     except TimeoutError as error:
         if not timeout.expired():
             raise
-        raise ShutdownDeadlineError(f"cut after {deadline_seconds} s") from error
+        raise ShutdownDeadlineError(f"cut after {deadline_seconds:g} s") from error
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
