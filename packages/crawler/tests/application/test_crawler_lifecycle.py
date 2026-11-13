@@ -1,4 +1,4 @@
-"""The crawler starts under its node id, re-evaluates a changed policy, then runs its loops."""
+"""The crawler starts under its node id, re-evaluates a changed policy, then runs its works."""
 
 import asyncio
 from datetime import timedelta
@@ -16,7 +16,8 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.supervisor import SupervisedLoop, Supervisor
+from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -42,8 +43,23 @@ _HASH = "31d6cfe0d16ae931b73c59d7e0c089c0"
 _FILENAME = "Keroro N°062A Les demoiselles cambrioleuses.avi"
 
 
+class _StartedWork(Work):
+    """Tells its crawl it started at its first turn, then waits for the stop."""
+
+    def __init__(self, name: str, *, crawl: "_Crawl") -> None:
+        self._name = name
+        self._crawl = crawl
+
+    async def wait_for_next_turn(self) -> None:
+        """Waits for nothing."""
+
+    async def run_once(self) -> None:
+        self._crawl.work_started(self._name)
+        await asyncio.Event().wait()
+
+
 class _Crawl:
-    """A ``CrawlerLifecycle`` over its real steps, the stores real, the rest fakes: two loops
+    """A ``CrawlerLifecycle`` over its real steps, the stores real, the rest fakes: two works
     record their start, then wait for the stop."""
 
     def __init__(
@@ -57,7 +73,7 @@ class _Crawl:
         download_enabled: bool = False,
     ) -> None:
         self.steps: list[str] = []
-        self.backoff_states_seen_by_loops: list[dict[BackoffKey, BackoffState]] = []
+        self.backoff_states_seen_by_works: list[dict[BackoffKey, BackoffState]] = []
         self.observability = ObservabilityOverFakes()
         self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
@@ -72,8 +88,8 @@ class _Crawl:
             jitter_generator=FakeJitterGenerator(),
             backoff_state_reader=self.backoff_state_store,
         )
-        self._loops_started = 0
-        self._both_loops_started = asyncio.Event()
+        self._works_started = 0
+        self._both_works_started = asyncio.Event()
         self.crawler_lifecycle = CrawlerLifecycle(
             node_id=_NODE_ID,
             observability_dispatcher=self.observability.dispatcher,
@@ -98,34 +114,33 @@ class _Crawl:
                 logger=self.catalog_reevaluator_logger,
             ),
             backoff=self.backoff,
-            loops=[self._loop("search"), self._loop("status")],
+            works=[self._work("search"), self._work("status")],
             download_enabled=download_enabled,
             supervisor=Supervisor(run_state_reader=self.run_state),
             logger=self.logger,
         )
 
-    def _loop(self, name: str) -> SupervisedLoop:
-        async def loop() -> None:
-            self.steps.append(f"{name}, {len(self.observability.logger.lines)} event(s) out")
-            self.backoff_states_seen_by_loops.append(self.backoff.snapshot())
-            self._loops_started += 1
-            if self._loops_started == 2:
-                self._both_loops_started.set()
-            await asyncio.Event().wait()
+    def _work(self, name: str) -> Work:
+        return _StartedWork(name, crawl=self)
 
-        return loop
+    def work_started(self, name: str) -> None:
+        self.steps.append(f"{name}, {len(self.observability.logger.lines)} event(s) out")
+        self.backoff_states_seen_by_works.append(self.backoff.snapshot())
+        self._works_started += 1
+        if self._works_started == 2:
+            self._both_works_started.set()
 
-    async def run_until_both_loops_start_then_stop(self) -> None:
+    async def run_until_both_works_start_then_stop(self) -> None:
         run = asyncio.create_task(
             self.crawler_lifecycle.run(arm_shutdown_bound=lambda: self.steps.append("bound armed"))
         )
-        await asyncio.wait_for(self._both_loops_started.wait(), 1.0)
+        await asyncio.wait_for(self._both_works_started.wait(), 1.0)
         self.run_state.set_shutdown_requested()
         await asyncio.wait_for(run, 1.0)
 
 
 @pytest.mark.asyncio
-async def test_the_crawler_starts_under_its_node_id_then_runs_each_loop(
+async def test_the_crawler_starts_under_its_node_id_then_runs_each_work(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -139,7 +154,7 @@ async def test_the_crawler_starts_under_its_node_id_then_runs_each_loop(
         engine=engine,
     )
 
-    await crawl.run_until_both_loops_start_then_stop()
+    await crawl.run_until_both_works_start_then_stop()
 
     assert crawl.logger.lines == [
         LoggedLine(level="info", message="crawler started: node_id=titar-node")
@@ -180,7 +195,7 @@ async def test_the_download_loop_shows_in_the_start(
         download_enabled=True,
     )
 
-    await crawl.run_until_both_loops_start_then_stop()
+    await crawl.run_until_both_works_start_then_stop()
 
     assert crawl.logger.lines == [
         LoggedLine(level="info", message="crawler started: node_id=titar-node"),
@@ -228,7 +243,7 @@ async def test_a_changed_policy_is_re_evaluated_after_the_start(
         )
     )
 
-    await crawl.run_until_both_loops_start_then_stop()
+    await crawl.run_until_both_works_start_then_stop()
 
     assert [line.message for line in crawl.observability.logger.lines] == [
         "🟢 node online (download off)",
@@ -246,7 +261,7 @@ async def test_a_changed_policy_is_re_evaluated_after_the_start(
 
 
 @pytest.mark.asyncio
-async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_loops(
+async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_works(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -263,7 +278,7 @@ async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_l
     saved = {_KAD: BackoffState(attempts=1, started_at=started_at, delay=timedelta(seconds=300))}
     crawl.backoff_state_store.set_backoff_states(saved)
 
-    await crawl.run_until_both_loops_start_then_stop()
+    await crawl.run_until_both_works_start_then_stop()
 
-    assert crawl.backoff_states_seen_by_loops == [saved, saved]
+    assert crawl.backoff_states_seen_by_works == [saved, saved]
     assert crawl.backoff.time_until_retry(_KAD) == timedelta(seconds=200)

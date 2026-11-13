@@ -95,7 +95,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `use case` | an operation called from outside through a driving port, in `application/use_cases/`: `ValidateConfig` | `service`, `interactor` |
 | `step` | a stage of the program the composition builds, behind no driving port: a class in `application/steps/`, one per module, `NodeIdResolver` | a use case |
 | `work`, `turn` | `Work`, what the supervisor runs again and again, an ABC a step subclasses (`StatusSensor`): a turn is one call to `run_once()`, after `wait_for_next_turn()`, the first turn included, the wait computed from the work's own state | a `loop`; a `task`, asyncio's |
-| `supervisor` | `Supervisor`, runs the crawler's loops, each work's among them, until the shutdown is requested, then cancels them | `LoopSupervisor` |
+| `supervisor` | `Supervisor`, runs each work's turns until the shutdown is requested, then cancels them | `LoopSupervisor` |
 | `lifecycle` | the program from its start to its stop, which the composition runs: `CrawlerLifecycle`, `PortSyncLifecycle`, behind no driving port | `app` |
 | `micros` | an integer of microseconds: an instant counts from the epoch; a column holding one is named `<x>_micros` too | a bare `_at` on an `int`, a column's included |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd`, `uid`, `gid` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process; `uid`, `gid`: POSIX's user and group ids) | `dir` for `directory` |

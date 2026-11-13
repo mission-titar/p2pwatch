@@ -134,12 +134,13 @@ flowchart TB
 Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k` (§9), et
 `crawler.yml` refuse une section `port_sync:`.
 
-Chaque boucle est une itération suivie d'un sommeil (`*_interval_seconds` depuis la config),
-supervisée par un `TaskGroup` : une boucle qui crashe bruyamment annule ses sœurs (fail-fast), mais
-les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10, discipline de
-frontière). Les recherches, le statut, le suivi des téléchargements et celui des sources sont déjà
-des `Work` : avant chaque tour, le premier compris, chacun attend ce que son propre état lui dit,
-puis prend son tour (`run_once()`) et cède la boucle d'événements. Une recherche attend la fin du
+Les recherches, le statut, le suivi des téléchargements et celui des sources sont des `Work`, que
+le `Supervisor` fait tourner, chacun dans sa tâche d'un `TaskGroup` : avant chaque tour, le premier
+compris, il attend ce que l'état propre du work lui dit (`wait_for_next_turn()`), puis lui fait
+prendre son tour (`run_once()`) et cède la boucle d'événements. Un tour qui lève annule ses sœurs
+(fail-fast), mais les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un tour (voir §10,
+discipline de frontière). À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
+chaque work. Une recherche attend la fin du
 backoff de son client et de son canal (§5) ; le statut, le reste de la minute depuis la fin de son
 dernier tour ; le suivi des téléchargements, rien au premier tour, puis
 `download.poll_interval_seconds` ou le réveil d'une décision de téléchargement, au premier des deux ;
@@ -228,7 +229,7 @@ flowchart TB
   avant la webui, câble les adapters concrets qu'elle décrit, chaque étape qui écrit le `node_id`
   le recevant à sa construction, puis lance `CrawlerLifecycle`
   (`application/crawler_lifecycle.py`), la racine du graphe : il annonce le démarrage, réévalue le
-  catalogue si la politique a changé, puis supervise les boucles.
+  catalogue si la politique a changé, puis confie les works au superviseur.
 - **`composition/command_line.py`** (`build_command_line`) construit les ports `crawl`,
   `validate-config` et `merge` (le cas d'usage `MergeCatalogs`) et les passe à la ligne de
   commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;
