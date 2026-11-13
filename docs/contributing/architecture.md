@@ -123,6 +123,7 @@ flowchart TB
   app --> s["Search"]
   app --> st["Status"]
   app -->|"if download"| d["Download"]
+  app -->|"if download"| so["Sources"]
 ```
 
 - **Téléchargement** (`download.enabled: true`, le défaut livré) : recherche **plus**
@@ -136,11 +137,13 @@ Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k
 Chaque boucle est une itération suivie d'un sommeil (`*_interval_seconds` depuis la config),
 supervisée par un `TaskGroup` : une boucle qui crashe bruyamment annule ses sœurs (fail-fast), mais
 les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10, discipline de
-frontière). Le statut et le suivi des téléchargements sont déjà des `Work` : avant chaque tour, le
-premier compris, chacun attend ce que son propre état lui dit, puis prend son tour (`run_once()`) et
-cède la boucle d'événements. Le statut attend le reste de la minute depuis la fin de son dernier
-tour ; le suivi des téléchargements, rien au premier tour, puis `download.poll_interval_seconds` ou
-le réveil d'une décision de téléchargement, au premier des deux.
+frontière). Le statut, le suivi des téléchargements et celui des sources sont déjà des `Work` :
+avant chaque tour, le premier compris, chacun attend ce que son propre état lui dit, puis prend son
+tour (`run_once()`) et cède la boucle d'événements. Le statut attend le reste de la minute depuis la
+fin de son dernier tour ; le suivi des téléchargements, rien au premier tour, puis
+`download.poll_interval_seconds` ou le réveil d'une décision de téléchargement, au premier des deux ;
+le suivi des sources, rien au premier tour, puis le reste de `download.sources_interval_seconds`
+depuis le début du précédent.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -376,7 +379,7 @@ flowchart LR
 ## 7. Du téléchargement à la complétion
 
 Actif en mode téléchargement seulement. Un tour de `DownloadCycle`, un `Work`, enchaîne trois
-étapes sur une seule session amuleapi, puis, toutes les `download.sources_interval_seconds`, relève
+étapes sur une seule session amuleapi ; `SourceWatcher`, un autre `Work` sur la même session, relève
 les sources des téléchargements du crawler (§8.3).
 
 ```mermaid
@@ -620,15 +623,13 @@ dépend d'un réseau que la ligne ne porte pas.
 
 ### 8.3 L'historique des sources
 
-La dernière étape du cycle de téléchargement lit les sources de chaque téléchargement du crawler que
-l'instantané de file liste sans le dire terminé (`SourceClient.sources` : `GET
-/downloads/{hash}/clients` en pages, puis un `GET /clients/{ecid}` par source), et les écrit en une
-transaction par téléchargement. Elle vient après les étapes qui font avancer les téléchargements,
-pour qu'une erreur en lisant des sources n'en saute aucune. Elle tourne au premier tour après un
-démarrage, puis au premier tour qui suit `download.sources_interval_seconds` (300 s par défaut)
-depuis son dernier départ, que la lecture ait abouti ou non : deux lectures sont donc espacées de
-l'intervalle, plus un tour au plus. `SourceWatcher` tient cet instant en mémoire, sur l'horloge
-monotone.
+Le suivi des sources, un `Work` à part du cycle de téléchargement, lit la file du client, puis les
+sources de chaque téléchargement du crawler qu'elle liste sans le dire terminé
+(`SourceClient.sources` : `GET /downloads/{hash}/clients` en pages, puis un `GET /clients/{ecid}`
+par source), et les écrit en une transaction par téléchargement. À part, une erreur en lisant des
+sources ne saute aucune étape des téléchargements. Il tourne dès le démarrage, puis
+`download.sources_interval_seconds` (300 s par défaut) après le début de son tour précédent, que la
+lecture ait abouti ou non. `SourceWatcher` tient cet instant en mémoire, sur l'horloge monotone.
 
 ```mermaid
 flowchart LR
@@ -785,7 +786,7 @@ démon sont
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
+| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

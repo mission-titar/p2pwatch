@@ -3,9 +3,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
-from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
-    SqliteSourcePointStore,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
@@ -18,7 +15,6 @@ from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
@@ -32,8 +28,6 @@ from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
-from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
-from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
@@ -105,7 +99,6 @@ def started(client: FakeDownloadClient) -> list[str]:
 def build_cycle(
     *,
     client: FakeDownloadClient,
-    source_client: FakeSourceClient | None = None,
     tracked_download_store: FakeTrackedDownloadStore | SqliteTrackedDownloadStore,
     decision_reader: FakeDecisionReader | None = None,
     observation_reader: FakeObservationReader | None = None,
@@ -115,10 +108,7 @@ def build_cycle(
     lost_after: timedelta = timedelta(days=1),
     observability_dispatcher: ObservabilityDispatcher | None = None,
     targets: Sequence[TargetSegment] | None = None,
-    sources: FakeSourcePointStore | SqliteSourcePointStore | None = None,
     fake_time: FakeTime | None = None,
-    sources_interval: timedelta = timedelta(seconds=30),
-    time_between_source_reads: timedelta = timedelta(seconds=60),
     logger: FakeLogger | None = None,
     wall_clock: WallClock | None = None,
     poll_interval_seconds: float = 30.0,
@@ -127,7 +117,6 @@ def build_cycle(
 ) -> DownloadCycle:
     fake_time = fake_time or FakeTime()
     wall_clock = wall_clock or fake_time.wall
-    sources = sources or FakeSourcePointStore()
     decision_reader = decision_reader or FakeDecisionReader()
     observation_reader = observation_reader or FakeObservationReader()
     targets = targets if targets is not None else TARGETS
@@ -172,21 +161,6 @@ def build_cycle(
             tracked_download_writer=tracked_download_store,
             tracked_download_reader=tracked_download_store,
             observation_reader=observation_reader,
-            logger=logger,
-        ),
-        source_watcher=SourceWatcher(
-            source_client=source_client or FakeSourceClient(),
-            tracked_download_reader=tracked_download_store,
-            source_point_writer=sources,
-            source_point_reader=sources,
-            download_labeler=download_labeler,
-            reappeared_after=timedelta(hours=12),
-            sources_interval=sources_interval,
-            time_between_source_reads=time_between_source_reads,
-            wall_clock=wall_clock,
-            monotonic_clock=fake_time.monotonic,
-            observability_dispatcher=observability_dispatcher,
-            node_id=NODE_ID,
             logger=logger,
         ),
         poll_interval_seconds=poll_interval_seconds,
