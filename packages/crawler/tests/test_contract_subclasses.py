@@ -42,6 +42,14 @@ _EXEMPTIONS: dict[str, str] = {
     "::FakeBrokenFreeSpaceMeter": "a stub: it refuses every measure",
     "crawler/tests/fakes/adapters/driven/fake_shutdown_requesting_ticker.py"
     "::FakeShutdownRequestingTicker": "a stub requesting the shutdown as each run starts",
+    "crawler/tests/fakes/adapters/driven/fake_raising_notifier.py"
+    "::FakeRaisingNotifier": "a stub: it raises its test's error at every send, a bug included",
+    "crawler/tests/fakes/adapters/driven/fake_hanging_notifier.py"
+    "::FakeHangingNotifier": "never ends a send, by design",
+    "crawler/tests/fakes/adapters/driven/fake_held_notifier.py"
+    "::FakeHeldNotifier": "holds each send until its test releases it, by design",
+    "crawler/tests/fakes/adapters/driven/fake_timed_notifier.py"
+    "::FakeTimedNotifier": "a spy keeping each send's instant: it refuses none",
 }
 
 

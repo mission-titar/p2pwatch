@@ -1,7 +1,7 @@
 # Handoff: v5 lot 4b, the health model running (tier Spec)
 
 Drafted by block 74's teammate from the block reports (#718 to #746, the collapsed "Block report" of each pull request
-body) and the lead's facts, to be corrected by the closing block (90). Spec:
+body) and the lead's facts, corrected by the closing block (90) with the holistic review's exits. Spec:
 `agents/specs/2026-11-09-v5-fault-isolation.md`, lot 4b of its three (D21), under
 `agents/specs/2026-11-04-v5-release-readiness.md` (the umbrella), whose D12 and D13 the whole lot 4 implements.
 
@@ -28,7 +28,9 @@ body) and the lead's facts, to be corrected by the closing block (90). Spec:
   and `HealthTransition` (component, condition, `previous`, `current`, the `outcome` that changed it). While failing
   holds, degraded is not held; on leaving failing, degraded enters only by its own entry. A condition is unknown until
   its window holds its smallest entry's outcomes; a success counts for every condition of its source.
-- **`HealthRecorder`** (`application/steps/`, block 20): every outcome's one path, `record(outcome, on=, by=)`; each
+- **`HealthRecorder`** (`application/steps/`, block 20): every outcome's one path, `record(outcome, on=, by=)`, the
+  turns' and the sends' source named `UNITS_OF_WORK` ("a unit of work's outcome: a supervised turn or a notification's
+  send", block 90, `TURNS` before); each
   transition logged in one line (`<component>, <condition>: <previous> to <current>`, a warning into degraded or
   failing, an info otherwise), then handed to its subscribers in order: `HealthEventTranslator`, then `RestartPolicy`.
 - **The conditions per component**, as the composition builds them:
@@ -36,12 +38,15 @@ body) and the lead's facts, to be corrected by the closing block (90). Spec:
   | Component (its name) | Conditions | Source of each |
   |---|---|---|
   | `client amuled` | unreachable (failing at 3 of 3) | `STATUS_API_ANSWER` |
-  | `channel amuled ed2k`, `... kad` | not connected (failing at 6 of 6), not connectable (degraded at 6 of 6), searches failed (`SearchFailedError`, default bands), bugs | `STATUS_CONNECTED_FIELD`, `STATUS_CONNECTABLE_FIELD`, `SEARCHES`, `TURNS` |
-  | `search '<keyword>' amuled <channel>` | bugs | `TURNS` |
-  | `status sensor amuled`, `source tracking amuled` | bugs | `TURNS` |
-  | `download tracking amuled` | bugs, connected to no network (the channels' band, 6 of 6), disk space low (degraded at 1 of 1, leaving at the first good reading) | `TURNS`, `STATUS_CONNECTED_CHANNELS`, `FREE_SPACE_READING` |
-  | `webui` | bugs | `TURNS` |
-  | `notifier <scheme> <audience>` per notification URL (`... 2` for a second alike) | bugs, sends refused (`NotificationRefused`, default bands) | `TURNS`, `SENDS` |
+  | `channel amuled ed2k`, `... kad` | not connected (failing at 6 of 6), not connectable (degraded at 6 of 6), searches failed (`SearchFailedError`, default bands; a search turn records a success or a refusal only, block 90), bugs | `STATUS_CONNECTED_FIELD`, `STATUS_CONNECTABLE_FIELD`, `SEARCHES`, `UNITS_OF_WORK` |
+  | `search '<keyword>' amuled <channel>` | bugs | `UNITS_OF_WORK` |
+  | `status sensor amuled`, `source tracking amuled` | bugs | `UNITS_OF_WORK` |
+  | `download tracking amuled` | bugs, connected to no network (the channels' band, 6 of 6), disk space low (degraded at 1 of 1, leaving at the first good reading) | `UNITS_OF_WORK`, `STATUS_CONNECTED_CHANNELS`, `FREE_SPACE_READING` |
+  | `webui` | bugs | `UNITS_OF_WORK` |
+  | `notifier <scheme> <audience>` per notification URL (`... 2` for a second alike) | bugs, sends failed (`NotificationFailed`, a refusal or a timeout, default bands, block 90) | `UNITS_OF_WORK`, `SENDS` |
+
+  Each work names itself in the log as the component it feeds (block 90), each owner `owner of client amuled`,
+  `owner of the webui`, `owner of the notifier`.
 
   An unknown reading (the client unreachable) records nothing on the channels' and download tracking's conditions.
   The client's component carries no bugs condition: no work feeds it.
@@ -51,13 +56,13 @@ body) and the lead's facts, to be corrected by the closing block (90). Spec:
   a component without a client (the webui, the notifier's services), so a failing notifier never notifies about
   itself. `_AlertTimer`, `CHANNEL_ALERT_AFTER` and `EdgeState` are gone.
 - **The works and the supervisor** (blocks 30 to 47): `Work`, an ABC (`wait_for_next_turn()`, `run_once()`,
-  `__str__`); the works are `StatusSensor` (renamed from `StatusLoop`, its wait from its last turn's end, set in a
+  `__str__`); the works are `StatusSensor` (renamed from `StatusLoop`, its wait from its latest turn's end, set in a
   `finally`), `DownloadCycle` (download tracking, at the poll or the wake, the first turn at once), `SourceWatcher`
   (source tracking, `sources_interval` start to start), one `KeywordSearch` per client, channel and keyword (the
   composition enumerating them with `dedupe_keywords` and the worker's channels), and `WebuiLiveness` (one status
   period before each turn). `Supervisor` (renamed from `LoopSupervisor`) runs each `SupervisedWork`'s turns: the wait
   outside the limit, the turn raced in a `TaskGroup` against `MonotonicClock.sleep` of its time limit, the outcome
-  recorded by `TURNS` on the components the work `feeds` (required, refused empty or reading no `TURNS`). A declared
+  recorded by `UNITS_OF_WORK` on the components the work `feeds` (required, refused empty or reading none). A declared
   failure is a warning `<work>: <reason>`; anything else a `Bug`, `bug in <work>` with its trace, the next turn
   waiting the later of `FLOOR_AFTER_A_BUG` (60 s) and its own wait; a turn past its limit is a `TurnPastItsLimit`,
   a `Bug`, logged without a trace. The shutdown arms its bound, then cancels every work, a restart in flight
@@ -75,23 +80,32 @@ body) and the lead's facts, to be corrected by the closing block (90). Spec:
   contract; a client built anew, at a restart of its owner or at the process's start, spaces its first starts from
   them, `remaining_wait` clamping a persisted wait. A `StoreError` is logged at error level, the read letting the
   client start as today, the write letting the search go on.
-- **The restarts** (blocks 52a, 52, 65, 68, 72): `StateOwner` (a port with `restart()` and `__str__`, its
+- **The restarts** (blocks 52a, 52, 65, 68, 72, 90): `StateOwner` (a port with `restart()` and `__str__`, its
   `StateOwnerContract`, `FakeStateOwner` in `tests/fakes/composition/`); `RestartPolicy`, the recorder's subscriber,
-  restarts the owner of a component whose bugs condition enters failing, through an `asyncio.Queue` the supervisor
-  reads, the restart in a task of the supervisor, the works feeding the owner's components cancelled and awaited
-  first, the bugs windows emptied once the rebuild succeeded; a restart is useless when a bugs condition of the
+  requests the restart of the owner of a component whose bugs condition enters failing: a `RestartRequest` (its owner,
+  its components, `rebuilt()` emptying their bugs windows, `rebuild_raised()` counting it useless) through an
+  `asyncio.Queue` the supervisor reads, the restart in a task of the supervisor, the works feeding the owner's
+  components cancelled and awaited before each attempt (block 90); a restart is useless when a bugs condition of the
   owner's components fails again before all are healthy, or when the rebuild raised (a `Bug` on each component, tried
-  again after the floor); three useless restarts and the owner is given up, the node running; the count resets when
-  every bugs condition of its components is healthy again. A failing component without an owner is only logged. The
-  owners, named by the composition per component: `AmuleClientOwner` (rebuilding every object holding the client
-  through the works' factory of block 52a, the resource stack closing the current instance), `WebuiThreadOwner`, and
-  `NotifierOwner`, through which the dispatcher reaches the notifier at each send (`current_notifier`).
+  again after the floor). After three rebuilds that raised, nothing of the owner's work runs until the container
+  restarts; after three useless restarts whose rebuilds succeeded, the works run on, only the buggy turns failing, and
+  the count resets once every bugs condition of its components is healthy again (answer 21). Every component the
+  policy reads is owned, the no-owner branch deleted (block 90). The owners: `AmuleClientOwner` (rebuilding every
+  object holding the client through `AmuleWorks.over`, the resource stack closing the current instance),
+  `WebuiThreadOwner` (through `WebuiWorks.over`), and `NotifierOwner`, through which the dispatcher reaches the notifier
+  at each send (`current_notifier`). `component_owners` maps each component to its owner from the works' factories
+  and the notifier's services; `PartsBuiltLater` holds the recorder and the supervisor for the parts built before them
+  (the dispatcher, the download decider, the owners, the factories), a read before either is set a
+  `PartNotBuiltYetError` (block 90).
 - **The notifications** (blocks 70, 72, 74): the `Notifier` port lists its `NotificationService`s (a scheme, an
   audience, an ordinal) and sends to one; `AppriseNotifier` holds one apprise object per node and service, its URL
   alone. The dispatcher sends a notification to each service of its audience concurrently, each under
   `notification_timeout_seconds`, and records each send's outcome on that service's component: by `TURNS`, and by
   `SENDS` unless a bug. A refusal (any apprise answer but a success) is `NotificationRefused`, a send past the timeout
-  `NotificationTimedOut`, both declared; anything else a `Bug`. Nothing a notification does breaks the crawl.
+  `NotificationTimedOut`, both `NotificationFailed`, declared; anything else a `Bug`. Nothing a notification does breaks
+  the crawl. A decision's sends after its write, and a completion's, run through `dispatch_shielded`, so a restart or a
+  time limit cancelling the turn loses none (block 90, `asyncio.shield` in the core's names). `NotifierContract`:
+  `AppriseNotifier` and `FakeNotifier` run it.
 - **Not yet, lot 4c's**: the graph and a component's propagated health, the root causes and one alert per root cause,
   the open alerts across a restart, `/health/*`, the health metrics, the loop watchdog, the refused password as a
   condition (its block 73), the databases as components, the reevaluation's condition. The connectivity and disk
@@ -128,7 +142,7 @@ Stack order, bottom to top; 52a sits below 52.
 | 70 | #744 | each notification's outcome on the notifier's component | 364, 16 |
 | 72 | #745 | the notifier's owner, the dispatcher reaching the rebuilt notifier at each send | 242, 15 |
 | 74 | #746 | the notifier's services, one component each, their sends refused | 497, 19 |
-| 90 | | closing block | |
+| 90 | | closing block: the holistic review's findings fixed, the spec corrected, the backlog reconciled, this handoff | 1486, 61 in 18 commits, in 8 steps each under both bounds, for the lead to cut |
 
 Twenty-six blocks with the closing one: the spec's 22 rows (the re-cut's, accepted past the workflow's 19 by the
 operator on 2026-11-11, "Je préfère un seul lot"), block 46 added on 2026-11-12, and four splits made in Act.
@@ -234,6 +248,15 @@ operator on 2026-11-11, "Je préfère un seul lot"), block 46 added on 2026-11-1
   - Block 72: `NotifierOwner` (`notifier` in the log), `NotifierBuilder`, `CurrentNotifier`; the indirection a callback,
     an owner implementing `Notifier` having been refused by `test_each_double_sits_in_the_ring_of_what_it_replaces`;
     `StateOwnerContract.state_relied_on`, async, checked after each restart; nothing for the resource stack.
+  - Block 90: the review's exits below; the index of Serena stale at its start (references at shifted lines), so the
+    three renames (`TURNS`, `SENDS_REFUSED`, `_last_turn_ended_at`) went by `git grep -w` and `sed`, each a constant or
+    a private attribute; `DownloadCycle` and `SourceWatcher` gain `client_name` for their log name; the download
+    decider records through an `OutcomeRecorder` callback, so the download steps are built before the recorder;
+    `download_steps` and `DownloadSteps` public, the steps' `targets` in place of the loaded config, their waker typed
+    by its port (`tach.toml`'s composition entry gains `status_reading_writer` and `waker`); `FakeStateOwner` gains
+    `raising_after_adding`, `FakeNotifier` `refusing`, `FakeHeldNotifier` added; four notifier doubles exempted from
+    `NotifierContract`, each with its reason; the factories' commit and their tests' split for the line bound, the
+    tests written and watched failing first.
   - Block 74: `NotificationService`, `notifier_components`, `SENDS_REFUSED` ("sends refused"), `SENDS`, in
     `notifier_outcomes.py` for the file bound; the ordinal for a second service alike (reordering two alike URLs swaps
     their names); the scheme `unknown` for a URL without `://`; "sends refused" counting `NotificationRefused` alone, a
@@ -274,10 +297,25 @@ One line per new behaviour; the block reports hold every case.
 | 72 | a restart keeping the old notifier; `current_notifier` called once | `assert (6, 0) == (3, 3)`; `assert (2, 0) == (1, 1)` |
 | 74 | the services' components; the per-service routing; the services sent to in series (mutation) | `ImportError: cannot import name 'SENDS'`; `TypeError: ... unexpected keyword argument 'service_components'`; `assert 10.0 == 5.0` |
 
+| 90 | a timeout counted by "sends failed"; the condition's name | `assert <Health.HEALTHY: 'healthy'> is <Health.FAILING: 'failing'>`; `('sends refused', ...) != ('sends failed', ...)` |
+| 90 | each work named as its component, each owner `owner of ...` (13 tests) | `assert 'status reading of amuled' == 'status sensor amuled'`; `assert 'client amuled' == 'owner of client amuled'` |
+| 90 | durations in seconds | `'hung: past its time limit of 0:00:30' != '... of 30 s'`; `'... for 3600.0s: ...' in` |
+| 90 | an unreachable client records nothing on "searches failed"; nine unreachable turns | `['channel amu...n to healthy'] == []`; `Left contains one more item: '... failing to healthy'` |
+| 90 | a login cancelled in flight | `assert False` (`_ClosingTransport.closed`) |
+| 90 | a shielded dispatch, a turn cut between a decision's write and its send, a completion's likewise | `TimeoutError` (three tests, the send never kept) |
+| 90 | the works a raising rebuild added stopped before the next attempt | `assert 231.0 < 181.0` |
+| 90 | the restart request's surface; the holder; the factories' tests | `ImportError: cannot import name 'RestartRequest'`; `ModuleNotFoundError: ... parts_built_later`; `ImportError: cannot import name 'AmuleWorks'` |
+| 90 | `FakeNotifier` under `NotifierContract` | `TypeError: FakeNotifier.__init__() got an unexpected keyword argument 'refusing'` |
+
 Passed at once and kept as guards: block 41's `test_a_refused_password_fails_the_search_and_backs_nothing_off`
 (D2), block 47's ten-keywords test (proven by a mutant), block 51's and 65's translator cases, block 60's healthy disk
 sending nothing, block 68's restart test (block 52's mechanism), block 74's log line assertion (proven by a mutant).
-Blocks 33 and 52a add no behaviour.
+Block 90's, each proven by a mutant: the give-up then a later bug (MAJOR 1, the reset guarded by `state.phase !=
+"given up"`: `assert [] == [<FakeStateOwner ...>]`), the holder's refusal (the `None` check removed: `AttributeError:
+'NoneType' object has no attribute 'record'`), the mapping test (the status sensor's component left out of
+`AmuleWorks.components()`: the sets differ), `AppriseNotifier` under `NotifierContract` (its behaviour already).
+The dispatcher's `:g` for the timeout is held by no test: the tests' timeouts print alike either way. Blocks 33 and
+52a add no behaviour.
 
 ## Section 4's rows, where each is held
 
@@ -302,27 +340,82 @@ Blocks 33 and 52a add no behaviour.
 
 ## Accepted limits
 
-The spec's section 6, plus what the blocks found:
+The spec's section 6, its D20 limit narrowed by the closing block (a restart or a time limit no longer loses a
+notification, the process's death still does) and its no-owner limit removed with its branch; and what the operator
+accepted during Wrap, quoted (`lot4b-operator-answers.md`, 21 to 25):
+
+- **After three useless restarts whose rebuilds succeeded, the owner's works run on**, only the buggy turns failing,
+  the count reset once every bugs condition of its components is healthy again, so a later bug gets three restarts
+  more; after three rebuilds that raised, nothing of the owner's work runs until the container restarts (answer 21):
+  "A".
+- **A notification is lost only if the process dies between its write and its send**: a restart or a time limit
+  cancelling the turn leaves the sends to their end within their timeout (answer 22): "A".
+- **A timeout counts toward a service's condition as a refusal does** (answer 23): "Aligné avec la reco, on ne gagne
+  pas à distinguer."
+- **Source tracking's failed list read waits a full `sources_interval`** (block 35, answer 24), a fixed cadence: "On
+  garde A".
+- **The choices made in blocks**: block 51's "connected to no network" at 6 of 6 (the lead's answer on its pull
+  request), block 68's webui rebuild whose bind fails not raising (a port held elsewhere costs three useless restarts),
+  block 70's source covering a notification's send, block 74's `NOMATCH` a refusal logged at each send, block 47's
+  teammate editing the spec's formulas and the yield's row, block 52 at 21 files (answer 25): "ça me semble ok".
+- **The list of declared failures is written by hand** (the lead's, holistic MINOR 14):
+  `test_every_failure_a_driven_port_declares_is_a_declared_failure` misses a new port's failure until someone adds
+  it; a check over the ports' docstrings would parse prose.
+
+## Found by the blocks, for the operator
+
+Each with its block and its exit; none is an accepted limit unless the list above says so.
 
 - **An unreachable reading samples every channel as unknown, at boot too** (block 25): two debug lines at a boot with
-  the API down, no gauge series either way.
-- **Source tracking reads `sources_interval` apart start to start, and a failed list read waits a full interval**
-  (block 35), where it used to retry one poll later.
-- **A login cancelled by the shutdown during a rebuild leaves its httpx client unclosed until the process exits**
-  (block 52, found by reading, not fixed, unverified): `AmuleApiClient._connect` closes it on `except Exception`. A
-  latent defect for the closing block to settle, not yet a decision.
-- **A webui rebuild whose bind fails does not raise** (block 68): the liveness fails it again, the restart counted
-  useless three turns later; a bind the old webui's fall caused (a port held elsewhere) fails three times.
+  the API down, no gauge series either way. Not a review finding; left as is.
+- **A failed list read waits a full interval** (block 35): accepted, answer 24.
+- **A login cancelled during a rebuild left its httpx client unclosed** (block 52): fixed by block 90 (holistic MINOR
+  2), the client closed on any exit of the login.
+- **A webui rebuild whose bind fails does not raise** (block 68): accepted, answer 25.
 - **A `TimeoutError` the notifier raises itself is recorded as `NotificationTimedOut`** (block 70): `asyncio.wait_for`
-  cannot tell it from its own expiry.
+  cannot tell it from its own expiry. Not a review finding; left as is.
 - **A send in flight during a restart finishes on the old notifier; a restarted notifier stays unknown until its
-  third send** (block 72), a useless restart noticed at the third bug after it.
-- **A notification service that only times out is never failing** (block 74): "sends refused" counts refusals
-  alone, its warning line shows the timeouts; a bug on one service rebuilds every service's apprise objects; two alike
-  URLs reordered swap their names.
-- **A spacing lost to a store failure costs one early start** (block 46, the spec's row).
-- **A turn past its limit is logged without its trace** (block 47): the trace would show where the cancellation
-  landed, not why the turn was slow.
+  third send** (block 72), a useless restart noticed at the third bug after it. Not a review finding; left as is.
+- **A notification service that only times out never failed** (block 74): fixed by block 90 (holistic MAJOR 2,
+  answer 23). A bug on one service rebuilds every service's apprise objects, and two alike URLs reordered swap their
+  names: not review findings; left as is.
+- **A spacing lost to a store failure costs one early start** (block 46): the spec's settled row.
+- **A turn past its limit is logged without its trace** (block 47): the spec's sketch; the trace would show where the
+  cancellation landed, not why the turn was slow.
+
+## The holistic review's findings and their exits
+
+`.reviews/v5-lot4b-holistic.md`: 0 CRITICAL, 5 MAJOR, 18 MINOR; the exits settled by the lead and the operator.
+
+| # | Finding | Exit |
+|---|---|---|
+| MAJOR 1 | after three useless restarts whose rebuilds succeeded, the works run on and the count resets, unseen and untested | fixed: the code kept (answer 21), the spec's step 4 says both cases, a test of a give-up then all healthy then a bug |
+| MAJOR 2 | a service that only times out reads healthy | fixed (answer 23): "sends failed" counts `NotificationFailed`, a refusal or a timeout |
+| MAJOR 3 | a restart or a time limit cancelling a turn loses a notification | fixed (answer 22): `dispatch_shielded` after a decision's write and a completion's; D20's limit unchanged |
+| MAJOR 4 | no test runs D5 as the node wires it | fixed: `AmuleWorks`, `WebuiWorks`, `component_owners`, `apprise_notifier` with tests of their own; a real restart left to the release candidate |
+| MAJOR 5 | the draft's "Accepted limits" held teammates' findings | fixed: this handoff's two lists above |
+| MINOR 1 | the old works stopped once, before the retry loop | fixed: stopped before each attempt |
+| MINOR 2 | a cancelled login leaves its httpx client unclosed | fixed: closed on any exit of the login |
+| MINOR 3 | the no-owner branch had no production user | fixed: deleted with its test, section 6's limit removed |
+| MINOR 4 | "searches failed" healed during an aMule outage | fixed: a search turn records a success or a refusal only |
+| MINOR 5 | choices made in blocks the operator never saw | fixed: marked in the spec with answers 24 and 25 |
+| MINOR 6 | one part, two names in the log; `TURNS` two concepts | fixed: each work named as its component, each owner `owner of ...`, `UNITS_OF_WORK` |
+| MINOR 7 | `_last_turn_ended_at` | fixed: `_latest_turn_ended_at` |
+| MINOR 8 | "apprise groups", "Never raises", `WorkAdder`'s home | fixed |
+| MINOR 9 | `architecture.md`'s "boucles" and its old alert end | fixed |
+| MINOR 10 | section 6 lacked lot 4b's operator-visible changes; `operate.md` contradicted | fixed: section 6 gains them, `operate.md`'s sentence corrected |
+| MINOR 11 | no `NotifierContract` | fixed: `AppriseNotifier` and `FakeNotifier` run it, four doubles exempted with their reasons |
+| MINOR 12 | three duration formats | fixed: `{seconds:g} s` everywhere, `troubleshooting.md` corrected |
+| MINOR 13 | the restart's sequence over four public methods; names bound later read by lambdas | fixed: `RestartRequest`, `PartsBuiltLater` |
+| MINOR 14 | TDD departures; the hand-written list of declared failures | the departures named under "Departures" and "The tests watched failing"; the list an accepted limit, the lead's |
+| MINOR 15 | the spec's table lacked 27, 35, 41, 52a; `StatusLoop`; block 52's files | fixed: rows added, the name corrected, block 52's 21 files accepted (answer 25) |
+| MINOR 16 | block 36 touched lot 7's guide, block 40's hunk dropped | the rule stated once in section 6 "For lot 7"; no revert |
+| MINOR 17 | four CI runs stuck queued | the lead's, in Integrate: the rebase onto `main` must show a green run on each of the four branches |
+| MINOR 18 | docstrings past two lines; "D9's mark" as a reason | fixed |
+
+The TDD departures the review named (MINOR 14): block 74's log-line assertion written after the code, proven by a
+mutant; block 68's restart test passing at once; block 30's four wait tests and block 35's failing only on a
+constructor `TypeError`; block 36's evidence mutations of code already written.
 
 ## For lot 7 (the operator pages, umbrella D19)
 
@@ -332,28 +425,31 @@ The spec's section 6 lists what the pages must say. The blocks add, each a line 
   degraded or failing, an info otherwise: `client amuled, unreachable: ...`, `channel amuled kad, not connectable:
   unknown to degraded`, `channel amuled kad, searches failed: unknown to failing`, `download tracking amuled, connected
   to no network: unknown to failing`, `download tracking amuled, disk space low: unknown to degraded`, `search 'keroro'
-  amuled kad, bugs: unknown to failing`, `notifier discord community, sends refused: unknown to failing`; one info
+  amuled kad, bugs: unknown to failing`, `notifier discord community, sends failed: unknown to failing`; one info
   `..., unknown to healthy` per condition once its window fills after a start (blocks 20 to 74).
 - **The supervisor's lines**: a bug no longer stops the node, `bug in <work>` (error, with its trace), its next turn
   at least 60 s later; a declared failure `<work>: <reason>` (warning); a turn past its limit `<work>: past its time
-  limit of H:MM:SS` (error) (blocks 40, 47).
-- **A failed search is logged twice**: the worker's line as before, then the supervisor's `search '<keyword>' on
-  <client>/<channel>: <reason>` (block 41).
+  limit of 1200 s` (error), every duration in seconds (blocks 40, 47, 90). Each work is named as the component it
+  feeds: `status sensor amuled`, `search 'keroro' amuled kad`, `download tracking amuled`, `source tracking amuled`,
+  `webui` (block 90).
+- **A failed search is logged twice**: the worker's line as before, then the supervisor's `search '<keyword>' <client>
+  <channel>: <reason>` (blocks 41, 90).
 - **A password refused while the node runs no longer stops it**: a warning each status turn, nothing alerted until
   lot 4c's block 73 (block 40, the spec's limit).
 - **Source tracking**: no more `download sources store failure (...): step skipped, retry` (the supervisor's warning
   replaces it, block 40); its reads start to start (block 35, `docs/settings.md` updated).
 - **The restarts** under `...restart_policy` and `...supervisor`: `search 'keroro' amuled kad, bugs failing:
-  restarting client amuled` (warning), `client amuled restarted` (info), `restart of client amuled raised` (error, with
-  its trace), `client amuled: 3 useless restarts, its components failing; not restarted again` (error); the same for
-  `webui thread` (then `webui serving on <host>:<port> (own thread)`) and `notifier` (`notifier discord community, bugs
-  failing: restarting notifier`); the shutdown's stderr line now reads `amuled session closing…` (blocks 52, 68, 72,
-  74).
-- **A fallen webui**: `bug in webui liveness` (error, the `WebuiFallen` trace) each minute, the thread's own line
+  restarting owner of client amuled` (warning), `owner of client amuled restarted` (info), `restart of owner of client
+  amuled raised` (error, with its trace), `owner of client amuled: 3 useless restarts, its components failing; not
+  restarted again` (error); the same for `owner of the webui` (then `webui serving on <host>:<port> (own thread)`) and
+  `owner of the notifier` (`notifier discord community, bugs failing: restarting owner of the notifier`); the
+  shutdown's stderr line now reads `amuled session closing…` (blocks 52, 68, 72, 74, 90).
+- **A fallen webui**: `bug in webui` (error, the `WebuiFallen` trace) each minute, the thread's own line
   `webui degraded: the crawler carries on without HTTP` carrying the cause, then the restart (blocks 65, 68).
 - **The notifications**: `notification <audience> failed (<error>)` is gone; in its place, per service,
-  `notification discord community: refused (FAILURE)` and `notification discord community: past its timeout of 5.0 s`
-  (warnings), `bug in notification discord community` (error, with its trace); a refusal by a service (a webhook's
+  `notifier discord community: refused (FAILURE)` and `notifier discord community: past its timeout of 5 s`
+  (warnings), `bug in notifier discord community` (error, with its trace); a service that only times out fails its
+  "sends failed" (block 90); a refusal by a service (a webhook's
   4xx) is now logged; a URL apprise cannot load is a refusal at each send, logged, where it was skipped in silence;
   with several URLs for one audience a notification waits for the slowest, within the timeout; without any URL there
   is no notifier component (blocks 70, 74).
@@ -362,8 +458,12 @@ The spec's section 6 lists what the pages must say. The blocks add, each a line 
   two error lines `latest search starts not read (...): the first starts not spaced` and `search start not written
   (...): a client built anew may start early`.
 - **A stalled amuleapi reads as an unreachable client after 60 s** (block 45), through the existing path.
-- Untouched by the blocks: `docs/migration-4x.md` (lot 7's). The operator's line `download enabled: download loop
-  armed` keeps its words.
+- **A loss line in seconds**: `file=... unseen by the client for 86400 s: marked failed` (block 90,
+  `docs/troubleshooting.md` corrected); `operate.md`'s sentence on an unreachable API corrected (block 90): the
+  channels keep their last readings, no channel alert starts or ends.
+- `docs/migration-4x.md` is lot 7's: block 36 corrected a sentence it made false, block 40's new hunk was dropped, the
+  rule stated once in the spec's section 6. The operator's line `download enabled: download loop armed` keeps its
+  words. Section 6 "For lot 7" now lists all of the above (block 90).
 
 ## The operator's decisions outside the blocks
 
@@ -388,32 +488,39 @@ From the lead's record of 2026-11-11 and 2026-11-12, the operator's words quoted
   IP. p2pwatch n'en utilise qu'un, et c'est bien car ça laisse l'utilisateur libre d'avoir un amule à part aussi."
 - Block 46's spec correction and its size: "approuvé".
 - Block 52 at 1510 lines, 52a split off: "reco ok".
+- The holistic review's exits, during Wrap (answers 21 to 25, quoted under "Accepted limits"): "A", "A", "Aligné avec
+  la reco, on ne gagne pas à distinguer.", "On garde A", "ça me semble ok".
 
 ## The lot's counts
 
-To be completed by the closing block from the lead's record; what the reports and the lead's facts give:
+The lead's record, and the reports:
 
-- Blocks: 26 with the closing one (the spec's 22 rows, block 46 added, four splits).
-- Splits: 4 (25/27, 33/34, 40/41, 52a out of 52). Blocks inserted: 1 (46, 2026-11-12). Bounds passed with the
-  operator's acceptance: 10, 20, 40, 46, 52.
+- Blocks: 26 with the closing one (the spec's 22 rows, block 46 added, four splits), the closing block in 8 steps
+  under both bounds, for the lead to cut.
+- Fix-backs: 1 (block 51's band, after its pull request, nothing stacked above). Cascaded rebases: 0. Runs
+  re-triggered: 2 (block 74's first run cancelled by the handoff's push; block 52's push at 52a's insertion). Rebases
+  onto `main`: 0 so far. Fewer runs re-triggered than blocks.
+- Splits: 4 (25/27, 33/34, 40/41, 52a out of 52). Blocks inserted: 1 (46) plus 52a. Bounds passed with the operator's
+  acceptance: 10, 20, 40, 46, 52.
+- Class 2 questions: 1 (block 45, answer 17). The operator's answers, verbatim: "On ne peut pas résoudre ça simplement
+  en stockant dans local.db la date et heure de dernier lancement ? Ça résoudrait les deux cas sans problème.", then
+  "ça me semble ok, mais gardons en tête que ça doit être générique pour généraliser ça à d'autres réseaux p2p (v5) et
+  donc clients."
+- Bodies the operator called unreadable unprompted: 0.
 - Changes after a pull request opened, seen in the reports: block 51's band moved from 3 of 3 to 6 of 6 on the lead's
-  answer; block 40's `docs/migration-4x.md` hunk dropped on the lead's request. The fix-backs, cascaded rebases and the
-  runs they re-triggered are the lead's to count.
-- The stack re-created as GitHub stack #740 for 52a's insertion.
+  answer; block 40's `docs/migration-4x.md` hunk dropped on the lead's request. The stack re-created as GitHub stack
+  #740 for 52a's insertion.
 - Continuous integration: four runs, of blocks 20, 25, 27 and 30, stuck queued on GitHub with no job since 2026-11-11,
-  each block green locally; the GitHub REST quota exhausted once on 2026-11-11 by parallel `gh run watch` calls.
-- Class 2 questions: 1 (block 45: how the wiring tests get past the first start's minute). The operator's answers,
-  verbatim: "On ne peut pas résoudre ça simplement en stockant dans local.db la date et heure de dernier lancement ? Ça
-  résoudrait les deux cas sans problème.", then "ça me semble ok, mais gardons en tête que ça doit être générique pour
-  généraliser ça à d'autres réseaux p2p (v5) et donc clients."
+  each block green locally (the rebase onto `main` must show each green, holistic MINOR 17); the GitHub REST quota
+  exhausted once on 2026-11-11 by parallel `gh run watch` calls.
 - Class 1 fixes: 7. Block 20: `ClientUnreachableLasting`'s comment ("emitted once until one comes" now "until it
   heals"). Block 38: the composition's docstring named download tracking's work alone. Block 47: the eD2k search's and
   the Kad search's formulas (`S + B + 3c`, `2B + 4c`). Block 60: `events.py`'s docstring and `test_policy.py` named a
   `first_occurrence` no event carries. Block 68: `_start_webui`'s unread `run_state_store` parameter. Block 70: the
   adapter's docstring said apprise with no service returns `None` (2.1 answers `NOMATCH`). Block 72:
   `docs/contributing/architecture.md`'s module table lacked `webui_thread_owner.py`.
-- Gates: the crawler from 2791 tests passed (block 10) to 3038 (block 74), 4 skipped, 21 deselected throughout.
-- Rebases onto `main`, bodies the operator called unreadable: the lead's.
+- Gates: the crawler from 2791 tests passed (block 10) to 3038 (block 74), then 3055 (block 90), 4 skipped, 21
+  deselected throughout.
 
 ## Pitfalls learned
 
@@ -449,8 +556,8 @@ To be completed by the closing block from the lead's record; what the reports an
 - **Build order in the composition**: the recorder's subscribers include the restart policy, which needs every owned
   component, so any step that records is built after the recorder and its components before the policy (block 60); a
   name a nested function reads must be bound before its first call, and mypy cannot type one read before its
-  assignment (blocks 52a, 52); `health_recorder` is declared before it is assigned, so a notification dispatched
-  before the recorder exists would raise `NameError` (block 70; nothing dispatches in between today).
+  assignment (blocks 52a, 52); the parts built before the recorder and the supervisor reach them through
+  `PartsBuiltLater`, a read before either is set a `PartNotBuiltYetError`, never a `NameError` (block 90).
 - **The supervisor empties the bugs windows right after `restart()` returns**: an owner that awaited after adding a
   work could see its first outcome erased; `AmuleClientOwner` adds its works last (block 52).
 - **Recording nests**: the notifier's transition reaches every subscriber before the subscribers after the translator
@@ -472,16 +579,26 @@ To be completed by the closing block from the lead's record; what the reports an
 - **The notifier's components are built from the services the first notifier lists**: a rebuilt notifier must list
   equal services, which the same configuration guarantees (block 74). `FakeNotifier.calls` keeps
   `(audience, notification)`; a test needing the service reads the outcomes on its components.
-- **The policy's no-owner branch has no production component since block 72** (block 72); it keeps its test in
-  `test_restart_policy.py`.
+- **The policy indexes its owners directly** (block 90): a component carrying a bugs condition without an owner is a
+  `KeyError` in the recorder's subscriber, which a supervisor's recording turns into the node's end. Every component
+  the composition builds is owned through `component_owners`; a test building a policy over part of its components
+  subscribes it only when it restarts (`test_keyword_search.py`) or gives the others an owner of their own
+  (`test_supervisor.py`).
+- **A shielded send outlives its turn** (block 90): `dispatch_shielded` holds its task in the dispatcher, the loop
+  keeping a weak reference to a task alone; at the shutdown a send in flight goes on within its timeout while the
+  resources close.
+- **Serena's index can be stale at a block's start** (block 90): its references came back at shifted lines, so the
+  renames of constants went by `git grep -w`; check the index on a recent name before the first rename.
+- **An index already holding a restore** (`git checkout <ref> -- <paths>` stages them): a later `git add` of a few
+  files commits them all (block 90, caught by `git show --stat`).
 
 ## Not validated
 
-- **The composition's wiring of the health model has no test of its own** (blocks 20 to 74): the wiring tests run on
-  real time with a one-minute status period, so a transition needs minutes and a restart three bugs a minute apart.
-  The steps' tests build the same recorder, translator, policy and supervisor the composition does; the mappings of
-  components to owners are reached by coverage only. No restart ran through the real composition (blocks 52, 68,
-  72); the webui's liveness work never reached its first turn in a wiring test (block 65).
+- **No restart ran through the real composition** (blocks 52, 68, 72): the works' factories and the mapping of
+  components to owners have tests of their own since block 90 (every feed owned, each owner's components those its
+  works feed, a rebuilt client's turns on the new client), but a real restart on the node, the webui's liveness
+  reaching its first turn in a wiring test (block 65) and the order the composition builds its parts in are left to the
+  release candidate's fault injection.
 - **Integration suites**: block 46 ran `api_integration` and `download_integration` against
   `ghcr.io/mission-titar/p2pwatch-amule:latest` on `-p 14711:4711`, 5 passed; the compose smoke test was not run (its
   changed script only parsed with `ast.parse`); block 45's integration constructions only gain an argument, not run.
@@ -494,10 +611,9 @@ To be completed by the closing block from the lead's record; what the reports an
 
 ## Next step
 
-The closing block, 90 (`docs/lot-4b-wrap`), stacked on top: the holistic review over
-`git diff origin/main...origin/feat/notifier-services`, its findings fixed (the httpx client a cancelled rebuild
-leaves unclosed, above, is one to settle), `BACKLOG.md`'s sub-entry 4b deleted, every departure above marked
-`(Corrected: ...)` in the spec (block 52's 21 files among them), and this handoff corrected with the counts. Then the
-operator reads and merges the stack; no release, v5 shipping after lots 4 to 7 and the release candidates. Lot 4c
-next, what the operator sees and the real stops (its 18 blocks, from 05, `feat/health-graph`: `Dependency`,
-`Quorum.ALL`, the propagation, the health gauges its first reader), on the conditions and components this lot built.
+The lead cuts block 90's steps into branches on top of the stack, then rebases the whole stack onto `main`, each of
+the four branches whose runs stuck queued showing a green run (holistic MINOR 17); the operator reads and merges the
+stack. No release: v5 ships after lots 4 to 7 and the release candidates. Lot 4c next, what the operator sees and the
+real stops (its 18 blocks, from 05, `feat/health-graph`: `Dependency`, `Quorum.ALL`, the propagation, the health
+gauges its first reader), on the conditions and components this lot built; its alerts on the notifier's components
+must not be sent through the notifier (block 70's pitfall).

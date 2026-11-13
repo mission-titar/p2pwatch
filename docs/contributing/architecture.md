@@ -103,7 +103,7 @@ flowchart RL
 
 | Paquet | Dist | Rôle |
 |---|---|---|
-| `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
+| `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les works de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`), le port-sync (`python -m p2pwatch_amule port-sync`, §9) et le healthcheck (`python -m p2pwatch_amule health`, §13). |
 | `pytest_settings` | `pytest-settings` | **Configuration de test partagée**, un seul module et non un hexagone : les réglages de pytest que la suite de chaque paquet applique, chargés par son point d'entrée `pytest11`. Hors de la portée de vulture, comme les tests. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
@@ -131,10 +131,10 @@ flowchart TB
 
 - **Téléchargement** (`download.enabled: true`, le défaut livré) : recherche **plus**
   téléchargement.
-- **Catalogue seul** (`download` absent ou `enabled: false`) : **seule la boucle de recherche
-  tourne**, avec celle du statut. Le nœud catalogue et notifie, et ne télécharge rien.
+- **Catalogue seul** (`download` absent ou `enabled: false`) : **seuls les works de recherche
+  tournent**, avec le capteur de statut. Le nœud catalogue et notifie, et ne télécharge rien.
 
-Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k` (§9), et
+Le port-sync n'est pas un work du crawler : il tourne dans le conteneur `ed2k` (§9), et
 `crawler.yml` refuse une section `port_sync:`.
 
 Les recherches, le statut, le suivi des téléchargements, celui des sources et la vivacité de la
@@ -310,9 +310,11 @@ Points clés en chemin :
   redondance multi-nœuds est entièrement affaire de faire tourner plusieurs nœuds et de fusionner
   leurs catalogues.
 - **Le statut n'est pas la liveness** : « le processus est vivant » n'implique pas « on peut
-  trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
-  minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
-  pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
+  trouver quelque chose là, maintenant ». Le capteur de statut (`StatusSensor`, un work) lit le
+  statut de chaque client toutes les minutes, par canal (`connected`, `connectable`), et alerte sur
+  un état dégradé qui dure : 5 min pour un canal, 2 min pour l'API injoignable. Le rétablissement
+  attend l'hystérésis de la condition : neuf lectures saines après une panne (vingt pour « non
+  joignable par les pairs »).
 - **Résilience** : une recherche refusée ou un client injoignable fait échouer le tour une fois le
   backoff posé et l'événement émis, et le superviseur le journalise (§3) ; un bug ne touche jamais
   le backoff. `BackoffSaver`, que les recherches partagent, écrit le backoff après chaque recherche
@@ -365,7 +367,7 @@ sequenceDiagram
   cesse simplement de l'élargir.
 - L'observation est écrite (`files`, `observation_variants`, `observations`) **puis** matchée. La décision
   (`target_id`, `rule_name`, `tier`) va dans `match_decisions`. En mode téléchargement, un tier
-  `download` *pousse* la boucle de téléchargement pour qu'elle réagisse sans attendre son intervalle.
+  `download` *réveille* le work de suivi des téléchargements pour qu'il réagisse sans attendre son intervalle.
 - Une opération que le démon refuse (`400 amuled_rejected`) met ce **canal** en **backoff**
   (base × factor^échecs + jitter), persisté à chaque changement.
 
@@ -840,9 +842,9 @@ redémarre le propriétaire de son composant (§3).
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
-| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
+| Démarrage et works | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `webui_liveness.py` (`WebuiLiveness`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
+| Works | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `webui_liveness.py` (`WebuiLiveness`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

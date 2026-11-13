@@ -10,6 +10,7 @@ import pytest
 from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
+from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.decision_tier import DecisionTier
@@ -30,6 +31,7 @@ from p2pwatch.domain.observability.notifier_outcomes import (
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
+from tests.contracts.application.ports.driven.notifier_contract import NotifierContract
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
 _NODE_ID = NodeId("titar-node-1")
@@ -352,6 +354,14 @@ async def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
     assert body.startswith(
         "**Source**\n`a'@everyone'b` 1f2e3d4c…, reappeared after 12 h\n".replace("@", "@\u200b")
     )
+
+
+class TestAppriseNotifier(NotifierContract):
+    def notifier(self) -> Notifier:
+        return _notifier()[0]
+
+    def refusing_notifier(self) -> Notifier:
+        return _notifier(*[apprise.AppriseResultStatus.FAILURE] * 3)[0]
 
 
 def test_a_notifier_without_a_url_has_no_service() -> None:

@@ -308,19 +308,23 @@ the figures, appendix C "Estimates".)
 |---|---|---|
 | 10 | `refactor/node-id-at-construction` | the node id resolved by the composition before the graph, every step receiving it at construction (past the file bound, accepted) |
 | 20 | `feat/client-unreachable-condition` | the health library's first pieces, the central recorder and its log line, the translator; the client's unreachable condition replaces the status loop's API timer (past both bounds, accepted) |
-| 25 | `feat/channel-conditions` | the channels' not connected and not connectable conditions; `_AlertTimer` removed |
+| 25 | `feat/channel-conditions` | the channels' not connected and not connectable conditions; `_AlertTimer` removed (Corrected: split by field in Act, 25 the not connected condition) |
+| 27 | `feat/channel-not-connectable` | (Corrected: split out of 25 in Act, row added by the closing block) each channel's not connectable condition, degraded, `_AlertTimer` removed |
 | 30 | `refactor/status-work` | `Work`; `LoopSupervisor` renamed `Supervisor`; the status reading the first work |
-| 33 | `refactor/download-tracking-work` | download tracking as a work; `DownloadLoop` removed |
-| 34 | `refactor/source-tracking-work` | source tracking as a work of its own |
+| 33 | `refactor/download-tracking-work` | download tracking as a work; `DownloadLoop` removed (Corrected: split in Act, 33 the mechanical rename of the cycle's round to `run_once`) |
+| 34 | `refactor/download-loop-removed` | (Corrected: split out of 33 in Act, row added by the closing block) download tracking as a work, `DownloadLoop` removed |
+| 35 | `refactor/source-tracking-work` | source tracking as a work of its own (Corrected: numbered 34 here before the split of 33, 35 on the stack) |
 | 36 | `refactor/search-works` | one work per client, channel and keyword; `SearchTaskRunner` removed |
 | 38 | `refactor/supervisor-runs-the-works` | the turn loop in the supervisor, the shutdown its own |
-| 40 | `feat/turn-outcomes` | each turn's outcome, a bug failing its turn alone, the floor after a `Bug` |
+| 40 | `feat/turn-outcomes` | each turn's outcome, a bug failing its turn alone, the floor after a `Bug` (Corrected: at 29 files, accepted by the operator on 2026-11-11, "recos ok", the search worker's raising apart as 41) |
+| 41 | `feat/search-failures-raised` | (Corrected: split out of 40 in Act, the spec's own lever, row added by the closing block) a failed search raised after its backoff and events, the backoff saved in a `finally` |
 | 45 | `fix/amuleapi-request-bound` | a request's total bound (Corrected: the first starts' spacing moved to block 46, the operator's answer of 2026-11-12) |
 | 46 | `feat/persisted-search-starts` | each client's latest search starts kept in `local.db`, a client built anew spacing its first starts from them (past both bounds, accepted by the operator on 2026-11-12) |
 | 47 | `feat/turn-time-limits` | each work's time limit |
 | 50 | `feat/bugs-condition` | the bugs condition and every work's component |
 | 51 | `feat/network-conditions` | a channel's searches failed, download tracking's client connected to no network |
-| 52 | `feat/restart-policy` | `StateOwner`, `RestartPolicy`, the aMule client's owner, useless restarts counted, none past three (past the line bound, accepted) |
+| 52a | `refactor/works-factory` | (Corrected: split out of 52 on 2026-11-12, the operator's "reco ok", row added by the closing block) the works over the aMule client built by one factory, the download steps holding no client built once, behaviour unchanged |
+| 52 | `feat/restart-policy` | `StateOwner`, `RestartPolicy`, the aMule client's owner, useless restarts counted, none past three (past the line bound, accepted; Corrected by the closing block: at 21 files, past the file bound too, accepted by the operator on 2026-11-12, "ça me semble ok") |
 | 60 | `feat/disk-space-condition` | disk space low as a condition |
 | 65 | `feat/webui-liveness` | the webui's liveness turn |
 | 68 | `feat/webui-restart` | the webui thread's owner |
@@ -414,6 +418,18 @@ reader; 18 blocks.)
   port-sync's errors in its log.
 - The new `local.db` migration (open alerts). (Corrected: and lot 4b's block 46, the `latest_search_starts` table; a
   node restarted within a minute of a search holds that channel's first search until the spacing ends.)
+- (Corrected by lot 4b's closing block, the holistic review's MINOR 10: what lot 4b changes for the operator.) An
+  alert's end held by the hysteresis: "unreachable" and "not connected" end about nine readings after the recovery,
+  "not connectable" twenty. An unknown reading keeps the channels' windows, so while the API is unreachable no channel
+  alert starts or ends (`docs/operate.md`'s sentence corrected). The new log lines, each part named once (a work as
+  the component it feeds, an owner as `owner of ...`): the recorder's one line per transition, the supervisor's
+  `bug in <work>`, `<work>: <reason>` and `<work>: past its time limit of <seconds> s`, the restart policy's, the
+  dispatcher's per service (`notifier <service>: refused (...)`, `past its timeout of <seconds> s`); a duration
+  written `<seconds> s` (the loss line now `unseen by the client for 86400 s`, `docs/troubleshooting.md` corrected);
+  the shutdown's stderr line `amuled session closing…`.
+- (Corrected by lot 4b's closing block, the holistic review's MINOR 16.) One rule for `docs/migration-4x.md` and the
+  operator pages: a sentence a change makes false is corrected in the block that makes it false (block 36, the
+  closing block), new content is lot 7's (block 40's hunk dropped).
 
 ### Adjacent backlog items
 
@@ -467,6 +483,8 @@ reader; 18 blocks.)
   # application/steps/supervisor.py
   class Supervisor:
       def add(self, work: Work, *, feeds: tuple[Component, ...], time_limit: timedelta) -> None: ...
+      # (Corrected by the closing block: `add(SupervisedWork)`, the work, its feeds and its limit in one value, and
+      # `supervise(works)` for the first ones, block 38's departure)
 
       async def _run(self, work: Work) -> None:
           while True:
@@ -515,7 +533,9 @@ reader; 18 blocks.)
   is recorded through one `HealthRecorder`, in `application/steps/`, on one component and by one source; each
   condition declares the source it reads (`TURNS`, the supervisor's outcome of a turn, read by the bugs condition
   alone; the status reading's API answer, its `connected` field, its `connectable` field; a search's declared
-  outcome; the free-space reading; a notification's outcome), so a success counts for every condition of its source
+  outcome; the free-space reading; a notification's outcome (Corrected by the closing block: block 70 records a
+  notification's send by the turns' source too, named `UNITS_OF_WORK`, "a unit of work's outcome: a supervised turn or a
+  notification's send", and by `SENDS`; the operator's answer of 2026-11-12 on the holistic review's list, "ça me semble ok")), so a success counts for every condition of its source
   and for no other. The recorder publishes each `HealthTransition` to its subscribers, awaited in order, and writes
   it in one log line: the `HealthEventTranslator` to today's events (4b), the `RestartPolicy`, the alerts (4c). A
   declared reason carries its reading (`free_bytes` and `min_free_bytes` for the free space), a component its labels
@@ -573,7 +593,7 @@ reader; 18 blocks.)
   | a channel | searches failed by the network (`SearchFailed`) (Corrected: block 51, the search's declared outcomes its source) | the table's thresholds |
   | the aMule client | unreachable (a sensor reading) | failing |
   | the aMule client | password refused (4c) | failing |
-  | download tracking | the client connected to no network (Corrected: block 51, recorded by the status reading) | failing |
+  | download tracking | the client connected to no network (Corrected: block 51, recorded by the status reading; Corrected by the closing block: failing at the channels' 6 of 6, the lead's answer on block 51's pull request, the operator's answer of 2026-11-12 on the holistic review's list, "ça me semble ok") | failing |
   | download tracking | free disk space below the current floor (Corrected: entering at 1 of 1 and leaving at the first good reading, today's, D9) | degraded |
   | a database | its writes' declared failures | the table's thresholds |
   | the webui | a fall of its unit, which serves until it falls (Corrected: a liveness turn each period, a fallen thread a `Bug`: no asyncio cancellation reaches a thread, D4) | a `Bug` |
@@ -719,7 +739,9 @@ are settled under "Lot 4b, settled at its start", below.)
   - 33: download tracking (snapshot, tracker, decider, starter) as a work, its wait none at first, then the poll or
     the wake; `DownloadLoop` removed, `architecture.md` updated;
   - 34: source tracking out of the cycle, a work of its own reading the client's list, its turns `sources_interval`
-    apart from start to start, as today; a `StoreError` of its reads logged as today until block 40;
+    apart from start to start, as today (Corrected by the closing block: the start stamped before the list read, so a
+    failed read waits a full interval where it used to retry one poll later, a fixed cadence as the status sensor's;
+    the operator's answer of 2026-11-12, "On garde A"); a `StoreError` of its reads logged as today until block 40;
   - 36: one work per (client, channel, keyword), enumerated by the composition, its wait `time_until_ready`, so a
     persisted backoff delays the first search after a start as today; `BackoffSaver`, the object the search works
     share, taking its snapshot at the first turn (after the lifecycle's `resume_waits`) and saving after each turn;
@@ -781,7 +803,8 @@ are settled under "Lot 4b, settled at its start", below.)
   `Bug`. (Corrected: the race in a `TaskGroup` whose expiry task cancels the turn, which runs in the task that
   waited for it: a turn in a task of its own started one loop iteration after its wait, so a search could start on a
   backoff another work set in between, which two tests of `test_keyword_search.py` caught; the race's end suspends
-  every turn, so the yield after it is removed.) Each limit is the sum of the bounds on its turn's path, measured on `efba50c5` (`S` the 60 s start spacing,
+  every turn, so the yield after it is removed; this mark, the formulas' and the yield row's, written by block 47's
+  teammate, the operator's answer of 2026-11-12 on the holistic review's list, "ça me semble ok".) Each limit is the sum of the bounds on its turn's path, measured on `efba50c5` (`S` the 60 s start spacing,
   `B` the 120 s search budget, `N` `notification_timeout_seconds`, `K` the deduplicated keywords, `K_w` those
   sharing one Kad word, `c` one amuleapi call: a login, the request, a re-login and a resend on a 401, so four
   requests under block 45's bound and two waits on the login lock), plus a fixed allowance of 5 minutes for what
@@ -817,13 +840,17 @@ are settled under "Lot 4b, settled at its start", below.)
 - **Blocks 65, 68**: `WebuiLiveness`, a turn each status period (60 s) over what the webui thread exposes (through a
   callback the composition passes, the webui adapter depending on driving ports and the domain only), its component
   and bugs condition; the restart policy logging a failing component without an owner, its first case; then the
-  webui thread's owner, rebuilt by the composition.
+  webui thread's owner, rebuilt by the composition. (Corrected by the closing block: a rebuild whose bind fails does not
+  raise, so the liveness fails it again and a port held elsewhere costs three useless restarts, block 68's choice;
+  the operator's answer of 2026-11-12 on the holistic review's list, "ça me semble ok".)
 - **Blocks 70, 72, 74**: the dispatcher records each notification's outcome on one notifier component: a refusal
   the adapter's `NotificationRefused`, a send past `N` a `NotificationTimedOut`, both declared, any other exception
   a `Bug`, the bugs condition counting `Bug` alone; then the notifier's owner, the dispatcher holding the rebuilt
   notifier through one indirection; then the port listing its services and sending to one, one apprise object per
   URL, one component per service named by its scheme and its audience, never its URL, which carries the webhook's
-  token, and its "sends refused" condition, the log line its first reader.
+  token, and its "sends refused" condition, the log line its first reader. (Corrected by the closing block: a URL
+  apprise cannot load, `NOMATCH`, is a refusal logged at each send, where it was skipped in silence, block 74's
+  choice; the operator's answer of 2026-11-12 on the holistic review's list, "ça me semble ok".)
 - **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4b deleted, the holistic review's fixes.
 - **Glossary**: one line per D8 name and per new concept (`HealthRecorder`, `HealthEventTranslator`, `Bug`, the
   readings' reasons, the floor after a `Bug`, `BackoffSaver`, `WebuiLiveness`, `TURNS` and a condition's source), in
@@ -881,7 +908,7 @@ decision or rule it names, the operator's, or the lead's where its row says so.
 | 52 | when the count resets | when every bugs condition of the owner's components is healthy again | the lead's: the owner is then repaired, and a second bug elsewhere in it counts against the same restarts |
 | 52 | the limit with the restarts | in the same block | the lead's: a block restarting without its limit would restart a deterministic bug's client every three bugs |
 | 52 | `StateOwner`'s surface | a port file with its tach entry and a `StateOwnerContract` each owner and its fake subclass | `.claude/CLAUDE.md`, a contract per contracted port |
-| 52 | what the client's owner rebuilds | every object holding the client (`SearchWorker`, `StatusLoop`, `DownloadCycle`, `DownloadStarter`, `SourceWatcher`); the tracker's loss deadlines, the backoff and the cataloguer kept | D5 clears the owner's memory, not the steps' |
+| 52 | what the client's owner rebuilds | every object holding the client (`SearchWorker`, `StatusLoop` (Corrected: `StatusSensor` since block 30), `DownloadCycle`, `DownloadStarter`, `SourceWatcher`); the tracker's loss deadlines, the backoff and the cataloguer kept | D5 clears the owner's memory, not the steps' |
 | 52 | what the resource stack closes | the owner's current instance | the stack registers the first one: the live session would never log out |
 | 52, 65, 68, 72 | how the policy finds an owner | the composition names each component's owner; a failing component without one is only logged (from block 65, the webui's before 68) (Corrected by the closing block: that branch deleted once every component had its owner; a restart's sequence carried by one `RestartRequest` the policy hands the supervisor, the holistic review's MINOR 13) | one mapping for every owner, the notifier included, which feeds no work |
 | 60 | the disk condition | enters at 1 of 1 and leaves at the first good reading | D21 over D9's single failure (D9's mark): today's `EdgeState` re-arms at the first good reading, so a second dip alerts again |
