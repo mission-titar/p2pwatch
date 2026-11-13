@@ -21,7 +21,7 @@ class ObservabilityOverFakes:
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             node_metric_writer=self.node_metric_store,
-            notifier=self.notifier,
+            current_notifier=lambda: self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
             record_outcome=HealthRecorder(logger=FakeLogger(), subscribers=()).record,
             notifier_component=notifier_component(),

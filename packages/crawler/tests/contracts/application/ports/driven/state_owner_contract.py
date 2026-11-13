@@ -20,21 +20,18 @@ class StateOwnerContract(ABC):
         """The in-memory state ``owner`` holds now."""
 
     @abstractmethod
-    def states_relied_on(self, owner: StateOwner) -> list[object]:
-        """The state the works of each addition to the supervisor rely on, in order."""
+    async def state_relied_on(self, owner: StateOwner) -> object:
+        """The state what relies on ``owner`` reaches now: the latest work it added to the
+        supervisor, or what reaches the state through ``owner`` itself."""
 
     async def test_a_restart_builds_its_state_anew(self, owner: StateOwner) -> None:
         first = self.state_of(owner)
         await owner.restart()
         assert self.state_of(owner) is not first
 
-    async def test_each_restart_adds_works_relying_on_the_state_it_built(
+    async def test_each_restart_leaves_what_relies_on_it_on_the_state_it_built(
         self, owner: StateOwner
     ) -> None:
-        built = []
         for _ in range(2):
             await owner.restart()
-            built.append(self.state_of(owner))
-        relied_on = self.states_relied_on(owner)
-        assert len(relied_on) == len(built)
-        assert all(state is new for state, new in zip(relied_on, built, strict=True))
+            assert await self.state_relied_on(owner) is self.state_of(owner)

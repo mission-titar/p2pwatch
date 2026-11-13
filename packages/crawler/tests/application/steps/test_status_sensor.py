@@ -71,7 +71,7 @@ class _Observability:
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             node_metric_writer=FakeNodeMetricStore(),
-            notifier=self.notifier,
+            current_notifier=lambda: self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
             # The composition's cycle: each alert's outcome recorded on the recorder sending it.
             record_outcome=lambda outcome, *, on, by: self.health_recorder.record(

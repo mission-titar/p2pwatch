@@ -11,6 +11,8 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   shares; its owner, ``AmuleClientOwner``, rebuilds it and every object holding it at a restart.
 - ONE ``UvicornServerThread`` at a time serving the webui; its owner, ``WebuiThreadOwner``,
   rebuilds it and the webui it serves at a restart.
+- ONE ``AppriseNotifier`` at a time; its owner, ``NotifierOwner``, rebuilds it at a restart, the
+  dispatcher reaching it through the owner at each send.
 
 Works: one search work per channel and keyword (``KeywordSearch``), the status sensor's work, the
 webui's liveness, and download and source tracking's when configured, which ``CrawlerLifecycle``
@@ -137,6 +139,7 @@ from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_owner import AmuleClientOwner
+from p2pwatch.composition.notifier_owner import NotifierOwner
 from p2pwatch.composition.turn_time_limits import TIME_LIMIT_ALLOWANCE, AmuleTurnTimeLimits
 from p2pwatch.composition.webui_thread_owner import WebuiThreadOwner
 from p2pwatch.domain.console_query import ConsoleDatabase
@@ -550,22 +553,25 @@ class CrawlerComposition(CrawlerRunner):
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             node_metric_store = InMemoryNodeMetricStore()
-            notifier = AppriseNotifier(
-                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
-                apprise_factory=apprise.Apprise,
+            notifier_owner = NotifierOwner(
+                build_notifier=lambda: AppriseNotifier(
+                    tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
+                    apprise_factory=apprise.Apprise,
+                )
             )
+            notifier_part = notifier_component()
             # A cycle: the dispatcher records on the recorder, whose translator dispatches. The
             # translator turns none of the notifier's transitions into an event, which bounds it.
             health_recorder: HealthRecorder
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
-                notifier=notifier,
+                current_notifier=notifier_owner.notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
                 record_outcome=lambda outcome, *, on, by: health_recorder.record(
                     outcome, on=on, by=by
                 ),
-                notifier_component=notifier_component(),
+                notifier_component=notifier_part,
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
@@ -686,7 +692,11 @@ class CrawlerComposition(CrawlerRunner):
                 *(() if download_config is None else (tracking_part, source_tracking_part)),
             )
             restart_policy = RestartPolicy(
-                owners={**dict.fromkeys(amule_parts, amule_owner), webui_part: webui_owner},
+                owners={
+                    **dict.fromkeys(amule_parts, amule_owner),
+                    webui_part: webui_owner,
+                    notifier_part: notifier_owner,
+                },
                 logger=StdlibLogger(RestartPolicy.__module__),
             )
             health_recorder = HealthRecorder(
