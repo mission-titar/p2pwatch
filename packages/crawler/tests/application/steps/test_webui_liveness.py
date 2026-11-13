@@ -1,5 +1,5 @@
-"""The webui's liveness: a turn each status period, a fallen webui thread its bug; without an owner,
-its bugs condition failing is logged and restarts nothing."""
+"""The webui's liveness: a turn each status period, a fallen webui thread its bug, its bugs
+condition failing restarting the thread's owner."""
 
 import pytest
 
@@ -15,6 +15,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.composition.fake_state_owner import FakeStateOwner
 from tests.support.virtual_time import VirtualLoop
 
 
@@ -62,34 +63,43 @@ async def test_each_turn_waits_a_status_period_the_first_included() -> None:
     assert fake_time.sleeps == [STATUS_PERIOD, STATUS_PERIOD]
 
 
-def test_a_fallen_webui_fails_its_bugs_condition_at_its_third_bug_and_restarts_nothing(
+def test_a_fallen_webui_restarts_its_owner_at_its_third_bug_the_rebuilt_thread_healthy(
     virtual_loop: VirtualLoop,
 ) -> None:
-    webui_thread = _WebuiThread(alive=True)
+    fallen = _WebuiThread(alive=True)
     webui = webui_component()
+    clock = FakeLoopMonotonicClock(virtual_loop)
+    supervisor: Supervisor
+
+    def liveness_over(thread: _WebuiThread) -> SupervisedWork:
+        return SupervisedWork(
+            work=WebuiLiveness(thread_alive=thread.is_alive, monotonic_clock=clock),
+            time_limit=STATUS_PERIOD,
+            feeds=(webui,),
+        )
+
+    owner = FakeStateOwner(
+        "webui thread",
+        add_works=lambda _: supervisor.add(liveness_over(_WebuiThread(alive=True))),
+    )
     policy_logger = FakeLogger()
-    policy = RestartPolicy(owners={}, logger=policy_logger)
+    policy = RestartPolicy(owners={webui: owner}, logger=policy_logger)
     run_state = FakeRunStateStore()
     # Fallen between its first and second turns, a minute apart: failing at its fourth.
-    virtual_loop.call_later(90.0, webui_thread.fall)
-    virtual_loop.call_later(330.0, run_state.set_shutdown_requested)
+    virtual_loop.call_later(90.0, fallen.fall)
+    virtual_loop.call_later(450.0, run_state.set_shutdown_requested)
     supervisor = Supervisor(
         run_state_reader=run_state,
-        monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
+        monotonic_clock=clock,
         health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=(policy,)),
         restart_policy=policy,
         logger=FakeLogger(),
     )
-    liveness = WebuiLiveness(
-        thread_alive=webui_thread.is_alive, monotonic_clock=FakeLoopMonotonicClock(virtual_loop)
-    )
     virtual_loop.run_until_complete(
-        supervisor.supervise(
-            [SupervisedWork(work=liveness, time_limit=STATUS_PERIOD, feeds=(webui,))],
-            arm_shutdown_bound=lambda: None,
-        )
+        supervisor.supervise([liveness_over(fallen)], arm_shutdown_bound=lambda: None)
     )
-    assert webui.health_of(BUGS) is Health.FAILING
+    assert owner.attempts == [240.0]
+    assert webui.health_of(BUGS) is Health.HEALTHY
     assert policy_logger.lines == [
-        LoggedLine(level="warning", message="webui, bugs failing: no owner, not restarted")
+        LoggedLine(level="warning", message="webui, bugs failing: restarting webui thread")
     ]
