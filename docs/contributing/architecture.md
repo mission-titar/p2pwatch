@@ -136,7 +136,9 @@ Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k
 Chaque boucle est une itération suivie d'un sommeil (`*_interval_seconds` depuis la config),
 supervisée par un `TaskGroup` : une boucle qui crashe bruyamment annule ses sœurs (fail-fast), mais
 les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10, discipline de
-frontière).
+frontière). Le statut est déjà un `Work` : avant chaque tour, le premier compris, il attend
+ce que son propre état lui dit, ici le reste de la minute depuis la fin de son dernier tour, puis
+prend son tour (`run_once()`) et cède la boucle d'événements.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -706,7 +708,7 @@ flowchart LR
   démarrage pose le fichier `down` du service, et s6 ne le lance jamais. Allumé, il valide les
   réglages ([Devenir High-ID](../high-id.md)) avant tout, et sort en nommant une valeur invalide.
 - **Aucun événement, aucune métrique.** Le port-sync journalise chaque changement et chaque échec,
-  rien de plus. Le Low-ID se lit dans le cœur, par la boucle de statut : la jauge
+  rien de plus. Le Low-ID se lit dans le cœur, par le capteur de statut : la jauge
   `p2pwatch_channel_connectable` et l'alerte sur un canal non joignable depuis 5 minutes.
 
 *Risque accepté : un High-ID augmente l'exposition, voir [Devenir High-ID](../high-id.md).*
@@ -779,9 +781,9 @@ démon sont
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
-| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/loop_supervisor.py` (`LoopSupervisor`) |
+| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
+| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

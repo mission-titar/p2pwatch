@@ -1,7 +1,7 @@
-"""The status loop: a reading every minute feeds the channel gauges and the conditions of the client
-and of each channel, whose transitions send today's alerts (spec stage 2, D15; v5 lot 4, D21)."""
+"""The status sensor, a work: a reading every minute feeds the channel gauges and the conditions of
+the client and of each channel, whose transitions send today's alerts (spec stage 2, D15; v5 lot 4,
+D21)."""
 
-import asyncio
 from collections.abc import Sequence
 from datetime import timedelta
 
@@ -12,7 +12,7 @@ from p2pwatch.application.ports.driven.status_reading_writer import StatusReadin
 from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.status_loop import StatusLoop
+from p2pwatch.application.steps.status_sensor import StatusSensor
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
@@ -27,7 +27,6 @@ from p2pwatch.domain.status_reading import (
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
-from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
@@ -78,23 +77,21 @@ def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
     )
 
 
-def _status_loop(
+def _status_sensor(
     client_name: ClientName,
     *,
     client: StatusClient,
     fake_time: FakeTime,
     observability: _Observability,
-    run_state: FakeRunStateStore,
     status_reading_writer: StatusReadingWriter | None = None,
     channels: Sequence[Channel] = _CHANNELS,
-) -> StatusLoop:
-    return StatusLoop(
+) -> StatusSensor:
+    return StatusSensor(
         client_name=client_name,
         client=client,
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability.dispatcher,
-        run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         health_recorder=observability.health_recorder,
         client_component=client_component(client_name),
@@ -105,23 +102,25 @@ def _status_loop(
     )
 
 
+async def _take_turns(sensor: StatusSensor, *, turns: int) -> None:
+    for _ in range(turns):
+        await sensor.wait_for_next_turn()
+        await sensor.run_once()
+
+
 async def _run(
     *readings: _Reading, client: ClientName = _AMULED, channels: Sequence[Channel] = _CHANNELS
 ) -> _Observability:
-    fake_time, run_state = FakeTime(), FakeRunStateStore()
+    fake_time = FakeTime()
     observability = _Observability(fake_time)
-    scripted = FakeStatusClient(list(readings), run_state=run_state)
-    await asyncio.wait_for(
-        _status_loop(
-            client,
-            client=scripted,
-            fake_time=fake_time,
-            observability=observability,
-            run_state=run_state,
-            channels=channels,
-        ).run(),
-        timeout=1.0,
+    sensor = _status_sensor(
+        client,
+        client=FakeStatusClient(list(readings)),
+        fake_time=fake_time,
+        observability=observability,
+        channels=channels,
     )
+    await _take_turns(sensor, turns=len(readings))
     return observability
 
 
@@ -254,7 +253,7 @@ async def test_an_operation_the_api_refuses_reads_as_unreachable() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_refused_password_ends_the_loop() -> None:
+async def test_a_refused_password_escapes_its_turn() -> None:
     with pytest.raises(ClientAuthError):
         await _run(ClientAuthError("amuleapi refused the admin password"), _status(ed2k=_UP))
 
@@ -301,24 +300,21 @@ async def test_each_reading_samples_every_channel_and_unreachable_makes_them_unk
 async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     *, reading: _Reading, published: ClientStatus | None
 ) -> None:
-    fake_time, run_state = FakeTime(), FakeRunStateStore()
+    fake_time = FakeTime()
     fake_time.step_wall(timedelta(hours=1))  # the two clocks part: each instant shows its clock
     status_reading_store = FakeStatusReadingStore((ClientName("amuled"),))
-    client = FakeStatusClient([_status(kad=_UP), reading], run_state=run_state)
-    status_loop = _status_loop(
+    sensor = _status_sensor(
         ClientName("amuled"),
-        client=client,
+        client=FakeStatusClient([_status(kad=_UP), reading]),
         fake_time=fake_time,
         observability=_Observability(fake_time),
-        run_state=run_state,
         status_reading_writer=status_reading_store,
     )
-    await asyncio.wait_for(status_loop.run(), timeout=1.0)
-    read_at = fake_time.wall.now() - timedelta(seconds=60)  # the loop slept one period after it
-    published_at = fake_time.monotonic.now() - timedelta(seconds=60)
+    await _take_turns(sensor, turns=2)
     assert status_reading_store.read_readings() == {
         "amuled": PublishedReading(
-            reading=StatusReading(read_at=read_at, status=published), published_at=published_at
+            reading=StatusReading(read_at=fake_time.wall.now(), status=published),
+            published_at=fake_time.monotonic.now(),
         )
     }
 
@@ -326,19 +322,59 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 @pytest.mark.asyncio
 async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> None:
     # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
-    fake_time, run_state = FakeTime(), FakeRunStateStore()
+    fake_time = FakeTime()
     observability = _Observability(fake_time)
-    client = FakeSteppedStatusClient(
-        [_status(ed2k=_LOW_ID)] * 5, run_state=run_state, fake_time=fake_time
+    sensor = _status_sensor(
+        ClientName("amuled"),
+        client=FakeSteppedStatusClient([_status(ed2k=_LOW_ID)] * 5, fake_time=fake_time),
+        fake_time=fake_time,
+        observability=observability,
     )
-    await asyncio.wait_for(
-        _status_loop(
-            ClientName("amuled"),
-            client=client,
-            fake_time=fake_time,
-            observability=observability,
-            run_state=run_state,
-        ).run(),
-        timeout=1.0,
-    )
+    await _take_turns(sensor, turns=5)
     assert observability.notifier.notifications == []
+
+
+def _sensor_over(fake_time: FakeTime, *readings: _Reading) -> StatusSensor:
+    return _status_sensor(
+        _AMULED,
+        client=FakeStatusClient(list(readings)),
+        fake_time=fake_time,
+        observability=_Observability(fake_time),
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_first_turn_waits_nothing() -> None:
+    fake_time = FakeTime()
+    await _sensor_over(fake_time).wait_for_next_turn()
+    assert fake_time.sleeps == []
+
+
+@pytest.mark.asyncio
+async def test_the_next_turn_waits_the_period_left_since_the_last_turn_ended() -> None:
+    fake_time = FakeTime()
+    sensor = _sensor_over(fake_time, _status(ed2k=_UP))
+    await sensor.run_once()
+    fake_time.advance(timedelta(seconds=20))
+    await sensor.wait_for_next_turn()
+    assert fake_time.sleeps == [timedelta(seconds=40)]
+
+
+@pytest.mark.asyncio
+async def test_a_turn_past_its_period_starts_the_next_at_once() -> None:
+    fake_time = FakeTime()
+    sensor = _sensor_over(fake_time, _status(ed2k=_UP))
+    await sensor.run_once()
+    fake_time.advance(timedelta(seconds=90))
+    await sensor.wait_for_next_turn()
+    assert fake_time.sleeps == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_that_raised_waits_a_full_period_too() -> None:
+    fake_time = FakeTime()
+    sensor = _sensor_over(fake_time, ClientAuthError("amuleapi refused the admin password"))
+    with pytest.raises(ClientAuthError):
+        await sensor.run_once()
+    await sensor.wait_for_next_turn()
+    assert fake_time.sleeps == [timedelta(seconds=60)]
