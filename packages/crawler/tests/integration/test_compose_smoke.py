@@ -700,6 +700,7 @@ async def main() -> None:
         port={_API_PORT},
         password={_API_PASSWORD!r},
         timeout_seconds=10.0,
+        request_bound_seconds=60.0,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),

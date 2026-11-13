@@ -82,6 +82,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         port: int,
         password: str,
         timeout_seconds: float,
+        request_bound_seconds: float,
         page_size: int,
         progress_poll_interval: timedelta,
         monotonic_clock: MonotonicClock,
@@ -90,6 +91,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         self._base_url = f"http://{host}:{port}/api/v1"
         self._password = password
         self._timeout_seconds = timeout_seconds
+        self._request_bound_seconds = request_bound_seconds
         self._page_size = page_size
         self._progress_poll_interval = progress_poll_interval
         # One transport per session: closing a session closes its transport.
@@ -149,7 +151,12 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         if http is None:
             return
         with suppress(ApiUnreachableError):
-            await _send(http, method="POST", path="/auth/logout")
+            await _send(
+                http,
+                method="POST",
+                path="/auth/logout",
+                bound_seconds=self._request_bound_seconds,
+            )
         await http.aclose()
 
     async def search(
@@ -341,14 +348,28 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         """Sends, renewing the token ONCE on a 401. Never twice: amuleapi locks an IP out for
         300 s after 30 rejected tokens, and only a successful login clears that state."""
         login_count = self._login_count
-        response = await _send(http, method=method, path=path, body=body, params=params)
+        response = await _send(
+            http,
+            method=method,
+            path=path,
+            bound_seconds=self._request_bound_seconds,
+            body=body,
+            params=params,
+        )
         if response.status_code == httpx.codes.UNAUTHORIZED:
             async with self._login_lock:
                 if self._closed:
                     raise ApiUnreachableError("amuleapi client closed")
                 if self._login_count == login_count:  # no other call renewed it meanwhile
                     await self._login(http)
-            response = await _send(http, method=method, path=path, body=body, params=params)
+            response = await _send(
+                http,
+                method=method,
+                path=path,
+                bound_seconds=self._request_bound_seconds,
+                body=body,
+                params=params,
+            )
         if not response.is_success:
             raise error_from_response(response)
         return _decode(response)
@@ -359,6 +380,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             http,
             method="POST",
             path="/auth/login",
+            bound_seconds=self._request_bound_seconds,
             body={"password": self._password},
             params={"include_token": "true"},
         )
@@ -413,14 +435,21 @@ async def _send(
     *,
     method: str,
     path: str,
+    bound_seconds: float,
     body: dict[str, Any] | None = None,
     params: dict[str, Any] | None = None,
 ) -> httpx.Response:
-    """One HTTP roundtrip; a transport failure is an unreachable daemon, never a crash."""
+    """One HTTP roundtrip within ``bound_seconds`` in all, since httpx bounds each phase alone;
+    a transport failure or the bound's expiry is an unreachable daemon, never a crash."""
     try:
-        return await http.request(method, path, json=body, params=params)
+        async with asyncio.timeout(bound_seconds):
+            return await http.request(method, path, json=body, params=params)
     except httpx.HTTPError as failure:
         raise ApiUnreachableError(f"{method} {path}: {failure}") from failure
+    except TimeoutError as expiry:
+        raise ApiUnreachableError(
+            f"{method} {path}: no whole answer within {bound_seconds:g} s"
+        ) from expiry
 
 
 def _decode(response: httpx.Response) -> dict[str, Any]:

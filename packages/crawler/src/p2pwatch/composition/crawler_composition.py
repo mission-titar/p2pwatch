@@ -136,6 +136,8 @@ _logger = logging.getLogger(__name__)
 # The label of the one client a node drives: crawler.yml has no key to name it.
 _AMULE_CLIENT_NAME = ClientName("amuled")
 _AMULE_API_TIMEOUT_SECONDS = 10.0
+# httpx bounds each phase alone, so a server trickling its bytes would hold a request for ever.
+_AMULE_API_REQUEST_BOUND_SECONDS = 60.0
 # Rows asked for per list request. Every list route caps at 100 when `limit` is omitted, which
 # would silently truncate the shared-file sweep completion detection depends on (§7.5).
 _AMULE_API_PAGE_SIZE = 500
@@ -224,6 +226,7 @@ class CrawlerComposition(CrawlerRunner):
             port=port,
             password=crawler_config.amule_api_password,
             timeout_seconds=_AMULE_API_TIMEOUT_SECONDS,
+            request_bound_seconds=_AMULE_API_REQUEST_BOUND_SECONDS,
             page_size=_AMULE_API_PAGE_SIZE,
             progress_poll_interval=_AMULE_API_PROGRESS_POLL_INTERVAL,
             monotonic_clock=monotonic_clock,
