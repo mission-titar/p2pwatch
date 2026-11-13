@@ -7,6 +7,9 @@ import httpx
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
+from p2pwatch.domain.identifiers import ClientName
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 
@@ -14,10 +17,12 @@ from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
 @pytest.mark.asyncio
 async def test_the_real_client_logs_in_and_out_over_the_socket() -> None:
     api = FakeAmuleApi()
+    search_start_store = FakeSearchStartStore()
 
     with FakeAmuleApiServer(api) as server:
         client = AmuleApiClient(
             server.host,
+            client_name=ClientName("amuled"),
             port=server.port,
             password=PASSWORD,
             timeout_seconds=10.0,
@@ -26,6 +31,9 @@ async def test_the_real_client_logs_in_and_out_over_the_socket() -> None:
             progress_poll_interval=timedelta(seconds=5),
             transport_factory=httpx.AsyncHTTPTransport,
             monotonic_clock=api.monotonic_clock,
+            wall_clock=FakeTime().wall,
+            search_start_writer=search_start_store,
+            search_start_reader=search_start_store,
         )
         await client.open()
         await client.close()

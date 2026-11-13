@@ -265,7 +265,10 @@ Points clés en chemin :
   le permettent, et c'est l'adaptateur qui les applique dans `search()`. Pour aMule : deux départs
   `ed2k` à 60 s d'écart au moins, un seul en vol ; deux départs Kad sur un même mot Kad (le premier
   mot de 3 octets du mot-clé) à 60 s d'écart au moins. Un canal lent ne retient jamais un canal
-  rapide.
+  rapide. Le client écrit chaque départ dans `latest_search_starts`, par client, canal et portée
+  (`''` pour tout le canal `ed2k`, le mot Kad sur Kad), et un client construit à nouveau, au
+  démarrage du nœud par exemple, espace ses premiers départs de ceux-là, l'attente restante bornée
+  à 60 s par `remaining_wait`.
 - **Mots-clés minimaux, depuis la config** : `search.keywords`, obligatoire et sans défaut dans le code
   (`keroro` + `titar` dans le `crawler.yml` livré). `keroro`
   ratisse large ; `titar` est une **sentinelle française** rare et non saturable (voir le handoff de
@@ -477,6 +480,7 @@ flowchart LR
     ni["node_identity"]
     dl["downloads"]
     bs["backoff_states"]
+    ls["latest_search_starts"]
     rs["reevaluation_state"]
   end
 ```
@@ -486,9 +490,9 @@ flowchart LR
   (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`ON CONFLICT DO NOTHING`),
   donc sans danger en cas de redémarrage en pleine écriture ; jamais `INSERT OR IGNORE`, qui
   avalerait aussi une violation de `NOT NULL` ou de `CHECK`.
-- **`local.db`** (version de schéma 15) : l'état d'exécution du nœud (identité, suivi des
-  téléchargements et de leur progression, backoff des recherches, empreinte de la politique
-  réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
+- **`local.db`** (version de schéma 16) : l'état d'exécution du nœud (identité, suivi des
+  téléchargements et de leur progression, backoff des recherches, derniers départs de recherche,
+  empreinte de la politique réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
 
 La migration `catalog/0005` a supprimé `file_verifications` et `local/0004` a supprimé
 `verification_tasks`, en réécrivant en `completed` toute ligne de téléchargement `quarantined`
@@ -541,9 +545,11 @@ ses quatre instants en microsecondes : `queued_at_micros`, `completed_at_micros`
 `node_runtime` par `node_identity`, une seule ligne typée : `node_id` et `created_at_micros`. Une
 base dont `node_runtime` porte un `node_id` sans son `created_at` refuse de migrer plutôt que de
 perdre l'identité du nœud. `reevaluation_state` est reconstruite elle aussi, si bien que chaque table
-de `local.db` est désormais `STRICT`. Chaque table du catalogue l'est aussi, déclarée ainsi là où
-`catalog/0008`, `0010`, `0011` et `0015` la créent, avec un `CHECK` sur chaque quantité (`>= 0`), sur
-`tier` et `connectable`, et sur chaque `*_micros`, entre `datetime.min` et `datetime.max` en UTC.
+de `local.db` est désormais `STRICT`. `local/0016` crée `latest_search_starts`, `STRICT` elle aussi,
+le dernier départ de recherche de chaque client par canal et portée, en microsecondes. Chaque table
+du catalogue l'est aussi, déclarée ainsi là où `catalog/0008`, `0010`, `0011` et `0015` la créent,
+avec un `CHECK` sur chaque quantité (`>= 0`), sur `tier` et `connectable`, et sur chaque `*_micros`,
+entre `datetime.min` et `datetime.max` en UTC.
 
 ### 8.1 Écrire une migration
 

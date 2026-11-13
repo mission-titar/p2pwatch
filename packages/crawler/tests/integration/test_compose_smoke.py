@@ -693,10 +693,21 @@ from datetime import timedelta
 import httpx
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
+from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
+from p2pwatch.application.ports.driven.search_start_reader import SearchStartReader
+from p2pwatch.application.ports.driven.search_start_writer import SearchStartWriter
+
+class NoSearchStarts(SearchStartReader, SearchStartWriter):
+    def read_latest_starts(self, client_name):
+        return ()
+
+    def set_latest_start(self, client_name, *, start):
+        pass
 
 async def main() -> None:
     client = AmuleApiClient(
         {_API_HOST!r},
+        client_name="amuled",
         port={_API_PORT},
         password={_API_PASSWORD!r},
         timeout_seconds=10.0,
@@ -704,6 +715,9 @@ async def main() -> None:
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
+        wall_clock=SystemWallClock(),
+        search_start_writer=NoSearchStarts(),
+        search_start_reader=NoSearchStarts(),
         transport_factory=httpx.AsyncHTTPTransport,
     )
     completed = [d.file.native_id for d in await client.downloads() if d.completed]

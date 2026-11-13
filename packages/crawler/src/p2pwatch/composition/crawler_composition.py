@@ -2,7 +2,8 @@
 
 COMPOSITION ring (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
-  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore`` and ``SqliteBackoffStateStore``
+  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore``, ``SqliteBackoffStateStore`` and
+  ``SqliteSearchStartStore``
   (single writer, invariant §11), connections opened by the ``SqliteDatabaseOpener``
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
@@ -67,6 +68,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_policy_fingerprint_store
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier import (
     SqlitePreMigrationCopier,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_search_start_store import (
+    SqliteSearchStartStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
     SqliteSourcePointStore,
@@ -217,12 +221,19 @@ class CrawlerComposition(CrawlerRunner):
         self._root_logger = root_logger
 
     def _amule_api_client(
-        self, crawler_config: CrawlerConfig, *, monotonic_clock: MonotonicClock
+        self,
+        crawler_config: CrawlerConfig,
+        *,
+        monotonic_clock: MonotonicClock,
+        wall_clock: WallClock,
+        search_start_store: SqliteSearchStartStore,
     ) -> AmuleApiClient:
-        """The node's one session on amuled, paced on the composition's monotonic clock."""
+        """The node's one session on amuled, paced on the composition's clocks from the latest
+        search starts ``search_start_store`` holds."""
         host, port = self._amule_api_address
         return AmuleApiClient(
             host,
+            client_name=_AMULE_CLIENT_NAME,
             port=port,
             password=crawler_config.amule_api_password,
             timeout_seconds=_AMULE_API_TIMEOUT_SECONDS,
@@ -230,6 +241,9 @@ class CrawlerComposition(CrawlerRunner):
             page_size=_AMULE_API_PAGE_SIZE,
             progress_poll_interval=_AMULE_API_PROGRESS_POLL_INTERVAL,
             monotonic_clock=monotonic_clock,
+            wall_clock=wall_clock,
+            search_start_writer=search_start_store,
+            search_start_reader=search_start_store,
             transport_factory=httpx.AsyncHTTPTransport,
         )
 
@@ -460,7 +474,12 @@ class CrawlerComposition(CrawlerRunner):
                 node_id=node_id,
                 logger=StdlibLogger(Cataloguer.__module__),
             )
-            client = self._amule_api_client(crawler_config, monotonic_clock=monotonic_clock)
+            client = self._amule_api_client(
+                crawler_config,
+                monotonic_clock=monotonic_clock,
+                wall_clock=wall_clock,
+                search_start_store=SqliteSearchStartStore(local_connection),
+            )
             stack.push_async_callback(client.close)
             await client.open()
             workers = [
