@@ -125,9 +125,11 @@ class _Searches:
         run_state = FakeRunStateStore()
         self.loop.call_later(seconds, run_state.set_shutdown_requested)
         self.loop.run_until_complete(
-            Supervisor(run_state_reader=run_state).supervise(
-                self.works(client, keywords=keywords), arm_shutdown_bound=lambda: None
-            )
+            Supervisor(
+                run_state_reader=run_state,
+                monotonic_clock=self.monotonic_clock,
+                logger=FakeLogger(),
+            ).supervise(self.works(client, keywords=keywords), arm_shutdown_bound=lambda: None)
         )
 
 
@@ -161,6 +163,37 @@ def test_channels_do_not_wait_for_each_other(searches: _Searches) -> None:
     searches.run_for(_HOUR, client=client, keywords=["keroro"])
     counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels()}
     assert counts[Channel("ed2k")] >= 5 * counts[Channel("kad")]
+
+
+def test_a_bug_on_one_keywords_searches_leaves_the_other_keywords_searching(
+    searches: _Searches,
+) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, broken_keywords=frozenset({Keyword("keroro")})
+    )
+    searches.run_for(100.0, client=client, keywords=["keroro", "titar"])
+    starts = {
+        name: [start for start, keyword, _ in client.searches if keyword == name]
+        for name in ("keroro", "titar")
+    }
+    # The broken keyword's searches one floor apart, the other's at their own pace.
+    assert starts == {"keroro": [0.0, 60.0], "titar": [0.0, 30.0, 60.0, 90.0]}
+    assert searches.backoff.snapshot() == {}  # a bug never touches the backoff
+
+
+def test_a_bug_on_every_kad_search_leaves_the_ed2k_searches_going_on(searches: _Searches) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("ed2k"): 30.0, Channel("kad"): 30.0}, broken_channels=frozenset({Channel("kad")})
+    )
+    searches.run_for(100.0, client=client, keywords=["keroro", "titar"])
+    starts = {
+        name: sorted(start for start, _, channel in client.searches if channel == name)
+        for name in ("ed2k", "kad")
+    }
+    assert starts == {
+        "ed2k": [0.0, 0.0, 30.0, 30.0, 60.0, 60.0, 90.0, 90.0],
+        "kad": [0.0, 0.0, 60.0, 60.0],
+    }
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:
@@ -219,3 +252,10 @@ def test_a_backoff_the_previous_run_saved_delays_the_first_search(searches: _Sea
     client = FakeTimedSearchClient({Channel("kad"): 30.0})
     searches.run_for(100.0, client=client, keywords=["keroro"])
     assert [start for start, *_ in client.searches] == [40.0, 70.0]
+
+
+def test_the_supervisor_names_the_work_after_its_keyword_client_and_channel(
+    searches: _Searches,
+) -> None:
+    [work] = searches.works(FakeTimedSearchClient({Channel("kad"): 30.0}), keywords=["keroro"])
+    assert str(work) == "search 'keroro' on amuled/kad"

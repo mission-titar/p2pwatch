@@ -361,3 +361,10 @@ async def test_a_wait_cancelled_at_shutdown_propagates_the_cancellation() -> Non
     with pytest.raises(asyncio.CancelledError):
         await task
     assert task.cancelled()
+
+
+def test_the_supervisor_names_the_work_download_tracking() -> None:
+    cycle = build_cycle(
+        client=FakeDownloadClient(), tracked_download_store=FakeTrackedDownloadStore()
+    )
+    assert str(cycle) == "download tracking"

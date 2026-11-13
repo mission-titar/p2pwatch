@@ -7,6 +7,10 @@ class Work(ABC):
     """A turn and the wait before it, the first included, computed from the work's own state."""
 
     @abstractmethod
+    def __str__(self) -> str:
+        """The work as the supervisor's log lines name it."""
+
+    @abstractmethod
     async def run_once(self) -> None:
         """Takes one turn."""
 

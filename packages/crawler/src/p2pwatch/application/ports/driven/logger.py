@@ -21,3 +21,7 @@ class Logger(ABC):
     @abstractmethod
     def error(self, message: str, *args: object) -> None:
         """A failure that loses work: a write, a step or a file skipped."""
+
+    @abstractmethod
+    def exception(self, message: str, *args: object, error: BaseException) -> None:
+        """A failure outside every contract, at the error level, followed by ``error``'s trace."""

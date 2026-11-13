@@ -602,7 +602,11 @@ class CrawlerComposition(CrawlerRunner):
                 backoff=backoff,
                 works=works,
                 download_enabled=download_config is not None,
-                supervisor=Supervisor(run_state_reader=run_state_store),
+                supervisor=Supervisor(
+                    run_state_reader=run_state_store,
+                    monotonic_clock=monotonic_clock,
+                    logger=StdlibLogger(Supervisor.__module__),
+                ),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the

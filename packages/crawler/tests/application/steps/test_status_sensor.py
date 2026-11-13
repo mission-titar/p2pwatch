@@ -13,6 +13,7 @@ from p2pwatch.application.steps.health_event_translator import HealthEventTransl
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_sensor import StatusSensor
+from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
@@ -26,13 +27,17 @@ from p2pwatch.domain.status_reading import (
     client_component,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
+from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_stepped_status_client import FakeSteppedStatusClient
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
+from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
 
@@ -378,3 +383,44 @@ async def test_a_turn_that_raised_waits_a_full_period_too() -> None:
         await sensor.run_once()
     await sensor.wait_for_next_turn()
     assert fake_time.sleeps == [timedelta(seconds=60)]
+
+
+def test_the_supervisor_names_the_work_after_its_client() -> None:
+    fake_time = FakeTime()
+    sensor = _status_sensor(
+        _AMULED,
+        client=FakeStatusClient([]),
+        fake_time=fake_time,
+        observability=_Observability(fake_time),
+    )
+    assert str(sensor) == "status reading of amuled"
+
+
+def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
+    virtual_loop: VirtualLoop,
+) -> None:
+    refused = ClientAuthError("amuleapi refused the admin password")
+    observability = _Observability(FakeTime())
+    monotonic_clock = FakeLoopMonotonicClock(virtual_loop)
+    sensor = StatusSensor(
+        client_name=_AMULED,
+        client=FakeStatusClient([refused] * 5),
+        wall_clock=FakeLoopWallClock(virtual_loop),
+        monotonic_clock=monotonic_clock,
+        observability_dispatcher=observability.dispatcher,
+        status_reading_writer=FakeStatusReadingStore((_AMULED,)),
+        health_recorder=observability.health_recorder,
+        client_component=client_component(_AMULED),
+        channel_components={},
+    )
+    run_state, logger = FakeRunStateStore(), FakeLogger()
+    virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)
+    supervisor = Supervisor(
+        run_state_reader=run_state, monotonic_clock=monotonic_clock, logger=logger
+    )
+
+    # Returns at the stop, no ``ExceptionGroup``: the node runs on.
+    virtual_loop.run_until_complete(supervisor.supervise([sensor], arm_shutdown_bound=lambda: None))
+
+    message = "status reading of amuled: amuleapi refused the admin password"
+    assert logger.lines == [LoggedLine(level="warning", message=message)] * 5

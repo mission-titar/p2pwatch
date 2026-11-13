@@ -65,6 +65,9 @@ class StatusSensor(Work):
         self._channel_components = channel_components
         self._last_turn_ended_at: MonotonicInstant | None = None
 
+    def __str__(self) -> str:
+        return f"status reading of {self._client_name}"
+
     async def wait_for_next_turn(self) -> None:
         """Waits the period left since the last turn ended, nothing before the first."""
         if self._last_turn_ended_at is None:
@@ -84,7 +87,7 @@ class StatusSensor(Work):
         try:
             status = await self._client.status()
         except ClientAuthError:
-            raise  # a wrong password is config, not an outage
+            raise  # a wrong password is config, not an outage: the turn's declared outcome
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             self._publish(None)
             await self._observability_dispatcher.dispatch(

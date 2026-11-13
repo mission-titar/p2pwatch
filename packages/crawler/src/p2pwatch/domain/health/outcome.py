@@ -14,8 +14,15 @@ class OutcomeSource:
 
 
 @dataclass(kw_only=True, frozen=True)
+class Bug:
+    """An outcome's reason outside every contract: an undeclared exception (spec v5 lot 4, D3)."""
+
+    description: str
+
+
+@dataclass(kw_only=True, frozen=True)
 class Outcome:
-    reason: DeclaredFailure | None  # None for a success
+    reason: DeclaredFailure | Bug | None  # None for a success
 
     @classmethod
     def success(cls) -> Self:
@@ -24,3 +31,7 @@ class Outcome:
     @classmethod
     def declared(cls, reason: DeclaredFailure) -> Self:
         return cls(reason=reason)
+
+    @classmethod
+    def bug(cls, description: str) -> Self:
+        return cls(reason=Bug(description=description))

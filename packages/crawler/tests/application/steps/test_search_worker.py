@@ -115,7 +115,7 @@ def _worker(
     )
 
 
-def test_a_worker_declares_the_channels_of_its_client(
+def test_a_worker_declares_its_client_and_the_channels_of_its_client(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -131,7 +131,7 @@ def test_a_worker_declares_the_channels_of_its_client(
         backoff=_registry(fake_time),
         fake_time=fake_time,
     )
-    assert worker.channels == ("kad",)
+    assert (worker.client_name, worker.channels) == ("amule-1", ("kad",))
 
 
 @pytest.mark.parametrize(

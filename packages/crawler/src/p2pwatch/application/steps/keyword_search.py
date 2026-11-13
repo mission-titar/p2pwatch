@@ -29,6 +29,9 @@ class KeywordSearch(Work):
         self._backoff_saver = backoff_saver
         self._monotonic_clock = monotonic_clock
 
+    def __str__(self) -> str:
+        return f"search '{self._keyword}' on {self._search_worker.client_name}/{self._channel}"
+
     async def wait_for_next_turn(self) -> None:
         """Waits until neither the client nor the channel is backed off, a backoff resumed at the
         start or set by another work while it waited included."""

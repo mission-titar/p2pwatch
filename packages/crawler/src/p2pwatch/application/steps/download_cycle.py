@@ -63,6 +63,9 @@ class DownloadCycle(Work):
         self._logger = logger
         self._turn_taken = False
 
+    def __str__(self) -> str:
+        return "download tracking"
+
     async def wait_for_next_turn(self) -> None:
         """Waits nothing before the first turn, then ``poll_interval`` or the download wake,
         whichever comes first (spec §5), the loser cancelled."""

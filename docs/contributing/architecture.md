@@ -137,9 +137,11 @@ Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k
 Les recherches, le statut, le suivi des téléchargements et celui des sources sont des `Work`, que
 le `Supervisor` fait tourner, chacun dans sa tâche d'un `TaskGroup` : avant chaque tour, le premier
 compris, il attend ce que l'état propre du work lui dit (`wait_for_next_turn()`), puis lui fait
-prendre son tour (`run_once()`) et cède la boucle d'événements. Un tour qui lève annule ses sœurs
-(fail-fast), mais les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un tour (voir §10,
-discipline de frontière). À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
+prendre son tour (`run_once()`) et cède la boucle d'événements. Un tour qui lève échoue seul, les
+autres works continuent : un échec déclaré (`DeclaredFailure`, la base de tout échec qu'un port
+piloté déclare) est journalisé en une ligne, toute autre exception est un bug, journalisé avec sa
+trace, et le tour suivant de ce work attend alors au moins un plancher de 60 s (le plus tardif du
+plancher et de son attente propre). À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
 chaque work. Une recherche attend la fin du
 backoff de son client et de son canal (§5) ; le statut, le reste de la minute depuis la fin de son
 dernier tour ; le suivi des téléchargements, rien au premier tour, puis
@@ -761,7 +763,8 @@ par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de b
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
 démon sont
 **absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
-`InMemoryNodeMetricStore`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
+`InMemoryNodeMetricStore`) est un bug, pas un transitoire : il fait échouer son tour, journalisé
+avec sa trace, et le superviseur espace le tour suivant d'au moins son plancher (§3).
 
 ## 11. Invariants de conception (récapitulatif)
 

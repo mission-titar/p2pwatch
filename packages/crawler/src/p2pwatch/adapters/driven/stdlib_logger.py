@@ -25,3 +25,6 @@ class StdlibLogger(Logger):
 
     def error(self, message: str, *args: object) -> None:
         self._logger.error(message, *args, stacklevel=_CALLER)
+
+    def exception(self, message: str, *args: object, error: BaseException) -> None:
+        self._logger.error(message, *args, exc_info=error, stacklevel=_CALLER)
