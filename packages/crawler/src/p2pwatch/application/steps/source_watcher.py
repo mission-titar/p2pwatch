@@ -21,7 +21,7 @@ from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared
 from p2pwatch.domain.source import (
@@ -58,6 +58,7 @@ class SourceWatcher(Work):
     def __init__(
         self,
         *,
+        client_name: ClientName,
         download_client: DownloadClient,
         source_client: SourceClient,
         tracked_download_reader: TrackedDownloadReader,
@@ -73,6 +74,7 @@ class SourceWatcher(Work):
         node_id: NodeId,
         logger: Logger,
     ) -> None:
+        self._client_name = client_name
         self._download_client = download_client
         self._source_client = source_client
         self._tracked_download_reader = tracked_download_reader
@@ -90,7 +92,7 @@ class SourceWatcher(Work):
         self._turn_started_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
-        return "source tracking"
+        return f"source tracking {self._client_name}"
 
     async def wait_for_next_turn(self) -> None:
         """Waits ``sources_interval`` since the latest turn started, failed or not (source points

@@ -48,7 +48,7 @@ async def test_a_turn_over_a_fallen_webui_thread_raises_a_bug() -> None:
     with pytest.raises(WebuiFallen) as raised:
         await liveness.run_once()
     assert not isinstance(raised.value, DeclaredFailure)
-    assert str(liveness) == "webui liveness"
+    assert str(liveness) == webui_component().name
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ def test_a_fallen_webui_restarts_its_owner_at_its_third_bug_the_rebuilt_thread_h
         )
 
     owner = FakeStateOwner(
-        "webui thread",
+        "owner of the webui",
         add_works=lambda _: supervisor.add(liveness_over(_WebuiThread(alive=True))),
     )
     policy_logger = FakeLogger()
@@ -101,5 +101,5 @@ def test_a_fallen_webui_restarts_its_owner_at_its_third_bug_the_rebuilt_thread_h
     assert owner.attempts == [240.0]
     assert webui.health_of(BUGS) is Health.HEALTHY
     assert policy_logger.lines == [
-        LoggedLine(level="warning", message="webui, bugs failing: restarting webui thread")
+        LoggedLine(level="warning", message="webui, bugs failing: restarting owner of the webui")
     ]

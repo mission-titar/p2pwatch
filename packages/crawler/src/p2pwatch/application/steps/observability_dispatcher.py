@@ -83,22 +83,23 @@ class ObservabilityDispatcher:
     async def _outcome_of(
         self, service: NotificationService, *, notification: Notification
     ) -> Outcome:
+        named = self._service_components[service].name
         try:
             await asyncio.wait_for(
                 self._current_notifier().notify(service, notification=notification),
                 timeout=self._notification_timeout_seconds,
             )
         except NotificationRefused as refusal:
-            self._logger.warning("notification %s: %s", service, refusal)
+            self._logger.warning("%s: %s", named, refusal)
             return Outcome.declared(refusal)
         except TimeoutError:
             timed_out = NotificationTimedOut(
                 f"past its timeout of {self._notification_timeout_seconds} s"
             )
-            self._logger.warning("notification %s: %s", service, timed_out)
+            self._logger.warning("%s: %s", named, timed_out)
             return Outcome.declared(timed_out)
         except Exception as error:  # the send's boundary, by design: any other is a bug
-            self._logger.exception("bug in notification %s", service, error=error)
+            self._logger.exception("bug in %s", named, error=error)
             return Outcome.bug(repr(error))
         return Outcome.success()
 

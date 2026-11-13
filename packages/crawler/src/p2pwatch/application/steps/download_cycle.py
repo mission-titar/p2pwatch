@@ -30,6 +30,7 @@ from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
@@ -44,6 +45,7 @@ class DownloadCycle(Work):
     def __init__(
         self,
         *,
+        client_name: ClientName,
         download_client: DownloadClient,
         download_tracker: DownloadTracker,
         download_decider: DownloadDecider,
@@ -53,6 +55,7 @@ class DownloadCycle(Work):
         waker: Waker,
         logger: Logger,
     ) -> None:
+        self._client_name = client_name
         self._download_client = download_client
         self._download_tracker = download_tracker
         self._download_decider = download_decider
@@ -64,7 +67,7 @@ class DownloadCycle(Work):
         self._turn_taken = False
 
     def __str__(self) -> str:
-        return "download tracking"
+        return f"download tracking {self._client_name}"
 
     async def wait_for_next_turn(self) -> None:
         """Waits nothing before the first turn, then ``poll_interval`` or the download wake,

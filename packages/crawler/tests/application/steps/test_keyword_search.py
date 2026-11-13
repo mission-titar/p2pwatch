@@ -415,7 +415,7 @@ def test_the_supervisor_names_the_work_after_its_keyword_client_and_channel(
         keywords=["keroro"],
         health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=()),
     )
-    assert str(work.work) == "search 'keroro' on amuled/kad"
+    assert str(work.work) == work.feeds[0].name == "search 'keroro' amuled kad"
 
 
 def test_ten_keywords_queued_on_the_clients_ed2k_lock_stay_within_their_time_limits(

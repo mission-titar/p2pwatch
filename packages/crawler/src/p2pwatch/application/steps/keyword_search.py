@@ -40,7 +40,7 @@ class KeywordSearch(Work):
         self._channel_component = channel_component
 
     def __str__(self) -> str:
-        return f"search '{self._keyword}' on {self._search_worker.client_name}/{self._channel}"
+        return f"search '{self._keyword}' {self._search_worker.client_name} {self._channel}"
 
     async def wait_for_next_turn(self) -> None:
         """Waits until neither the client nor the channel is backed off, a backoff resumed at the

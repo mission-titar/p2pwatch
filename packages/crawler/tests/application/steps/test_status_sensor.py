@@ -457,7 +457,7 @@ def test_the_supervisor_names_the_work_after_its_client() -> None:
         fake_time=fake_time,
         observability=_Observability(fake_time),
     )
-    assert str(sensor) == "status reading of amuled"
+    assert str(sensor) == status_sensor_component(_AMULED).name
 
 
 def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
@@ -502,7 +502,7 @@ def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
         )
     )
 
-    message = "status reading of amuled: amuleapi refused the admin password"
+    message = "status sensor amuled: amuleapi refused the admin password"
     assert logger.lines == [LoggedLine(level="warning", message=message)] * 5
 
 

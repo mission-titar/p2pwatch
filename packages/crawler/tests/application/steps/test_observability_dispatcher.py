@@ -280,7 +280,7 @@ async def test_a_refused_notification_is_a_declared_outcome_logged_in_one_line()
     ).dispatch(_COMPLETED)
     assert node_metric_store.read_samples()  # written despite the refusal
     assert logger.lines[-1] == LoggedLine(
-        level="warning", message="notification fake community: refused (FAILURE)"
+        level="warning", message="notifier fake community: refused (FAILURE)"
     )
     assert outcomes.recorded == _both(Outcome.declared(refusal))
 
@@ -298,7 +298,7 @@ async def test_a_send_past_its_timeout_is_a_declared_outcome_logged_in_one_line(
     ).dispatch(_COMPLETED)
     assert node_metric_store.read_samples()
     assert logger.lines[-1] == LoggedLine(
-        level="warning", message="notification fake community: past its timeout of 0.01 s"
+        level="warning", message="notifier fake community: past its timeout of 0.01 s"
     )
     assert [recorded.by for recorded in outcomes.recorded] == [UNITS_OF_WORK, SENDS]
     for recorded in outcomes.recorded:
@@ -314,7 +314,7 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_logged_with_its_trac
         FakeNodeMetricStore(), notifier=FakeRaisingNotifier(error), logger=logger, outcomes=outcomes
     ).dispatch(_COMPLETED)
     assert logger.lines[-1] == LoggedLine(
-        level="error", message="bug in notification fake community", error=error
+        level="error", message="bug in notifier fake community", error=error
     )
     assert outcomes.recorded == [  # a bug records nothing by the sends' source
         _Recorded(
