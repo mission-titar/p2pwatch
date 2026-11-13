@@ -168,7 +168,7 @@ def build_cycle(
             download_tracker=download_tracker,
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
-            health_recorder=health_recorder,
+            record_outcome=health_recorder.record,
             download_tracking_component=(
                 tracking_component or download_tracking_component(ClientName("amuled"))
             ),
