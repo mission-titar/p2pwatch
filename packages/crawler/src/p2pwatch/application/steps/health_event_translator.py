@@ -6,7 +6,7 @@ from collections.abc import Mapping
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import HealthTransition
-from p2pwatch.domain.health.health_condition import HealthCondition
+from p2pwatch.domain.health.health_condition import Health, HealthCondition
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
@@ -23,6 +23,7 @@ from p2pwatch.domain.status_reading import (
     lasting_at_entry,
 )
 
+_UNWELL = (Health.DEGRADED, Health.FAILING)
 _CHANNEL_FIELDS: Mapping[HealthCondition, ChannelField] = {
     CHANNEL_NOT_CONNECTED: "connected",
     CHANNEL_NOT_CONNECTABLE: "connectable",
@@ -45,10 +46,10 @@ class HealthEventTranslator:
 
     def _event(self, transition: HealthTransition) -> Event | None:
         condition, labels = transition.condition, transition.component.labels
-        band, _ = condition.band()
-        if transition.current is band:
+        # A reading's condition holds one band: entering it alerts, leaving it ends the alert.
+        if transition.current in _UNWELL:
             alerts = True
-        elif transition.previous is band:  # unknown to healthy ends no alert
+        elif transition.previous in _UNWELL:  # unknown to healthy ends no alert
             alerts = False
         else:
             return None

@@ -1,5 +1,6 @@
 """Runs each work's turns until the shutdown is requested, then cancels them all; a turn that raises
-or passes its time limit fails alone (spec v5 lot 4, D1, D3 and D4)."""
+or passes its time limit fails alone, each turn's outcome recorded on the components its work feeds
+(spec v5 lot 4, D1, D3, D4 and D10)."""
 
 import asyncio
 from collections.abc import Sequence
@@ -10,9 +11,11 @@ from typing import Protocol
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.declared_failure import DeclaredFailure
-from p2pwatch.domain.health.outcome import Bug, Outcome
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome
 
 # The least wait after a bug, so a bug before the client's own pacing never reruns at full speed:
 # the client's start spacing, a starting value tuned at the release candidate.
@@ -21,14 +24,18 @@ FLOOR_AFTER_A_BUG = timedelta(seconds=60)
 
 @dataclass(frozen=True, kw_only=True)
 class SupervisedWork:
-    """A work and its time limit, past which a turn is cut as a bug (spec v5 lot 4, D4)."""
+    """A work, its time limit, past which a turn is cut as a bug (spec v5 lot 4, D4), and the
+    components its turns' outcomes feed, each reading them."""
 
     work: Work
     time_limit: timedelta
+    feeds: tuple[Component, ...]
 
     def __post_init__(self) -> None:
         if self.time_limit <= timedelta(0):
             raise ValueError(f"{self.work}: a time limit must be positive, not {self.time_limit}")
+        if not self.feeds or not all(component.reads(TURNS) for component in self.feeds):
+            raise ValueError(f"{self.work}: a component at least expected, each reading its turns")
 
 
 class TurnPastItsLimit(Exception):
@@ -47,10 +54,12 @@ class Supervisor:
         *,
         run_state_reader: RunStateReader,
         monotonic_clock: MonotonicClock,
+        health_recorder: HealthRecorder,
         logger: Logger,
     ) -> None:
         self._run_state_reader = run_state_reader
         self._monotonic_clock = monotonic_clock
+        self._health_recorder = health_recorder
         self._logger = logger
 
     async def supervise(
@@ -78,6 +87,8 @@ class Supervisor:
         while True:
             await self._wait(supervised.work, after=outcome)
             outcome = await self._outcome_of(supervised)
+            for component in supervised.feeds:
+                await self._health_recorder.record(outcome, on=component, by=TURNS)
 
     async def _wait(self, work: Work, *, after: Outcome) -> None:
         """The work's own wait; after a bug, the later of it and the floor, never their sum."""

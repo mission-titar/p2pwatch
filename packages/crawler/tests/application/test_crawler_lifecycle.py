@@ -16,9 +16,12 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.health.component import Component, ComponentLabels
+from p2pwatch.domain.health.health_condition import BUGS
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.observability.notification import RelayedLogLine
@@ -123,13 +126,24 @@ class _Crawl:
             supervisor=Supervisor(
                 run_state_reader=self.run_state,
                 monotonic_clock=FakeBlockingMonotonicClock(),  # no limit expires
+                health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=()),
                 logger=FakeLogger(),
             ),
             logger=self.logger,
         )
 
     def _work(self, name: str) -> SupervisedWork:
-        return SupervisedWork(work=_StartedWork(name, crawl=self), time_limit=timedelta(days=1))
+        return SupervisedWork(
+            work=_StartedWork(name, crawl=self),
+            time_limit=timedelta(days=1),
+            feeds=(
+                Component(
+                    name=name,
+                    labels=ComponentLabels(client_name=ClientName("amuled")),
+                    conditions=(BUGS,),
+                ),
+            ),
+        )
 
     def work_started(self, name: str) -> None:
         self.steps.append(f"{name}, {len(self.observability.logger.lines)} event(s) out")

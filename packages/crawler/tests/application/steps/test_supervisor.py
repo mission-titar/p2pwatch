@@ -1,6 +1,6 @@
 """Each work's turns run until the stop, whoever asks; a turn that raises or passes its time limit
-fails alone, a bug's next turn waiting at least the floor; the bound is armed before the works
-unwind.
+fails alone, a bug's next turn waiting at least the floor; each turn's outcome is recorded on the
+components its work feeds; the bound is armed before the works unwind.
 
 The timed tests share one simulated time, on the virtual-time loop.
 """
@@ -11,9 +11,14 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.supervisor import FLOOR_AFTER_A_BUG, SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import SearchFailedError
+from p2pwatch.domain.health.component import Component, ComponentLabels
+from p2pwatch.domain.health.health_condition import BUGS
+from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.status_reading import client_component
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -133,8 +138,21 @@ class _HungWork(Work):
             raise
 
 
-def _supervised(*works: Work, time_limit: timedelta = _DAY) -> list[SupervisedWork]:
-    return [SupervisedWork(work=work, time_limit=time_limit) for work in works]
+def _component(name: str) -> Component:
+    """A component judged on the bugs of the turns alone."""
+    return Component(
+        name=name, labels=ComponentLabels(client_name=ClientName("amuled")), conditions=(BUGS,)
+    )
+
+
+def _supervised(
+    *works: Work, time_limit: timedelta = _DAY, feeds: tuple[Component, ...] = ()
+) -> list[SupervisedWork]:
+    """Each work feeding ``feeds``, or a component named after it."""
+    return [
+        SupervisedWork(work=work, time_limit=time_limit, feeds=feeds or (_component(str(work)),))
+        for work in works
+    ]
 
 
 def _supervisor(*, run_state: FakeRunStateStore) -> Supervisor:
@@ -142,6 +160,7 @@ def _supervisor(*, run_state: FakeRunStateStore) -> Supervisor:
     return Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeBlockingMonotonicClock(),
+        health_recorder=HealthRecorder(logger=FakeLogger(), subscribers=()),
         logger=FakeLogger(),
     )
 
@@ -151,18 +170,22 @@ def _supervise_until(
     *works: Work,
     seconds: float,
     logger: FakeLogger | None = None,
+    health_logger: FakeLogger | None = None,
     time_limit: timedelta = _DAY,
+    feeds: tuple[Component, ...] = (),
 ) -> None:
     run_state = FakeRunStateStore()
     loop.call_later(seconds, run_state.set_shutdown_requested)
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(loop),
+        health_recorder=HealthRecorder(logger=health_logger or FakeLogger(), subscribers=()),
         logger=logger or FakeLogger(),
     )
     loop.run_until_complete(
         supervisor.supervise(
-            _supervised(*works, time_limit=time_limit), arm_shutdown_bound=lambda: None
+            _supervised(*works, time_limit=time_limit, feeds=feeds),
+            arm_shutdown_bound=lambda: None,
         )
     )
 
@@ -234,7 +257,58 @@ def test_a_turn_ending_within_its_time_limit_keeps_its_outcome(virtual_loop: Vir
 @pytest.mark.parametrize("time_limit", [timedelta(0), timedelta(seconds=-1)])
 def test_a_time_limit_that_is_not_positive_is_refused(time_limit: timedelta) -> None:
     with pytest.raises(ValueError, match="time limit"):
-        SupervisedWork(work=_CountedWork(), time_limit=time_limit)
+        SupervisedWork(work=_CountedWork(), time_limit=time_limit, feeds=(_component("counted"),))
+
+
+@pytest.mark.parametrize(
+    "feeds", [(), (client_component(ClientName("amuled")),)], ids=["none", "no turns read"]
+)
+def test_a_work_feeding_no_component_reading_its_turns_is_refused(
+    feeds: tuple[Component, ...],
+) -> None:
+    with pytest.raises(ValueError, match="^counted: a component at least expected, each reading"):
+        SupervisedWork(work=_CountedWork(), time_limit=_DAY, feeds=feeds)
+
+
+def test_each_turn_s_outcome_is_recorded_on_every_component_its_work_feeds(
+    virtual_loop: VirtualLoop,
+) -> None:
+    health_logger = FakeLogger()
+    work = _PacedWork("kad search", wait_seconds=1.0, raising=[KeyError("channels")], always=True)
+    feeds = (_component("search kad"), _component("channel kad"))
+
+    _supervise_until(
+        virtual_loop, work, seconds=2 * _FLOOR + 2.0, health_logger=health_logger, feeds=feeds
+    )
+
+    assert len(work.turns) == 3
+    assert health_logger.lines == [
+        LoggedLine(level="warning", message="search kad, bugs: unknown to failing"),
+        LoggedLine(level="warning", message="channel kad, bugs: unknown to failing"),
+    ]
+
+
+def test_a_declared_failure_counts_as_no_bug(virtual_loop: VirtualLoop) -> None:
+    health_logger = FakeLogger()
+    work = _PacedWork("kad search", wait_seconds=10.0, raising=[SearchFailedError("refused")] * 3)
+    _supervise_until(virtual_loop, work, seconds=35.0, health_logger=health_logger)
+    assert health_logger.lines == [
+        LoggedLine(level="info", message="kad search, bugs: unknown to healthy")
+    ]
+
+
+def test_a_turn_past_its_time_limit_is_recorded_as_a_bug(virtual_loop: VirtualLoop) -> None:
+    health_logger = FakeLogger()
+    _supervise_until(
+        virtual_loop,
+        _HungWork(),
+        seconds=3 * 30.0 + 2 * _FLOOR + 1.0,
+        health_logger=health_logger,
+        time_limit=_HALF_MINUTE,
+    )
+    assert health_logger.lines == [
+        LoggedLine(level="warning", message="hung, bugs: unknown to failing")
+    ]
 
 
 def test_two_turns_of_a_work_raising_a_bug_at_once_are_never_closer_than_the_floor(

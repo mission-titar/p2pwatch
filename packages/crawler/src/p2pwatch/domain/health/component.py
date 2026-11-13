@@ -35,6 +35,10 @@ class Component:
         self.labels = labels
         self._windows = [ConditionWindow(condition=condition) for condition in conditions]
 
+    def reads(self, source: OutcomeSource) -> bool:
+        """Whether a condition of it reads ``source``."""
+        return any(window.condition.source == source for window in self._windows)
+
     def record(self, outcome: Outcome, *, by: OutcomeSource) -> tuple[HealthTransition, ...]:
         """Feeds ``outcome`` to each condition reading ``by``; returns the changes it caused."""
         transitions: list[HealthTransition] = []

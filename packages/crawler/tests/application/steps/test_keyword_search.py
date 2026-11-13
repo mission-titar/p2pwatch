@@ -19,6 +19,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.keyword_search import KeywordSearch
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
@@ -27,6 +28,8 @@ from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.status_reading import channel_component
+from p2pwatch.domain.work_components import keyword_search_component
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -120,6 +123,10 @@ class _Searches:
         backoff_saver = BackoffSaver(
             backoff=self.backoff, backoff_state_writer=self.state, logger=FakeLogger()
         )
+        channel_components = {
+            channel: channel_component(client_name=worker.client_name, channel=channel)
+            for channel in worker.channels
+        }
         return [
             SupervisedWork(
                 work=KeywordSearch(
@@ -130,6 +137,12 @@ class _Searches:
                     monotonic_clock=self.monotonic_clock,
                 ),
                 time_limit=time_limit_of(Keyword(keyword), channel=channel),
+                feeds=(
+                    keyword_search_component(
+                        keyword=Keyword(keyword), client_name=worker.client_name, channel=channel
+                    ),
+                    channel_components[channel],
+                ),
             )
             for channel in worker.channels
             for keyword in keywords
@@ -143,6 +156,7 @@ class _Searches:
         keywords: list[str],
         time_limit_of: _TimeLimitOf = lambda _keyword, *, channel: _DAY,
         logger: FakeLogger | None = None,
+        health_logger: FakeLogger | None = None,
     ) -> None:
         run_state = FakeRunStateStore()
         self.loop.call_later(seconds, run_state.set_shutdown_requested)
@@ -151,6 +165,9 @@ class _Searches:
             Supervisor(
                 run_state_reader=run_state,
                 monotonic_clock=self.monotonic_clock,
+                health_recorder=HealthRecorder(
+                    logger=health_logger or FakeLogger(), subscribers=()
+                ),
                 logger=logger or FakeLogger(),
             ).supervise(works, arm_shutdown_bound=lambda: None)
         )
@@ -194,29 +211,50 @@ def test_a_bug_on_one_keywords_searches_leaves_the_other_keywords_searching(
     client = FakeTimedSearchClient(
         {Channel("kad"): 30.0}, broken_keywords=frozenset({Keyword("keroro")})
     )
-    searches.run_for(100.0, client=client, keywords=["keroro", "titar"])
+    health_logger = FakeLogger()
+    searches.run_for(
+        130.0, client=client, keywords=["keroro", "titar"], health_logger=health_logger
+    )
     starts = {
         name: [start for start, keyword, _ in client.searches if keyword == name]
         for name in ("keroro", "titar")
     }
     # The broken keyword's searches one floor apart, the other's at their own pace.
-    assert starts == {"keroro": [0.0, 60.0], "titar": [0.0, 30.0, 60.0, 90.0]}
+    assert starts == {"keroro": [0.0, 60.0, 120.0], "titar": [0.0, 30.0, 60.0, 90.0, 120.0]}
     assert searches.backoff.snapshot() == {}  # a bug never touches the backoff
+    # The channel degraded at its second bug among ten, the healthy keyword's turns among them.
+    assert _unwell(health_logger) == [
+        "channel amuled kad, bugs: healthy to degraded",
+        "search 'keroro' amuled kad, bugs: unknown to failing",
+    ]
 
 
 def test_a_bug_on_every_kad_search_leaves_the_ed2k_searches_going_on(searches: _Searches) -> None:
     client = FakeTimedSearchClient(
         {Channel("ed2k"): 30.0, Channel("kad"): 30.0}, broken_channels=frozenset({Channel("kad")})
     )
-    searches.run_for(100.0, client=client, keywords=["keroro", "titar"])
+    health_logger = FakeLogger()
+    searches.run_for(
+        130.0, client=client, keywords=["keroro", "titar"], health_logger=health_logger
+    )
     starts = {
         name: sorted(start for start, _, channel in client.searches if channel == name)
         for name in ("ed2k", "kad")
     }
     assert starts == {
-        "ed2k": [0.0, 0.0, 30.0, 30.0, 60.0, 60.0, 90.0, 90.0],
-        "kad": [0.0, 0.0, 60.0, 60.0],
+        "ed2k": [0.0, 0.0, 30.0, 30.0, 60.0, 60.0, 90.0, 90.0, 120.0, 120.0],
+        "kad": [0.0, 0.0, 60.0, 60.0, 120.0, 120.0],
     }
+    assert sorted(_unwell(health_logger)) == [
+        "channel amuled kad, bugs: unknown to failing",
+        "search 'keroro' amuled kad, bugs: unknown to failing",
+        "search 'titar' amuled kad, bugs: unknown to failing",
+    ]
+
+
+def _unwell(health_logger: FakeLogger) -> list[str]:
+    """The health changes into degraded or failing, as the recorder logs them."""
+    return [line.message for line in health_logger.lines if line.level == "warning"]
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:
