@@ -32,7 +32,7 @@ async def test_queued_download_without_observation_emits_no_link() -> None:
         tracked_download_store=tracked_download_store,
         observation_reader=FakeObservationReader(observations={}),  # no observation
     )
-    await cycle.run()
+    await cycle.run_once()
     assert client.started == []
 
 
@@ -54,7 +54,7 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run()  # does not raise (application failure tolerated per hash)
+    await cycle.run_once()  # does not raise (application failure tolerated per hash)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.FAILED
     )  # link rejected → marked failed
@@ -86,7 +86,7 @@ async def test_start_rejected_for_one_file_does_not_block_the_next() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run()
+    await cycle.run_once()
     assert tracked_download_store.states[HASH_A] is DownloadState.FAILED  # rejected
     assert tracked_download_store.states[HASH_B] is DownloadState.QUEUED  # accepted (link emitted)
     assert HASH_B in started(client)
@@ -109,7 +109,7 @@ async def test_a_download_the_client_forgot_is_started_once_per_round_until_list
     )
     rounds = []
     for _ in range(4):
-        await cycle.run()
+        await cycle.run_once()
         rounds.append(len(client.started))
     assert rounds == [1, 2, 2, 3]
     assert client.started[0] == DownloadRequest(file=key(HASH_A), filename="a.avi", size_bytes=9)
@@ -132,5 +132,5 @@ async def test_a_failed_or_completed_download_the_client_forgot_is_not_started()
         client=client,
         tracked_download_store=tracked_download_store,
         observation_reader=observation_reader,
-    ).run()
+    ).run_once()
     assert client.started == []

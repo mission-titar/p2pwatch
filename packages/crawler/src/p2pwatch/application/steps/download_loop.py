@@ -36,7 +36,7 @@ class DownloadLoop:
         at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
         """
         while not self._run_state_reader.is_shutdown_requested():
-            await self._download_cycle.run()
+            await self._download_cycle.run_once()
             if self._run_state_reader.is_shutdown_requested():
                 break
             await self._sleep_or_wake()
