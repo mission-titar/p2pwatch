@@ -802,10 +802,13 @@ par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de b
 
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
 démon sont
-**absorbés** (dégradation). Le dispatcher enregistre l'issue de chaque notification sur le
-composant du notifieur : un refus d'un service (`NotificationRefused`) et un envoi au-delà de
-`observability.notification_timeout_seconds` (`NotificationTimedOut`) sont déclarés, toute autre
-exception est un bug, journalisé avec sa trace, que seule sa condition « bugs » compte. Le
+**absorbés** (dégradation). Chaque URL de notification est un service, nommé par son schéma et son
+audience, jamais par son URL, qui porte le jeton du webhook ; le dispatcher envoie une notification
+à chaque service de son audience à la fois et enregistre l'issue de chaque envoi sur le composant
+de ce service : un refus du service (`NotificationRefused`), que compte sa condition « sends
+refused », et un envoi au-delà de `observability.notification_timeout_seconds`
+(`NotificationTimedOut`) sont déclarés, toute autre exception est un bug, journalisé avec sa trace,
+que seule sa condition « bugs » compte. Le
 traducteur ne change aucune transition du notifieur en événement : un notifieur en échec ne notifie
 jamais de lui-même ; un échec dans un composant in-process testé à 100 % (par exemple
 `InMemoryNodeMetricStore`) est un bug, pas un transitoire : il fait échouer son tour, journalisé

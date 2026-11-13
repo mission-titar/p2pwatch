@@ -12,13 +12,13 @@ class FakeApprise(apprise.Apprise):
         status: apprise.AppriseResultStatus = apprise.AppriseResultStatus.SUCCESS,
     ) -> None:
         super().__init__(asset=asset)
-        self.added: list[tuple[object, object]] = []
+        self.added: list[tuple[object, dict[str, object]]] = []
         self.sent: list[dict[str, object]] = []
         self._status = status
 
     def add(self, *args: object, **kwargs: object) -> bool:
-        """Records ``add(url, tag=...)``, the notifier's call."""
-        self.added.append((args[0], kwargs["tag"]))
+        """Records ``add(url)``, the notifier's call, with its keywords."""
+        self.added.append((args[0], kwargs))
         return True
 
     async def async_notify(self, *args: object, **kwargs: object) -> apprise.AppriseResult:

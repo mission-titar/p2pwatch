@@ -18,7 +18,7 @@ from p2pwatch.domain.health.health_condition import BUGS, Health
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability import events as ev
-from p2pwatch.domain.observability.notifier_outcomes import notifier_component
+from p2pwatch.domain.observability.notifier_outcomes import notifier_components
 from tests.contracts.application.ports.driven.state_owner_contract import StateOwnerContract
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -45,7 +45,7 @@ def _dispatcher(owner: NotifierOwner) -> ObservabilityDispatcher:
         current_notifier=owner.notifier,
         notification_timeout_seconds=5.0,
         record_outcome=HealthRecorder(logger=FakeLogger(), subscribers=()).record,
-        notifier_component=notifier_component(),
+        service_components=notifier_components(owner.notifier().services()),
     )
 
 
@@ -83,7 +83,8 @@ def test_a_notifier_failing_on_its_bugs_restarts_its_owner_the_sends_then_reachi
     raising, rebuilt = FakeRaisingNotifier(KeyError("embeds")), FakeNotifier()
     built = iter((raising, rebuilt))
     owner = NotifierOwner(build_notifier=lambda: next(built))
-    component, policy_logger = notifier_component(), FakeLogger()
+    components, policy_logger = notifier_components(owner.notifier().services()), FakeLogger()
+    [community, _] = components.values()  # each send is the community's
     recorder: HealthRecorder
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
@@ -91,9 +92,9 @@ def test_a_notifier_failing_on_its_bugs_restarts_its_owner_the_sends_then_reachi
         current_notifier=owner.notifier,
         notification_timeout_seconds=5.0,
         record_outcome=lambda outcome, *, on, by: recorder.record(outcome, on=on, by=by),
-        notifier_component=component,
+        service_components=components,
     )
-    policy = RestartPolicy(owners={component: owner}, logger=policy_logger)
+    policy = RestartPolicy(owners=dict.fromkeys(components.values(), owner), logger=policy_logger)
     recorder = HealthRecorder(
         logger=FakeLogger(),
         subscribers=(
@@ -124,7 +125,9 @@ def test_a_notifier_failing_on_its_bugs_restarts_its_owner_the_sends_then_reachi
 
     virtual_loop.run_until_complete(scenario())
     assert (raising.calls, len(rebuilt.calls)) == (3, 3)
-    assert component.health_of(BUGS) is Health.HEALTHY
+    assert community.health_of(BUGS) is Health.HEALTHY
     assert policy_logger.lines == [
-        LoggedLine(level="warning", message="notifier, bugs failing: restarting notifier")
+        LoggedLine(
+            level="warning", message="notifier fake community, bugs failing: restarting notifier"
+        )
     ]

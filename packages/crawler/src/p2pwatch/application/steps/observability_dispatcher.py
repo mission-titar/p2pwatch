@@ -1,20 +1,24 @@
-"""The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies its audience.
-Each notification's outcome is recorded on the notifier's component, a refusal or a send past the
-timeout declared, any other exception a bug: none breaks the crawl (E-D13, spec v5 lot 4, D3)."""
+"""The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies each service of
+its audience, all together. Each send's outcome is recorded on its service's component, a refusal
+or a send past the timeout declared, any other exception a bug: none breaks the crawl (E-D13,
+spec v5 lot 4, D3)."""
 
 import asyncio
+from collections.abc import Mapping
 from typing import Protocol, assert_never
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.health.outcome import TURNS, Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome, OutcomeSource
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.node_metric import CounterIncrement
 from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.notifier_outcomes import (
+    SENDS,
     NotificationRefused,
+    NotificationService,
     NotificationTimedOut,
 )
 from p2pwatch.domain.observability.policy import audience_of, plan_observability
@@ -41,14 +45,14 @@ class ObservabilityDispatcher:
         current_notifier: CurrentNotifier,
         notification_timeout_seconds: float,
         record_outcome: OutcomeRecorder,
-        notifier_component: Component,
+        service_components: Mapping[NotificationService, Component],
     ) -> None:
         self._logger = logger
         self._node_metric_writer = node_metric_writer
         self._current_notifier = current_notifier
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_outcome = record_outcome
-        self._notifier_component = notifier_component
+        self._service_components = service_components
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
@@ -59,27 +63,42 @@ class ObservabilityDispatcher:
             else:
                 self._node_metric_writer.set_gauge(instruction)
         if plan.notification is not None:
-            outcome = await self._outcome_of(plan.notification)
-            await self._record_outcome(outcome, on=self._notifier_component, by=TURNS)
+            await self._notify(plan.notification)
 
-    async def _outcome_of(self, notification: Notification) -> Outcome:
+    async def _notify(self, notification: Notification) -> None:
+        """Sends to each service of its audience together, so a notification takes one timeout
+        at most, then records each send's outcome."""
         audience = audience_of(notification)
+        services = [s for s in self._service_components if s.audience is audience]
+        async with asyncio.TaskGroup() as group:
+            sends = [
+                group.create_task(self._outcome_of(s, notification=notification)) for s in services
+            ]
+        for service, send in zip(services, sends, strict=True):
+            component, outcome = self._service_components[service], send.result()
+            await self._record_outcome(outcome, on=component, by=TURNS)
+            if not isinstance(outcome.reason, Bug):
+                await self._record_outcome(outcome, on=component, by=SENDS)
+
+    async def _outcome_of(
+        self, service: NotificationService, *, notification: Notification
+    ) -> Outcome:
         try:
             await asyncio.wait_for(
-                self._current_notifier().notify(audience, notification=notification),
+                self._current_notifier().notify(service, notification=notification),
                 timeout=self._notification_timeout_seconds,
             )
         except NotificationRefused as refusal:
-            self._logger.warning("notification %s: %s", audience.value, refusal)
+            self._logger.warning("notification %s: %s", service, refusal)
             return Outcome.declared(refusal)
         except TimeoutError:
             timed_out = NotificationTimedOut(
                 f"past its timeout of {self._notification_timeout_seconds} s"
             )
-            self._logger.warning("notification %s: %s", audience.value, timed_out)
+            self._logger.warning("notification %s: %s", service, timed_out)
             return Outcome.declared(timed_out)
         except Exception as error:  # the send's boundary, by design: any other is a bug
-            self._logger.exception("bug in notification %s", audience.value, error=error)
+            self._logger.exception("bug in notification %s", service, error=error)
             return Outcome.bug(repr(error))
         return Outcome.success()
 
