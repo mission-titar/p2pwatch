@@ -2,8 +2,11 @@
 
 from datetime import timedelta
 
+import pytest
+
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
+from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -84,3 +87,13 @@ def test_a_failed_save_is_logged_and_retried_after_the_next_turn() -> None:
         )
     ]
     assert [saved[_KAD].attempts for saved in saving.state.saved] == [2]
+
+
+def test_a_turn_that_raised_after_changing_the_backoff_still_saves_it() -> None:
+    saving = _Saving()
+
+    with pytest.raises(SearchFailedError), saving.saver.saving():
+        saving.backoff.record_failure(_KAD)
+        raise SearchFailedError("refused")
+
+    assert [set(saved) for saved in saving.state.saved] == [{_KAD}]

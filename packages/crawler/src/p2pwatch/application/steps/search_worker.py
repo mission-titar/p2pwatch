@@ -84,7 +84,8 @@ class SearchWorker:
         return changed
 
     async def search(self, keyword: Keyword, *, channel: Channel) -> None:
-        """One search, run once ``time_until_ready`` is zero. Never raises: backs off and logs."""
+        """One search, run once ``time_until_ready`` is zero. A failure the client declares raises
+        once backed off, logged and dispatched (spec v5 lot 4, D2)."""
         channel_backoff_key = BackoffKey(client_name=self._client_name, channel=channel)
         try:
             answer = await self._client.search(
@@ -102,7 +103,7 @@ class SearchWorker:
             await self._observability_dispatcher.dispatch(
                 SearchFailed(client_name=self._client_name, channel=channel)
             )
-            return
+            raise
         except ClientUnreachableError as error:
             delay = self._backoff.record_failure(self._client_backoff_key)
             self._logger.warning(
@@ -114,7 +115,7 @@ class SearchWorker:
             await self._observability_dispatcher.dispatch(
                 ClientUnreachable(client_name=self._client_name)
             )
-            return
+            raise
         changed = await self._record_observations(channel, answer=answer)
         self._backoff.reset(channel_backoff_key)
         self._backoff.reset(self._client_backoff_key)

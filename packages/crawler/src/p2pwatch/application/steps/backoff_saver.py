@@ -28,12 +28,15 @@ class BackoffSaver:
 
     @contextmanager
     def saving(self) -> Iterator[None]:
-        """Wraps a turn: snapshots the backoff at the first, saves it after each that changed it."""
+        """Wraps a turn: snapshots the backoff at the first, saves it after each that changed it,
+        a turn that raised included."""
         if self._saved is None:
             # Once the lifecycle resumed the backoff: no save rewrites what it read.
             self._saved = self._backoff.snapshot()
-        yield
-        self._save()
+        try:
+            yield
+        finally:
+            self._save()
 
     def _save(self) -> None:
         current = self._backoff.snapshot()
