@@ -27,7 +27,7 @@ import ctypes
 import logging
 import sqlite3
 import sys
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import timedelta
@@ -46,7 +46,7 @@ from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.glibc_memory_releaser import GlibcMemoryReleaser
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
-from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
+from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseFactory, AppriseNotifier
 from p2pwatch.adapters.driven.persistence_sqlite.errors import OpeningInterruptedError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_backoff_state_store import (
     SqliteBackoffStateStore,
@@ -100,6 +100,9 @@ from p2pwatch.adapters.driving.webui.app import build_app as build_webui_app
 from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerThread
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.ports.driven.state_owner import StateOwner
+from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
+from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
@@ -129,7 +132,7 @@ from p2pwatch.application.steps.supervisor import (
     SupervisedWork,
     Supervisor,
 )
-from p2pwatch.application.steps.webui_liveness import WebuiLiveness
+from p2pwatch.application.steps.webui_liveness import WebuiLiveness, WebuiThreadAlive
 from p2pwatch.application.steps.work import Work
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
@@ -147,10 +150,16 @@ from p2pwatch.composition.parts_built_later import PartsBuiltLater
 from p2pwatch.composition.turn_time_limits import TIME_LIMIT_ALLOWANCE, AmuleTurnTimeLimits
 from p2pwatch.composition.webui_thread_owner import WebuiThreadOwner
 from p2pwatch.domain.console_query import ConsoleDatabase
-from p2pwatch.domain.crawler_config import CrawlerConfig, DownloadConfig, LoadedConfig
+from p2pwatch.domain.crawler_config import (
+    CrawlerConfig,
+    DownloadConfig,
+    LoadedConfig,
+    NotificationTarget,
+)
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.identifiers import ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
+from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.observability.notifier_outcomes import notifier_components
 from p2pwatch.domain.search.keywords import dedupe_keywords
@@ -234,7 +243,7 @@ def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
 
 
 @dataclass(frozen=True, kw_only=True)
-class _DownloadSteps:
+class DownloadSteps:
     """The download steps holding no client, which outlive its restarts, and the parts they need
     to build those holding it."""
 
@@ -248,7 +257,7 @@ class _DownloadSteps:
     tracker: DownloadTracker
     decider: DownloadDecider
     observation_store: SqliteObservationStore
-    waker: AsyncioWaker
+    waker: Waker
     wall_clock: WallClock
     monotonic_clock: MonotonicClock
     observability_dispatcher: ObservabilityDispatcher
@@ -293,23 +302,23 @@ class _DownloadSteps:
         return (download_cycle, self.tracking), (source_watcher, self.source_tracking)
 
 
-def _download_steps(
+def download_steps(
     download_config: DownloadConfig,
     *,
     tracking: Component,
     source_tracking: Component,
-    config: LoadedConfig,
+    targets: Sequence[TargetSegment],
     local_connection: sqlite3.Connection,
     catalog_connection: sqlite3.Connection,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
-    waker: AsyncioWaker,
+    waker: Waker,
     wall_clock: WallClock,
     monotonic_clock: MonotonicClock,
     observability_dispatcher: ObservabilityDispatcher,
     record_outcome: OutcomeRecorder,
     node_id: NodeId,
-) -> _DownloadSteps:
+) -> DownloadSteps:
     """The download steps sharing the catalog's stores and ``local_connection`` (one writer, on
     the event loop)."""
     tracked_download_store = SqliteTrackedDownloadStore(local_connection)
@@ -317,7 +326,7 @@ def _download_steps(
         observation_reader=observation_store,
         decision_reader=decision_store,
         tracked_download_reader=tracked_download_store,
-        targets=config.targets,
+        targets=targets,
     )
     tracker = DownloadTracker(
         tracked_download_writer=tracked_download_store,
@@ -330,7 +339,7 @@ def _download_steps(
         node_id=node_id,
         logger=StdlibLogger(DownloadTracker.__module__),
     )
-    return _DownloadSteps(
+    return DownloadSteps(
         config=download_config,
         client_name=_AMULE_CLIENT_NAME,
         tracking=tracking,
@@ -346,7 +355,7 @@ def _download_steps(
             observation_reader=observation_store,
             tracked_download_writer=tracked_download_store,
             tracked_download_reader=tracked_download_store,
-            targets=config.targets,
+            targets=targets,
             download_tracker=tracker,
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
@@ -360,6 +369,149 @@ def _download_steps(
         monotonic_clock=monotonic_clock,
         observability_dispatcher=observability_dispatcher,
         node_id=node_id,
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AmuleWorks:
+    """Every work over a client, each object holding it built anew at each build; the components
+    they feed and the steps holding no client built once, the recorder read at each build."""
+
+    client_name: ClientName
+    keywords: tuple[Keyword, ...]
+    client_component: Component
+    status_sensor_component: Component
+    channel_components: Mapping[Channel, Component]
+    keyword_components: Mapping[tuple[Channel, Keyword], Component]
+    download_steps: DownloadSteps | None
+    backoff: BackoffRegistry
+    backoff_saver: BackoffSaver
+    cataloguer: Cataloguer
+    observability_dispatcher: ObservabilityDispatcher
+    status_reading_writer: StatusReadingWriter
+    parts_built_later: PartsBuiltLater
+    wall_clock: WallClock
+    monotonic_clock: MonotonicClock
+    time_limits: AmuleTurnTimeLimits
+
+    def components(self) -> tuple[Component, ...]:
+        """The components its works feed: a restart empties their bugs windows alone."""
+        download = self.download_steps
+        return (
+            *self.keyword_components.values(),
+            *self.channel_components.values(),
+            self.status_sensor_component,
+            *(() if download is None else (download.tracking, download.source_tracking)),
+        )
+
+    def over(self, client: AmuleApiClient) -> list[SupervisedWork]:
+        """Every work over ``client``."""
+        health_recorder = self.parts_built_later.health_recorder
+        worker = SearchWorker(
+            client_name=self.client_name,
+            client=client,
+            backoff=self.backoff,
+            cataloguer=self.cataloguer,
+            observability_dispatcher=self.observability_dispatcher,
+            logger=StdlibLogger(SearchWorker.__module__),
+        )
+        works = [
+            SupervisedWork(
+                work=KeywordSearch(
+                    keyword=keyword,
+                    channel=channel,
+                    search_worker=worker,
+                    backoff_saver=self.backoff_saver,
+                    monotonic_clock=self.monotonic_clock,
+                    health_recorder=health_recorder,
+                    channel_component=self.channel_components[channel],
+                ),
+                time_limit=self.time_limits.of_search(keyword, channel=channel),
+                feeds=(self.keyword_components[channel, keyword], self.channel_components[channel]),
+            )
+            for channel in worker.channels
+            for keyword in self.keywords
+        ]
+        # The status sensor and download tracking share the search session.
+        status_sensor = StatusSensor(
+            client_name=self.client_name,
+            client=client,
+            wall_clock=self.wall_clock,
+            monotonic_clock=self.monotonic_clock,
+            observability_dispatcher=self.observability_dispatcher,
+            status_reading_writer=self.status_reading_writer,
+            health_recorder=health_recorder,
+            client_component=self.client_component,
+            channel_components=self.channel_components,
+            download_tracking_component=(
+                None if self.download_steps is None else self.download_steps.tracking
+            ),
+        )
+        works.append(
+            SupervisedWork(
+                work=status_sensor,
+                time_limit=self.time_limits.of_status_reading(
+                    channel_count=len(self.channel_components)
+                ),
+                feeds=(self.status_sensor_component,),
+            )
+        )
+        if self.download_steps is not None:
+            works.extend(
+                SupervisedWork(
+                    work=work, time_limit=self.time_limits.of_tracking(), feeds=(component,)
+                )
+                for work, component in self.download_steps.works(client)
+            )
+        return works
+
+
+@dataclass(frozen=True, kw_only=True)
+class WebuiWorks:
+    """The webui's liveness over a thread, built anew at each build."""
+
+    component: Component
+    monotonic_clock: MonotonicClock
+
+    def components(self) -> tuple[Component, ...]:
+        return (self.component,)
+
+    def over(self, thread_alive: WebuiThreadAlive) -> list[SupervisedWork]:
+        """The liveness of the thread ``thread_alive`` looks at."""
+        return [
+            SupervisedWork(
+                work=WebuiLiveness(thread_alive=thread_alive, monotonic_clock=self.monotonic_clock),
+                time_limit=TIME_LIMIT_ALLOWANCE,  # no await in its turn
+                feeds=(self.component,),
+            )
+        ]
+
+
+def component_owners(
+    *,
+    amule_works: AmuleWorks,
+    amule_owner: StateOwner,
+    webui_works: WebuiWorks,
+    webui_owner: StateOwner,
+    notifier_components: Iterable[Component],
+    notifier_owner: StateOwner,
+) -> dict[Component, StateOwner]:
+    """Each component's owner: an owner's works' factory names the components they feed, the
+    notifier's components are its services', which no work feeds."""
+    return {
+        **dict.fromkeys(amule_works.components(), amule_owner),
+        **dict.fromkeys(webui_works.components(), webui_owner),
+        **dict.fromkeys(notifier_components, notifier_owner),
+    }
+
+
+def apprise_notifier(
+    notifications: Sequence[NotificationTarget], *, apprise_factory: AppriseFactory
+) -> AppriseNotifier:
+    """A notifier over the configured URLs: its owner builds it anew at each restart."""
+    return AppriseNotifier(
+        tuple((t.url, t.audience, t.node_prefix) for t in notifications),
+        apprise_factory=apprise_factory,
     )
 
 
@@ -562,9 +714,8 @@ class CrawlerComposition(CrawlerRunner):
             observability = crawler_config.observability
             node_metric_store = InMemoryNodeMetricStore()
             notifier_owner = NotifierOwner(
-                build_notifier=lambda: AppriseNotifier(
-                    tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
-                    apprise_factory=apprise.Apprise,
+                build_notifier=lambda: apprise_notifier(
+                    observability.notifications, apprise_factory=apprise.Apprise
                 )
             )
             notifier_parts = notifier_components(notifier_owner.notifier().services())
@@ -603,16 +754,16 @@ class CrawlerComposition(CrawlerRunner):
                     database_opener=database_opener,
                 )
 
-            webui_part = webui_component()
+            webui_works = WebuiWorks(component=webui_component(), monotonic_clock=monotonic_clock)
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
             # synchronous work. A crash degrades (spec §17.1), and its owner rebuilds it.
             webui_thread = build_webui()
-            # Each owner reaches its works' factory and the supervisor at its restarts only.
+            # Each owner reaches the supervisor at its restarts only.
             webui_owner = WebuiThreadOwner(
                 webui_thread,
                 build_thread=build_webui,
-                build_works=lambda rebuilt: webui_works(rebuilt),
+                build_works=lambda rebuilt: webui_works.over(rebuilt.is_alive),
                 add_work=later.add_work,
             )
             # The thread held then, stopped at the unwind before the database connections close.
@@ -658,70 +809,34 @@ class CrawlerComposition(CrawlerRunner):
                     search_start_store=search_start_store,
                 )
 
-            client = build_client()
-            amule_owner = AmuleClientOwner(
-                client,
-                client_name=_AMULE_CLIENT_NAME,
-                build_client=build_client,
-                build_works=lambda rebuilt: client_works(rebuilt),
-                add_work=later.add_work,
-            )
-            # The client held then, not this first one, whose rebuilt successor would never log out.
-            stack.push_async_callback(amule_owner.close)
-            await client.open()
-            # One per channel: the status reading's fields and the channel's searches feed it.
-            channel_components = {
-                channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
-                for channel in client.channels()
-            }
+            channels = build_client().channels()  # a client's own channels, its rebuilds' too
             keywords = dedupe_keywords(crawler_config.search.keywords)
-            keyword_components = {
-                (channel, keyword): keyword_search_component(
-                    keyword=keyword, client_name=_AMULE_CLIENT_NAME, channel=channel
-                )
-                for channel in client.channels()
-                for keyword in keywords
-            }
-            client_part = client_component(_AMULE_CLIENT_NAME)
-            status_sensor_part = status_sensor_component(_AMULE_CLIENT_NAME)
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
-            # Built before the policy naming their owner, the download steps after the recorder.
-            tracking_part = download_tracking_component(_AMULE_CLIENT_NAME)
-            source_tracking_part = source_tracking_component(_AMULE_CLIENT_NAME)
-            # Built once: a restart empties their bugs windows and keeps the readings' windows.
-            amule_parts = (
-                *keyword_components.values(),
-                *channel_components.values(),
-                status_sensor_part,
-                *(() if download_config is None else (tracking_part, source_tracking_part)),
-            )
-            restart_policy = RestartPolicy(
-                owners={
-                    **dict.fromkeys(amule_parts, amule_owner),
-                    webui_part: webui_owner,
-                    **dict.fromkeys(notifier_parts.values(), notifier_owner),
+            amule_works = AmuleWorks(
+                client_name=_AMULE_CLIENT_NAME,
+                keywords=keywords,
+                client_component=client_component(_AMULE_CLIENT_NAME),
+                status_sensor_component=status_sensor_component(_AMULE_CLIENT_NAME),
+                # One per channel: the status reading's fields and the channel's searches feed it.
+                channel_components={
+                    channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
+                    for channel in channels
                 },
-                logger=StdlibLogger(RestartPolicy.__module__),
-            )
-            health_recorder = HealthRecorder(
-                logger=StdlibLogger(HealthRecorder.__module__),
-                subscribers=(
-                    HealthEventTranslator(
-                        observability_dispatcher=observability_dispatcher, node_id=node_id
-                    ).translate,
-                    restart_policy,
-                ),
-            )
-            later.health_recorder = health_recorder
-            download_steps = (
-                None
+                keyword_components={
+                    (channel, keyword): keyword_search_component(
+                        keyword=keyword, client_name=_AMULE_CLIENT_NAME, channel=channel
+                    )
+                    for channel in channels
+                    for keyword in keywords
+                },
+                download_steps=None
                 if download_config is None
-                else _download_steps(
+                else download_steps(
                     download_config,
-                    tracking=tracking_part,
-                    source_tracking=source_tracking_part,
-                    config=config,
+                    tracking=download_tracking_component(_AMULE_CLIENT_NAME),
+                    source_tracking=source_tracking_component(_AMULE_CLIENT_NAME),
+                    targets=config.targets,
                     local_connection=local_connection,
                     catalog_connection=catalog_connection,
                     observation_store=observation_store,
@@ -730,102 +845,68 @@ class CrawlerComposition(CrawlerRunner):
                     wall_clock=wall_clock,
                     monotonic_clock=monotonic_clock,
                     observability_dispatcher=observability_dispatcher,
-                    record_outcome=health_recorder.record,
+                    record_outcome=later.record,
                     node_id=node_id,
-                )
+                ),
+                backoff=backoff,
+                backoff_saver=BackoffSaver(
+                    backoff=backoff,
+                    backoff_state_writer=backoff_state_store,
+                    logger=StdlibLogger(BackoffSaver.__module__),
+                ),
+                cataloguer=cataloguer,
+                observability_dispatcher=observability_dispatcher,
+                status_reading_writer=status_reading_store,
+                parts_built_later=later,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+                time_limits=AmuleTurnTimeLimits(
+                    request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
+                    search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
+                    notification_timeout=timedelta(
+                        seconds=observability.notification_timeout_seconds
+                    ),
+                    keywords=keywords,
+                ),
             )
-            supervisor = Supervisor(
+            client = build_client()
+            amule_owner = AmuleClientOwner(
+                client,
+                client_name=_AMULE_CLIENT_NAME,
+                build_client=build_client,
+                build_works=amule_works.over,
+                add_work=later.add_work,
+            )
+            # The client held then, not this first one, whose rebuilt successor would never log out.
+            stack.push_async_callback(amule_owner.close)
+            await client.open()
+            restart_policy = RestartPolicy(
+                owners=component_owners(
+                    amule_works=amule_works,
+                    amule_owner=amule_owner,
+                    webui_works=webui_works,
+                    webui_owner=webui_owner,
+                    notifier_components=notifier_parts.values(),
+                    notifier_owner=notifier_owner,
+                ),
+                logger=StdlibLogger(RestartPolicy.__module__),
+            )
+            later.health_recorder = HealthRecorder(
+                logger=StdlibLogger(HealthRecorder.__module__),
+                subscribers=(
+                    HealthEventTranslator(
+                        observability_dispatcher=observability_dispatcher, node_id=node_id
+                    ).translate,
+                    restart_policy,
+                ),
+            )
+            later.supervisor = Supervisor(
                 run_state_reader=run_state_store,
                 monotonic_clock=monotonic_clock,
-                health_recorder=health_recorder,
+                health_recorder=later.health_recorder,
                 restart_policy=restart_policy,
                 logger=StdlibLogger(Supervisor.__module__),
             )
-            later.supervisor = supervisor
-            time_limits = AmuleTurnTimeLimits(
-                request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
-                search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
-                notification_timeout=timedelta(seconds=observability.notification_timeout_seconds),
-                keywords=keywords,
-            )
-            backoff_saver = BackoffSaver(
-                backoff=backoff,
-                backoff_state_writer=backoff_state_store,
-                logger=StdlibLogger(BackoffSaver.__module__),
-            )
-
-            def client_works(current: AmuleApiClient) -> list[SupervisedWork]:
-                """Every work over ``current``, with every object holding it built anew."""
-                worker = SearchWorker(
-                    client_name=_AMULE_CLIENT_NAME,
-                    client=current,
-                    backoff=backoff,
-                    cataloguer=cataloguer,
-                    observability_dispatcher=observability_dispatcher,
-                    logger=StdlibLogger(SearchWorker.__module__),
-                )
-                works = [
-                    SupervisedWork(
-                        work=KeywordSearch(
-                            keyword=keyword,
-                            channel=channel,
-                            search_worker=worker,
-                            backoff_saver=backoff_saver,
-                            monotonic_clock=monotonic_clock,
-                            health_recorder=health_recorder,
-                            channel_component=channel_components[channel],
-                        ),
-                        time_limit=time_limits.of_search(keyword, channel=channel),
-                        feeds=(keyword_components[channel, keyword], channel_components[channel]),
-                    )
-                    for channel in worker.channels
-                    for keyword in keywords
-                ]
-                # The status sensor and download tracking share the search session.
-                status_sensor = StatusSensor(
-                    client_name=_AMULE_CLIENT_NAME,
-                    client=current,
-                    wall_clock=wall_clock,
-                    monotonic_clock=monotonic_clock,
-                    observability_dispatcher=observability_dispatcher,
-                    status_reading_writer=status_reading_store,
-                    health_recorder=health_recorder,
-                    client_component=client_part,
-                    channel_components=channel_components,
-                    download_tracking_component=(
-                        None if download_steps is None else download_steps.tracking
-                    ),
-                )
-                works.append(
-                    SupervisedWork(
-                        work=status_sensor,
-                        time_limit=time_limits.of_status_reading(
-                            channel_count=len(channel_components)
-                        ),
-                        feeds=(status_sensor_part,),
-                    )
-                )
-                if download_steps is not None:
-                    works.extend(
-                        SupervisedWork(
-                            work=work, time_limit=time_limits.of_tracking(), feeds=(component,)
-                        )
-                        for work, component in download_steps.works(current)
-                    )
-                return works
-
-            def webui_works(thread: UvicornServerThread) -> list[SupervisedWork]:
-                """The liveness of the webui ``thread`` serves."""
-                return [
-                    SupervisedWork(
-                        work=WebuiLiveness(
-                            thread_alive=thread.is_alive, monotonic_clock=monotonic_clock
-                        ),
-                        time_limit=TIME_LIMIT_ALLOWANCE,  # no await in its turn
-                        feeds=(webui_part,),
-                    )
-                ]
-
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
@@ -841,9 +922,9 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                works=[*client_works(client), *webui_works(webui_thread)],
+                works=[*amule_works.over(client), *webui_works.over(webui_thread.is_alive)],
                 download_enabled=download_config is not None,
-                supervisor=supervisor,
+                supervisor=later.supervisor,
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the

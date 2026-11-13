@@ -469,6 +469,8 @@ depends_on = [
   "p2pwatch.application.ports.driven.monotonic_clock",
   "p2pwatch.application.ports.driven.notifier",
   "p2pwatch.application.ports.driven.state_owner",
+  "p2pwatch.application.ports.driven.status_reading_writer",
+  "p2pwatch.application.ports.driven.waker",
   "p2pwatch.application.ports.driven.wall_clock",
   "p2pwatch.application.ports.driving.crawler_runner",
   "p2pwatch.application.steps",
