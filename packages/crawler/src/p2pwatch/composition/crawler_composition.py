@@ -9,9 +9,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status sensor and download tracking share.
 
-Loops: the search tasks (``SearchTaskRunner``), the status sensor's work, and download tracking's
-when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
-shutdown.
+Loops: one search work per channel and keyword (``KeywordSearch``), the status sensor's work, and
+download tracking's when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the
+webui requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
@@ -93,6 +93,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
+from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
@@ -103,9 +104,9 @@ from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
 from p2pwatch.application.steps.health_recorder import HealthRecorder
+from p2pwatch.application.steps.keyword_search import KeywordSearch
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_sensor import StatusSensor
@@ -129,6 +130,7 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
+from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
 
@@ -429,8 +431,8 @@ class CrawlerComposition(CrawlerRunner):
                 database_opener=database_opener,
             )
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
-            # (backoff survives restart, spec §3/§7), injected into ALL workers + passed to the
-            # search tasks that persist it. Single writer on the event loop.
+            # (backoff survives restart, spec §3/§7), injected into ALL workers + the saver the
+            # search works share. Single writer on the event loop.
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config),
                 wall_clock=wall_clock,
@@ -494,18 +496,25 @@ class CrawlerComposition(CrawlerRunner):
                     for channel in client.channels()
                 },
             )
-            search_task_runner = SearchTaskRunner(
-                workers=workers,
-                keywords=crawler_config.search.keywords,
+            keywords = dedupe_keywords(crawler_config.search.keywords)
+            backoff_saver = BackoffSaver(
                 backoff=backoff,
                 backoff_state_writer=backoff_state_store,
-                monotonic_clock=monotonic_clock,
-                logger=StdlibLogger(SearchTaskRunner.__module__),
+                logger=StdlibLogger(BackoffSaver.__module__),
             )
             loops: list[SupervisedLoop] = [
-                search_task_runner.run,
-                status_sensor.run,
+                KeywordSearch(
+                    keyword=keyword,
+                    channel=channel,
+                    search_worker=worker,
+                    backoff_saver=backoff_saver,
+                    monotonic_clock=monotonic_clock,
+                ).run
+                for worker in workers
+                for channel in worker.channels
+                for keyword in keywords
             ]
+            loops.append(status_sensor.run)
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
             # shares the catalog's stores and ``local_connection`` (one writer, on the event loop),

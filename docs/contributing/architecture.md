@@ -137,10 +137,11 @@ Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k
 Chaque boucle est une itération suivie d'un sommeil (`*_interval_seconds` depuis la config),
 supervisée par un `TaskGroup` : une boucle qui crashe bruyamment annule ses sœurs (fail-fast), mais
 les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10, discipline de
-frontière). Le statut, le suivi des téléchargements et celui des sources sont déjà des `Work` :
-avant chaque tour, le premier compris, chacun attend ce que son propre état lui dit, puis prend son
-tour (`run_once()`) et cède la boucle d'événements. Le statut attend le reste de la minute depuis la
-fin de son dernier tour ; le suivi des téléchargements, rien au premier tour, puis
+frontière). Les recherches, le statut, le suivi des téléchargements et celui des sources sont déjà
+des `Work` : avant chaque tour, le premier compris, chacun attend ce que son propre état lui dit,
+puis prend son tour (`run_once()`) et cède la boucle d'événements. Une recherche attend la fin du
+backoff de son client et de son canal (§5) ; le statut, le reste de la minute depuis la fin de son
+dernier tour ; le suivi des téléchargements, rien au premier tour, puis
 `download.poll_interval_seconds` ou le réveil d'une décision de téléchargement, au premier des deux ;
 le suivi des sources, rien au premier tour, puis le reste de `download.sources_interval_seconds`
 depuis le début du précédent.
@@ -233,11 +234,12 @@ flowchart TB
   commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;
   `python -m p2pwatch` lit l'état du processus et la lance.
 
-## 5. Les tâches de recherche
+## 5. Les recherches
 
 C'est le cœur du système et sa raison d'être : **être là 24/7** pour attraper un fichier rare à
-l'instant où une source le partage. Une tâche par *(client, canal, mot-clé)* cherche en boucle,
-toutes en même temps (`application/steps/search_task_runner.py`).
+l'instant où une source le partage. Un `Work` par *(client, canal, mot-clé)*, `KeywordSearch`, que
+la composition énumère, cherche en boucle, tous en même temps
+(`application/steps/keyword_search.py`).
 
 ```mermaid
 flowchart TD
@@ -263,8 +265,8 @@ Points clés en chemin :
   ratisse large ; `titar` est une **sentinelle française** rare et non saturable (voir le handoff de
   simplification de la recherche pour le *pourquoi* : les données réelles ont montré que chercher
   davantage n'aide pas). La génération de mots-clés par cible a été supprimée.
-- **Une tâche en backoff dort** jusqu'à la fin de son backoff (celui du client ou celui du canal),
-  elle ne boucle jamais à vide. L'attente se mesure sur l'horloge monotone ; `backoff_states` en
+- **Une recherche en backoff dort** jusqu'à la fin de son backoff (celui du client ou celui du
+  canal), elle ne boucle jamais à vide ; un backoff repris au démarrage retarde aussi la première. L'attente se mesure sur l'horloge monotone ; `backoff_states` en
   garde le début et le délai, et au démarrage suivant le temps écoulé est borné à `[0, délai]` par
   `remaining_wait`, si bien qu'une horloge reculée pendant l'arrêt n'allonge jamais l'attente. La
   redondance multi-nœuds est entièrement affaire de faire tourner plusieurs nœuds et de fusionner
@@ -273,10 +275,11 @@ Points clés en chemin :
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
   minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
   pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
-- **Résilience** : une `StoreError` à l'écriture du backoff est journalisée, et l'écriture
-  retentée après la recherche suivante.
+- **Résilience** : `BackoffSaver`, que les recherches partagent, écrit le backoff après chaque
+  recherche qui l'a changé ; une `StoreError` à l'écriture est journalisée, et l'écriture retentée
+  après la recherche suivante.
 
-### 5.1 Une tâche de recherche, de bout en bout
+### 5.1 Une recherche, de bout en bout
 
 ```mermaid
 sequenceDiagram
@@ -786,7 +789,7 @@ démon sont
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
+| Boucles | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |
