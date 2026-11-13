@@ -137,7 +137,8 @@ flowchart TB
 Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k` (§9), et
 `crawler.yml` refuse une section `port_sync:`.
 
-Les recherches, le statut, le suivi des téléchargements et celui des sources sont des `Work`, que
+Les recherches, le statut, le suivi des téléchargements, celui des sources et la vivacité de la
+webui sont des `Work`, que
 le `Supervisor` fait tourner, chacun dans sa tâche d'un `TaskGroup` : avant chaque tour, le premier
 compris, il attend ce que l'état propre du work lui dit (`wait_for_next_turn()`), puis lui fait
 prendre son tour (`run_once()`) et cède la boucle d'événements. Chaque work a sa limite de temps,
@@ -149,14 +150,18 @@ ligne, toute autre exception est un bug, journalisé avec sa trace, et le tour s
 attend alors au moins un plancher de 60 s (le plus tardif du plancher et de son attente propre).
 L'issue de chaque tour est enregistrée sur les composants que son work alimente, dont la condition
 « bugs » compte les bugs seuls : une recherche alimente le sien et celui de son canal, le statut, le
-suivi des téléchargements et celui des sources chacun le sien. Le composant d'un canal compte
+suivi des téléchargements, celui des sources et la vivacité de la webui chacun le sien. La vivacité
+de la webui (`WebuiLiveness`) regarde chaque minute si le thread de la webui tourne encore : la
+webui sert jusqu'à sa chute, et aucune annulation n'atteint un thread, si bien qu'un thread terminé
+compte comme un bug, sa limite de temps étant la marge fixe seule. Le composant d'un canal compte
 aussi ses recherches refusées par le réseau (`SearchFailedError`), d'après l'issue déclarée de
 chaque recherche, un bug n'y comptant rien ; celui du suivi des téléchargements, les lectures du
 statut où aucun canal du client n'est connecté, et chaque mesure de l'espace libre sous le
 plancher, dégradé dès une mesure basse et rétabli à la première bonne, comme l'alerte disque
 d'aujourd'hui. Quand la condition « bugs » d'un composant passe à
 failing, la politique de redémarrage (`RestartPolicy`) redémarre son propriétaire, celui que la
-composition lui nomme, aujourd'hui le client aMule (`AmuleClientOwner`) pour chaque composant :
+composition lui nomme, aujourd'hui le client aMule (`AmuleClientOwner`) pour chaque composant sauf
+celui de la webui, qui n'en a pas encore et dont l'échec est seulement journalisé :
 dans une tâche à lui, le superviseur annule et attend les works qui alimentent ses composants, le
 propriétaire ferme sa session, reconstruit le client et chaque objet qui le tient, puis rend ses
 works au superviseur, et seules les fenêtres « bugs » de ses composants sont vidées, celles des
@@ -170,7 +175,7 @@ backoff de son client et de son canal (§5) ; le statut, le reste de la minute d
 dernier tour ; le suivi des téléchargements, rien au premier tour, puis
 `download.poll_interval_seconds` ou le réveil d'une décision de téléchargement, au premier des deux ;
 le suivi des sources, rien au premier tour, puis le reste de `download.sources_interval_seconds`
-depuis le début du précédent.
+depuis le début du précédent ; la vivacité de la webui, une minute, avant le premier tour compris.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -825,7 +830,7 @@ redémarre le propriétaire de son composant (§3).
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
+| Boucles | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_sensor.py` (`StatusSensor`, un `Work`), `webui_liveness.py` (`WebuiLiveness`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

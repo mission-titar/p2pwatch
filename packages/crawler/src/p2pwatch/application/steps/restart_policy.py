@@ -1,6 +1,6 @@
 """The restart policy: a bugs condition entering failing restarts its component's owner, at most
-three times in vain; every bugs condition of the owner's components healthy again resets the count
-(spec v5 lot 4, D5, appendix A "Restarts")."""
+three times in vain; every bugs condition of the owner's components healthy again resets the count;
+a component without an owner is only logged (spec v5 lot 4, D5, appendix A "Restarts")."""
 
 import asyncio
 from collections.abc import Mapping
@@ -44,8 +44,14 @@ class RestartPolicy:
         return tuple(component for component, its in self._owners.items() if its is owner)
 
     async def __call__(self, transition: HealthTransition) -> None:
+        if transition.condition != BUGS:
+            return
         owner = self._owners.get(transition.component)
-        if owner is None or transition.condition != BUGS:
+        if owner is None:
+            if transition.current is Health.FAILING:
+                self._logger.warning(
+                    "%s, bugs failing: no owner, not restarted", transition.component.name
+                )
             return
         state = self._states[owner]
         if transition.current is Health.FAILING:

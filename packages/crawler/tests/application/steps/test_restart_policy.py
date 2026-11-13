@@ -1,6 +1,6 @@
 """The restart policy: a bugs condition entering failing restarts its component's owner, at most
 three times in vain; every bugs condition of the owner's components healthy again resets the
-count."""
+count; a component without an owner is only logged."""
 
 import asyncio
 
@@ -170,15 +170,28 @@ async def test_a_rebuild_after_raising_ones_keeps_their_count() -> None:
     assert await policy.requested() == []  # its third useless restart
 
 
-async def test_a_component_without_an_owner_or_a_condition_but_bugs_restarts_nothing() -> None:
+async def test_a_condition_but_bugs_failing_restarts_nothing() -> None:
     policy = _Policy()
     channel = channel_component(client_name=_CLIENT, channel=Channel("kad"))
     for _ in range(6):
         await policy.recorder.record(
             Outcome.declared(ChannelNotConnected()), on=channel, by=STATUS_CONNECTED_FIELD
         )
-    await policy.fail(channel)
     assert await policy.requested() == []
+    assert policy.logger.lines == []
+
+
+async def test_a_component_without_an_owner_failing_on_bugs_is_logged_and_restarts_nothing() -> (
+    None
+):
+    policy = _Policy()
+    webui = _component("webui")
+    await policy.fail(webui)
+    await policy.record(Outcome.success(), on=webui, times=10)
+    assert await policy.requested() == []
+    assert policy.logger.lines == [
+        LoggedLine(level="warning", message="webui, bugs failing: no owner, not restarted")
+    ]
 
 
 async def test_each_owner_s_components_are_those_the_composition_names() -> None:

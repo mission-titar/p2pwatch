@@ -71,6 +71,10 @@ class UvicornServerThread:
         host, port = self._server.servers[0].sockets[0].getsockname()[:2]
         return host, port
 
+    def is_alive(self) -> bool:
+        """Whether its thread runs: it ends once uvicorn fell or stopped."""
+        return self._thread.is_alive()
+
     async def start(self) -> None:
         """Starts the thread, then waits, bounded, until uvicorn has bound or the thread ended."""
         self._thread.start()

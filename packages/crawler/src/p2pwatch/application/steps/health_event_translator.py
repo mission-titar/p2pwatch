@@ -48,6 +48,9 @@ class HealthEventTranslator:
 
     def _event(self, transition: HealthTransition) -> Event | None:
         condition, labels = transition.condition, transition.component.labels
+        client_name = labels.client_name
+        if client_name is None:
+            return None  # today's events are each a client's
         # A reading's condition holds one band: entering it alerts, leaving it ends the alert.
         if transition.current in _UNWELL:
             alerts = True
@@ -58,11 +61,11 @@ class HealthEventTranslator:
         if condition == CLIENT_UNREACHABLE:
             if alerts:
                 return ClientUnreachableLasting(
-                    client_name=labels.client_name,
+                    client_name=client_name,
                     unreachable_for_seconds=lasting_at_entry(condition).total_seconds(),
                     node_id=self._node_id,
                 )
-            return ClientReachableAgain(client_name=labels.client_name, node_id=self._node_id)
+            return ClientReachableAgain(client_name=client_name, node_id=self._node_id)
         if condition == DISK_SPACE_LOW:
             reason = transition.outcome.reason  # entering at one low reading: that reading
             if not alerts or not isinstance(reason, FreeSpaceBelowFloor):
@@ -77,12 +80,12 @@ class HealthEventTranslator:
             return None
         if alerts:
             return ChannelDegraded(
-                client_name=labels.client_name,
+                client_name=client_name,
                 channel=channel,
                 field=field,
                 degraded_for_seconds=lasting_at_entry(condition).total_seconds(),
                 node_id=self._node_id,
             )
         return ChannelRecovered(
-            client_name=labels.client_name, channel=channel, field=field, node_id=self._node_id
+            client_name=client_name, channel=channel, field=field, node_id=self._node_id
         )

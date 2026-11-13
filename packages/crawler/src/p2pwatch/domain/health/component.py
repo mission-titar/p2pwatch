@@ -11,7 +11,7 @@ from p2pwatch.domain.identifiers import Channel, ClientName
 class ComponentLabels:
     """What the events and the metrics name a component by."""
 
-    client_name: ClientName
+    client_name: ClientName | None = None  # None: a part of no client, the webui
     channel: Channel | None = None  # None: a component of the whole client
 
 
