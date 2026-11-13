@@ -400,6 +400,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.source_client",
   "p2pwatch.application.ports.driven.source_point_reader",
   "p2pwatch.application.ports.driven.source_point_writer",
+  "p2pwatch.application.ports.driven.state_owner",
   "p2pwatch.application.ports.driven.status_client",
   "p2pwatch.application.ports.driven.waker",
   "p2pwatch.application.ports.driven.wall_clock",
@@ -466,6 +467,7 @@ depends_on = [
   "p2pwatch.adapters.driving.webui",
   "p2pwatch.application.crawler_lifecycle",
   "p2pwatch.application.ports.driven.monotonic_clock",
+  "p2pwatch.application.ports.driven.state_owner",
   "p2pwatch.application.ports.driven.wall_clock",
   "p2pwatch.application.ports.driving.crawler_runner",
   "p2pwatch.application.steps",
@@ -687,6 +689,11 @@ depends_on = ["p2pwatch.domain"]
 path = "p2pwatch.application.ports.driven.sql_executor"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.state_owner"
+layer = "ports"
+depends_on = []
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.status_client"

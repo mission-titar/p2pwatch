@@ -7,8 +7,8 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (single writer, invariant §11), connections opened by the ``SqliteDatabaseOpener``
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
-- ONE ``AmuleApiClient`` on the one amuled the core drives, whose session every work shares,
-  the works over it built by one factory.
+- ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
+  shares; its owner, ``AmuleClientOwner``, rebuilds it and every object holding it at a restart.
 
 Works: one search work per channel and keyword (``KeywordSearch``), the status sensor's work, and
 download and source tracking's when configured, which ``CrawlerLifecycle`` runs until
@@ -113,6 +113,7 @@ from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.keyword_search import KeywordSearch
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_sensor import StatusSensor
@@ -132,6 +133,7 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
+from p2pwatch.composition.amule_client_owner import AmuleClientOwner
 from p2pwatch.composition.turn_time_limits import AmuleTurnTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, DownloadConfig, LoadedConfig
@@ -237,6 +239,9 @@ class _DownloadSteps:
     monotonic_clock: MonotonicClock
     observability_dispatcher: ObservabilityDispatcher
     node_id: NodeId
+
+    def components(self) -> tuple[Component, Component]:
+        return self.tracking, self.source_tracking
 
     def works(self, client: AmuleApiClient) -> tuple[tuple[Work, Component], ...]:
         """Download tracking and source tracking over ``client``, each with its component."""
@@ -611,13 +616,29 @@ class CrawlerComposition(CrawlerRunner):
                 node_id=node_id,
                 logger=StdlibLogger(Cataloguer.__module__),
             )
-            client = self._amule_api_client(
-                crawler_config,
-                monotonic_clock=monotonic_clock,
-                wall_clock=wall_clock,
-                search_start_store=SqliteSearchStartStore(local_connection),
+            search_start_store = SqliteSearchStartStore(local_connection)
+
+            def build_client() -> AmuleApiClient:
+                return self._amule_api_client(
+                    crawler_config,
+                    monotonic_clock=monotonic_clock,
+                    wall_clock=wall_clock,
+                    search_start_store=search_start_store,
+                )
+
+            client = build_client()
+            # A cycle: the policy holds the owner, the works the recorder calling the policy. The
+            # owner reaches the works' factory and the supervisor at its restarts only.
+            supervisor: Supervisor
+            amule_owner = AmuleClientOwner(
+                client,
+                client_name=_AMULE_CLIENT_NAME,
+                build_client=build_client,
+                build_works=lambda rebuilt: client_works(rebuilt),
+                add_work=lambda supervised: supervisor.add(supervised),
             )
-            stack.push_async_callback(client.close)
+            # The client held then, not this first one, whose rebuilt successor would never log out.
+            stack.push_async_callback(amule_owner.close)
             await client.open()
             # One per channel: the status reading's fields and the channel's searches feed it.
             channel_components = {
@@ -653,18 +674,33 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                 )
             )
+            # Built once: a restart empties their bugs windows and keeps the readings' windows.
+            restart_policy = RestartPolicy(
+                owners=dict.fromkeys(
+                    (
+                        *keyword_components.values(),
+                        *channel_components.values(),
+                        status_sensor_part,
+                        *(() if download_steps is None else download_steps.components()),
+                    ),
+                    amule_owner,
+                ),
+                logger=StdlibLogger(RestartPolicy.__module__),
+            )
             health_recorder = HealthRecorder(
                 logger=StdlibLogger(HealthRecorder.__module__),
                 subscribers=(
                     HealthEventTranslator(
                         observability_dispatcher=observability_dispatcher, node_id=node_id
                     ).translate,
+                    restart_policy,
                 ),
             )
             supervisor = Supervisor(
                 run_state_reader=run_state_store,
                 monotonic_clock=monotonic_clock,
                 health_recorder=health_recorder,
+                restart_policy=restart_policy,
                 logger=StdlibLogger(Supervisor.__module__),
             )
             time_limits = AmuleTurnTimeLimits(

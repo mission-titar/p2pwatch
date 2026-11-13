@@ -10,15 +10,20 @@ import pytest
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
-from p2pwatch.application.steps.health_recorder import HealthRecorder
+from p2pwatch.application.steps.health_recorder import HealthRecorder, HealthSubscriber
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.status_sensor import StatusSensor
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
+from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.health_condition import Health
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
+    CLIENT_UNREACHABLE,
     ChannelStatus,
     ClientStatus,
     PublishedReading,
@@ -38,6 +43,7 @@ from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusRead
 from tests.fakes.adapters.driven.fake_stepped_status_client import FakeSteppedStatusClient
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
+from tests.fakes.composition.fake_state_owner import FakeStateOwner
 from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
@@ -55,7 +61,9 @@ class _Observability:
     """The dispatch step over fakes, each notification timed: an alert is one; the health recorder
     logs apart, as its own module's logger does."""
 
-    def __init__(self, fake_time: FakeTime) -> None:
+    def __init__(
+        self, fake_time: FakeTime, *, subscribers: Sequence[HealthSubscriber] = ()
+    ) -> None:
         self.logger = FakeLogger()
         self.notifier = FakeTimedNotifier(fake_time)
         self.dispatcher = ObservabilityDispatcher(
@@ -69,7 +77,7 @@ class _Observability:
             observability_dispatcher=self.dispatcher, node_id=_NODE_ID
         )
         self.health_recorder = HealthRecorder(
-            logger=self.health_logger, subscribers=(translator.translate,)
+            logger=self.health_logger, subscribers=(translator.translate, *subscribers)
         )
 
 
@@ -469,6 +477,7 @@ def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
         run_state_reader=run_state,
         monotonic_clock=monotonic_clock,
         health_recorder=observability.health_recorder,
+        restart_policy=RestartPolicy(owners={}, logger=FakeLogger()),
         logger=logger,
     )
 
@@ -488,3 +497,108 @@ def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
 
     message = "status reading of amuled: amuleapi refused the admin password"
     assert logger.lines == [LoggedLine(level="warning", message=message)] * 5
+
+
+class _BrokenWork(Work):
+    """Raises a bug at each turn, its turns ``wait`` apart."""
+
+    def __init__(self, *, monotonic_clock: FakeLoopMonotonicClock, wait: timedelta) -> None:
+        self._monotonic_clock = monotonic_clock
+        self._wait = wait
+
+    def __str__(self) -> str:
+        return "broken"
+
+    async def wait_for_next_turn(self) -> None:
+        await self._monotonic_clock.sleep(self._wait)
+
+    async def run_once(self) -> None:
+        raise RuntimeError("bug")
+
+
+class _OwnedSensor:
+    """A status sensor over scripted readings and a work raising a bug ``broken_every``, beside
+    it on the Kad channel, one owner owning their components, each restart adding both anew over
+    the same client and components."""
+
+    def __init__(
+        self, loop: VirtualLoop, *readings: _Reading, broken_every: timedelta | None = None
+    ) -> None:
+        self._loop = loop
+        self._client = FakeStatusClient(list(readings))
+        self._monotonic_clock = FakeLoopMonotonicClock(loop)
+        self._broken_every = broken_every
+        self.client_component = client_component(_AMULED)
+        self.channel_components = {
+            channel: channel_component(client_name=_AMULED, channel=channel)
+            for channel in _CHANNELS
+        }
+        self._sensor_component = status_sensor_component(_AMULED)
+        self.owner = FakeStateOwner("client amuled", add_works=self._add_works)
+        owned: list[Component] = [self._sensor_component, *self.channel_components.values()]
+        policy = RestartPolicy(owners=dict.fromkeys(owned, self.owner), logger=FakeLogger())
+        self.observability = _Observability(FakeTime(), subscribers=(policy,))
+        self._run_state = FakeRunStateStore()
+        self._supervisor = Supervisor(
+            run_state_reader=self._run_state,
+            monotonic_clock=self._monotonic_clock,
+            health_recorder=self.observability.health_recorder,
+            restart_policy=policy,
+            logger=FakeLogger(),
+        )
+
+    def run_for(self, seconds: float) -> None:
+        self._loop.call_later(seconds, self._run_state.set_shutdown_requested)
+        self._loop.run_until_complete(
+            self._supervisor.supervise(self._works(), arm_shutdown_bound=lambda: None)
+        )
+
+    def _add_works(self, _state: object) -> None:
+        for supervised in self._works():
+            self._supervisor.add(supervised)
+
+    def _works(self) -> list[SupervisedWork]:
+        sensor = StatusSensor(
+            client_name=_AMULED,
+            client=self._client,
+            wall_clock=FakeLoopWallClock(self._loop),
+            monotonic_clock=self._monotonic_clock,
+            observability_dispatcher=self.observability.dispatcher,
+            status_reading_writer=FakeStatusReadingStore((_AMULED,)),
+            health_recorder=self.observability.health_recorder,
+            client_component=self.client_component,
+            channel_components=self.channel_components,
+            download_tracking_component=None,
+        )
+        hour = timedelta(hours=1)
+        works = [SupervisedWork(work=sensor, time_limit=hour, feeds=(self._sensor_component,))]
+        if self._broken_every is not None:
+            broken = _BrokenWork(monotonic_clock=self._monotonic_clock, wait=self._broken_every)
+            kad = self.channel_components[Channel("kad")]
+            works.append(SupervisedWork(work=broken, time_limit=hour, feeds=(kad,)))
+        return works
+
+
+def test_a_client_restart_under_an_open_alert_neither_sends_it_again_nor_ends_it(
+    virtual_loop: VirtualLoop,
+) -> None:
+    off = _status(kad=(False, None))
+    # Its third bug at 600 s restarts the client, the alert open since the sixth reading.
+    owned = _OwnedSensor(virtual_loop, *[off] * 30, broken_every=timedelta(seconds=200))
+
+    owned.run_for(600.0 + 7 * 60.0 + 1.0)  # seven readings after the restart, all failed
+
+    assert owned.owner.attempts == [600.0]
+    notifications = owned.observability.notifier.notifications
+    assert [notification for _, notification in notifications] == [
+        _warning("amuled kad: off its network for 5 min")
+    ]
+
+
+def test_amule_unreachable_fails_the_client_s_condition_and_restarts_nothing(
+    virtual_loop: VirtualLoop,
+) -> None:
+    owned = _OwnedSensor(virtual_loop, *[_DOWN] * 20)
+    owned.run_for(19 * 60.0 + 1.0)
+    assert owned.owner.attempts == []
+    assert owned.client_component.health_of(CLIENT_UNREACHABLE) is Health.FAILING

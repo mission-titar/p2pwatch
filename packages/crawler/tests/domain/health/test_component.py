@@ -76,3 +76,27 @@ def test_a_component_reads_the_sources_of_its_conditions_alone() -> None:
     component = _component()
     assert (component.reads(_ANSWERS), component.reads(_FIELDS)) == (True, True)
     assert component.reads(OutcomeSource(name="the turns")) is False
+
+
+def test_a_component_gives_each_condition_s_health_and_none_for_one_it_does_not_carry() -> None:
+    component = _component()
+    for _ in range(3):
+        component.record(Outcome.declared(_NoAnswer()), by=_ANSWERS)
+    unworn = HealthCondition(name="unworn", source=_ANSWERS, counting=_NoAnswer)
+    assert component.health_of(_NOT_ANSWERING) is Health.FAILING
+    assert component.health_of(_BAD_FIELD) is Health.UNKNOWN
+    assert component.health_of(unworn) is None
+
+
+def test_emptying_the_windows_of_a_source_leaves_the_other_sources_windows() -> None:
+    component = _component()
+    for _ in range(3):
+        component.record(Outcome.declared(_NoAnswer()), by=_ANSWERS)
+        component.record(Outcome.declared(_BadField()), by=_FIELDS)
+
+    component.empty_windows(of=_ANSWERS)
+
+    assert component.health_of(_NOT_ANSWERING) is Health.UNKNOWN
+    assert component.health_of(_BAD_FIELD) is Health.FAILING
+    # Emptied: three new failures are needed to fail again.
+    assert component.record(Outcome.declared(_NoAnswer()), by=_ANSWERS) == ()
