@@ -3,10 +3,13 @@
 The works share one simulated time, so these tests run on the virtual-time loop.
 """
 
+import json
 from datetime import timedelta
+from typing import Protocol
 
 import pytest
 
+from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import SqliteDecisionStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
@@ -17,8 +20,9 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.keyword_search import KeywordSearch
-from p2pwatch.application.steps.search_worker import SearchWorker
-from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
+from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
+from p2pwatch.composition.turn_time_limits import AmuleTurnTimeLimits
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -30,19 +34,26 @@ from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonoto
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.virtual_time import EPOCH, VirtualLoop
+from tests.support.virtual_time import EPOCH, MONOTONIC_EPOCH, VirtualLoop
 
 _NODE_ID = NodeId("n1")
 _HOUR = 3600.0
+_DAY = timedelta(days=1)
 _POLICY = BackoffPolicy(
     base_seconds=60.0,
     cap_seconds=600.0,
     factor=2.0,
     jitter_ratio=0.0,
 )
+
+
+class _TimeLimitOf(Protocol):
+    def __call__(self, keyword: Keyword, /, *, channel: Channel) -> timedelta: ...
 
 
 class _Searches:
@@ -71,7 +82,13 @@ class _Searches:
             backoff_state_reader=self.state,
         )
 
-    def works(self, client: SearchClient, *, keywords: list[str]) -> list[KeywordSearch]:
+    def works(
+        self,
+        client: SearchClient,
+        *,
+        keywords: list[str],
+        time_limit_of: _TimeLimitOf = lambda _keyword, *, channel: _DAY,
+    ) -> list[SupervisedWork]:
         """One work per channel and keyword, in that order, as the composition enumerates them."""
         dispatcher = ObservabilityOverFakes().dispatcher
         file_judge = FileJudge(
@@ -104,12 +121,15 @@ class _Searches:
             backoff=self.backoff, backoff_state_writer=self.state, logger=FakeLogger()
         )
         return [
-            KeywordSearch(
-                keyword=Keyword(keyword),
-                channel=channel,
-                search_worker=worker,
-                backoff_saver=backoff_saver,
-                monotonic_clock=self.monotonic_clock,
+            SupervisedWork(
+                work=KeywordSearch(
+                    keyword=Keyword(keyword),
+                    channel=channel,
+                    search_worker=worker,
+                    backoff_saver=backoff_saver,
+                    monotonic_clock=self.monotonic_clock,
+                ),
+                time_limit=time_limit_of(Keyword(keyword), channel=channel),
             )
             for channel in worker.channels
             for keyword in keywords
@@ -121,15 +141,18 @@ class _Searches:
         *,
         client: SearchClient,
         keywords: list[str],
+        time_limit_of: _TimeLimitOf = lambda _keyword, *, channel: _DAY,
+        logger: FakeLogger | None = None,
     ) -> None:
         run_state = FakeRunStateStore()
         self.loop.call_later(seconds, run_state.set_shutdown_requested)
+        works = self.works(client, keywords=keywords, time_limit_of=time_limit_of)
         self.loop.run_until_complete(
             Supervisor(
                 run_state_reader=run_state,
                 monotonic_clock=self.monotonic_clock,
-                logger=FakeLogger(),
-            ).supervise(self.works(client, keywords=keywords), arm_shutdown_bound=lambda: None)
+                logger=logger or FakeLogger(),
+            ).supervise(works, arm_shutdown_bound=lambda: None)
         )
 
 
@@ -258,4 +281,57 @@ def test_the_supervisor_names_the_work_after_its_keyword_client_and_channel(
     searches: _Searches,
 ) -> None:
     [work] = searches.works(FakeTimedSearchClient({Channel("kad"): 30.0}), keywords=["keroro"])
-    assert str(work) == "search 'keroro' on amuled/kad"
+    assert str(work.work) == "search 'keroro' on amuled/kad"
+
+
+def test_ten_keywords_queued_on_the_clients_ed2k_lock_stay_within_their_time_limits(
+    searches: _Searches,
+) -> None:
+    # Each search held for its budget; requests of 10 s at most, so the limit is short enough
+    # that one counting no queue would cut the last keywords' turns.
+    keywords = [f"keroro {number:02}" for number in range(1, 11)]
+    request_bound = timedelta(seconds=10)
+    api = FakeAmuleApi(monotonic_clock=searches.monotonic_clock, progress={"state": "running"})
+    store = FakeSearchStartStore()
+    client = AmuleApiClient(
+        "amuled.test",
+        client_name=ClientName("amuled"),
+        port=4711,
+        password=PASSWORD,
+        timeout_seconds=10.0,
+        request_bound_seconds=request_bound.total_seconds(),
+        page_size=500,
+        progress_poll_interval=timedelta(seconds=5),
+        monotonic_clock=searches.monotonic_clock,
+        wall_clock=searches.wall_clock,
+        search_start_writer=store,
+        search_start_reader=store,
+        transport_factory=api.transport,
+    )
+    limits = AmuleTurnTimeLimits(
+        request_bound=request_bound,
+        search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
+        notification_timeout=timedelta(seconds=5),
+        keywords=tuple(Keyword(keyword) for keyword in keywords),
+    )
+    logger = FakeLogger()
+
+    searches.run_for(
+        3000.0, client=client, keywords=keywords, time_limit_of=limits.of_search, logger=logger
+    )
+    searches.loop.run_until_complete(client.close())
+
+    ed2k_starts = [query for _, query in _starts(api, search_type="global")]
+    assert sorted(set(ed2k_starts)) == keywords  # every keyword through the queue
+    assert len(ed2k_starts) >= 2 * len(keywords)
+    assert logger.lines == []  # no turn past its limit, no bug
+
+
+def _starts(api: FakeAmuleApi, *, search_type: str) -> list[tuple[float, str]]:
+    """Every ``POST /search`` of one type: when, and for which query."""
+    return [
+        ((moment - MONOTONIC_EPOCH).total_seconds(), json.loads(request.content)["query"])
+        for moment, request in api.calls
+        if request.url.path == "/api/v1/search"
+        and json.loads(request.content)["type"] == search_type
+    ]

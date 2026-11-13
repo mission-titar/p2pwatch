@@ -16,7 +16,7 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
@@ -27,6 +27,7 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
+from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
@@ -121,14 +122,14 @@ class _Crawl:
             download_enabled=download_enabled,
             supervisor=Supervisor(
                 run_state_reader=self.run_state,
-                monotonic_clock=self.fake_time.monotonic,
+                monotonic_clock=FakeBlockingMonotonicClock(),  # no limit expires
                 logger=FakeLogger(),
             ),
             logger=self.logger,
         )
 
-    def _work(self, name: str) -> Work:
-        return _StartedWork(name, crawl=self)
+    def _work(self, name: str) -> SupervisedWork:
+        return SupervisedWork(work=_StartedWork(name, crawl=self), time_limit=timedelta(days=1))
 
     def work_started(self, name: str) -> None:
         self.steps.append(f"{name}, {len(self.observability.logger.lines)} event(s) out")

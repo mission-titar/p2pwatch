@@ -772,14 +772,18 @@ are settled under "Lot 4b, settled at its start", below.)
     the eD2k-then-Kad cut leaving its first part at about 570 lines and 24 files.
 - **Block 47**: each work's time limit, the turn raced against `MonotonicClock.sleep` with
   `asyncio.wait(FIRST_COMPLETED)`, as `download_loop.py` does, a turn past it a `TurnPastItsLimit`, recorded as a
-  `Bug`. Each limit is the sum of the bounds on its turn's path, measured on `efba50c5` (`S` the 60 s start spacing,
+  `Bug`. (Corrected: the race in a `TaskGroup` whose expiry task cancels the turn, which runs in the task that
+  waited for it: a turn in a task of its own started one loop iteration after its wait, so a search could start on a
+  backoff another work set in between, which two tests of `test_keyword_search.py` caught; the race's end suspends
+  every turn, so the yield after it is removed.) Each limit is the sum of the bounds on its turn's path, measured on `efba50c5` (`S` the 60 s start spacing,
   `B` the 120 s search budget, `N` `notification_timeout_seconds`, `K` the deduplicated keywords, `K_w` those
   sharing one Kad word, `c` one amuleapi call: a login, the request, a re-login and a resend on a 401, so four
   requests under block 45's bound and two waits on the login lock), plus a fixed allowance of 5 minutes for what
   grows with live counts no setting bounds (section 6):
   - the status reading: `2c + 5N`;
   - an eD2k search: `(K-1)·max(S, B+2c) + S + B + 2c`, every keyword's turn waiting through the others' on the
-    client's eD2k lock; a Kad search: `K_w·S + 2B + 3c`;
+    client's eD2k lock; a Kad search: `K_w·S + 2B + 3c`; (Corrected: `S + B + 3c` and `2B + 4c`, the answer's first
+    page read after the eD2k lock, a Kad widening before each poll's sleep);
   - download tracking and source tracking: `2c + N` each, one page of each list and one notification, the allowance
     covering the other pages, the starts of unlisted downloads, the sources and their notifications;
   - the webui's liveness turn: the allowance alone, no await in it.
@@ -843,7 +847,7 @@ decision or rule it names, the operator's, or the lead's where its row says so.
 | 30 to 38 | the order of the supervisor's blocks | the preparation (each loop a work, behaviour unchanged), then the swap, then the behaviour (block 40) | the operator, 2026-11-11, so no two supervisors run side by side (Beck: make the change easy, then make the easy change) |
 | 30 | how a work runs before the swap | one concrete `Work.run()`, and `LoopSupervisor` renamed `Supervisor` | the lead's: one driving loop written once, not one per work, and one supervising class all along; block 38 moves the loop into the supervisor |
 | 30 to 38 | the wait and the first turn | the wait before every turn, the first included, from the work's own state | today's order (`search_task_runner.py:64-66`): a backoff restored by `resume_waits` delays the first search |
-| 30, 38 | the yield after a turn | kept, in the turn loop | a turn that never suspends must not starve the loop (`search_task_runner.py:70-71`) |
+| 30, 38 | the yield after a turn | kept, in the turn loop (Corrected: removed by block 47, the race's end suspending every turn) | a turn that never suspends must not starve the loop (`search_task_runner.py:70-71`) |
 | 33, 34 | the download split | two works, each reading the client's list | the operator, 2026-11-11: a skipped sources round would count as a success, about ten per real round |
 | 34 | source tracking's interval | start to start, as today | `source_watcher.py:85-91` |
 | 36 | where the search works are enumerated | the composition (`dedupe_keywords`, `client.channels()`), the owner reusing it | D5, no factory leaves the composition root |

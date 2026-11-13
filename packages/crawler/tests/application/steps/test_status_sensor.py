@@ -13,7 +13,7 @@ from p2pwatch.application.steps.health_event_translator import HealthEventTransl
 from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_sensor import StatusSensor
-from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
@@ -420,7 +420,12 @@ def test_a_password_refused_while_the_node_runs_is_a_declared_outcome_each_turn(
     )
 
     # Returns at the stop, no ``ExceptionGroup``: the node runs on.
-    virtual_loop.run_until_complete(supervisor.supervise([sensor], arm_shutdown_bound=lambda: None))
+    virtual_loop.run_until_complete(
+        supervisor.supervise(
+            [SupervisedWork(work=sensor, time_limit=timedelta(hours=1))],
+            arm_shutdown_bound=lambda: None,
+        )
+    )
 
     message = "status reading of amuled: amuleapi refused the admin password"
     assert logger.lines == [LoggedLine(level="warning", message=message)] * 5

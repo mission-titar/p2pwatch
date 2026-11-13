@@ -140,11 +140,13 @@ Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k
 Les recherches, le statut, le suivi des téléchargements et celui des sources sont des `Work`, que
 le `Supervisor` fait tourner, chacun dans sa tâche d'un `TaskGroup` : avant chaque tour, le premier
 compris, il attend ce que l'état propre du work lui dit (`wait_for_next_turn()`), puis lui fait
-prendre son tour (`run_once()`) et cède la boucle d'événements. Un tour qui lève échoue seul, les
-autres works continuent : un échec déclaré (`DeclaredFailure`, la base de tout échec qu'un port
-piloté déclare) est journalisé en une ligne, toute autre exception est un bug, journalisé avec sa
-trace, et le tour suivant de ce work attend alors au moins un plancher de 60 s (le plus tardif du
-plancher et de son attente propre). À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
+prendre son tour (`run_once()`) et cède la boucle d'événements. Chaque work a sa limite de temps,
+la somme des bornes sur le chemin de son tour plus une marge fixe de 5 minutes
+(`composition/turn_time_limits.py`) : un tour qui la dépasse est annulé, journalisé en une ligne,
+et compte comme un bug. Un tour qui lève échoue seul, les autres works continuent : un échec
+déclaré (`DeclaredFailure`, la base de tout échec qu'un port piloté déclare) est journalisé en une
+ligne, toute autre exception est un bug, journalisé avec sa trace, et le tour suivant de ce work
+attend alors au moins un plancher de 60 s (le plus tardif du plancher et de son attente propre). À l'arrêt demandé, le superviseur arme le délai d'arrêt, puis annule
 chaque work. Une recherche attend la fin du
 backoff de son client et de son canal (§5) ; le statut, le reste de la minute depuis la fin de son
 dernier tour ; le suivi des téléchargements, rien au premier tour, puis
