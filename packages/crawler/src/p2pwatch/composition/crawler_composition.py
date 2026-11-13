@@ -7,10 +7,10 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
-  session the status sensor and the download loop share.
+  session the status sensor and download tracking share.
 
-Loops: the search tasks (``SearchTaskRunner``), the status sensor's work, and the download loop when
-configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
+Loops: the search tasks (``SearchTaskRunner``), the status sensor's work, and download tracking's
+when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
 shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
@@ -98,7 +98,6 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
-from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
@@ -480,7 +479,7 @@ class CrawlerComposition(CrawlerRunner):
                     ).translate,
                 ),
             )
-            # The status sensor and the download loop share the search session: one per node.
+            # The status sensor and download tracking share the search session: one per node.
             status_sensor = StatusSensor(
                 client_name=_AMULE_CLIENT_NAME,
                 client=client,
@@ -571,16 +570,12 @@ class CrawlerComposition(CrawlerRunner):
                         node_id=node_id,
                         logger=StdlibLogger(SourceWatcher.__module__),
                     ),
-                    logger=StdlibLogger(DownloadCycle.__module__),
-                )
-                download_loop = DownloadLoop(
-                    download_cycle=download_cycle,
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     monotonic_clock=monotonic_clock,
                     waker=waker,
-                    run_state_reader=run_state_store,
+                    logger=StdlibLogger(DownloadCycle.__module__),
                 )
-                loops.append(download_loop.run)
+                loops.append(download_cycle.run)
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,

@@ -26,8 +26,6 @@ _EXEMPTIONS: dict[str, str] = {
     "::FakeObservationReader": "a stub: its reads return what its test gives it",
     "crawler/tests/fakes/adapters/driven/fake_decision_reader.py"
     "::FakeDecisionReader": "a stub: its candidates are what its test gives it",
-    "crawler/tests/fakes/adapters/driven/fake_shutdown_during_cycle_decision_reader.py"
-    "::FakeShutdownDuringCycleDecisionReader": "a stub requesting the shutdown on its first read",
     "crawler/tests/fakes/adapters/driven/fake_source_point_store.py"
     "::FakeSourcePointStore": "a stub and a spy: its reads return what its test gives it",
     "crawler/tests/fakes/adapters/driven/fake_coverage_reader.py"

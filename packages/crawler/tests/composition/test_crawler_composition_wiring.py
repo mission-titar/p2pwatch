@@ -305,7 +305,7 @@ def _has_read_the_sources_then_listed_again(api: FakeAmuleApi) -> bool:
 
 
 @pytest.mark.asyncio
-async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_nodes_id(
+async def test_download_tracking_records_a_tracked_downloads_sources_under_the_nodes_id(
     tmp_path: Path,
 ) -> None:
     catalog = open_catalog(tmp_path / "catalog.db")
