@@ -3,11 +3,13 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import ConditionWindow, Health, HealthCondition
 from p2pwatch.domain.health.outcome import TURNS, Outcome, OutcomeSource
 from p2pwatch.domain.identifiers import Channel, ClientName
+from p2pwatch.domain.search.searches_failed import SEARCHES
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
@@ -121,7 +123,9 @@ def test_a_client_s_component_is_judged_on_its_unreachable_condition() -> None:
     ) == ["unreachable"]
 
 
-def test_a_channel_s_component_is_judged_on_its_two_fields_and_its_turns_bugs() -> None:
+def test_a_channel_s_component_is_judged_on_its_two_fields_its_searches_and_its_turns_bugs() -> (
+    None
+):
     component = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
     assert (component.name, component.labels) == (
         "channel amuled kad",
@@ -131,5 +135,6 @@ def test_a_channel_s_component_is_judged_on_its_two_fields_and_its_turns_bugs() 
         component,
         (STATUS_CONNECTED_FIELD, Outcome.declared(ChannelNotConnected())),
         (STATUS_CONNECTABLE_FIELD, Outcome.declared(ChannelNotConnectable())),
+        (SEARCHES, Outcome.declared(SearchFailedError("refused"))),
         (TURNS, Outcome.bug("KeyError('channels')")),
-    ) == ["not connected", "not connectable", "bugs"]
+    ) == ["not connected", "not connectable", "searches failed", "bugs"]

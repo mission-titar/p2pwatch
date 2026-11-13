@@ -515,6 +515,12 @@ class CrawlerComposition(CrawlerRunner):
                 channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
                 for channel in client.channels()
             }
+            # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
+            download_config = crawler_config.download
+            # Its turns' bugs and the status reading's connected channels feed it.
+            download_tracking = (
+                None if download_config is None else download_tracking_component(_AMULE_CLIENT_NAME)
+            )
             # The status sensor and download tracking share the search session: one per node.
             status_sensor = StatusSensor(
                 client_name=_AMULE_CLIENT_NAME,
@@ -526,6 +532,7 @@ class CrawlerComposition(CrawlerRunner):
                 health_recorder=health_recorder,
                 client_component=client_component(_AMULE_CLIENT_NAME),
                 channel_components=channel_components,
+                download_tracking_component=download_tracking,
             )
             keywords = dedupe_keywords(crawler_config.search.keywords)
             time_limits = AmuleTurnTimeLimits(
@@ -547,6 +554,8 @@ class CrawlerComposition(CrawlerRunner):
                         search_worker=worker,
                         backoff_saver=backoff_saver,
                         monotonic_clock=monotonic_clock,
+                        health_recorder=health_recorder,
+                        channel_component=channel_components[channel],
                     ),
                     time_limit=time_limits.of_search(keyword, channel=channel),
                     feeds=(
@@ -568,11 +577,9 @@ class CrawlerComposition(CrawlerRunner):
                 )
             )
 
-            # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its works
-            # share the catalog's stores and ``local_connection`` (one writer, on the event loop),
-            # and the search session.
-            download_config = crawler_config.download
-            if download_config is not None:
+            # The download works share the catalog's stores and ``local_connection`` (one writer,
+            # on the event loop), and the search session.
+            if download_config is not None and download_tracking is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
                 source_point_store = SqliteSourcePointStore(catalog_connection)
                 download_labeler = DownloadLabeler(
@@ -625,7 +632,7 @@ class CrawlerComposition(CrawlerRunner):
                     SupervisedWork(
                         work=download_cycle,
                         time_limit=time_limits.of_tracking(),
-                        feeds=(download_tracking_component(_AMULE_CLIENT_NAME),),
+                        feeds=(download_tracking,),
                     )
                 )
                 source_watcher = SourceWatcher(

@@ -2,6 +2,7 @@ from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import Health
 from p2pwatch.domain.health.outcome import TURNS, Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
+from p2pwatch.domain.status_reading import STATUS_CONNECTED_CHANNELS, NoChannelConnected
 from p2pwatch.domain.work_components import (
     download_tracking_component,
     keyword_search_component,
@@ -39,3 +40,16 @@ def test_the_client_s_other_works_components_are_named_by_their_work_and_client(
         for name in ("status sensor amuled", "download tracking amuled", "source tracking amuled")
     ]
     assert all(_fails_on_three_bugs(component) for component in components)
+
+
+def test_download_tracking_fails_at_six_readings_of_a_client_connected_to_no_network() -> None:
+    component = download_tracking_component(_AMULED)
+    transitions = [
+        component.record(Outcome.declared(NoChannelConnected()), by=STATUS_CONNECTED_CHANNELS)
+        for _ in range(6)
+    ]
+    # Never before the channels' "not connected" it sums up: their band.
+    assert [[(t.condition.name, t.current) for t in each] for each in transitions] == [
+        *[[]] * 5,
+        [("connected to no network", Health.FAILING)],
+    ]
