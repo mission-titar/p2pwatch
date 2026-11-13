@@ -1,5 +1,5 @@
 """``plan_observability`` is an exhaustive match: one case per event + each conditional branch
-(a rise or not, first_occurrence true/false)."""
+(a rise or not)."""
 
 from datetime import timedelta
 

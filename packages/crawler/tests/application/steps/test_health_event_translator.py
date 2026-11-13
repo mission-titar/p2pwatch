@@ -6,8 +6,10 @@ import pytest
 from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.declared_failure import DeclaredFailure
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW, FreeSpaceBelowFloor
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_condition import BUGS, Health, HealthCondition
+from p2pwatch.domain.health.outcome import Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -37,6 +39,7 @@ async def _notified(
     current: Health,
     condition: HealthCondition = CLIENT_UNREACHABLE,
     component: Component = _CLIENT,
+    outcome: Outcome | None = None,
 ) -> list[Notification]:
     notifier = FakeNotifier()
     translator = HealthEventTranslator(
@@ -50,7 +53,11 @@ async def _notified(
     )
     await translator.translate(
         HealthTransition(
-            component=component, condition=condition, previous=previous, current=current
+            component=component,
+            condition=condition,
+            previous=previous,
+            current=current,
+            outcome=outcome or Outcome.success(),
         )
     )
     return [notification for _, notification in notifier.calls]
@@ -150,6 +157,35 @@ async def test_a_condition_without_an_event_of_today_sends_nothing(
     assert (
         await _notified(
             previous=previous, current=current, condition=condition, component=component
+        )
+        == []
+    )
+
+
+_DOWNLOAD_TRACKING = download_tracking_component(ClientName("fake"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("previous", [U, H])
+async def test_the_disk_entering_degraded_alerts_with_the_reading_that_entered_it(
+    previous: Health,
+) -> None:
+    low = FreeSpaceBelowFloor(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30)
+    assert await _notified(
+        previous=previous,
+        current=D,
+        condition=DISK_SPACE_LOW,
+        component=_DOWNLOAD_TRACKING,
+        outcome=Outcome.declared(low),
+    ) == [_warning("download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("previous", [U, D])
+async def test_the_disk_healthy_sends_nothing_as_today(previous: Health) -> None:
+    assert (
+        await _notified(
+            previous=previous, current=H, condition=DISK_SPACE_LOW, component=_DOWNLOAD_TRACKING
         )
         == []
     )

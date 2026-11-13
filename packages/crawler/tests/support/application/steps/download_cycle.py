@@ -14,15 +14,19 @@ from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Keyword, NodeId
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.work_components import download_tracking_component
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
@@ -114,6 +118,7 @@ def build_cycle(
     poll_interval_seconds: float = 30.0,
     waker: FakeWaker | None = None,
     wait_clock: MonotonicClock | None = None,
+    tracking_component: Component | None = None,
 ) -> DownloadCycle:
     fake_time = fake_time or FakeTime()
     wall_clock = wall_clock or fake_time.wall
@@ -122,6 +127,15 @@ def build_cycle(
     targets = targets if targets is not None else TARGETS
     observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
     logger = logger or FakeLogger()
+    # As the composition: the free-space reading's transitions become today's disk alert.
+    health_recorder = HealthRecorder(
+        logger=FakeLogger(),
+        subscribers=(
+            HealthEventTranslator(
+                observability_dispatcher=observability_dispatcher, node_id=NODE_ID
+            ).translate,
+        ),
+    )
     download_labeler = DownloadLabeler(
         observation_reader=observation_reader,
         decision_reader=decision_reader,
@@ -153,7 +167,10 @@ def build_cycle(
             download_tracker=download_tracker,
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
-            node_id=NODE_ID,
+            health_recorder=health_recorder,
+            download_tracking_component=(
+                tracking_component or download_tracking_component(ClientName("amuled"))
+            ),
             logger=logger,
         ),
         download_starter=DownloadStarter(

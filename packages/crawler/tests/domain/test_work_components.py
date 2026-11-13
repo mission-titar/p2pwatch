@@ -1,3 +1,4 @@
+from p2pwatch.domain.download.disk_space import FREE_SPACE_READING, FreeSpaceBelowFloor
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import Health
 from p2pwatch.domain.health.outcome import TURNS, Outcome
@@ -52,4 +53,13 @@ def test_download_tracking_fails_at_six_readings_of_a_client_connected_to_no_net
     assert [[(t.condition.name, t.current) for t in each] for each in transitions] == [
         *[[]] * 5,
         [("connected to no network", Health.FAILING)],
+    ]
+
+
+def test_download_tracking_is_degraded_by_a_free_space_reading_below_the_floor() -> None:
+    component = download_tracking_component(_AMULED)
+    low = Outcome.declared(FreeSpaceBelowFloor(free_bytes=500, min_free_bytes=600))
+    transitions = component.record(low, by=FREE_SPACE_READING)
+    assert [(t.condition.name, t.current) for t in transitions] == [
+        ("disk space low", Health.DEGRADED)
     ]
