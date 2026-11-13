@@ -99,7 +99,7 @@ class TestWebuiThreadOwner(StateOwnerContract):
 
 
 def test_the_owner_is_named_after_its_thread() -> None:
-    assert str(_Owned().owner) == "webui thread"
+    assert str(_Owned().owner) == "owner of the webui"
 
 
 @pytest.mark.asyncio
