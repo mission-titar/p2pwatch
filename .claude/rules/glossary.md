@@ -66,6 +66,14 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `notification` | `Notification`, what a `Notifier` sends an audience, carrying its node: a `RelayedLogLine` relays an event's log line unchanged; a community one is a typed kind, a `TierRise`, a `SourceAlert` or a `CompletedDownload`, which the notifier writes out | a log line, which an operations notification only relays |
 | `node metric` | a measurement of the node's own running (searches done, free disk, the crawler up), which Prometheus reads: a `NodeCounter` or a `NodeGauge` names one, with its description and its label class (`ChannelLabels`, `ClientLabels`, `DecisionLabels`, `SourceAlertLabels`, or none); `CounterIncrement` and `GaugeSetting` are what the policy writes, `NodeMetricSample` is one series and its current value | a bare `metric`; a file's or a source's figures |
+| `declared failure` | `DeclaredFailure`, a failure the code expects, such as aMule not answering (`ClientNotAnswering`), as opposed to a bug | an `expected error` |
+| `outcome` | `Outcome`, whether one attempt worked, and if not, why | `result` |
+| `health` | `Health`, what a condition says of its part: unknown at first, then healthy or failing | `status`, a client's |
+| `health condition` | `HealthCondition`, one way a part can be unwell, such as "aMule does not answer": failing after 3 failures in a row, healthy again once fewer than 2 of the last 10 failed, each count a `Threshold` | a bare `condition`, a token expression |
+| `component` | `Component`, a part of the node whose health is tracked, such as the aMule client | `unit`, `service` |
+| `health transition` | `HealthTransition`, a change in one part's health, such as the aMule client going from healthy to failing | `event`, the observability's |
+| `health recorder` | `HealthRecorder`, updates a part's health with each new outcome, logs every change, and passes the change on to the alerts | `registry` |
+| `health alerts` | `HealthAlerts`, sends the client's alerts when its health changes: "amuled unreachable for 2 min" when it starts failing, "amuled reachable again" when it recovers | `translator` |
 | `inaccessible path` | `InaccessiblePathError`, a path the filesystem refuses to examine (removed, under a file, behind a directory it cannot search, its name too long): the declared failure of `FreeSpaceMeter` and `CatalogFinder` | a raw `OSError` past its adapter |
 | `config problem` | `ConfigProblem`, one problem of a config file: the file, the key or none, the message | a refusal, an error |
 | `schema` | a pydantic model of a config file as written, in the config adapter only: `CrawlerConfigSchema` | the domain object it builds |
