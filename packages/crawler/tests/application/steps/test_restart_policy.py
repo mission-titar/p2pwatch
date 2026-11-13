@@ -11,7 +11,7 @@ from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import BUGS
-from p2pwatch.domain.health.outcome import TURNS, Outcome
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.status_reading import (
     STATUS_CONNECTED_FIELD,
@@ -46,7 +46,7 @@ class _Policy:
 
     async def record(self, outcome: Outcome, *, on: Component, times: int) -> None:
         for _ in range(times):
-            await self.recorder.record(outcome, on=on, by=TURNS)
+            await self.recorder.record(outcome, on=on, by=UNITS_OF_WORK)
 
     async def fail(self, component: Component) -> None:
         await self.record(_BUG, on=component, times=3)
@@ -54,7 +54,7 @@ class _Policy:
     async def rebuild(self) -> None:
         """What the supervisor does once the owner's restart built it anew."""
         for component in self.policy.components_of(self.owner):
-            component.empty_windows(of=TURNS)
+            component.empty_windows(of=UNITS_OF_WORK)
         self.policy.rebuilt(self.owner)
 
     async def requested(self) -> list[StateOwner]:

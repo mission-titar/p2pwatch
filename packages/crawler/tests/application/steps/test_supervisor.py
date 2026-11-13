@@ -19,7 +19,7 @@ from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component, ComponentLabels
 from p2pwatch.domain.health.health_condition import BUGS, Health
-from p2pwatch.domain.health.outcome import TURNS, Outcome
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Outcome
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.status_reading import client_component
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
@@ -410,7 +410,7 @@ class _BugRecorder(Work):
         await asyncio.sleep(10.0)  # noqa: TID251
 
     async def run_once(self) -> None:
-        await self._recorder.record(Outcome.bug("KeyError('x')"), on=self._on, by=TURNS)
+        await self._recorder.record(Outcome.bug("KeyError('x')"), on=self._on, by=UNITS_OF_WORK)
 
 
 def _broken(component: Component) -> SupervisedWork:

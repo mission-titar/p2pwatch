@@ -1,5 +1,5 @@
 """A notification's declared failures, the services a notifier sends to, and each service's
-component, judged on its bugs and on its sends refused (spec v5 lot 4, D3, D10)."""
+component, judged on its bugs and on its sends failed (spec v5 lot 4, D3, D10)."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -11,16 +11,20 @@ from p2pwatch.domain.health.outcome import OutcomeSource
 from p2pwatch.domain.observability.policy import Audience
 
 
-class NotificationRefused(DeclaredFailure):
+class NotificationFailed(DeclaredFailure):
+    """A send that did not deliver its notification, refused or timed out."""
+
+
+class NotificationRefused(NotificationFailed):
     """A service refused a notification or failed to deliver it: the ``Notifier``'s failure."""
 
 
-class NotificationTimedOut(DeclaredFailure):
+class NotificationTimedOut(NotificationFailed):
     """A send past the notification timeout: a reason, never raised."""
 
 
 SENDS = OutcomeSource(name="a notification's success or declared failure")
-SENDS_REFUSED = HealthCondition(name="sends refused", source=SENDS, counting=NotificationRefused)
+SENDS_FAILED = HealthCondition(name="sends failed", source=SENDS, counting=NotificationFailed)
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -45,7 +49,7 @@ def notifier_components(
         service: Component(
             name=f"notifier {service}",
             labels=ComponentLabels(),
-            conditions=(BUGS, SENDS_REFUSED),
+            conditions=(BUGS, SENDS_FAILED),
         )
         for service in services
     }

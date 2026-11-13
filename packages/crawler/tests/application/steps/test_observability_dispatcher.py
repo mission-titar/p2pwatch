@@ -13,7 +13,7 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.health_condition import BUGS, Health
-from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Bug, Outcome, OutcomeSource
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.engine import DecisionRecord
@@ -27,7 +27,7 @@ from p2pwatch.domain.observability.node_metric import (
 from p2pwatch.domain.observability.notification import RelayedLogLine, TierRise
 from p2pwatch.domain.observability.notifier_outcomes import (
     SENDS,
-    SENDS_REFUSED,
+    SENDS_FAILED,
     NotificationRefused,
     NotificationService,
     NotificationTimedOut,
@@ -223,7 +223,7 @@ async def test_each_severity_logs_at_its_level(
 def _both(outcome: Outcome, *, on: Component = _COMMUNITY) -> list[_Recorded]:
     """A send's outcome as the dispatcher records it: by the bugs' source, then by the sends'."""
     return [
-        _Recorded(outcome=outcome, on=on, by=TURNS),
+        _Recorded(outcome=outcome, on=on, by=UNITS_OF_WORK),
         _Recorded(outcome=outcome, on=on, by=SENDS),
     ]
 
@@ -300,7 +300,7 @@ async def test_a_send_past_its_timeout_is_a_declared_outcome_logged_in_one_line(
     assert logger.lines[-1] == LoggedLine(
         level="warning", message="notification fake community: past its timeout of 0.01 s"
     )
-    assert [recorded.by for recorded in outcomes.recorded] == [TURNS, SENDS]
+    assert [recorded.by for recorded in outcomes.recorded] == [UNITS_OF_WORK, SENDS]
     for recorded in outcomes.recorded:
         assert isinstance(recorded.outcome.reason, NotificationTimedOut)
         assert str(recorded.outcome.reason) == "past its timeout of 0.01 s"
@@ -320,21 +320,21 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_logged_with_its_trac
         _Recorded(
             outcome=Outcome(reason=Bug(description="RuntimeError('canal mort')")),
             on=_COMMUNITY,
-            by=TURNS,
+            by=UNITS_OF_WORK,
         )
     ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("error", "bugs", "sends_refused", "failing"),
+    ("error", "bugs", "sends_failed", "failing"),
     [
-        (NotificationRefused("403"), Health.HEALTHY, Health.FAILING, "sends refused"),
+        (NotificationRefused("403"), Health.HEALTHY, Health.FAILING, "sends failed"),
         (KeyError("embeds"), Health.FAILING, Health.UNKNOWN, "bugs"),
     ],
 )
-async def test_three_bugs_fail_a_service_s_bugs_condition_three_refusals_its_sends_refused(
-    *, error: Exception, bugs: Health, sends_refused: Health, failing: str
+async def test_three_bugs_fail_a_service_s_bugs_condition_three_refusals_its_sends_failed(
+    *, error: Exception, bugs: Health, sends_failed: Health, failing: str
 ) -> None:
     notifier, health_logger = FakeRaisingNotifier(error), FakeLogger()
     components = notifier_components(notifier.services())
@@ -349,7 +349,7 @@ async def test_three_bugs_fail_a_service_s_bugs_condition_three_refusals_its_sen
     for _ in range(3):
         await dispatcher.dispatch(_COMPLETED)
     component = components[ONE_SERVICE_PER_AUDIENCE[0]]
-    assert (component.health_of(BUGS), component.health_of(SENDS_REFUSED)) == (bugs, sends_refused)
+    assert (component.health_of(BUGS), component.health_of(SENDS_FAILED)) == (bugs, sends_failed)
     # The log line, the conditions' one reader in lot 4b.
     assert health_logger.lines[-1] == LoggedLine(
         level="warning", message=f"notifier fake community, {failing}: unknown to failing"

@@ -11,7 +11,7 @@ from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.health.outcome import TURNS, Bug, Outcome, OutcomeSource
+from p2pwatch.domain.health.outcome import UNITS_OF_WORK, Bug, Outcome, OutcomeSource
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.node_metric import CounterIncrement
 from p2pwatch.domain.observability.notification import Notification
@@ -76,7 +76,7 @@ class ObservabilityDispatcher:
             ]
         for service, send in zip(services, sends, strict=True):
             component, outcome = self._service_components[service], send.result()
-            await self._record_outcome(outcome, on=component, by=TURNS)
+            await self._record_outcome(outcome, on=component, by=UNITS_OF_WORK)
             if not isinstance(outcome.reason, Bug):
                 await self._record_outcome(outcome, on=component, by=SENDS)
 

@@ -53,7 +53,7 @@ class _AlertRound:
 
 class SourceWatcher(Work):
     """Reads the sources of our downloads, records their points and alerts; owns the instant of
-    its last turn's start."""
+    its latest turn's start."""
 
     def __init__(
         self,
@@ -93,7 +93,7 @@ class SourceWatcher(Work):
         return "source tracking"
 
     async def wait_for_next_turn(self) -> None:
-        """Waits ``sources_interval`` since the last turn started, failed or not (source points
+        """Waits ``sources_interval`` since the latest turn started, failed or not (source points
         spec, D3), on the monotonic clock; nothing before the first."""
         if self._turn_started_at is None:
             return
