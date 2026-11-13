@@ -13,7 +13,7 @@ class OutcomeSource:
     name: str
 
 
-TURNS = OutcomeSource(name="the supervisor's outcome of a turn")
+TURNS = OutcomeSource(name="a unit of work's outcome: a supervised turn's, a notification's")
 
 
 @dataclass(kw_only=True, frozen=True)

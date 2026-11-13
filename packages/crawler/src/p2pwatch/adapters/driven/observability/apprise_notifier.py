@@ -7,9 +7,10 @@ to the first group and as is to the second, since apprise sends one message to e
 tag. A community kind's title, Markdown body and notify type are written here; a relayed log
 line is sent untitled, its severity mapped. Every message is markdown (a Discord embed) with
 every ``@`` neutralised, and both groups share an asset naming the node (spec
-discord-embed-notifications §4). No URL → natural no-op (apprise with no service returns
-``None``). ``apprise_factory`` builds a group: ``apprise.Apprise`` from the composition. The
-timeout/error absorption live in the dispatch step (E-D13).
+discord-embed-notifications §4). No URL → natural no-op (apprise with no service answers
+``NOMATCH``); a group whose services did not all take it raises ``NotificationRefused`` once both
+are sent. ``apprise_factory`` builds a group: ``apprise.Apprise`` from the composition. The
+timeout lives in the dispatch step (E-D13).
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
@@ -37,6 +38,7 @@ from p2pwatch.domain.observability.notification import (
     SourceAlertKind,
     TierRise,
 )
+from p2pwatch.domain.observability.notifier_outcomes import NotificationRefused
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 
@@ -125,6 +127,9 @@ def _message(notification: Notification) -> tuple[str, str, object]:
             assert_never(notification)
 
 
+# A group without a service for the audience sends nothing, and refuses nothing.
+_DELIVERED = (apprise.AppriseResultStatus.SUCCESS, apprise.AppriseResultStatus.NOMATCH)
+
 # apprise extracts "@word", "<@id>" and "<@&id>" from markdown into pings: a zero-width space breaks
 # every one of them, and p2pwatch never mentions anyone.
 _NO_MENTION = "@\u200b"
@@ -167,11 +172,16 @@ class AppriseNotifier(Notifier):
         node_id = notification.node_id
         prefixed_group, bare_group = self._groups(node_id)
         prefixed = f"[{node_id}] {title}".rstrip()
+        refused: list[str] = []
         for group, heading in ((prefixed_group, prefixed), (bare_group, title)):
-            await group.async_notify(
+            result = await group.async_notify(
                 title=heading.replace("@", _NO_MENTION),
                 body=body.replace("@", _NO_MENTION),
                 body_format=apprise.NotifyFormat.MARKDOWN,
                 notify_type=notify_type,
                 tag=audience.value,
             )
+            if result.status not in _DELIVERED:
+                refused.append(result.status.name)
+        if refused:
+            raise NotificationRefused(f"a service refused it ({', '.join(refused)})")

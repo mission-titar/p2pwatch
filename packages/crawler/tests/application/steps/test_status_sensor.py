@@ -21,6 +21,7 @@ from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.health_condition import Health
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
+from p2pwatch.domain.observability.notifier_outcomes import notifier_component
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     CLIENT_UNREACHABLE,
@@ -66,11 +67,17 @@ class _Observability:
     ) -> None:
         self.logger = FakeLogger()
         self.notifier = FakeTimedNotifier(fake_time)
+        self.health_recorder: HealthRecorder
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             node_metric_writer=FakeNodeMetricStore(),
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
+            # The composition's cycle: each alert's outcome recorded on the recorder sending it.
+            record_outcome=lambda outcome, *, on, by: self.health_recorder.record(
+                outcome, on=on, by=by
+            ),
+            notifier_component=notifier_component(),
         )
         self.health_logger = FakeLogger()
         translator = HealthEventTranslator(

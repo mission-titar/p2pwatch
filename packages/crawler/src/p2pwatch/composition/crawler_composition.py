@@ -145,6 +145,7 @@ from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
+from p2pwatch.domain.observability.notifier_outcomes import notifier_component
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
@@ -553,11 +554,18 @@ class CrawlerComposition(CrawlerRunner):
                 tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
                 apprise_factory=apprise.Apprise,
             )
+            # A cycle: the dispatcher records on the recorder, whose translator dispatches. The
+            # translator turns none of the notifier's transitions into an event, which bounds it.
+            health_recorder: HealthRecorder
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
                 notifier=notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
+                record_outcome=lambda outcome, *, on, by: health_recorder.record(
+                    outcome, on=on, by=by
+                ),
+                notifier_component=notifier_component(),
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)

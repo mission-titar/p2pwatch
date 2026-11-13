@@ -4,6 +4,7 @@ connectivity events, an alert on entering its band, its end only on a return to 
 import pytest
 
 from p2pwatch.application.steps.health_event_translator import HealthEventTranslator
+from p2pwatch.application.steps.health_recorder import HealthRecorder
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW, FreeSpaceBelowFloor
@@ -12,6 +13,7 @@ from p2pwatch.domain.health.health_condition import BUGS, Health, HealthConditio
 from p2pwatch.domain.health.outcome import Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
+from p2pwatch.domain.observability.notifier_outcomes import notifier_component
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.search.searches_failed import SEARCHES_FAILED
 from p2pwatch.domain.status_reading import (
@@ -48,6 +50,8 @@ async def _notified(
             node_metric_writer=FakeNodeMetricStore(),
             notifier=notifier,
             notification_timeout_seconds=5.0,
+            record_outcome=HealthRecorder(logger=FakeLogger(), subscribers=()).record,
+            notifier_component=notifier_component(),
         ),
         node_id=_NODE_ID,
     )
@@ -149,12 +153,14 @@ async def test_a_condition_no_event_names_sends_nothing() -> None:
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, download_tracking_component(ClientName("fake"))),
         (BUGS, webui_component()),
+        (BUGS, notifier_component()),  # so a failing notifier never notifies of itself
     ],
     ids=[
         "a channel's bugs",
         "a channel's searches failed",
         "connected to no network",
         "the webui's bugs",
+        "the notifier's bugs",
     ],
 )
 async def test_a_condition_without_an_event_of_today_sends_nothing(
