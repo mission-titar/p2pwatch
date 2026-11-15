@@ -99,7 +99,7 @@ class DownloadCycle(Work):
         mid-write.
 
         A ``ClientUnreachableError`` here does NOT dispatch ``ClientUnreachable``, unlike the
-        search tasks: the event is the searches'. Download tracking is single-client, so its
+        searches: the event is theirs. Download tracking is single-client, so its
         ``client=...`` label would say nothing, and its counter is shared with the search workers.
         The unavailability is handled by the next cycle's retry + the warning log. Intentional
         asymmetry.
