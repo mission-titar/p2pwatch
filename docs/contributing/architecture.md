@@ -134,20 +134,18 @@ flowchart TB
 Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k` (§9), et
 `crawler.yml` refuse une section `port_sync:`.
 
-Chaque boucle est une itération suivie d'un sommeil (`*_interval_seconds` depuis la config),
-supervisée par un `TaskGroup` (`Supervisor`) : une boucle qui crashe bruyamment annule ses sœurs
-(fail-fast), mais les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10,
-discipline de frontière).
-
-Les recherches, la lecture du statut, le suivi des téléchargements et celui des sources sont
-écrits comme des `Work` : une attente, puis un tour (`run_once()`), encore. L'attente vient avant
-chaque tour, le premier compris, et chaque `Work` la calcule depuis son propre état : pour une
-recherche, la fin du backoff de son client et de son canal, si bien qu'un backoff repris au
-démarrage retarde aussi la première (§5) ; pour le statut, ce qui reste de la minute depuis la fin
-de la lecture précédente, rien avant la première ; pour les téléchargements,
-`download.poll_interval_seconds` ou le réveil d'une décision, au premier venu, rien avant le premier
-tour ; pour les sources, ce qui reste de `download.sources_interval_seconds` depuis le début du tour
-précédent, rien avant le premier.
+Les recherches, la lecture du statut, le suivi des téléchargements et celui des sources sont des
+`Work` : une attente, puis un tour (`run_once()`), encore. Le `Supervisor` fait tourner chacun dans
+sa tâche d'un `TaskGroup` et cède la boucle d'événements après chaque tour. Un tour qui lève une
+exception annule tous les autres et arrête le nœud (fail-fast), mais les erreurs d'I/O *attendues*
+sont absorbées à l'intérieur d'un tour (voir §10, discipline de frontière). À l'arrêt demandé, il
+arme le délai d'arrêt, puis annule chaque `Work`. L'attente vient avant chaque tour, le premier
+compris, et chaque `Work` la calcule depuis son propre état : pour une recherche, la fin du backoff
+de son client et de son canal, si bien qu'un backoff repris au démarrage retarde aussi la première
+(§5) ; pour le statut, ce qui reste de la minute depuis la fin de la lecture précédente, rien avant
+la première ; pour les téléchargements, `download.poll_interval_seconds` ou le réveil d'une
+décision, au premier venu, rien avant le premier tour ; pour les sources, ce qui reste de
+`download.sources_interval_seconds` depuis le début du tour précédent, rien avant le premier.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -231,7 +229,7 @@ flowchart TB
   les trois fichiers et en liste chaque problème, résout le `node_id` dès `local.db` ouverte, câble
   les adapters concrets qu'elle décrit et donne le `node_id` à chaque étape qui l'écrit, puis lance
   `CrawlerLifecycle` (`application/crawler_lifecycle.py`), la racine du graphe : il annonce le
-  démarrage, réévalue le catalogue si la politique a changé, puis supervise les boucles.
+  démarrage, réévalue le catalogue si la politique a changé, puis confie les `Work` au `Supervisor`.
 - **`composition/command_line.py`** (`build_command_line`) construit les ports `crawl`,
   `validate-config` et `merge` (le cas d'usage `MergeCatalogs`) et les passe à la ligne de
   commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;

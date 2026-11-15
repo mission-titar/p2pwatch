@@ -9,11 +9,11 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status watcher, download tracking and source tracking share.
 
-Loops: one search per channel and keyword (``KeywordSearch``), the status watcher, and download and
+Works: one search per channel and keyword (``KeywordSearch``), the status watcher, and download and
 source tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the
 webui requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
-the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
+the works (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
 """
 
@@ -110,11 +110,8 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
-from p2pwatch.application.steps.supervisor import (
-    ShutdownBoundArmer,
-    SupervisedLoop,
-    Supervisor,
-)
+from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
+from p2pwatch.application.steps.work import Work
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -253,7 +250,7 @@ class CrawlerComposition(CrawlerRunner):
         mutated) and the run state (every change scheduled on the crawler's loop).
         It reads through its OWN ``ThreadReadConnections``, one connection per thread, each opened
         by ``database_opener``. Its stop is registered on ``stack`` so it runs during the normal
-        LIFO unwind, AFTER the loops stop."""
+        LIFO unwind, AFTER the works stop."""
         crawler_config = config.crawler_config
         webui_package_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
         local_db_path = Path(crawler_config.local_db_path)
@@ -513,8 +510,7 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 monotonic_clock=monotonic_clock,
             )
-            loops: list[SupervisedLoop] = [search.run for search in searches]
-            loops.append(status_watcher.run)
+            works: list[Work] = [*searches, status_watcher]
 
             # Download and source tracking share the catalog's stores and ``local_connection``
             # (one writer, on the event loop), and the search session.
@@ -584,7 +580,7 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     logger=StdlibLogger(SourceWatcher.__module__),
                 )
-                loops.extend((download_cycle.run, source_watcher.run))
+                works.extend((download_cycle, source_watcher))
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
@@ -601,7 +597,7 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                loops=loops,
+                works=works,
                 download_enabled=download_config is not None,
                 supervisor=Supervisor(run_state_reader=run_state_store),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
