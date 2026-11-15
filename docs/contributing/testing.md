@@ -256,8 +256,8 @@ est un `0.0.0.0:8080` fixe, qui entrerait en collision avec ce qui écoute déj�
 ```
 
 **Attendu.** 1 test passé (`test_real_loop_runs_one_search_and_stops`). Les résultats de recherche
-peuvent tout à fait être vides : ce qui est validé, c'est la **boucle** (démarrage, recherche, mise
-au catalogue, arrêt borné).
+peuvent tout à fait être vides : ce qui est validé, c'est le **crawl** (démarrage, recherche, mise au
+catalogue, arrêt borné).
 
 ---
 
