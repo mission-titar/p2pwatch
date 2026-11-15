@@ -1,10 +1,12 @@
-"""One client's status loop: a reading every minute feeds the channel gauges and the client's
-health, and a degraded channel alerts once it has lasted, whatever came before it, boot included.
+"""One client's status loop: a reading every minute feeds the channel gauges and the health of
+the client and of each channel, and a channel not connectable alerts once it has lasted.
 
-The alert timers live in memory, on the monotonic clock: a restart restarts them, so an ongoing
-degradation alerts at most one delay later.
+An unknown field records nothing, so while aMule does not answer each channel keeps its health.
+The connectable timers live in memory, on the monotonic clock: a restart restarts them, so an
+ongoing degradation alerts at most one delay later.
 """
 
+from collections.abc import Mapping
 from datetime import timedelta
 from typing import Literal
 
@@ -21,20 +23,19 @@ from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
     ChannelDegraded,
-    ChannelField,
     ChannelRecovered,
     ChannelStatusSampled,
     ClientUnreachable,
-    Event,
 )
 from p2pwatch.domain.status_reading import (
+    CHANNEL_ALERT_AFTER,
+    CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     STATUS_PERIOD,
+    ChannelStatus,
     ClientStatus,
     StatusReading,
 )
-
-CHANNEL_ALERT_AFTER = timedelta(minutes=5)
 
 
 class _AlertTimer:
@@ -63,7 +64,8 @@ class _AlertTimer:
 
 
 class StatusLoop:
-    """One client's status loop; its alert timers are its own state."""
+    """One client's status loop, reading each of ``channel_components``' channels; its connectable
+    timers are its own state."""
 
     def __init__(
         self,
@@ -78,6 +80,7 @@ class StatusLoop:
         node_id: NodeId,
         node_health: NodeHealth,
         client_component: Component,
+        channel_components: Mapping[Channel, Component],
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -89,7 +92,10 @@ class StatusLoop:
         self._node_id = node_id
         self._node_health = node_health
         self._client_component = client_component
-        self._channel_timers: dict[tuple[Channel, ChannelField], _AlertTimer] = {}
+        self._channel_components = channel_components
+        self._connectable_timers = {
+            channel: _AlertTimer(CHANNEL_ALERT_AFTER) for channel in channel_components
+        }
 
     async def run(self) -> None:
         """Reads the status every period until shutdown."""
@@ -106,49 +112,13 @@ class StatusLoop:
                 await self._observability_dispatcher.dispatch(
                     ClientUnreachable(client_name=self._client_name)
                 )
-                # Every channel is unknown while the API is: only the API's own alert can fire.
-                readings: list[tuple[Channel, bool | None, bool | None]] = [
-                    (channel, None, None)
-                    for channel in dict.fromkeys(c for c, _ in self._channel_timers)
-                ]
-            else:
-                readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
             await self._node_health.record(
                 on=self._client_component, rule=CLIENT_UNREACHABLE, detected=status is None
             )
-            for channel, connected, connectable in readings:
-                await self._observability_dispatcher.dispatch(
-                    ChannelStatusSampled(
-                        client_name=self._client_name,
-                        channel=channel,
-                        connected=connected,
-                        connectable=connectable,
-                    )
-                )
-                fields: tuple[tuple[ChannelField, bool | None], ...] = (
-                    ("connected", connected),
-                    ("connectable", connectable),
-                )
-                for field, healthy in fields:
-                    await self._observe(
-                        self._channel_timers.setdefault(
-                            (channel, field), _AlertTimer(CHANNEL_ALERT_AFTER)
-                        ),
-                        healthy=healthy,
-                        alert=ChannelDegraded(
-                            client_name=self._client_name,
-                            channel=channel,
-                            field=field,
-                            degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
-                            node_id=self._node_id,
-                        ),
-                        recovery=ChannelRecovered(
-                            client_name=self._client_name,
-                            channel=channel,
-                            field=field,
-                            node_id=self._node_id,
-                        ),
-                    )
+            # A channel the reading leaves out, every one while aMule does not answer, is unknown.
+            channels = {c.channel: c for c in status.channels} if status else {}
+            for channel, component in self._channel_components.items():
+                await self._read_channel(channel, reading=channels.get(channel), on=component)
             await self._monotonic_clock.sleep(STATUS_PERIOD)
 
     def _publish(self, status: ClientStatus | None) -> None:
@@ -157,9 +127,42 @@ class StatusLoop:
             self._client_name, reading=reading, published_at=self._monotonic_clock.now()
         )
 
-    async def _observe(
-        self, timer: _AlertTimer, *, healthy: bool | None, alert: Event, recovery: Event
+    async def _read_channel(
+        self, channel: Channel, *, reading: ChannelStatus | None, on: Component
     ) -> None:
-        change = timer.observe(healthy, now=self._monotonic_clock.now())
-        if change is not None:
-            await self._observability_dispatcher.dispatch(alert if change == "alert" else recovery)
+        connected = None if reading is None else reading.connected
+        connectable = None if reading is None else reading.connectable
+        await self._observability_dispatcher.dispatch(
+            ChannelStatusSampled(
+                client_name=self._client_name,
+                channel=channel,
+                connected=connected,
+                connectable=connectable,
+            )
+        )
+        if connected is not None:
+            await self._node_health.record(
+                on=on, rule=CHANNEL_NOT_CONNECTED, detected=not connected
+            )
+        change = self._connectable_timers[channel].observe(
+            connectable, now=self._monotonic_clock.now()
+        )
+        if change == "alert":
+            await self._observability_dispatcher.dispatch(
+                ChannelDegraded(
+                    client_name=self._client_name,
+                    channel=channel,
+                    field="connectable",
+                    degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
+                    node_id=self._node_id,
+                )
+            )
+        elif change == "recovery":
+            await self._observability_dispatcher.dispatch(
+                ChannelRecovered(
+                    client_name=self._client_name,
+                    channel=channel,
+                    field="connectable",
+                    node_id=self._node_id,
+                )
+            )

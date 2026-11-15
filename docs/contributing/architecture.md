@@ -765,8 +765,10 @@ chaque minute. Détecté 3 fois d'affilée, le client est en échec, et l'alerte
 for 2 min » part. Détecté moins de 2 fois sur les 10 dernières, il redevient sain, et « amuled
 reachable again » part. Redevenir sain prend plus longtemps que tomber en échec, si bien qu'un
 client capricieux n'alerte pas en boucle. Avant 3 vérifications, son état est inconnu, et rien ne
-part. `NodeHealth` journalise chaque changement d'état et le transmet aux alertes
-(`HealthAlerter`). Plus tard, le même modèle servira à reconstruire une partie dont les bugs
+part. Chaque canal du client est aussi une partie : hors de son réseau 6 lectures d'affilée, il est
+en échec (« amuled kad: off its network for 5 min »). Une lecture où aMule ne répond pas
+n'enregistre rien sur les canaux, qui gardent leur état. `NodeHealth` journalise chaque changement
+d'état et le transmet aux alertes (`HealthAlerter`). Plus tard, le même modèle servira à reconstruire une partie dont les bugs
 reviennent.
 
 ## 11. Invariants de conception (récapitulatif)
