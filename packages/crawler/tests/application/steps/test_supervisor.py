@@ -136,10 +136,12 @@ async def test_a_turn_that_raises_escapes_as_an_exception_group_without_arming_t
     events: list[str] = []
     status = _BlockedWork("status", events=events)
 
+    supervision = Supervisor(run_state_reader=FakeRunStateStore()).supervise(
+        [status, _RaisingWork()], arm_shutdown_bound=lambda: events.append("armed")
+    )
+
     with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a turn raised")):
-        await Supervisor(run_state_reader=FakeRunStateStore()).supervise(
-            [status, _RaisingWork()], arm_shutdown_bound=lambda: events.append("armed")
-        )
+        await asyncio.wait_for(supervision, 1.0)
 
     assert events == ["status cancelled"]
 
