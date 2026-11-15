@@ -10,6 +10,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
     SqliteTrackedDownloadStore,
 )
 from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.application.steps.download_decider import DownloadDecider
@@ -38,6 +39,7 @@ from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
 from tests.fakes.adapters.driven.fake_source_point_store import FakeSourcePointStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 NODE_ID = NodeId("n1")
@@ -123,6 +125,9 @@ def build_cycle(
     logger: FakeLogger | None = None,
     wall_clock: WallClock | None = None,
     health_logger: FakeLogger | None = None,
+    poll_interval_seconds: float = 30.0,
+    waker: FakeWaker | None = None,
+    wait_clock: MonotonicClock | None = None,  # the wait's alone: the tracker reads the time
 ) -> DownloadCycle:
     fake_time = fake_time or FakeTime()
     wall_clock = wall_clock or fake_time.wall
@@ -194,5 +199,8 @@ def build_cycle(
             node_id=NODE_ID,
             logger=logger,
         ),
+        poll_interval_seconds=poll_interval_seconds,
+        monotonic_clock=wait_clock or fake_time.monotonic,
+        waker=waker or FakeWaker(),
         logger=logger,
     )

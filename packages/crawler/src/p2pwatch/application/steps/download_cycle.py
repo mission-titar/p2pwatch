@@ -1,7 +1,6 @@
-"""The download loop: reconcile → completions → new candidates → sources → sleep/wake (spec §5).
+"""Download tracking: each round lists the client's downloads, records their states and
+completions, queues the new candidates, starts what the client does not list, then reads sources.
 
-One serial task. ``DownloadCycle.run_once`` runs one round;
-``DownloadLoop`` repeats it until shutdown, waiting ``poll_interval`` or the download wake.
 Three things in it are not obvious:
 
 - **A completion is the client's own signal, never the bytes** (2026-09-02: 065B was stamped
@@ -17,22 +16,31 @@ measurement skip the iteration, ``StoreError`` is logged and the cycle continues
 download is never abandoned.
 """
 
+import asyncio
+from contextlib import suppress
+from datetime import timedelta
+
 from p2pwatch.application.ports.driven.download_client import DownloadClient
 from p2pwatch.application.ports.driven.logger import Logger
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
+from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.store_error import StoreError
+from p2pwatch.domain.wake_subject import WakeSubject
 
 # A read the client refuses is the daemon unavailable.
 _UNAVAILABLE = (ClientUnreachableError, ReadRejectedError)
 
 
-class DownloadCycle:
-    """One download round over the four stages, under one error doctrine."""
+class DownloadCycle(Work):
+    """Tracks the client's downloads, one round per turn: the first at once, each next one after
+    ``poll_interval_seconds`` or as soon as a download decision wakes it."""
 
     def __init__(
         self,
@@ -42,6 +50,9 @@ class DownloadCycle:
         download_decider: DownloadDecider,
         download_starter: DownloadStarter,
         source_watcher: SourceWatcher,
+        poll_interval_seconds: float,
+        monotonic_clock: MonotonicClock,
+        waker: Waker,
         logger: Logger,
     ) -> None:
         self._download_client = download_client
@@ -49,10 +60,30 @@ class DownloadCycle:
         self._download_decider = download_decider
         self._download_starter = download_starter
         self._source_watcher = source_watcher
+        self._poll_interval = timedelta(seconds=poll_interval_seconds)
+        self._monotonic_clock = monotonic_clock
+        self._waker = waker
         self._logger = logger
+        self._turn_taken = False
+
+    async def wait_for_next_turn(self) -> None:
+        """Returns at once before the first turn, then after the poll interval or the download
+        wake, whichever comes first."""
+        if not self._turn_taken:
+            return
+        sleep = asyncio.ensure_future(self._monotonic_clock.sleep(self._poll_interval))
+        wake = asyncio.ensure_future(self._waker.wait(WakeSubject.DOWNLOAD))
+        try:
+            await asyncio.wait({sleep, wake}, return_when=asyncio.FIRST_COMPLETED)
+        finally:  # whichever has not ended is cancelled, both at the shutdown
+            for task in (sleep, wake):
+                if not task.done():
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
 
     async def run_once(self) -> None:
-        """ONE iteration of the download loop. Never raises: tolerates/absorbs.
+        """Takes one download round. Never raises: tolerates/absorbs.
 
         Two distinct error DOCTRINES (anti-starvation):
 
@@ -72,11 +103,12 @@ class DownloadCycle:
         mid-write.
 
         A ``ClientUnreachableError`` here does NOT dispatch ``ClientUnreachable``, unlike the
-        search tasks: the event is the searches'. The download loop is single-client, so its
+        search tasks: the event is the searches'. Download tracking is single-client, so its
         ``client=...`` label would say nothing, and its counter is shared with the search workers.
         The unavailability is handled by the next cycle's retry + the warning log. Intentional
         asymmetry.
         """
+        self._turn_taken = True  # first, so a turn that raised still waits before the next one
         # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
         try:
             listed_statuses = await self._download_client.downloads()

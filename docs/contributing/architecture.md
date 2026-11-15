@@ -138,10 +138,11 @@ supervisée par un `TaskGroup` (`Supervisor`) : une boucle qui crashe bruyamment
 (fail-fast), mais les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10,
 discipline de frontière).
 
-La lecture du statut est la première de ces tâches écrite comme un `Work` : une attente, puis un
-tour (`run_once()`), encore. L'attente vient avant chaque tour, le premier compris, et chaque
-`Work` la calcule depuis son propre état : pour le statut, ce qui reste de la minute depuis la fin
-de la lecture précédente, rien avant la première.
+La lecture du statut et le suivi des téléchargements sont écrits comme des `Work` : une
+attente, puis un tour (`run_once()`), encore. L'attente vient avant chaque tour, le premier
+compris, et chaque `Work` la calcule depuis son propre état, rien avant le premier tour : pour le
+statut, ce qui reste de la minute depuis la fin de la lecture précédente ; pour les
+téléchargements, `download.poll_interval_seconds` ou le réveil d'une décision, au premier venu.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -321,7 +322,7 @@ sequenceDiagram
   cesse simplement de l'élargir.
 - L'observation est écrite (`files`, `observation_variants`, `observations`) **puis** matchée. La décision
   (`target_id`, `rule_name`, `tier`) va dans `match_decisions`. En mode téléchargement, un tier
-  `download` *pousse* la boucle de téléchargement pour qu'elle réagisse sans attendre son intervalle.
+  `download` *réveille* le suivi des téléchargements pour qu'il réagisse sans attendre son intervalle.
 - Une opération que le démon refuse (`400 amuled_rejected`) met ce **canal** en **backoff**
   (base × factor^échecs + jitter), persisté à chaque changement.
 
@@ -377,8 +378,8 @@ flowchart LR
 
 ## 7. Du téléchargement à la complétion
 
-Actif en mode téléchargement seulement. Une itération de `DownloadCycle.run_once`, que `DownloadLoop`
-répète, enchaîne trois étapes sur une seule session amuleapi, puis, toutes les
+Actif en mode téléchargement seulement. Un tour de `DownloadCycle`, un `Work`, enchaîne trois
+étapes sur une seule session amuleapi, puis, toutes les
 `download.sources_interval_seconds`, relève les sources des téléchargements du crawler (§8.3).
 
 ```mermaid
@@ -808,7 +809,7 @@ et le transmet aux alertes (`HealthAlerter`).
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
 | Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
+| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

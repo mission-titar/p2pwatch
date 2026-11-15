@@ -7,9 +7,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
-  session the status watcher and the download loop share.
+  session the status watcher and download tracking share.
 
-Loops: the search tasks (``SearchTaskRunner``), the status watcher, and the download loop when
+Loops: the search tasks (``SearchTaskRunner``), the status watcher, and download tracking when
 configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
 shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
@@ -98,7 +98,6 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
-from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
@@ -488,7 +487,7 @@ class CrawlerComposition(CrawlerRunner):
                     ).send,
                 ),
             )
-            # The status watcher and the download loop share the search session: one per node.
+            # The status watcher and download tracking share the search session: one per node.
             status_watcher = StatusWatcher(
                 client_name=_AMULE_CLIENT_NAME,
                 client=client,
@@ -516,7 +515,7 @@ class CrawlerComposition(CrawlerRunner):
                 status_watcher.run,
             ]
 
-            # The download loop shares the catalog's stores and ``local_connection`` (one writer,
+            # Download tracking shares the catalog's stores and ``local_connection`` (one writer,
             # on the event loop), and the search session.
             if download_config is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
@@ -578,16 +577,12 @@ class CrawlerComposition(CrawlerRunner):
                         node_id=node_id,
                         logger=StdlibLogger(SourceWatcher.__module__),
                     ),
-                    logger=StdlibLogger(DownloadCycle.__module__),
-                )
-                download_loop = DownloadLoop(
-                    download_cycle=download_cycle,
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     monotonic_clock=monotonic_clock,
                     waker=waker,
-                    run_state_reader=run_state_store,
+                    logger=StdlibLogger(DownloadCycle.__module__),
                 )
-                loops.append(download_loop.run)
+                loops.append(download_cycle.run)
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
