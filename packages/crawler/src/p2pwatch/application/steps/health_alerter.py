@@ -48,6 +48,7 @@ class HealthAlerter:
         self._min_free_bytes = min_free_bytes  # the download disk's floor; None: no download
 
     async def send(self, transition: HealthTransition) -> None:
+        alert: Event | None
         if transition.current is HealthState.FAILING:
             alert = self._alert(transition)
         elif transition.previous is HealthState.FAILING:  # healthy from the start: none to end
@@ -57,7 +58,7 @@ class HealthAlerter:
         if alert is not None:
             await self._observability_dispatcher.dispatch(alert)
 
-    def _alert(self, transition: HealthTransition) -> Event | None:
+    def _alert(self, transition: HealthTransition) -> Event:
         component, node_id = transition.component, self._node_id
         if transition.rule == CLIENT_UNREACHABLE:
             return ClientUnreachableLasting(
@@ -75,7 +76,7 @@ class HealthAlerter:
             )
         if transition.rule == DISK_SPACE_LOW:
             return DiskSpaceLow(min_free_bytes=self._floor_of(transition), node_id=node_id)
-        return None
+        raise _no_alert_for(transition)
 
     def _floor_of(self, transition: HealthTransition) -> int:
         if self._min_free_bytes is None:
@@ -93,7 +94,15 @@ class HealthAlerter:
                 field=field,
                 node_id=node_id,
             )
-        return None  # the disk alert has no end, as it never had
+        if transition.rule == DISK_SPACE_LOW:
+            return None  # the disk alert has no end, as it never had
+        raise _no_alert_for(transition)
+
+
+def _no_alert_for(transition: HealthTransition) -> ValueError:
+    return ValueError(
+        f"{transition.component.name}, {transition.rule.name}: no alert for this rule"
+    )
 
 
 def _channel_of(transition: HealthTransition) -> Channel:

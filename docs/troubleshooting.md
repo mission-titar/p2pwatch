@@ -161,7 +161,7 @@ accumulé, mais vous redémarrez d'un état connu.
   partagés. Un téléchargement `queued` ou `downloading` qu'amuled ne rapporte pas lui est renvoyé à
   chaque cycle, jusqu'à ce qu'il le rapporte de nouveau. S'il ne l'a plus rapporté depuis
   `download.lost_after_seconds` (24 h par défaut), il est marqué `failed`, avec une ligne de
-  journal : `file=... unseen by the client for 86400.0s: marked failed`.
+  journal : `file=... unseen by the client for 86400 s: marked failed`.
 - **Comment l'absence se compte.** Sur l'horloge monotone du nœud, qu'un réglage de l'heure système
   ne déplace pas. Au démarrage, le décompte reprend depuis `latest_seen_at` : un téléchargement
   absent depuis plus de `download.lost_after_seconds`, arrêt du nœud compris, passe en `failed` dès
