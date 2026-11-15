@@ -377,7 +377,7 @@ flowchart LR
 
 ## 7. Du téléchargement à la complétion
 
-Actif en mode téléchargement seulement. Une itération de `DownloadCycle.run`, que `DownloadLoop`
+Actif en mode téléchargement seulement. Une itération de `DownloadCycle.run_once`, que `DownloadLoop`
 répète, enchaîne trois étapes sur une seule session amuleapi, puis, toutes les
 `download.sources_interval_seconds`, relève les sources des téléchargements du crawler (§8.3).
 
