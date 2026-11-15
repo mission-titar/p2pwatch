@@ -9,7 +9,11 @@ from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
-from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED, CLIENT_UNREACHABLE
+from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTABLE,
+    CHANNEL_NOT_CONNECTED,
+    CLIENT_UNREACHABLE,
+)
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -30,7 +34,7 @@ _KAD = Component(
     name="channel amuled kad",
     client_name=ClientName("amuled"),
     channel=Channel("kad"),
-    rules=(CHANNEL_NOT_CONNECTED,),
+    rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
 )
 
 
@@ -90,44 +94,48 @@ async def test_another_rule_failing_or_recovering_sends_nothing(
     assert await _sent(previous=previous, current=current, rule=other) == []
 
 
-_OFF_ITS_NETWORK = RelayedLogLine(
-    message="amuled kad: off its network for 5 min", severity=Severity.WARNING, node_id=_NODE_ID
+_CHANNEL_ALERTS = pytest.mark.parametrize(
+    ("rule", "alert", "end"),
+    [
+        (CHANNEL_NOT_CONNECTED, "off its network for 5 min", "back on its network"),
+        (CHANNEL_NOT_CONNECTABLE, "not connectable for 5 min", "connectable again"),
+    ],
+    ids=["not connected", "not connectable"],
 )
 
 
 @pytest.mark.asyncio
+@_CHANNEL_ALERTS
 @pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
-async def test_a_channel_failing_not_connected_sends_off_its_network_for_5_min(
-    previous: HealthState,
+async def test_a_channel_failing_sends_its_alert_for_5_min(
+    *, rule: HealthRule, alert: str, end: str, previous: HealthState
 ) -> None:
-    sent = await _sent(
-        previous=previous, current=HealthState.FAILING, rule=CHANNEL_NOT_CONNECTED, on=_KAD
-    )
-    assert sent == [_OFF_ITS_NETWORK]
-
-
-@pytest.mark.asyncio
-async def test_a_channel_connected_again_sends_back_on_its_network() -> None:
-    sent = await _sent(
-        previous=HealthState.FAILING,
-        current=HealthState.HEALTHY,
-        rule=CHANNEL_NOT_CONNECTED,
-        on=_KAD,
-    )
+    sent = await _sent(previous=previous, current=HealthState.FAILING, rule=rule, on=_KAD)
     assert sent == [
-        RelayedLogLine(
-            message="amuled kad: back on its network", severity=Severity.INFO, node_id=_NODE_ID
-        )
+        RelayedLogLine(message=f"amuled kad: {alert}", severity=Severity.WARNING, node_id=_NODE_ID)
     ]
 
 
 @pytest.mark.asyncio
-async def test_a_channel_connected_from_its_first_readings_sends_nothing() -> None:
+@_CHANNEL_ALERTS
+async def test_a_channel_healthy_again_sends_its_alert_s_end(
+    *, rule: HealthRule, alert: str, end: str
+) -> None:
     sent = await _sent(
-        previous=HealthState.UNKNOWN,
-        current=HealthState.HEALTHY,
-        rule=CHANNEL_NOT_CONNECTED,
-        on=_KAD,
+        previous=HealthState.FAILING, current=HealthState.HEALTHY, rule=rule, on=_KAD
+    )
+    assert sent == [
+        RelayedLogLine(message=f"amuled kad: {end}", severity=Severity.INFO, node_id=_NODE_ID)
+    ]
+
+
+@pytest.mark.asyncio
+@_CHANNEL_ALERTS
+async def test_a_channel_healthy_from_its_first_readings_sends_nothing(
+    *, rule: HealthRule, alert: str, end: str
+) -> None:
+    sent = await _sent(
+        previous=HealthState.UNKNOWN, current=HealthState.HEALTHY, rule=rule, on=_KAD
     )
     assert sent == []
 
