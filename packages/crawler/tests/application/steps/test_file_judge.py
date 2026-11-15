@@ -115,6 +115,7 @@ def _file_judge(
         waker=waker,
         observability_dispatcher=observability.dispatcher,
         wall_clock=wall_clock,
+        node_id=_NODE_ID,
     )
 
 
@@ -147,7 +148,6 @@ async def _record(
     return await judge.rejudge(
         _key(native_id),
         base_candidate=_reported_file(native_id, filename=filename).to_candidate(),
-        node_id=_NODE_ID,
     )
 
 
@@ -703,7 +703,6 @@ async def test_a_file_never_observed_raises_naming_it_before_any_write(
         await judge.rejudge(
             _key(_HASH_CAT),
             base_candidate=_reported_file(_HASH_CAT, filename=_DISCARD_NAME).to_candidate(),
-            node_id=_NODE_ID,
         )
     assert count_decisions(catalog_connection) == 1
     assert observability.logger.lines == []
@@ -740,7 +739,6 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
     await judge.rejudge(
         _key(_HASH_MULTI),
         base_candidate=_reported_file(_HASH_MULTI, filename=_MULTI_NAME).to_candidate(),
-        node_id=_NODE_ID,
     )
     assert rows(
         catalog_connection,

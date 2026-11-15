@@ -59,6 +59,7 @@ class SourceWatcher:
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         observability_dispatcher: ObservabilityDispatcher,
+        node_id: NodeId,
         logger: Logger,
     ) -> None:
         self._source_client = source_client
@@ -72,12 +73,11 @@ class SourceWatcher:
         self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
         self._observability_dispatcher = observability_dispatcher
+        self._node_id = node_id
         self._logger = logger
         self._sources_read_at: MonotonicInstant | None = None
 
-    async def record_sources(
-        self, listed_statuses: tuple[DownloadStatus, ...], *, node_id: NodeId
-    ) -> None:
+    async def record_sources(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
         """Records the sources of each of our downloads the client lists, completed ones aside,
         then alerts on them (stage 4, D8; source points, D5). A store failure skips that
         download's; a client failure propagates.
@@ -97,13 +97,9 @@ class SourceWatcher:
             read_at = self._wall_clock.now()
             readings = await self._source_client.sources(status.file)
             try:
-                points = self._source_points(
-                    status.file, readings=readings, read_at=read_at, node_id=node_id
-                )
+                points = self._source_points(status.file, readings=readings, read_at=read_at)
                 self._source_point_writer.record_points(points)
-                await self._alert_sources(
-                    status.file, points=points, round_=round_, node_id=node_id
-                )
+                await self._alert_sources(status.file, points=points, round_=round_)
             except StoreError as error:
                 self._logger.error(
                     "sources file=%s store failure (%s): file skipped, continues",
@@ -117,7 +113,6 @@ class SourceWatcher:
         *,
         readings: tuple[SourceReading, ...],
         read_at: datetime,
-        node_id: NodeId,
     ) -> tuple[SourcePoint, ...]:
         """A point per reading, with its role, the latest point's when aMule gives none; a source
         without identity is told apart by its name. Reads every latest point before the write,
@@ -127,11 +122,9 @@ class SourceWatcher:
             SourcePoint(
                 file=file,
                 reading=reading,
-                role=self._role(
-                    file, reading=reading, since=since, read_at=read_at, node_id=node_id
-                ),
+                role=self._role(file, reading=reading, since=since, read_at=read_at),
                 observed_at=read_at,
-                node_id=node_id,
+                node_id=self._node_id,
             )
             for reading in readings
             if reading.source is not None or reading.source_name is not None
@@ -144,12 +137,11 @@ class SourceWatcher:
         reading: SourceReading,
         since: datetime,
         read_at: datetime,
-        node_id: NodeId,
     ) -> SourceRole:
         if reading.role is not None:
             return reading.role
         latest = self._source_point_reader.read_latest_point(
-            file, reading=reading, since=since, before=read_at, node_id=node_id
+            file, reading=reading, since=since, before=read_at, node_id=self._node_id
         )
         return carried_role(latest, reading=reading)
 
@@ -159,7 +151,6 @@ class SourceWatcher:
         *,
         points: tuple[SourcePoint, ...],
         round_: _AlertRound,
-        node_id: NodeId,
     ) -> None:
         """Emits D5's alerts for the useful points of a committed write, once per source per
         round."""
@@ -172,13 +163,13 @@ class SourceWatcher:
             if round_.alerts_allowed is None:
                 # The same answer at any point of the round: "before" excludes the round's writes.
                 round_.alerts_allowed = self._source_point_reader.has_points_before(
-                    round_.started_at, node_id=node_id
+                    round_.started_at, node_id=self._node_id
                 )
             if not round_.alerts_allowed:
                 return  # the node's first recording round is a baseline, not news
             earlier_points = EarlierPoints.of(
                 self._source_point_reader.read_earlier_points(
-                    source, before=round_.started_at, node_id=node_id
+                    source, before=round_.started_at, node_id=self._node_id
                 )
             )
             alert = source_alert(
@@ -200,7 +191,7 @@ class SourceWatcher:
                     file=file,
                     filename=filename,
                     target_titles=titles,
-                    node_id=node_id,
+                    node_id=self._node_id,
                 )
                 if isinstance(alert, FirstUseful)
                 else SourceReappeared(
@@ -210,7 +201,7 @@ class SourceWatcher:
                     filename=filename,
                     target_titles=titles,
                     absent_for_seconds=alert.absent_for.total_seconds(),
-                    node_id=node_id,
+                    node_id=self._node_id,
                 )
             )
             await self._observability_dispatcher.dispatch(event)

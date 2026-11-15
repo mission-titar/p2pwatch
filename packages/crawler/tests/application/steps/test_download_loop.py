@@ -67,6 +67,7 @@ def _download_loop(
         wall_clock=fake_time.wall,
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability_dispatcher,
+        node_id=_NODE_ID,
         logger=logger,
     )
     download_cycle = DownloadCycle(
@@ -83,6 +84,7 @@ def _download_loop(
             download_tracker=download_tracker,
             wall_clock=fake_time.wall,
             observability_dispatcher=observability_dispatcher,
+            node_id=_NODE_ID,
             logger=logger,
         ),
         download_starter=DownloadStarter(
@@ -104,6 +106,7 @@ def _download_loop(
             wall_clock=fake_time.wall,
             monotonic_clock=fake_time.monotonic,
             observability_dispatcher=observability_dispatcher,
+            node_id=_NODE_ID,
             logger=logger,
         ),
         logger=logger,
@@ -122,7 +125,7 @@ async def test_loop_stops_when_shutdown_is_requested_before_start() -> None:
     run_state = FakeRunStateStore()
     run_state.set_shutdown_requested()
     download_loop = _download_loop(waker=FakeWaker(), run_state=run_state)
-    await asyncio.wait_for(download_loop.run(_NODE_ID), timeout=1.0)  # runs no cycle
+    await asyncio.wait_for(download_loop.run(), timeout=1.0)  # runs no cycle
 
 
 @pytest.mark.asyncio
@@ -140,7 +143,7 @@ async def test_loop_runs_a_cycle_then_sleeps_then_stops() -> None:
         waker.wake(WakeSubject.DOWNLOAD)
 
     await asyncio.gather(
-        asyncio.wait_for(download_loop.run(_NODE_ID), timeout=2.0), stop_after_first_sleep()
+        asyncio.wait_for(download_loop.run(), timeout=2.0), stop_after_first_sleep()
     )
     assert fake_time.sleeps[0] == timedelta(seconds=30)  # one poll interval
 
@@ -157,9 +160,7 @@ async def test_nudge_wakes_the_loop_before_poll_expires() -> None:
         run_state.set_shutdown_requested()
         waker.wake(WakeSubject.DOWNLOAD)  # wakes the wait before the 999 s poll
 
-    await asyncio.gather(
-        asyncio.wait_for(download_loop.run(_NODE_ID), timeout=2.0), wake_then_stop()
-    )
+    await asyncio.gather(asyncio.wait_for(download_loop.run(), timeout=2.0), wake_then_stop())
     assert WakeSubject.DOWNLOAD in waker.waited_subjects
 
 
@@ -175,7 +176,7 @@ async def test_loop_breaks_when_shutdown_is_requested_during_the_cycle() -> None
         fake_time=fake_time,
         decision_reader=FakeShutdownDuringCycleDecisionReader(run_state),
     )
-    await asyncio.wait_for(download_loop.run(_NODE_ID), timeout=1.0)
+    await asyncio.wait_for(download_loop.run(), timeout=1.0)
     assert fake_time.sleeps == []  # break before any sleep/wake
 
 
@@ -196,9 +197,7 @@ async def test_nudge_wins_and_cancels_the_pending_sleep() -> None:
         run_state.set_shutdown_requested()
         waker.wake(WakeSubject.DOWNLOAD)
 
-    await asyncio.gather(
-        asyncio.wait_for(download_loop.run(_NODE_ID), timeout=2.0), stop_when_waited()
-    )
+    await asyncio.gather(asyncio.wait_for(download_loop.run(), timeout=2.0), stop_when_waited())
     assert WakeSubject.DOWNLOAD in waker.waited_subjects
 
 
@@ -213,7 +212,7 @@ async def test_loop_cancelled_mid_wait_propagates_cleanly() -> None:
     download_loop = _download_loop(
         waker=waker, run_state=run_state, monotonic_clock=FakeBlockingMonotonicClock()
     )
-    task = asyncio.ensure_future(download_loop.run(_NODE_ID))
+    task = asyncio.ensure_future(download_loop.run())
     # wait until the loop is parked in _sleep_or_wake (wake_task has called wait())
     while WakeSubject.DOWNLOAD not in waker.waited_subjects:
         await asyncio.sleep(0)  # noqa: TID251

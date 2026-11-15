@@ -10,7 +10,6 @@ from p2pwatch.application.ports.driven.policy_fingerprint_reader import PolicyFi
 from p2pwatch.application.ports.driven.policy_fingerprint_writer import PolicyFingerprintWriter
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.store_error import StoreError
 
 
@@ -50,13 +49,13 @@ class CatalogReevaluator:
         self._monotonic_clock = monotonic_clock
         self._logger = logger
 
-    async def reevaluate_if_policy_changed(self, node_id: NodeId) -> None:
+    async def reevaluate_if_policy_changed(self) -> None:
         """Re-evaluates iff the stored policy fingerprint differs, then stores it unless a
         requested shutdown stopped the pass; logs each outcome."""
         if self._policy_fingerprint_reader.read_policy_fingerprint() == self._policy_fingerprint:
             self._logger.info("policy unchanged: catalogue re-evaluation skipped")
             return
-        summary = await self._reevaluate_catalog(node_id)
+        summary = await self._reevaluate_catalog()
         if summary is None:
             return
         # Stored only once the pass ends: a pass that raises is retried at the next start.
@@ -67,7 +66,7 @@ class CatalogReevaluator:
             summary.rows_written,
         )
 
-    async def _reevaluate_catalog(self, node_id: NodeId) -> ReevaluationSummary | None:
+    async def _reevaluate_catalog(self) -> ReevaluationSummary | None:
         """Judges each file in turn; a ``StoreError`` on one is logged and the sweep goes on; a
         requested shutdown stops it before the next file, and gives ``None``."""
         total = self._catalog_scan_reader.read_file_count()
@@ -88,7 +87,7 @@ class CatalogReevaluator:
             reported_file = observation.reported_file
             try:
                 rows_written += await self._file_judge.rejudge(
-                    reported_file.file, base_candidate=reported_file.to_candidate(), node_id=node_id
+                    reported_file.file, base_candidate=reported_file.to_candidate()
                 )
             except StoreError as error:
                 self._logger.error(

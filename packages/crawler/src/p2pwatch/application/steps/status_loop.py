@@ -71,6 +71,7 @@ class StatusLoop:
         observability_dispatcher: ObservabilityDispatcher,
         run_state_reader: RunStateReader,
         status_reading_writer: StatusReadingWriter,
+        node_id: NodeId,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -79,11 +80,12 @@ class StatusLoop:
         self._observability_dispatcher = observability_dispatcher
         self._run_state_reader = run_state_reader
         self._status_reading_writer = status_reading_writer
+        self._node_id = node_id
         self._api_timer = _AlertTimer(UNREACHABLE_ALERT_AFTER)
         self._channel_timers: dict[tuple[Channel, ChannelField], _AlertTimer] = {}
 
-    async def run(self, node_id: NodeId) -> None:
-        """Reads the status every period until shutdown, its alerts carrying ``node_id``."""
+    async def run(self) -> None:
+        """Reads the status every period until shutdown."""
         while not self._run_state_reader.is_shutdown_requested():
             try:
                 status = await self._client.status()
@@ -110,9 +112,9 @@ class StatusLoop:
                 alert=ClientUnreachableLasting(
                     client_name=self._client_name,
                     unreachable_for_seconds=UNREACHABLE_ALERT_AFTER.total_seconds(),
-                    node_id=node_id,
+                    node_id=self._node_id,
                 ),
-                recovery=ClientReachableAgain(client_name=self._client_name, node_id=node_id),
+                recovery=ClientReachableAgain(client_name=self._client_name, node_id=self._node_id),
             )
             for channel, connected, connectable in readings:
                 await self._observability_dispatcher.dispatch(
@@ -138,13 +140,13 @@ class StatusLoop:
                             channel=channel,
                             field=field,
                             degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
-                            node_id=node_id,
+                            node_id=self._node_id,
                         ),
                         recovery=ChannelRecovered(
                             client_name=self._client_name,
                             channel=channel,
                             field=field,
-                            node_id=node_id,
+                            node_id=self._node_id,
                         ),
                     )
             await self._monotonic_clock.sleep(STATUS_PERIOD)

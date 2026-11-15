@@ -80,6 +80,7 @@ class _Reevaluation:
                 waker=self.waker,
                 observability_dispatcher=self.observability.dispatcher,
                 wall_clock=wall_clock,
+                node_id=_NODE_ID,
             ),
             catalog_scan_reader=catalog_scan_reader,
             progress_every_files=progress_every_files,
@@ -89,7 +90,7 @@ class _Reevaluation:
         )
 
     async def run(self) -> None:
-        await self.catalog_reevaluator.reevaluate_if_policy_changed(_NODE_ID)
+        await self.catalog_reevaluator.reevaluate_if_policy_changed()
 
 
 def _reported_file(native_id: str, *, filename: str) -> ReportedFile:

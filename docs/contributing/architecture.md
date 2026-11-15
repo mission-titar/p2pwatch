@@ -184,11 +184,12 @@ flowchart TB
 - `application/` range ses ports (`ports/`, un port par fichier, nommé d'après lui), ses cas
   d'usage (`use_cases/`), ses étapes (`steps/`) et au plus un cycle de vie (`<x>_lifecycle.py`).
   Un cas d'usage est appelé du dehors, par un port pilotant qu'il implémente sur des ports pilotés.
-  Une étape est un stade du graphe du cycle de vie, appelée seulement par lui ou par une autre
-  étape : une classe, une par module, nommé d'après elle (`steps/node_id_resolver.py` contient
-  `NodeIdResolver`), qui reçoit ses dépendances à sa construction et les valeurs du run (le
-  `node_id`, un fichier) à l'appel. Le cycle de vie (`CrawlerLifecycle`, `PortSyncLifecycle`) est le programme de son
-  démarrage à son arrêt, que la composition lance ; il n'a pas de port. Cas d'usage et étapes ne
+  Une étape est un morceau du programme que la composition assemble, qu'aucun port pilotant
+  n'expose : une classe, une par module, nommé d'après elle (`steps/node_id_resolver.py` contient
+  `NodeIdResolver`). Elle reçoit à sa construction ses dépendances et ce qui vaut pour tout le run
+  (le `node_id`), à l'appel ce qui change d'un appel à l'autre (un fichier). Le cycle de vie
+  (`CrawlerLifecycle`, `PortSyncLifecycle`) est le programme de son démarrage à son arrêt, que la
+  composition lance ; il n'a pas de port. Cas d'usage et étapes ne
   s'importent pas entre eux, ni le cycle de vie. Ce qui n'appelle aucun port va au domaine.
 - Chaque hexagone expose `build_command_line(...)` dans `composition/command_line.py`, qui
   construit les adaptateurs, les cas d'usage et la ligne de commande ; `__main__.py` lit l'état du
@@ -216,9 +217,9 @@ flowchart TB
   (`p2pwatch.application.steps.search_worker`), que filtre un opérateur.
 - **`adapters/`** portent toutes les I/O et héritent des ports qu'ils implémentent.
 - **`composition/`** (`CrawlerComposition`) charge la config par l'adapter de config, qui contrôle
-  les trois fichiers et en liste chaque problème, câble les adapters concrets qu'elle décrit,
-  puis lance `CrawlerLifecycle`
-  (`application/crawler_lifecycle.py`), la racine du graphe : il résout le `node_id`, annonce le
+  les trois fichiers et en liste chaque problème, résout le `node_id` dès `local.db` ouverte, câble
+  les adapters concrets qu'elle décrit et donne le `node_id` à chaque étape qui l'écrit, puis lance
+  `CrawlerLifecycle` (`application/crawler_lifecycle.py`), la racine du graphe : il annonce le
   démarrage, réévalue le catalogue si la politique a changé, puis supervise les boucles.
 - **`composition/command_line.py`** (`build_command_line`) construit les ports `crawl`,
   `validate-config` et `merge` (le cas d'usage `MergeCatalogs`) et les passe à la ligne de

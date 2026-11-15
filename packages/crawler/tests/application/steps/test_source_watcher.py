@@ -82,7 +82,7 @@ async def test_the_sources_of_each_tracked_download_the_client_lists_are_recorde
         sources=sources,
         fake_time=fake_time,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert source_client.source_reads == [HASH_A, HASH_B]
     assert sources.recorded == [
         SourcePoint(
@@ -120,7 +120,7 @@ async def test_a_passing_reading_carries_its_latest_points_role_from_the_window_
         fake_time=fake_time,
         time_between_source_reads=timedelta(minutes=5),
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert sources.latest_asked == [(HASH_A, passing, start - timedelta(minutes=15), start)]
     assert [point.role for point in sources.recorded] == [SourceRole.QUEUED] * 2
 
@@ -146,7 +146,7 @@ async def test_a_reading_with_neither_source_nor_name_is_dropped() -> None:
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert sources.latest_asked == []
     assert [point.reading for point in sources.recorded] == [_reading("peer")]
 
@@ -162,7 +162,7 @@ async def test_a_download_the_client_reports_completed_is_not_read() -> None:
         client=client,
         source_client=source_client,
         tracked_download_store=tracked_download_store,
-    ).run(NODE_ID)
+    ).run()
     assert source_client.source_reads == [HASH_B]
 
 
@@ -179,7 +179,7 @@ async def test_a_store_failure_on_one_download_skips_its_sources_only() -> None:
         source_client=source_client,
         tracked_download_store=tracked_download_store,
         sources=sources,
-    ).run(NODE_ID)
+    ).run()
     assert [point.file.native_id for point in sources.recorded] == [HASH_B]
 
 
@@ -199,7 +199,7 @@ async def test_sources_are_read_once_per_interval_however_often_the_cycle_runs()
         sources_interval=timedelta(seconds=300),
     )
     for _ in range(11):
-        await cycle.run(NODE_ID)
+        await cycle.run()
         fake_time.advance(timedelta(seconds=30))
     assert [point.observed_at for point in sources.recorded] == [
         start,
@@ -220,12 +220,12 @@ async def test_a_sources_read_the_daemon_failed_waits_for_the_next_interval() ->
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     fake_time.advance(timedelta(seconds=30))
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert source_client.source_reads == [HASH_A]
     fake_time.advance(timedelta(seconds=270))
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert source_client.source_reads == [HASH_A, HASH_A]
 
 
@@ -241,10 +241,10 @@ async def test_a_wall_clock_step_back_delays_no_sources_read() -> None:
         fake_time=fake_time,
         sources_interval=timedelta(seconds=300),
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     fake_time.step_wall(timedelta(hours=-1))
     fake_time.advance(timedelta(seconds=300))
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert source_client.source_reads == [HASH_A, HASH_A]
 
 
@@ -297,7 +297,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
         observation_reader=observation_reader,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert _alerts(observability) == [
         _alert(
             _PEER,
@@ -353,7 +353,7 @@ async def test_a_source_useful_again_after_the_threshold_reappears() -> None:
         observability_dispatcher=observability.dispatcher,
         fake_time=fake_time,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert sources.asked == [(_OTHER_PEER, start), (_PEER, start)]
     assert sources.node_ids == {NODE_ID}  # the round writes and reads the cycle's node's points
     assert _alerts(observability) == [
@@ -379,7 +379,7 @@ async def test_a_reading_without_a_source_id_raises_nothing() -> None:
         sources=sources,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert sources.asked == []
     assert _alerts(observability) == []
 
@@ -405,7 +405,7 @@ async def test_a_round_without_a_useful_reading_with_a_source_id_never_asks_for_
         tracked_download_store=_tracking(HASH_A),
         sources=sources,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert sources.baselines == []
 
 
@@ -427,7 +427,7 @@ async def test_the_baseline_is_asked_once_per_round_against_its_start() -> None:
         sources=sources,
         fake_time=fake_time,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert sources.baselines == [start]
 
 
@@ -444,7 +444,7 @@ async def test_a_store_failure_asking_the_baseline_skips_that_downloads_alerts_o
         sources=sources,
         observability_dispatcher=observability.dispatcher,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert [point.file.native_id for point in sources.recorded] == [HASH_A, HASH_B]
     assert len(sources.baselines) == 2
     assert _alerts(observability) == [
@@ -477,13 +477,13 @@ async def test_the_first_recording_round_is_a_baseline(
         observability_dispatcher=observability.dispatcher,
         fake_time=fake_time,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert _alerts(observability) == []
     assert source_variant_node_ids(catalog) == {NODE_ID}
     fake_time.advance(timedelta(seconds=30))
     third = SourceKey(network=Network.ED2K, native_id="d" * 32)
     readings[HASH_A] = (_peer(_PEER), _peer(third))
-    await cycle.run(NODE_ID)
+    await cycle.run()
     assert _alerts(observability) == [
         _alert(third, source_name="peer", absent_for=None, filename=HASH_A)
     ]
@@ -577,11 +577,11 @@ async def test_a_source_useful_at_three_consecutive_reads_is_new_once(
         observability=observability,
         fake_time=fake_time,
     )
-    await cycle.run(NODE_ID)  # the node's first round, a baseline
+    await cycle.run()  # the node's first round, a baseline
     readings[HASH_A] = (_peer(_OTHER_PEER), _peer(_PEER))
     for _ in range(3):
         fake_time.advance(timedelta(seconds=30))
-        await cycle.run(NODE_ID)
+        await cycle.run()
     assert _alerts(observability) == [
         _alert(_PEER, source_name="peer", absent_for=None, filename=HASH_A)
     ]
@@ -603,13 +603,13 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
         observability=observability,
         fake_time=fake_time,
     )
-    await cycle.run(NODE_ID)
+    await cycle.run()
     fake_time.advance(timedelta(hours=13))
     readings[HASH_A] = (_peer(_PEER, role=SourceRole.UNDETERMINED),)
-    await cycle.run(NODE_ID)
+    await cycle.run()
     fake_time.advance(timedelta(seconds=30))
     readings[HASH_A] = (_peer(_PEER),)
-    await cycle.run(NODE_ID)
+    await cycle.run()
     # The third round starts 13 h 30 s after the first, plus the 1 s each earlier read took.
     assert _alerts(observability) == [
         _alert(

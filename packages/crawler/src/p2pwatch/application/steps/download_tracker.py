@@ -33,6 +33,7 @@ class DownloadTracker:
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         observability_dispatcher: ObservabilityDispatcher,
+        node_id: NodeId,
         logger: Logger,
     ) -> None:
         self._tracked_download_writer = tracked_download_writer
@@ -42,11 +43,12 @@ class DownloadTracker:
         self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
         self._observability_dispatcher = observability_dispatcher
+        self._node_id = node_id
         self._logger = logger
         # Each queued or downloading download's instant from which it counts as lost.
         self._loss_deadline_by_file: dict[FileKey, MonotonicInstant] = {}
 
-    async def track(self, listed_statuses: tuple[DownloadStatus, ...], *, node_id: NodeId) -> None:
+    async def track(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
         """Follows ``listed_statuses``: a store failure in one step skips that step only."""
         # Step 1 - RECONCILE: NO client I/O left (the list came from step 0) → only StoreError.
         # Every step shares that ONE snapshot: a second read could only contradict the first.
@@ -65,9 +67,7 @@ class DownloadTracker:
         # downstream.
         try:
             fresh_states = self._tracked_download_reader.read_tracked_states()
-            await self._handle_completions(
-                fresh_states, listed_statuses=listed_statuses, node_id=node_id
-            )
+            await self._handle_completions(fresh_states, listed_statuses=listed_statuses)
         except StoreError as error:
             self._logger.error(
                 "download completions store failure (%s): step skipped, continues", error
@@ -112,7 +112,7 @@ class DownloadTracker:
                 states[file] = wanted_state
 
     async def _record_completion(
-        self, file: FileKey, *, states: dict[FileKey, DownloadState], node_id: NodeId
+        self, file: FileKey, *, states: dict[FileKey, DownloadState]
     ) -> None:
         """Marks ``completed`` (stamps completed_at) and notifies (step 2, §5).
 
@@ -127,7 +127,7 @@ class DownloadTracker:
                 file=file,
                 filename=self._download_labeler.best_filename(file),
                 target_titles=self._download_labeler.target_titles(file),
-                node_id=node_id,
+                node_id=self._node_id,
             )
         )
         self._logger.info("file=%s completed", file.native_id)
@@ -137,7 +137,6 @@ class DownloadTracker:
         states: dict[FileKey, DownloadState],
         *,
         listed_statuses: tuple[DownloadStatus, ...],
-        node_id: NodeId,
     ) -> None:
         """Completes each tracked file the client reports ``completed``.
 
@@ -152,7 +151,7 @@ class DownloadTracker:
             if current is DownloadState.COMPLETED:
                 continue  # already completed: the notification fired once
             try:
-                await self._record_completion(file, states=states, node_id=node_id)
+                await self._record_completion(file, states=states)
             except StoreError as error:
                 self._logger.error(
                     "completion file=%s store failure (%s): file skipped, continues",

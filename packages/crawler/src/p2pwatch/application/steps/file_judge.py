@@ -50,6 +50,7 @@ class FileJudge:
         waker: Waker,
         observability_dispatcher: ObservabilityDispatcher,
         wall_clock: WallClock,
+        node_id: NodeId,
     ) -> None:
         self._observation_reader = observation_reader
         self._decision_writer = decision_writer
@@ -58,10 +59,9 @@ class FileJudge:
         self._waker = waker
         self._observability_dispatcher = observability_dispatcher
         self._wall_clock = wall_clock
+        self._node_id = node_id
 
-    async def rejudge(
-        self, file: FileKey, *, base_candidate: FileCandidate, node_id: NodeId
-    ) -> int:
+    async def rejudge(self, file: FileKey, *, base_candidate: FileCandidate) -> int:
         """Judge the file on its known filenames, ``base_candidate`` giving the other fields, and
         record what changed; a change on a file never observed raises ``RuntimeError`` first."""
         filenames = self._observation_reader.read_known_filenames(file)
@@ -79,7 +79,10 @@ class FileJudge:
             raise RuntimeError(f"file {file.native_id} judged without an observation")
         dated_decisions = [
             DatedDecision(
-                file=file, decision=new_decision, decided_at=self._wall_clock.now(), node_id=node_id
+                file=file,
+                decision=new_decision,
+                decided_at=self._wall_clock.now(),
+                node_id=self._node_id,
             )
             for new_decision in new_decisions
         ]
@@ -90,7 +93,7 @@ class FileJudge:
             changes=tuple(
                 self._change(decision, persisted=persisted) for decision in new_decisions
             ),
-            node_id=node_id,
+            node_id=self._node_id,
         )
         self._decision_writer.record_decisions(dated_decisions)
         for new_decision in new_decisions:

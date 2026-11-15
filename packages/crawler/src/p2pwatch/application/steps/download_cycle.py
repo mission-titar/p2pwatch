@@ -24,7 +24,6 @@ from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
-from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.store_error import StoreError
 
@@ -52,7 +51,7 @@ class DownloadCycle:
         self._source_watcher = source_watcher
         self._logger = logger
 
-    async def run(self, node_id: NodeId) -> None:
+    async def run(self) -> None:
         """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
 
         Two distinct error DOCTRINES (item I2 - anti-starvation):
@@ -93,10 +92,10 @@ class DownloadCycle:
             max(status.size_bytes - status.bytes_done, 0) for status in listed_statuses
         )
         # Steps 1, 2 and 2b - STATES, COMPLETIONS, PRESENCE + LOSS: only StoreError, isolated.
-        await self._download_tracker.track(listed_statuses, node_id=node_id)
+        await self._download_tracker.track(listed_statuses)
         # Step 3 - CANDIDATES: no client I/O; a refused measure admits nothing, the cycle goes on.
         try:
-            await self._download_decider.queue_new_candidates(outstanding_bytes, node_id=node_id)
+            await self._download_decider.queue_new_candidates(outstanding_bytes)
         except StoreError as error:
             self._logger.error(
                 "download candidates store failure (%s): step skipped, continues", error
@@ -120,7 +119,7 @@ class DownloadCycle:
             self._logger.error("download start store failure (%s): step skipped, retry", error)
         # Step 5 - SOURCES: last, since it only observes; its failure must not skip a start (D8).
         try:
-            await self._source_watcher.record_sources(listed_statuses, node_id=node_id)
+            await self._source_watcher.record_sources(listed_statuses)
         except _UNAVAILABLE as error:
             self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
         except StoreError as error:
