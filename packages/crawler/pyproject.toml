@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9.2.0", "pytest-cov>=5", "pytest-asyncio>=1.2", "sqlfluff>=4.4.0"]
+dev = ["pytest>=9.2.0", "pytest-cov>=5", "pytest-asyncio>=1.2", "sqlfluff>=4.5.0"]
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
