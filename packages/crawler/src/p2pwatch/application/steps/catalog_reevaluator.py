@@ -51,7 +51,7 @@ class CatalogReevaluator:
 
     async def reevaluate_if_policy_changed(self) -> None:
         """Re-evaluates iff the stored policy fingerprint differs, then stores it unless a
-        requested shutdown stopped the pass; logs each outcome."""
+        requested shutdown stopped the pass; logs whether it ran and what it wrote."""
         if self._policy_fingerprint_reader.read_policy_fingerprint() == self._policy_fingerprint:
             self._logger.info("policy unchanged: catalogue re-evaluation skipped")
             return

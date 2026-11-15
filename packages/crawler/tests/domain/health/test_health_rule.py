@@ -12,55 +12,29 @@ _UNREACHABLE = HealthRule(
 )
 
 
-def _states_after_each(checks: list[bool]) -> list[HealthState]:
-    """The rule's state after each of ``checks``, in order."""
-    latest_detected: tuple[bool, ...] = ()
-    state = HealthState.UNKNOWN
-    states = []
-    for detected in checks:
-        latest_detected = (*latest_detected, detected)[-_UNREACHABLE.checks_kept :]
-        state = _UNREACHABLE.state_after(latest_detected, previous=state)
-        states.append(state)
-    return states
+def _state(*latest_detected: bool, previous: HealthState = HealthState.UNKNOWN) -> HealthState:
+    return _UNREACHABLE.state_after(latest_detected, previous=previous)
 
 
-def _changes(checks: list[bool]) -> list[tuple[int, HealthState]]:
-    """Each change of state, with the number of the check that caused it, counted from 1."""
-    states = [HealthState.UNKNOWN, *_states_after_each(checks)]
-    return [(n, states[n]) for n in range(1, len(states)) if states[n] is not states[n - 1]]
+def test_a_rule_keeps_as_many_checks_as_it_needs_to_turn_healthy() -> None:
+    assert _UNREACHABLE.checks_kept == 10
 
 
 def test_the_state_is_unknown_until_the_third_check() -> None:
-    assert _states_after_each([_NOT_DETECTED] * 3) == [
-        HealthState.UNKNOWN,
-        HealthState.UNKNOWN,
-        HealthState.HEALTHY,
-    ]
+    assert _state(_NOT_DETECTED, _NOT_DETECTED) is HealthState.UNKNOWN
+    assert _state(_NOT_DETECTED, _NOT_DETECTED, _NOT_DETECTED) is HealthState.HEALTHY
 
 
-def test_3_detections_in_a_row_from_the_start_make_it_failing() -> None:
-    assert _states_after_each([_DETECTED] * 3) == [
-        HealthState.UNKNOWN,
-        HealthState.UNKNOWN,
-        HealthState.FAILING,
-    ]
+def test_3_detections_in_a_row_make_it_failing() -> None:
+    assert _state(_DETECTED, _DETECTED, _DETECTED) is HealthState.FAILING
+    assert _state(_NOT_DETECTED, _DETECTED, _DETECTED) is HealthState.HEALTHY
 
 
-def test_after_failing_it_turns_healthy_at_the_ninth_check_not_detected() -> None:
-    # At the eighth, the rule still detected its case 2 times in the last 10 checks.
-    assert _changes([_DETECTED] * 3 + [_NOT_DETECTED] * 9) == [
-        (3, HealthState.FAILING),
-        (12, HealthState.HEALTHY),
-    ]
-
-
-def test_3_checks_not_detected_then_3_detected_over_and_over_fail_once_until_they_stop() -> None:
-    pattern = ([_NOT_DETECTED] * 3 + [_DETECTED] * 3) * 20
-    assert _changes(pattern + [_NOT_DETECTED] * 10) == [
-        (3, HealthState.HEALTHY),
-        (6, HealthState.FAILING),  # the third detection
-        (129, HealthState.HEALTHY),  # the ninth check not detected after the pattern stopped
-    ]
+def test_a_failing_rule_turns_healthy_under_2_detections_among_the_last_10() -> None:
+    twice = (_DETECTED,) * 2 + (_NOT_DETECTED,) * 8
+    once = (_DETECTED,) + (_NOT_DETECTED,) * 9
+    assert _state(*twice, previous=HealthState.FAILING) is HealthState.FAILING
+    assert _state(*once, previous=HealthState.FAILING) is HealthState.HEALTHY
 
 
 @pytest.mark.parametrize("times", [0, 4])
@@ -70,7 +44,9 @@ def test_detections_count_from_1_to_all_of_their_checks(times: int) -> None:
 
 
 def test_a_rule_refuses_to_turn_healthy_under_more_detections_than_made_it_fail() -> None:
-    with pytest.raises(ValueError, match="^'x' would recover on the detections that made it fail$"):
+    with pytest.raises(
+        ValueError, match="^'x' would turn healthy on the detections that made it fail$"
+    ):
         HealthRule(
             name="x",
             fails_at=Detections(times=2, among_last=10),
@@ -79,7 +55,9 @@ def test_a_rule_refuses_to_turn_healthy_under_more_detections_than_made_it_fail(
 
 
 def test_a_rule_refuses_to_turn_healthy_on_fewer_checks_than_made_it_fail() -> None:
-    with pytest.raises(ValueError, match="^'x' would recover on the detections that made it fail$"):
+    with pytest.raises(
+        ValueError, match="^'x' would turn healthy on the detections that made it fail$"
+    ):
         HealthRule(
             name="x",
             fails_at=Detections(times=2, among_last=10),

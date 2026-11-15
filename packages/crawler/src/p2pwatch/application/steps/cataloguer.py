@@ -55,10 +55,10 @@ class Cataloguer:
         client_name: ClientName,
         channel: Channel,
     ) -> int:
-        """Process ONE observation (spec §7). Returns the number of rows written (0..N).
+        """Process ONE observation. Returns the number of rows written (0..N).
 
         Dispatches ``ObservationRecorded`` (always), one ``DecisionsRecorded`` when a row was
-        written. A ``StoreError`` is absorbed (log + ``0``), the cycle continues (spec §7)."""
+        written. A ``StoreError`` is absorbed (log + ``0``), the cycle continues."""
         try:
             self._observation_writer.record_observation(
                 FileObservation(

@@ -79,11 +79,11 @@ class SourceWatcher:
 
     async def record_sources(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
         """Records the sources of each of our downloads the client lists, completed ones aside,
-        then alerts on them (stage 4, D8; source points, D5). A store failure skips that
+        then alerts on them. A store failure skips that
         download's; a client failure propagates.
 
         Runs once ``sources_interval`` has passed on the monotonic clock since its last start,
-        failed or not (D3)."""
+        failed or not."""
         started_at = self._monotonic_clock.now()
         last = self._sources_read_at
         if last is not None and started_at - last < self._sources_interval:

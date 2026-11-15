@@ -35,10 +35,12 @@ class HealthRule:
     recovers_under: Detections
 
     def __post_init__(self) -> None:
-        # Otherwise the detections that just made it fail would let it recover at the next check.
+        # Otherwise the detections that just made it fail would turn it healthy at the next check.
         fails, recovers = self.fails_at, self.recovers_under
         if recovers.times > fails.times or recovers.among_last < fails.among_last:
-            raise ValueError(f"{self.name!r} would recover on the detections that made it fail")
+            raise ValueError(
+                f"{self.name!r} would turn healthy on the detections that made it fail"
+            )
 
     @property
     def checks_kept(self) -> int:

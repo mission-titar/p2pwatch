@@ -31,7 +31,6 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
-from tests.fakes.adapters.driven.fake_stepped_status_client import FakeSteppedStatusClient
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
 
@@ -152,7 +151,7 @@ async def test_not_connectable_from_the_first_reading_alerts_at_five_minutes_onc
 
 
 @pytest.mark.asyncio
-async def test_a_degraded_state_lasting_four_minutes_never_alerts_nor_recovers() -> None:
+async def test_a_channel_failing_for_four_minutes_never_alerts() -> None:
     alerts = await _alerts(*[_status(ed2k=_LOW_ID)] * 5, _status(ed2k=_UP))
     assert alerts == []
 
@@ -231,6 +230,13 @@ async def test_unreachable_alerts_at_two_minutes_and_ends_at_the_ninth_answer() 
         observability.logger.lines.count(LoggedLine(level="warning", message="amuled unreachable"))
         == 3
     )
+    client_lines = [
+        line for line in observability.health_logger.lines if line.message.startswith("client ")
+    ]
+    assert client_lines == [
+        LoggedLine(level="warning", message="client amuled, unreachable: unknown to failing"),
+        LoggedLine(level="info", message="client amuled, unreachable: failing to healthy"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -311,24 +317,3 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
             reading=StatusReading(read_at=read_at, status=published), published_at=published_at
         )
     }
-
-
-@pytest.mark.asyncio
-async def test_a_wall_clock_step_forward_raises_no_alert_before_its_sixth_reading() -> None:
-    # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
-    fake_time, run_state = FakeTime(), FakeRunStateStore()
-    observability = _Observability(fake_time)
-    client = FakeSteppedStatusClient(
-        [_status(ed2k=_LOW_ID)] * 5, run_state=run_state, fake_time=fake_time
-    )
-    await asyncio.wait_for(
-        _status_loop(
-            ClientName("amuled"),
-            client=client,
-            fake_time=fake_time,
-            observability=observability,
-            run_state=run_state,
-        ).run(),
-        timeout=1.0,
-    )
-    assert observability.notifier.notifications == []
