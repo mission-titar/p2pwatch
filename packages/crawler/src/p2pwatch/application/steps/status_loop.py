@@ -13,11 +13,10 @@ from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
-from p2pwatch.application.steps.health_recorder import HealthRecorder
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.health.health_condition import Outcome
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import (
@@ -78,7 +77,7 @@ class StatusLoop:
         run_state_reader: RunStateReader,
         status_reading_writer: StatusReadingWriter,
         node_id: NodeId,
-        health_recorder: HealthRecorder,
+        node_health: NodeHealth,
         client_component: Component,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
@@ -89,7 +88,7 @@ class StatusLoop:
         self._run_state_reader = run_state_reader
         self._status_reading_writer = status_reading_writer
         self._node_id = node_id
-        self._health_recorder = health_recorder
+        self._node_health = node_health
         self._client_component = client_component
         self._channel_timers: dict[tuple[Channel, ChannelField], _AlertTimer] = {}
 
@@ -110,14 +109,15 @@ class StatusLoop:
                     (channel, None, None)
                     for channel in dict.fromkeys(c for c, _ in self._channel_timers)
                 ]
-                answer = Outcome.failed(ClientNotAnswering())
+                await self._node_health.record_failure(
+                    ClientNotAnswering(), on=self._client_component, condition=CLIENT_UNREACHABLE
+                )
             else:
                 self._publish(status)
                 readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
-                answer = Outcome.success()
-            await self._health_recorder.record(
-                answer, on=self._client_component, condition=CLIENT_UNREACHABLE
-            )
+                await self._node_health.record_success(
+                    on=self._client_component, condition=CLIENT_UNREACHABLE
+                )
             for channel, connected, connectable in readings:
                 await self._observability_dispatcher.dispatch(
                     ChannelStatusSampled(

@@ -9,7 +9,7 @@ import pytest
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.steps.health_alerts import HealthAlerts
-from p2pwatch.application.steps.health_recorder import HealthRecorder
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
@@ -57,7 +57,7 @@ class _Observability:
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
         )
         alerts = HealthAlerts(observability_dispatcher=self.dispatcher, node_id=_NODE_ID)
-        self.health_recorder = HealthRecorder(logger=FakeLogger(), subscribers=(alerts.send,))
+        self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(alerts.send,))
 
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
@@ -88,7 +88,7 @@ def _status_loop(
         run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_id=_NODE_ID,
-        health_recorder=observability.health_recorder,
+        node_health=observability.node_health,
         client_component=Component(
             name=f"client {client_name}", client_name=client_name, conditions=(CLIENT_UNREACHABLE,)
         ),

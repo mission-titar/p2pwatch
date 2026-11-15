@@ -2,28 +2,12 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Self
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
 
 
-@dataclass(kw_only=True, frozen=True)
-class Outcome:
-    """Whether one attempt worked, and if not, why."""
-
-    reason: DeclaredFailure | None  # None when it worked
-
-    @classmethod
-    def success(cls) -> Self:
-        return cls(reason=None)
-
-    @classmethod
-    def failed(cls, reason: DeclaredFailure) -> Self:
-        return cls(reason=reason)
-
-
-class Health(Enum):
-    """What a condition says of its part: unknown at first, then healthy or failing."""
+class HealthState(Enum):
+    """A part's state of health, as one condition sees it."""
 
     UNKNOWN = "unknown"  # not enough attempts yet to tell
     HEALTHY = "healthy"
@@ -31,7 +15,7 @@ class Health(Enum):
 
 
 @dataclass(kw_only=True, frozen=True)
-class Threshold:
+class FailureThreshold:
     """A number of failures among the latest attempts, such as "2 of the last 10"."""
 
     failures: int
@@ -48,9 +32,9 @@ class HealthCondition:
     row, healthy again once fewer than 2 of the last 10 failed."""
 
     name: str
-    counts: type[DeclaredFailure]  # such as ClientNotAnswering; any other outcome counts as working
-    fails_at: Threshold
-    recovers_under: Threshold
+    counts: type[DeclaredFailure]  # such as ClientNotAnswering; any other failure counts as working
+    fails_at: FailureThreshold
+    recovers_under: FailureThreshold
 
     def __post_init__(self) -> None:
         # Otherwise the failures that just made it fail would let it recover at the next attempt.
@@ -59,15 +43,16 @@ class HealthCondition:
             raise ValueError(f"{self.name!r} would recover on the failures that made it fail")
 
     @property
-    def outcomes_kept(self) -> int:
+    def attempts_kept(self) -> int:
         """How many latest attempts it must remember: 10 for "fewer than 2 of the last 10"."""
         return self.recovers_under.among_last
 
-    def health_after(self, latest: tuple[Outcome, ...], *, previous: Health) -> Health:
-        """The health once the newest of ``latest`` is counted; ``previous`` is the one before."""
-        if len(latest) < self.fails_at.among_last:
-            return Health.UNKNOWN
+    def state_after(self, latest_failed: tuple[bool, ...], *, previous: HealthState) -> HealthState:
+        """The state once the newest attempt is counted: ``latest_failed`` says, for each latest
+        attempt, oldest first, whether it failed for the reason this condition counts."""
+        if len(latest_failed) < self.fails_at.among_last:
+            return HealthState.UNKNOWN
         # A failing part needs ``recovers_under`` to recover; any other needs ``fails_at`` to fail.
-        threshold = self.recovers_under if previous is Health.FAILING else self.fails_at
-        failures = sum(isinstance(o.reason, self.counts) for o in latest[-threshold.among_last :])
-        return Health.FAILING if failures >= threshold.failures else Health.HEALTHY
+        threshold = self.recovers_under if previous is HealthState.FAILING else self.fails_at
+        failures = sum(latest_failed[-threshold.among_last :])
+        return HealthState.FAILING if failures >= threshold.failures else HealthState.HEALTHY

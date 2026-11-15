@@ -2,7 +2,7 @@
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import HealthTransition
-from p2pwatch.domain.health.health_condition import Health
+from p2pwatch.domain.health.health_condition import HealthState
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import ClientReachableAgain, ClientUnreachableLasting
 from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, UNREACHABLE_ALERT_AFTER
@@ -22,7 +22,7 @@ class HealthAlerts:
         if transition.condition != CLIENT_UNREACHABLE:
             return
         client_name = transition.component.client_name
-        if transition.current is Health.FAILING:
+        if transition.current is HealthState.FAILING:
             await self._observability_dispatcher.dispatch(
                 ClientUnreachableLasting(
                     client_name=client_name,
@@ -30,7 +30,9 @@ class HealthAlerts:
                     node_id=self._node_id,
                 )
             )
-        elif transition.previous is Health.FAILING:  # healthy from its first readings: none to end
+        elif (
+            transition.previous is HealthState.FAILING
+        ):  # healthy from its first readings: none to end
             await self._observability_dispatcher.dispatch(
                 ClientReachableAgain(client_name=client_name, node_id=self._node_id)
             )

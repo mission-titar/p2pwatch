@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 
-from p2pwatch.domain.health.health_condition import Health, HealthCondition, Outcome
+from p2pwatch.domain.declared_failure import DeclaredFailure
+from p2pwatch.domain.health.health_condition import HealthCondition, HealthState
 from p2pwatch.domain.identifiers import ClientName
 
 
@@ -12,8 +13,8 @@ class HealthTransition:
 
     component: "Component"
     condition: HealthCondition
-    previous: Health
-    current: Health
+    previous: HealthState
+    current: HealthState
 
 
 class Component:
@@ -24,16 +25,26 @@ class Component:
     ) -> None:
         self.name = name  # "client amuled", as the log names it
         self.client_name = client_name  # "amuled", as the alerts name it
-        self._latest_outcomes: dict[HealthCondition, tuple[Outcome, ...]]
-        self._latest_outcomes = dict.fromkeys(conditions, ())
-        self._health = dict.fromkeys(conditions, Health.UNKNOWN)
+        self._latest_failed: dict[HealthCondition, tuple[bool, ...]]
+        self._latest_failed = dict.fromkeys(conditions, ())
+        self._states = dict.fromkeys(conditions, HealthState.UNKNOWN)
 
-    def record(self, outcome: Outcome, *, condition: HealthCondition) -> HealthTransition | None:
-        """Counts ``outcome`` for ``condition``; returns the change of health it caused, if any."""
-        latest = (*self._latest_outcomes[condition], outcome)[-condition.outcomes_kept :]
-        previous = self._health[condition]
-        current = condition.health_after(latest, previous=previous)
-        self._latest_outcomes[condition], self._health[condition] = latest, current
+    def record_failure(
+        self, failure: DeclaredFailure, *, condition: HealthCondition
+    ) -> HealthTransition | None:
+        """Counts a failed attempt for ``condition``, as working if it failed for another reason;
+        returns the change of health it caused, if any."""
+        return self._record(isinstance(failure, condition.counts), condition=condition)
+
+    def record_success(self, *, condition: HealthCondition) -> HealthTransition | None:
+        """Counts an attempt that worked for ``condition``; returns the change it caused, if any."""
+        return self._record(False, condition=condition)
+
+    def _record(self, failed: bool, *, condition: HealthCondition) -> HealthTransition | None:
+        latest_failed = (*self._latest_failed[condition], failed)[-condition.attempts_kept :]
+        previous = self._states[condition]
+        current = condition.state_after(latest_failed, previous=previous)
+        self._latest_failed[condition], self._states[condition] = latest_failed, current
         if current is previous:
             return None
         return HealthTransition(

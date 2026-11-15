@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from p2pwatch.domain.declared_failure import DeclaredFailure
-from p2pwatch.domain.health.health_condition import HealthCondition, Threshold
+from p2pwatch.domain.health.health_condition import FailureThreshold, HealthCondition
 from p2pwatch.domain.identifiers import Channel
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.value_bounds import require_well_formed_text
@@ -21,8 +21,8 @@ _UNANSWERED_IN_A_ROW = 3
 CLIENT_UNREACHABLE = HealthCondition(
     name="unreachable",
     counts=ClientNotAnswering,
-    fails_at=Threshold(failures=_UNANSWERED_IN_A_ROW, among_last=_UNANSWERED_IN_A_ROW),
-    recovers_under=Threshold(failures=2, among_last=10),
+    fails_at=FailureThreshold(failures=_UNANSWERED_IN_A_ROW, among_last=_UNANSWERED_IN_A_ROW),
+    recovers_under=FailureThreshold(failures=2, among_last=10),
 )
 # The readings come a minute apart, so the third unanswered one comes 2 minutes after the first.
 UNREACHABLE_ALERT_AFTER = (_UNANSWERED_IN_A_ROW - 1) * STATUS_PERIOD

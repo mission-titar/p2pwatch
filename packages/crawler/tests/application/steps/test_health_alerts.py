@@ -5,7 +5,7 @@ import pytest
 from p2pwatch.application.steps.health_alerts import HealthAlerts
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import Component, HealthTransition
-from p2pwatch.domain.health.health_condition import Health, HealthCondition
+from p2pwatch.domain.health.health_condition import HealthCondition, HealthState
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -24,7 +24,7 @@ _REACHABLE_AGAIN = RelayedLogLine(
 
 
 async def _sent(
-    *, previous: Health, current: Health, condition: HealthCondition = CLIENT_UNREACHABLE
+    *, previous: HealthState, current: HealthState, condition: HealthCondition = CLIENT_UNREACHABLE
 ) -> list[Notification]:
     """The notifications sent when the aMule client's ``condition`` changes."""
     notifier = FakeNotifier()
@@ -46,25 +46,30 @@ async def _sent(
 
 @pytest.mark.asyncio
 async def test_the_client_failing_at_its_first_readings_sends_unreachable_for_2_min() -> None:
-    assert await _sent(previous=Health.UNKNOWN, current=Health.FAILING) == [_UNREACHABLE]
+    assert await _sent(previous=HealthState.UNKNOWN, current=HealthState.FAILING) == [_UNREACHABLE]
 
 
 @pytest.mark.asyncio
 async def test_the_client_failing_after_being_healthy_sends_unreachable_for_2_min() -> None:
-    assert await _sent(previous=Health.HEALTHY, current=Health.FAILING) == [_UNREACHABLE]
+    assert await _sent(previous=HealthState.HEALTHY, current=HealthState.FAILING) == [_UNREACHABLE]
 
 
 @pytest.mark.asyncio
 async def test_the_client_recovering_sends_reachable_again() -> None:
-    assert await _sent(previous=Health.FAILING, current=Health.HEALTHY) == [_REACHABLE_AGAIN]
+    assert await _sent(previous=HealthState.FAILING, current=HealthState.HEALTHY) == [
+        _REACHABLE_AGAIN
+    ]
 
 
 @pytest.mark.asyncio
 async def test_the_client_healthy_from_its_first_readings_sends_nothing() -> None:
-    assert await _sent(previous=Health.UNKNOWN, current=Health.HEALTHY) == []
+    assert await _sent(previous=HealthState.UNKNOWN, current=HealthState.HEALTHY) == []
 
 
 @pytest.mark.asyncio
 async def test_another_condition_failing_sends_nothing() -> None:
     other = replace(CLIENT_UNREACHABLE, name="other")
-    assert await _sent(previous=Health.HEALTHY, current=Health.FAILING, condition=other) == []
+    assert (
+        await _sent(previous=HealthState.HEALTHY, current=HealthState.FAILING, condition=other)
+        == []
+    )
