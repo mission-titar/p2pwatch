@@ -8,7 +8,6 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.steps.download_cycle import DownloadCycle
-from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.wake_subject import WakeSubject
 
 
@@ -30,14 +29,14 @@ class DownloadLoop:
         self._waker = waker
         self._run_state_reader = run_state_reader
 
-    async def run(self, node_id: NodeId) -> None:
+    async def run(self) -> None:
         """Repeats the cycle then waits (poll/wake) until shutdown (DECISION D12).
 
         Launched by ``CrawlerLifecycle`` through ``LoopSupervisor``; cancellation (shutdown) lands
         at the next ``await`` (a poll or the sleep/wake wait), never mid DB write.
         """
         while not self._run_state_reader.is_shutdown_requested():
-            await self._download_cycle.run(node_id)
+            await self._download_cycle.run()
             if self._run_state_reader.is_shutdown_requested():
                 break
             await self._sleep_or_wake()
