@@ -22,7 +22,7 @@ An agent adds an entry only after the operator has agreed to it.
   - **Lot 4b, the health model**: health rules on each part of the node and a supervisor rebuilding a buggy one, so
     one bug no longer stops the node; five lots. Spec: `agents/specs/2026-11-15-v5-lot-4b-health-model.md`.
   - **Lot 4c, what the operator sees of health**: the graph of parts, alerts per root cause, health metrics, the Node
-    page, `/health` per MicroProfile, the watchdog, the real stops; its spec to rewrite on lot 4b's names. D12.
+    page, `/health` per MicroProfile, the watchdog, the real stops. D12 of the umbrella spec; its draft, to rewrite on lot 4b's names, in `agents/specs/2026-11-09-v5-fault-isolation.md`.
   - **Lot 5, the webui**: database reads off the event loop, abandon and retry from the Node page, the heavy file page
     out of v5. D14 to D16 of the umbrella spec.
   - **Lot 6, the release chain**: release candidates as GitHub prereleases with their own image tags, never `latest`.

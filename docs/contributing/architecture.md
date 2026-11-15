@@ -264,8 +264,9 @@ Points clés en chemin :
   leurs catalogues.
 - **Le statut n'est pas la liveness** : « le processus est vivant » n'implique pas « on peut
   trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
-  minutes, par canal (`connected`, `connectable`), et alerte sur un état dégradé qui dure : 5 min
-  pour un canal, 2 min pour l'API injoignable, puis envoie son rétablissement.
+  minutes, par canal (`connected`, `connectable`), et alerte sur un échec qui dure : 5 min pour un
+  canal, 2 min pour l'API injoignable. La fin de l'alerte part environ neuf lectures après le
+  rétablissement (§10.1).
 - **Résilience** : une `StoreError` à l'écriture du backoff est journalisée, et l'écriture
   retentée après la recherche suivante.
 
@@ -772,8 +773,8 @@ donné n'enregistre rien, si bien que pendant qu'aMule ne répond pas, les canau
 Le suivi des téléchargements est une partie aussi : à chaque mesure de l'espace libre, la décision
 de téléchargement enregistre si le disque est sous son plancher. Une mesure basse suffit pour
 l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
-redevenir sain, et cette alerte n'a pas de fin. `NodeHealth` journalise chaque changement d'état et le transmet aux alertes (`HealthAlerter`). Plus
-tard, le même modèle servira à reconstruire une partie dont les bugs reviennent.
+redevenir sain, et cette alerte n'a pas de fin. `NodeHealth` journalise chaque changement d'état
+et le transmet aux alertes (`HealthAlerter`).
 
 ## 11. Invariants de conception (récapitulatif)
 
