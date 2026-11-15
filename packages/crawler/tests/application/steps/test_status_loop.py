@@ -1,5 +1,5 @@
 """The status loop: a reading every minute feeds the channel gauges and the health of the client
-and of each channel, and a degraded state alerts once it has lasted, boot included."""
+and of each channel, whose rules send today's alerts, boot included."""
 
 import asyncio
 from collections.abc import Sequence
@@ -19,6 +19,7 @@ from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     ChannelStatus,
@@ -92,7 +93,6 @@ def _status_loop(
         observability_dispatcher=observability.dispatcher,
         run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
-        node_id=_NODE_ID,
         node_health=observability.node_health,
         client_component=Component(
             name=f"client {client_name}", client_name=client_name, rules=(CLIENT_UNREACHABLE,)
@@ -102,7 +102,7 @@ def _status_loop(
                 name=f"channel {client_name} {channel}",
                 client_name=client_name,
                 channel=channel,
-                rules=(CHANNEL_NOT_CONNECTED,),
+                rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
             )
             for channel in channels
         },
@@ -129,14 +129,6 @@ async def _run(
     return observability
 
 
-@pytest.mark.asyncio
-async def test_every_alert_carries_the_node_id_the_loop_is_built_with() -> None:
-    observability = await _run(_DOWN, _DOWN, _DOWN, _status(ed2k=_UP))
-    notifications = observability.notifier.notifications
-    assert notifications
-    assert {notification.node_id for _, notification in notifications} == {_NODE_ID}
-
-
 async def _alerts(*readings: _Reading) -> list[tuple[float, Notification]]:
     return (await _run(*readings)).notifier.notifications
 
@@ -154,8 +146,16 @@ _NOT_CONNECTABLE = "not connectable for 5 min"
 
 @pytest.mark.asyncio
 async def test_not_connectable_from_the_first_reading_alerts_at_five_minutes_once() -> None:
-    alerts = await _alerts(*[_status(ed2k=_LOW_ID)] * 10)
-    assert alerts == [(300.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}"))]
+    observability = await _run(*[_status(kad=_LOW_ID)] * 10)
+    assert observability.notifier.notifications == [
+        (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))
+    ]
+    assert (
+        LoggedLine(
+            level="warning", message="channel amuled kad, not connectable: unknown to failing"
+        )
+        in observability.health_logger.lines
+    )
 
 
 @pytest.mark.asyncio
@@ -197,28 +197,32 @@ async def test_an_unreachable_reading_between_two_runs_off_the_network_ends_noth
 
 
 @pytest.mark.asyncio
-async def test_a_good_reading_after_an_alert_recovers() -> None:
-    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, _status(kad=_UP))
+async def test_not_connectable_ends_at_the_ninth_connectable_reading() -> None:
+    # It ends under 2 readings not connectable among the channel's last 10.
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, *[_status(kad=_UP)] * 9)
     assert alerts == [
         (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
-        (360.0, _info("amuled kad: connectable again")),
+        (840.0, _info("amuled kad: connectable again")),
     ]
 
 
 @pytest.mark.asyncio
-async def test_unknown_between_two_degraded_readings_restarts_the_clock() -> None:
+async def test_an_unknown_connectable_field_between_two_runs_not_connectable_records_nothing() -> (
+    None
+):
+    # aMule could not tell: the sixth reading not connectable is the seventh reading.
     unknown = _status(kad=(True, None))
-    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 3, unknown, *[_status(kad=_LOW_ID)] * 6)
-    assert alerts == [(540.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 3, unknown, *[_status(kad=_LOW_ID)] * 3)
+    assert alerts == [(360.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
 
 
 @pytest.mark.asyncio
-async def test_unknown_after_an_alert_is_no_recovery() -> None:
+async def test_an_unknown_connectable_field_after_an_alert_ends_nothing() -> None:
     unknown = _status(kad=(True, None))
-    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, unknown, _status(kad=_UP))
+    alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, unknown, *[_status(kad=_UP)] * 9)
     assert alerts == [
         (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
-        (420.0, _info("amuled kad: connectable again")),
+        (900.0, _info("amuled kad: connectable again")),
     ]
 
 
@@ -256,12 +260,14 @@ async def test_unreachable_for_one_minute_never_alerts() -> None:
 
 
 @pytest.mark.asyncio
-async def test_while_unreachable_only_the_api_alerts_and_channel_clocks_restart() -> None:
+async def test_while_unreachable_the_channels_keep_their_latest_readings() -> None:
+    # The two readings after the outage complete the channel's six; the client's end is held:
+    # 4 unanswered among its last 10 readings.
     low = _status(ed2k=_LOW_ID)
     alerts = await _alerts(*[low] * 4, *[_DOWN] * 5, *[low] * 6)
-    assert alerts == [  # no end: 4 unanswered among the client's last 10 readings
+    assert alerts == [
         (360.0, _warning("amuled unreachable for 2 min")),
-        (840.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}")),
+        (600.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}")),
     ]
 
 
@@ -315,7 +321,7 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
 
 
 @pytest.mark.asyncio
-async def test_a_wall_clock_step_forward_raises_no_alert_before_its_delay() -> None:
+async def test_a_wall_clock_step_forward_raises_no_alert_before_its_sixth_reading() -> None:
     # Degraded for four minutes of monotonic time, an hour and four minutes of wall clock.
     fake_time, run_state = FakeTime(), FakeRunStateStore()
     observability = _Observability(fake_time)
