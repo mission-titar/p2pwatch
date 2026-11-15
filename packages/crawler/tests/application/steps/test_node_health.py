@@ -1,10 +1,10 @@
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.component import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 
 
@@ -27,11 +27,7 @@ class _AmuleHealth:
     def __init__(self) -> None:
         self.logger = FakeLogger()
         self.subscribers = _Subscribers()
-        self.amule = Component(
-            name="client amuled",
-            client_name=ClientName("amuled"),
-            rules=(CLIENT_UNREACHABLE,),
-        )
+        self.amule = client_component(ClientName("amuled"))
         self._node_health = NodeHealth(
             logger=self.logger, subscribers=(self.subscribers.first, self.subscribers.second)
         )

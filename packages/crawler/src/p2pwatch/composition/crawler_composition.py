@@ -127,17 +127,12 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
-from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.download.disk_space import download_tracking_component
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
-from p2pwatch.domain.status_reading import (
-    CHANNEL_NOT_CONNECTABLE,
-    CHANNEL_NOT_CONNECTED,
-    CLIENT_UNREACHABLE,
-)
+from p2pwatch.domain.status_reading import channel_component, client_component
 
 _logger = logging.getLogger(__name__)
 
@@ -503,18 +498,9 @@ class CrawlerComposition(CrawlerRunner):
                 run_state_reader=run_state_store,
                 status_reading_writer=status_reading_store,
                 node_health=node_health,
-                client_component=Component(
-                    name=f"client {_AMULE_CLIENT_NAME}",
-                    client_name=_AMULE_CLIENT_NAME,
-                    rules=(CLIENT_UNREACHABLE,),
-                ),
+                client_component=client_component(_AMULE_CLIENT_NAME),
                 channel_components={
-                    channel: Component(
-                        name=f"channel {_AMULE_CLIENT_NAME} {channel}",
-                        client_name=_AMULE_CLIENT_NAME,
-                        channel=channel,
-                        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
-                    )
+                    channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
                     for channel in client.channels()
                 },
             )
@@ -568,11 +554,7 @@ class CrawlerComposition(CrawlerRunner):
                         wall_clock=wall_clock,
                         observability_dispatcher=observability_dispatcher,
                         node_health=node_health,
-                        download_tracking_component=Component(
-                            name=f"download tracking {_AMULE_CLIENT_NAME}",
-                            client_name=_AMULE_CLIENT_NAME,
-                            rules=(DISK_SPACE_LOW,),
-                        ),
+                        download_tracking_component=download_tracking_component(_AMULE_CLIENT_NAME),
                         logger=StdlibLogger(DownloadDecider.__module__),
                     ),
                     download_starter=DownloadStarter(

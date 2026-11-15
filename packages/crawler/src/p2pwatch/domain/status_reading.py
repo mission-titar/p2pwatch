@@ -3,8 +3,9 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
-from p2pwatch.domain.identifiers import Channel
+from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
@@ -34,6 +35,24 @@ CHANNEL_NOT_CONNECTABLE = HealthRule(
 )
 # A channel's sixth reading in a row comes 5 minutes after the first.
 CHANNEL_ALERT_AFTER = (_CHANNEL_DETECTED_IN_A_ROW - 1) * STATUS_PERIOD
+
+
+def client_component(client_name: ClientName) -> Component:
+    """The client, judged by whether its API answers: "client amuled"."""
+    return Component(
+        name=f"client {client_name}", client_name=client_name, rules=(CLIENT_UNREACHABLE,)
+    )
+
+
+def channel_component(*, client_name: ClientName, channel: Channel) -> Component:
+    """One of the client's channels, judged by whether it is connected and connectable:
+    "channel amuled kad"."""
+    return Component(
+        name=f"channel {client_name} {channel}",
+        client_name=client_name,
+        channel=channel,
+        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
+    )
 
 
 def is_reading_fresh(age: timedelta) -> bool:

@@ -4,7 +4,7 @@ import pytest
 
 from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW, download_tracking_component
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -14,6 +14,8 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    channel_component,
+    client_component,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
@@ -28,18 +30,9 @@ _REACHABLE_AGAIN = RelayedLogLine(
 )
 
 
-_AMULE = Component(
-    name="client amuled", client_name=ClientName("amuled"), rules=(CLIENT_UNREACHABLE,)
-)
-_KAD = Component(
-    name="channel amuled kad",
-    client_name=ClientName("amuled"),
-    channel=Channel("kad"),
-    rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
-)
-_DOWNLOAD_TRACKING = Component(
-    name="download tracking amuled", client_name=ClientName("amuled"), rules=(DISK_SPACE_LOW,)
-)
+_AMULE = client_component(ClientName("amuled"))
+_KAD = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
+_DOWNLOAD_TRACKING = download_tracking_component(ClientName("amuled"))
 _TEN_GIB = 10 * 2**30
 
 

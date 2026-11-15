@@ -14,18 +14,16 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_loop import StatusLoop
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
-    CHANNEL_NOT_CONNECTABLE,
-    CHANNEL_NOT_CONNECTED,
-    CLIENT_UNREACHABLE,
     ChannelStatus,
     ClientStatus,
     PublishedReading,
     StatusReading,
+    channel_component,
+    client_component,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
@@ -96,16 +94,9 @@ def _status_loop(
         run_state_reader=run_state,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_health=observability.node_health,
-        client_component=Component(
-            name=f"client {client_name}", client_name=client_name, rules=(CLIENT_UNREACHABLE,)
-        ),
+        client_component=client_component(client_name),
         channel_components={
-            channel: Component(
-                name=f"channel {client_name} {channel}",
-                client_name=client_name,
-                channel=channel,
-                rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
-            )
+            channel: channel_component(client_name=client_name, channel=channel)
             for channel in channels
         },
     )
