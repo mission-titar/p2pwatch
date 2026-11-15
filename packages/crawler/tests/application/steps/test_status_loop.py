@@ -60,7 +60,9 @@ class _Observability:
             notifier=self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
         )
-        alerter = HealthAlerter(observability_dispatcher=self.dispatcher, node_id=_NODE_ID)
+        alerter = HealthAlerter(
+            observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None
+        )
         self.health_logger = FakeLogger()
         self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send,))
 

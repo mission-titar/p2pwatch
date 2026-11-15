@@ -4,6 +4,7 @@ import pytest
 
 from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -36,6 +37,10 @@ _KAD = Component(
     channel=Channel("kad"),
     rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE),
 )
+_DOWNLOAD_TRACKING = Component(
+    name="download tracking amuled", client_name=ClientName("amuled"), rules=(DISK_SPACE_LOW,)
+)
+_TEN_GIB = 10 * 2**30
 
 
 async def _sent(
@@ -44,6 +49,7 @@ async def _sent(
     current: HealthState,
     rule: HealthRule = CLIENT_UNREACHABLE,
     on: Component = _AMULE,
+    min_free_bytes: int | None = _TEN_GIB,
 ) -> list[Notification]:
     """The notifications sent when the health of ``on`` under ``rule`` changes."""
     notifier = FakeNotifier()
@@ -53,7 +59,9 @@ async def _sent(
         notifier=notifier,
         notification_timeout_seconds=5.0,
     )
-    alerter = HealthAlerter(observability_dispatcher=dispatcher, node_id=_NODE_ID)
+    alerter = HealthAlerter(
+        observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=min_free_bytes
+    )
     await alerter.send(
         HealthTransition(component=on, rule=rule, previous=previous, current=current)
     )
@@ -145,4 +153,42 @@ async def test_a_channel_s_rule_on_a_component_with_no_channel_raises() -> None:
     with pytest.raises(ValueError, match="client amuled: no channel to name in its alert"):
         await _sent(
             previous=HealthState.HEALTHY, current=HealthState.FAILING, rule=CHANNEL_NOT_CONNECTED
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
+async def test_the_disk_failing_sends_disk_low_under_its_floor(previous: HealthState) -> None:
+    sent = await _sent(
+        previous=previous, current=HealthState.FAILING, rule=DISK_SPACE_LOW, on=_DOWNLOAD_TRACKING
+    )
+    assert sent == [
+        RelayedLogLine(
+            message="download disk low: under the 10.0 GiB floor (no new download)",
+            severity=Severity.WARNING,
+            node_id=_NODE_ID,
+        )
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.FAILING])
+async def test_the_disk_healthy_sends_nothing_since_its_alert_has_no_end(
+    previous: HealthState,
+) -> None:
+    sent = await _sent(
+        previous=previous, current=HealthState.HEALTHY, rule=DISK_SPACE_LOW, on=_DOWNLOAD_TRACKING
+    )
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_the_disk_failing_on_a_node_without_a_floor_raises() -> None:
+    with pytest.raises(ValueError, match="download tracking amuled: no disk floor for its alert"):
+        await _sent(
+            previous=HealthState.HEALTHY,
+            current=HealthState.FAILING,
+            rule=DISK_SPACE_LOW,
+            on=_DOWNLOAD_TRACKING,
+            min_free_bytes=None,
         )

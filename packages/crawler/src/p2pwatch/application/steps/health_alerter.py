@@ -1,8 +1,10 @@
-"""The client's and its channels' alerts, sent when their health changes."""
+"""The client's, its channels' and the download disk's alerts, sent when their health
+changes."""
 
 from collections.abc import Mapping
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
 from p2pwatch.domain.health.component import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, NodeId
@@ -12,6 +14,7 @@ from p2pwatch.domain.observability.events import (
     ChannelRecovered,
     ClientReachableAgain,
     ClientUnreachableLasting,
+    DiskSpaceLow,
     Event,
 )
 from p2pwatch.domain.status_reading import (
@@ -30,14 +33,19 @@ _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
 
 
 class HealthAlerter:
-    """Sends the client's and its channels' alerts when their health changes, such as "amuled
-    unreachable for 2 min" when it starts failing, "amuled reachable again" when it recovers."""
+    """Sends the client's, its channels' and the download disk's alerts when their health changes,
+    such as "amuled unreachable for 2 min" when it starts failing."""
 
     def __init__(
-        self, *, observability_dispatcher: ObservabilityDispatcher, node_id: NodeId
+        self,
+        *,
+        observability_dispatcher: ObservabilityDispatcher,
+        node_id: NodeId,
+        min_free_bytes: int | None,
     ) -> None:
         self._observability_dispatcher = observability_dispatcher
         self._node_id = node_id
+        self._min_free_bytes = min_free_bytes  # the download disk's floor; None: no download
 
     async def send(self, transition: HealthTransition) -> None:
         if transition.current is HealthState.FAILING:
@@ -65,7 +73,14 @@ class HealthAlerter:
                 degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
                 node_id=node_id,
             )
+        if transition.rule == DISK_SPACE_LOW:
+            return DiskSpaceLow(min_free_bytes=self._floor_of(transition), node_id=node_id)
         return None
+
+    def _floor_of(self, transition: HealthTransition) -> int:
+        if self._min_free_bytes is None:
+            raise ValueError(f"{transition.component.name}: no disk floor for its alert")
+        return self._min_free_bytes
 
     def _end(self, transition: HealthTransition) -> Event | None:
         component, node_id = transition.component, self._node_id
@@ -78,7 +93,7 @@ class HealthAlerter:
                 field=field,
                 node_id=node_id,
             )
-        return None
+        return None  # the disk alert has no end, as it never had
 
 
 def _channel_of(transition: HealthTransition) -> Channel:

@@ -10,8 +10,11 @@ from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.source_watcher import SourceWatcher
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
@@ -84,7 +87,12 @@ def _download_loop(
             download_tracker=download_tracker,
             wall_clock=fake_time.wall,
             observability_dispatcher=observability_dispatcher,
-            node_id=_NODE_ID,
+            node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
+            download_tracking_component=Component(
+                name="download tracking amuled",
+                client_name=ClientName("amuled"),
+                rules=(DISK_SPACE_LOW,),
+            ),
             logger=logger,
         ),
         download_starter=DownloadStarter(

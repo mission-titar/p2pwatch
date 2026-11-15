@@ -346,6 +346,37 @@ async def test_the_download_loop_records_a_tracked_downloads_sources_under_the_n
     catalog.close()
 
 
+def _has_listed_the_downloads_twice(api: FakeAmuleApi) -> bool:
+    """A second cycle's listing: the first cycle has read the free space."""
+    return [request.url.path for request in api.requests].count("/api/v1/downloads") >= 2
+
+
+@pytest.mark.asyncio
+async def test_a_disk_under_its_floor_alerts_with_the_floor_from_the_config(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 0.05,
+        "min_free_bytes": 2**60,  # beyond any disk: every reading is under it
+        "output_dir": str(tmp_path),
+    }
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path, download=download))
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with FakeAmuleApiServer(FakeAmuleApi()) as server, caplog.at_level(logging.INFO):
+        run = _crawl(server, config_path=config_path)
+        assert await asyncio.to_thread(
+            server.wait_for, _has_listed_the_downloads_twice, timeout_seconds=_WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+
+    assert "download tracking amuled, disk space low: unknown to failing" in caplog.messages
+    low = "download disk low: under the 1073741824.0 GiB floor (no new download)"
+    assert caplog.messages.count(low) == 1
+
+
 @pytest.mark.asyncio
 async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     tmp_path: Path,

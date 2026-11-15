@@ -2,8 +2,7 @@
 
 DOMAIN ring (pure). One FROZEN dataclass per salient observable fact; tagged union
 ``Event``. Business fields ONLY: no notion of log/metric/notification (that is
-``policy.plan_observability``'s job). Recurring failure facts carry ``first_occurrence``
-(computed by the application via ``EdgeState``) for notification anti-spam (E-D8).
+``policy.plan_observability``'s job).
 """
 
 from dataclasses import dataclass
@@ -129,8 +128,7 @@ class FreeSpaceSampled:
 
 @dataclass(kw_only=True, frozen=True)
 class DiskSpaceLow:
-    # Emitted only on the crossing below the floor: the download loop owns the edge.
-    free_bytes: int
+    # Sent once per dip: when the disk's health rule turns failing.
     min_free_bytes: int
     node_id: NodeId
 

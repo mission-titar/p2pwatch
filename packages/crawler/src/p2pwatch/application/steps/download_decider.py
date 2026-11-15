@@ -10,14 +10,15 @@ from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDow
 from p2pwatch.application.ports.driven.tracked_download_writer import TrackedDownloadWriter
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
 from p2pwatch.domain.download.policy import DownloadVerdict, decide_download
-from p2pwatch.domain.edge_state import EdgeState
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.observability.events import DiskSpaceLow, DownloadQueued, FreeSpaceSampled
+from p2pwatch.domain.observability.events import DownloadQueued, FreeSpaceSampled
 
 
 def _target_status(targets: Sequence[TargetSegment], *, target_id: TargetId) -> str:
@@ -30,7 +31,8 @@ def _target_status(targets: Sequence[TargetSegment], *, target_id: TargetId) -> 
 
 
 class DownloadDecider:
-    """Queues each download decision the disk floor admits; owns the disk-low edge."""
+    """Queues each download decision the disk floor admits, and records at each free-space
+    reading whether the disk is under its floor."""
 
     def __init__(
         self,
@@ -45,7 +47,8 @@ class DownloadDecider:
         download_tracker: DownloadTracker,
         wall_clock: WallClock,
         observability_dispatcher: ObservabilityDispatcher,
-        node_id: NodeId,
+        node_health: NodeHealth,
+        download_tracking_component: Component,
         logger: Logger,
     ) -> None:
         self._free_space_meter = free_space_meter
@@ -58,9 +61,9 @@ class DownloadDecider:
         self._download_tracker = download_tracker
         self._wall_clock = wall_clock
         self._observability_dispatcher = observability_dispatcher
-        self._node_id = node_id
+        self._node_health = node_health
+        self._download_tracking_component = download_tracking_component
         self._logger = logger
-        self._disk_low_edge = EdgeState()
 
     async def queue_new_candidates(self, outstanding_bytes: int) -> None:
         """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
@@ -70,16 +73,11 @@ class DownloadDecider:
         """
         free_bytes = self._free_space_meter.free_bytes()
         await self._observability_dispatcher.dispatch(FreeSpaceSampled(free_bytes=free_bytes))
-        if free_bytes >= self._min_free_bytes:
-            self._disk_low_edge.leave("disk_low")
-        elif self._disk_low_edge.enter("disk_low"):
-            await self._observability_dispatcher.dispatch(
-                DiskSpaceLow(
-                    free_bytes=free_bytes,
-                    min_free_bytes=self._min_free_bytes,
-                    node_id=self._node_id,
-                )
-            )
+        await self._node_health.record(
+            on=self._download_tracking_component,
+            rule=DISK_SPACE_LOW,
+            detected=free_bytes < self._min_free_bytes,
+        )
         for candidate in self._decision_reader.read_download_candidates():
             if self._tracked_download_reader.is_tracked(candidate.file):
                 continue
