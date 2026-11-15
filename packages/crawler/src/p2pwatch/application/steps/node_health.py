@@ -4,12 +4,11 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
-from p2pwatch.domain.declared_failure import DeclaredFailure
 from p2pwatch.domain.health.component import Component, HealthTransition
-from p2pwatch.domain.health.health_condition import HealthCondition, HealthState
+from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 
 
-# What NodeHealth passes each change of health to, such as HealthAlerts.send.
+# What NodeHealth passes each change of health to, such as HealthAlerter.send.
 class HealthSubscriber(Protocol):
     async def __call__(self, transition: HealthTransition) -> None: ...
 
@@ -22,21 +21,19 @@ class NodeHealth:
         self._logger = logger
         self._subscribers = tuple(subscribers)  # called in this order
 
-    async def record_failure(
-        self, failure: DeclaredFailure, *, on: Component, condition: HealthCondition
-    ) -> None:
-        await self._pass_on(on.record_failure(failure, condition=condition))
+    async def record_failure(self, error: Exception, *, on: Component, rule: HealthRule) -> None:
+        await self._pass_on(on.record_failure(error, rule=rule))
 
-    async def record_success(self, *, on: Component, condition: HealthCondition) -> None:
-        await self._pass_on(on.record_success(condition=condition))
+    async def record_success(self, *, on: Component, rule: HealthRule) -> None:
+        await self._pass_on(on.record_success(rule=rule))
 
     async def _pass_on(self, transition: HealthTransition | None) -> None:
         if transition is None:
             return
         failing = transition.current is HealthState.FAILING
         log = self._logger.warning if failing else self._logger.info
-        part, condition = transition.component.name, transition.condition.name
+        part, rule = transition.component.name, transition.rule.name
         previous, current = transition.previous.value, transition.current.value
-        log("%s, %s: %s to %s", part, condition, previous, current)
+        log("%s, %s: %s to %s", part, rule, previous, current)
         for subscriber in self._subscribers:
             await subscriber(transition)

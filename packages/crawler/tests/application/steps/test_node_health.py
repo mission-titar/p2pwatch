@@ -1,10 +1,11 @@
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
+from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.health.component import Component, HealthTransition
-from p2pwatch.domain.health.health_condition import HealthState
+from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, ClientNotAnswering
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 
 
@@ -30,7 +31,7 @@ class _AmuleHealth:
         self.amule = Component(
             name="client amuled",
             client_name=ClientName("amuled"),
-            conditions=(CLIENT_UNREACHABLE,),
+            rules=(CLIENT_UNREACHABLE,),
         )
         self._node_health = NodeHealth(
             logger=self.logger, subscribers=(self.subscribers.first, self.subscribers.second)
@@ -39,12 +40,12 @@ class _AmuleHealth:
     async def no_answer(self, *, times: int) -> None:
         for _ in range(times):
             await self._node_health.record_failure(
-                ClientNotAnswering(), on=self.amule, condition=CLIENT_UNREACHABLE
+                ClientUnreachableError("no answer"), on=self.amule, rule=CLIENT_UNREACHABLE
             )
 
     async def answer(self, *, times: int) -> None:
         for _ in range(times):
-            await self._node_health.record_success(on=self.amule, condition=CLIENT_UNREACHABLE)
+            await self._node_health.record_success(on=self.amule, rule=CLIENT_UNREACHABLE)
 
 
 @pytest.mark.asyncio
@@ -71,7 +72,7 @@ async def test_each_change_reaches_every_subscriber_in_order() -> None:
     await amule_health.no_answer(times=3)
     change = HealthTransition(
         component=amule_health.amule,
-        condition=CLIENT_UNREACHABLE,
+        rule=CLIENT_UNREACHABLE,
         previous=HealthState.UNKNOWN,
         current=HealthState.FAILING,
     )

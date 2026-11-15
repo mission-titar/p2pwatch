@@ -102,7 +102,7 @@ from p2pwatch.application.steps.download_loop import DownloadLoop
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.health_alerts import HealthAlerts
+from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.loop_supervisor import (
     LoopSupervisor,
     ShutdownBoundArmer,
@@ -476,7 +476,7 @@ class CrawlerComposition(CrawlerRunner):
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__),
                 subscribers=(
-                    HealthAlerts(
+                    HealthAlerter(
                         observability_dispatcher=observability_dispatcher, node_id=node_id
                     ).send,
                 ),
@@ -495,7 +495,7 @@ class CrawlerComposition(CrawlerRunner):
                 client_component=Component(
                     name=f"client {_AMULE_CLIENT_NAME}",
                     client_name=_AMULE_CLIENT_NAME,
-                    conditions=(CLIENT_UNREACHABLE,),
+                    rules=(CLIENT_UNREACHABLE,),
                 ),
             )
             search_task_runner = SearchTaskRunner(

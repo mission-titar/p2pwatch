@@ -2,10 +2,10 @@ from dataclasses import replace
 
 import pytest
 
-from p2pwatch.application.steps.health_alerts import HealthAlerts
+from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import Component, HealthTransition
-from p2pwatch.domain.health.health_condition import HealthCondition, HealthState
+from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -24,9 +24,9 @@ _REACHABLE_AGAIN = RelayedLogLine(
 
 
 async def _sent(
-    *, previous: HealthState, current: HealthState, condition: HealthCondition = CLIENT_UNREACHABLE
+    *, previous: HealthState, current: HealthState, rule: HealthRule = CLIENT_UNREACHABLE
 ) -> list[Notification]:
-    """The notifications sent when the aMule client's ``condition`` changes."""
+    """The notifications sent when the aMule client's health under ``rule`` changes."""
     notifier = FakeNotifier()
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
@@ -34,12 +34,10 @@ async def _sent(
         notifier=notifier,
         notification_timeout_seconds=5.0,
     )
-    amule = Component(
-        name="client amuled", client_name=ClientName("amuled"), conditions=(condition,)
-    )
-    alerts = HealthAlerts(observability_dispatcher=dispatcher, node_id=_NODE_ID)
-    await alerts.send(
-        HealthTransition(component=amule, condition=condition, previous=previous, current=current)
+    amule = Component(name="client amuled", client_name=ClientName("amuled"), rules=(rule,))
+    alerter = HealthAlerter(observability_dispatcher=dispatcher, node_id=_NODE_ID)
+    await alerter.send(
+        HealthTransition(component=amule, rule=rule, previous=previous, current=current)
     )
     return [notification for _, notification in notifier.calls]
 
@@ -67,9 +65,6 @@ async def test_the_client_healthy_from_its_first_readings_sends_nothing() -> Non
 
 
 @pytest.mark.asyncio
-async def test_another_condition_failing_sends_nothing() -> None:
+async def test_another_rule_failing_sends_nothing() -> None:
     other = replace(CLIENT_UNREACHABLE, name="other")
-    assert (
-        await _sent(previous=HealthState.HEALTHY, current=HealthState.FAILING, condition=other)
-        == []
-    )
+    assert await _sent(previous=HealthState.HEALTHY, current=HealthState.FAILING, rule=other) == []

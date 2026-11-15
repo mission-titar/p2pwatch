@@ -45,7 +45,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `search text` | `search_text`, the text a listed name must contain, or a listed source's hash prefix | `query`, which is SQL's |
 | `token` | a named matcher of the policy (`tokens:`) | a word of a text |
 | `word` | a piece of normalized text | `token` |
-| `token expression` | `TokenExpression`, an `all`, `any` or `not` over tokens: a rule's body, a composite token or an inline operand | `condition`, a health word |
+| `token expression` | `TokenExpression`, an `all`, `any` or `not` over tokens: a rule's body, a composite token or an inline operand | `condition` |
 | `reevaluation` | re-judging every file when the policy changed | `backfill` |
 | `tracked` | a download with a row in `downloads`, whatever its state: `TrackedDownload` | `downloaded`, `active` |
 | `download status` | `DownloadStatus`, a download as its client lists it: its bytes, its `completed` signal, its `WaitingReason` or `FailureReason` | a tracked download, which is ours |
@@ -66,13 +66,12 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `audience` | who a notification is for: `community`, `operations` | `tag` (apprise's keyword aside), `channel` |
 | `notification` | `Notification`, what a `Notifier` sends an audience, carrying its node: a `RelayedLogLine` relays an event's log line unchanged; a community one is a typed kind, a `TierRise`, a `SourceAlert` or a `CompletedDownload`, which the notifier writes out | a log line, which an operations notification only relays |
 | `node metric` | a measurement of the node's own running (searches done, free disk, the crawler up), which Prometheus reads: a `NodeCounter` or a `NodeGauge` names one, with its description and its label class (`ChannelLabels`, `ClientLabels`, `DecisionLabels`, `SourceAlertLabels`, or none); `CounterIncrement` and `GaugeSetting` are what the policy writes, `NodeMetricSample` is one series and its current value | a bare `metric`; a file's or a source's figures |
-| `declared failure` | `DeclaredFailure`, a failure the code expects, such as aMule not answering (`ClientNotAnswering`), as opposed to a bug | an `expected error` |
-| `health state` | `HealthState`, a part's state of health, as one condition sees it: unknown at first, then healthy or failing | `status`, a client's |
-| `health condition` | `HealthCondition`, one way a part can be unwell, such as "aMule does not answer": failing after 3 failures in a row, healthy again once fewer than 2 of the last 10 failed, each count a `FailureThreshold` | a bare `condition`, a token expression |
+| `health state` | `HealthState`, a part's state of health, as one rule sees it: unknown at first, then healthy or failing | `status`, a client's |
+| `health rule` | `HealthRule`, a rule judging a part's health from its latest attempts, such as "aMule does not answer": failing after 3 errors in a row, healthy again once fewer than 2 of the last 10 failed, each count a `FailureThreshold` | a health `condition` |
 | `component` | `Component`, a part of the node whose health is tracked, such as the aMule client | `unit`, `service` |
 | `health transition` | `HealthTransition`, a change in one part's health, such as the aMule client going from healthy to failing | `event`, the observability's |
 | `node health` | `NodeHealth`, the node's health: every part's attempts come here through `record_failure` and `record_success`, and each change is logged and passed on to the alerts | `recorder`, `registry` |
-| `health alerts` | `HealthAlerts`, sends the client's alerts when its health changes: "amuled unreachable for 2 min" when it starts failing, "amuled reachable again" when it recovers | `translator` |
+| `health alerter` | `HealthAlerter`, sends the client's alerts when its health changes: "amuled unreachable for 2 min" when it starts failing, "amuled reachable again" when it recovers | `translator` |
 | `inaccessible path` | `InaccessiblePathError`, a path the filesystem refuses to examine (removed, under a file, behind a directory it cannot search, its name too long): the declared failure of `FreeSpaceMeter` and `CatalogFinder` | a raw `OSError` past its adapter |
 | `config problem` | `ConfigProblem`, one problem of a config file: the file, the key or none, the message | a refusal, an error |
 | `schema` | a pydantic model of a config file as written, in the config adapter only: `CrawlerConfigSchema` | the domain object it builds |

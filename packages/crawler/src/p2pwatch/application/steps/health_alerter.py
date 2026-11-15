@@ -2,13 +2,13 @@
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.component import HealthTransition
-from p2pwatch.domain.health.health_condition import HealthState
+from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import ClientReachableAgain, ClientUnreachableLasting
 from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, UNREACHABLE_ALERT_AFTER
 
 
-class HealthAlerts:
+class HealthAlerter:
     """Sends the client's alerts when its health changes: "amuled unreachable for 2 min" when it
     starts failing, "amuled reachable again" when it recovers."""
 
@@ -19,7 +19,7 @@ class HealthAlerts:
         self._node_id = node_id
 
     async def send(self, transition: HealthTransition) -> None:
-        if transition.condition != CLIENT_UNREACHABLE:
+        if transition.rule != CLIENT_UNREACHABLE:
             return
         client_name = transition.component.client_name
         if transition.current is HealthState.FAILING:

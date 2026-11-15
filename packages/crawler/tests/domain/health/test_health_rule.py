@@ -1,26 +1,20 @@
 import pytest
 
-from p2pwatch.domain.declared_failure import DeclaredFailure
-from p2pwatch.domain.health.health_condition import FailureThreshold, HealthCondition, HealthState
+from p2pwatch.domain.health.health_rule import FailureThreshold, HealthRule, HealthState
 
-# Each attempt as the condition remembers it: whether it failed for the reason it counts.
+# Each attempt as the rule remembers it: whether it failed with the error it counts.
 _FAILED, _WORKED = True, False
 
-
-class _Refused(DeclaredFailure):
-    """The failure the condition under test counts."""
-
-
-_REFUSED = HealthCondition(
+_REFUSED = HealthRule(
     name="refused",
-    counts=_Refused,
+    counts=ConnectionRefusedError,
     fails_at=FailureThreshold(failures=3, among_last=3),
     recovers_under=FailureThreshold(failures=2, among_last=10),
 )
 
 
 def _states_after_each(attempts: list[bool]) -> list[HealthState]:
-    """The condition's state after each of ``attempts``, in order."""
+    """The rule's state after each of ``attempts``, in order."""
     latest_failed: tuple[bool, ...] = ()
     state = HealthState.UNKNOWN
     states = []
@@ -76,29 +70,29 @@ def test_a_threshold_needs_from_1_failure_to_all_of_its_attempts(failures: int) 
         FailureThreshold(failures=failures, among_last=3)
 
 
-def test_a_condition_refuses_to_recover_under_more_failures_than_made_it_fail() -> None:
+def test_a_rule_refuses_to_recover_under_more_failures_than_made_it_fail() -> None:
     with pytest.raises(ValueError, match="^'x' would recover on the failures that made it fail$"):
-        HealthCondition(
+        HealthRule(
             name="x",
-            counts=_Refused,
+            counts=ConnectionRefusedError,
             fails_at=FailureThreshold(failures=2, among_last=10),
             recovers_under=FailureThreshold(failures=3, among_last=10),
         )
 
 
-def test_a_condition_refuses_to_recover_on_fewer_attempts_than_made_it_fail() -> None:
+def test_a_rule_refuses_to_recover_on_fewer_attempts_than_made_it_fail() -> None:
     with pytest.raises(ValueError, match="^'x' would recover on the failures that made it fail$"):
-        HealthCondition(
+        HealthRule(
             name="x",
-            counts=_Refused,
+            counts=ConnectionRefusedError,
             fails_at=FailureThreshold(failures=2, among_last=10),
             recovers_under=FailureThreshold(failures=2, among_last=2),
         )
 
 
-def test_a_condition_may_fail_at_1_failure_and_recover_at_the_next_success() -> None:
+def test_a_rule_may_fail_at_1_failure_and_recover_at_the_next_success() -> None:
     one_of_one = FailureThreshold(failures=1, among_last=1)
-    condition = HealthCondition(
-        name="disk", counts=_Refused, fails_at=one_of_one, recovers_under=one_of_one
+    rule = HealthRule(
+        name="disk", counts=ConnectionRefusedError, fails_at=one_of_one, recovers_under=one_of_one
     )
-    assert condition.state_after((_WORKED,), previous=HealthState.FAILING) is HealthState.HEALTHY
+    assert rule.state_after((_WORKED,), previous=HealthState.FAILING) is HealthState.HEALTHY

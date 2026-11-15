@@ -3,11 +3,9 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from p2pwatch.domain.declared_failure import DeclaredFailure
-
 
 class HealthState(Enum):
-    """A part's state of health, as one condition sees it."""
+    """A part's state of health, as one rule sees it."""
 
     UNKNOWN = "unknown"  # not enough attempts yet to tell
     HEALTHY = "healthy"
@@ -27,12 +25,12 @@ class FailureThreshold:
 
 
 @dataclass(kw_only=True, frozen=True)
-class HealthCondition:
-    """One way a part can be unwell, such as "aMule does not answer": failing after 3 failures in a
-    row, healthy again once fewer than 2 of the last 10 failed."""
+class HealthRule:
+    """A rule judging a part's health from its latest attempts, such as "aMule does not answer":
+    failing after 3 errors in a row, healthy again once fewer than 2 of the last 10 failed."""
 
     name: str
-    counts: type[DeclaredFailure]  # such as ClientNotAnswering; any other failure counts as working
+    counts: type[Exception]  # such as ClientError; failing with any other error counts as working
     fails_at: FailureThreshold
     recovers_under: FailureThreshold
 
@@ -49,7 +47,7 @@ class HealthCondition:
 
     def state_after(self, latest_failed: tuple[bool, ...], *, previous: HealthState) -> HealthState:
         """The state once the newest attempt is counted: ``latest_failed`` says, for each latest
-        attempt, oldest first, whether it failed for the reason this condition counts."""
+        attempt, oldest first, whether it failed with the error this rule counts."""
         if len(latest_failed) < self.fails_at.among_last:
             return HealthState.UNKNOWN
         # A failing part needs ``recovers_under`` to recover; any other needs ``fails_at`` to fail.

@@ -30,7 +30,6 @@ from p2pwatch.domain.observability.events import (
 from p2pwatch.domain.status_reading import (
     CLIENT_UNREACHABLE,
     STATUS_PERIOD,
-    ClientNotAnswering,
     ClientStatus,
     StatusReading,
 )
@@ -99,7 +98,7 @@ class StatusLoop:
                 status = await self._client.status()
             except ClientAuthError:
                 raise  # a wrong password is config, not an outage
-            except ClientError:  # a refused route too: a renamed /version must not end the crawler
+            except ClientError as error:  # a refused route too: a renamed /version must not end it
                 self._publish(None)
                 await self._observability_dispatcher.dispatch(
                     ClientUnreachable(client_name=self._client_name)
@@ -110,13 +109,13 @@ class StatusLoop:
                     for channel in dict.fromkeys(c for c, _ in self._channel_timers)
                 ]
                 await self._node_health.record_failure(
-                    ClientNotAnswering(), on=self._client_component, condition=CLIENT_UNREACHABLE
+                    error, on=self._client_component, rule=CLIENT_UNREACHABLE
                 )
             else:
                 self._publish(status)
                 readings = [(c.channel, c.connected, c.connectable) for c in status.channels]
                 await self._node_health.record_success(
-                    on=self._client_component, condition=CLIENT_UNREACHABLE
+                    on=self._client_component, rule=CLIENT_UNREACHABLE
                 )
             for channel, connected, connectable in readings:
                 await self._observability_dispatcher.dispatch(
