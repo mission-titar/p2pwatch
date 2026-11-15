@@ -56,8 +56,8 @@ class DownloadConfig:
 
     @property
     def time_between_source_reads(self) -> timedelta:
-        """The time between reads the carried role's max age assumes: the interval plus a poll
-        (source points spec, D3), since the step runs on the first round past its interval."""
+        """The time between reads the carried role's max age assumes: the interval, plus a poll as
+        the margin of a read that outlasts it (source points spec, D3)."""
         return self.sources_interval + timedelta(seconds=self.poll_interval_seconds)
 
 

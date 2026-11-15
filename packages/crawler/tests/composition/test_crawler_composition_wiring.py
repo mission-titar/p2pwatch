@@ -298,11 +298,11 @@ async def test_full_mode_catalogues_queues_serves_the_webui_and_metrics_and_stop
     assert [str(warning.message) for warning in caught] == []
 
 
-def _has_read_the_sources_then_listed_again(api: FakeAmuleApi) -> bool:
-    """The next cycle's listing: the cycle that read the sources has written them."""
+def _has_read_the_sources_twice(api: FakeAmuleApi) -> bool:
+    """Source tracking's second read: its turns run one after the other, so the first has
+    written what it read."""
     paths = [request.url.path for request in api.requests]
-    sources = f"/api/v1/downloads/{_HASH}/clients"
-    return sources in paths and "/api/v1/downloads" in paths[paths.index(sources) :]
+    return paths.count(f"/api/v1/downloads/{_HASH}/clients") >= 2
 
 
 @pytest.mark.asyncio
@@ -326,6 +326,7 @@ async def test_download_tracking_records_a_tracked_downloads_sources_under_the_n
         "lost_after_seconds": 86400,
         "output_dir": str(tmp_path),
         "reappeared_after_seconds": 43200,
+        "sources_interval_seconds": 0.05,
     }
     _record_node_id(tmp_path, node_id=NodeId("wired-node"))
     config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path, download=download))
@@ -337,7 +338,7 @@ async def test_download_tracking_records_a_tracked_downloads_sources_under_the_n
     with FakeAmuleApiServer(api) as server:
         run = _crawl(server, config_path=config_path)
         assert await asyncio.to_thread(
-            server.wait_for, _has_read_the_sources_then_listed_again, timeout_seconds=_WAIT_SECONDS
+            server.wait_for, _has_read_the_sources_twice, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
@@ -347,9 +348,10 @@ async def test_download_tracking_records_a_tracked_downloads_sources_under_the_n
     catalog.close()
 
 
-def _has_listed_the_downloads_twice(api: FakeAmuleApi) -> bool:
-    """A second cycle's listing: the first cycle has read the free space."""
-    return [request.url.path for request in api.requests].count("/api/v1/downloads") >= 2
+def _download_tracking_has_listed_twice(api: FakeAmuleApi) -> bool:
+    """A second cycle's listing, so the first has read the free space; source tracking lists once
+    beside them, then waits its 300 s."""
+    return [request.url.path for request in api.requests].count("/api/v1/downloads") >= 3
 
 
 @pytest.mark.asyncio
@@ -368,7 +370,7 @@ async def test_a_disk_under_its_floor_alerts_with_the_floor_from_the_config(
     with FakeAmuleApiServer(FakeAmuleApi()) as server, caplog.at_level(logging.INFO):
         run = _crawl(server, config_path=config_path)
         assert await asyncio.to_thread(
-            server.wait_for, _has_listed_the_downloads_twice, timeout_seconds=_WAIT_SECONDS
+            server.wait_for, _download_tracking_has_listed_twice, timeout_seconds=_WAIT_SECONDS
         )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
