@@ -69,10 +69,10 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `health state` | `HealthState`, a part's state of health, as one rule sees it: unknown at first, then healthy or failing | `status`, a client's |
 | `health rule` | `HealthRule`, a rule judging a part's health from its latest checks, such as "aMule does not answer": failing once detected 3 times in a row, healthy again once detected fewer than 2 times in the last 10 | a health `condition` |
 | `detected` | what a rule saw or not at one check, the boolean `NodeHealth.record` takes; `Detections` counts them among the latest checks, such as "2 among the last 10" | `failure`, `success`, `outcome`, `problem` |
-| `component` | `Component`, a part of the node whose health is tracked, such as the aMule client | `unit`, `service` |
+| `component` | `Component`, a part of the node whose health is tracked, such as the aMule client or one of its channels | `unit`, `service` |
 | `health transition` | `HealthTransition`, a change of one part's state under one rule, such as the aMule client going from healthy to failing | `event`, the observability's |
 | `node health` | `NodeHealth`, the node's health: every part's checks come here through `record(on=..., rule=..., detected=...)`, and each change is logged and passed on to the alerts | `recorder`, `registry` |
-| `health alerter` | `HealthAlerter`, sends the client's alerts when its health changes: "amuled unreachable for 2 min" when it turns failing, "amuled reachable again" when it turns healthy | `translator` |
+| `health alerter` | `HealthAlerter`, sends the client's and its channels' alerts when their health changes: "amuled unreachable for 2 min" when the client turns failing, "amuled reachable again" when it turns healthy | `translator` |
 | `inaccessible path` | `InaccessiblePathError`, a path the filesystem refuses to examine (removed, under a file, behind a directory it cannot search, its name too long): the declared failure of `FreeSpaceMeter` and `CatalogFinder` | a raw `OSError` past its adapter |
 | `config problem` | `ConfigProblem`, one problem of a config file: the file, the key or none, the message | a refusal, an error |
 | `schema` | a pydantic model of a config file as written, in the config adapter only: `CrawlerConfigSchema` | the domain object it builds |

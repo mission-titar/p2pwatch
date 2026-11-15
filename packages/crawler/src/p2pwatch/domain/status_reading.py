@@ -21,6 +21,15 @@ CLIENT_UNREACHABLE = HealthRule(
 # The readings come a minute apart, so the third unanswered one comes 2 minutes after the first.
 UNREACHABLE_ALERT_AFTER = (_UNANSWERED_IN_A_ROW - 1) * STATUS_PERIOD
 
+_CHANNEL_OFF_IN_A_ROW = 6
+CHANNEL_NOT_CONNECTED = HealthRule(
+    name="not connected",
+    fails_at=Detections(times=_CHANNEL_OFF_IN_A_ROW, among_last=_CHANNEL_OFF_IN_A_ROW),
+    recovers_under=Detections(times=2, among_last=10),
+)
+# The sixth reading off its network comes 5 minutes after the first.
+CHANNEL_ALERT_AFTER = (_CHANNEL_OFF_IN_A_ROW - 1) * STATUS_PERIOD
+
 
 def is_reading_fresh(age: timedelta) -> bool:
     """Whether a reading this old still shows the client's status; its age is monotonic."""

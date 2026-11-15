@@ -132,7 +132,7 @@ from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE
+from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED, CLIENT_UNREACHABLE
 
 _logger = logging.getLogger(__name__)
 
@@ -498,6 +498,15 @@ class CrawlerComposition(CrawlerRunner):
                     client_name=_AMULE_CLIENT_NAME,
                     rules=(CLIENT_UNREACHABLE,),
                 ),
+                channel_components={
+                    channel: Component(
+                        name=f"channel {_AMULE_CLIENT_NAME} {channel}",
+                        client_name=_AMULE_CLIENT_NAME,
+                        channel=channel,
+                        rules=(CHANNEL_NOT_CONNECTED,),
+                    )
+                    for channel in client.channels()
+                },
             )
             search_task_runner = SearchTaskRunner(
                 workers=workers,

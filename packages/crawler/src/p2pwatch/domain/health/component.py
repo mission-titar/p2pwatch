@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
-from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.identifiers import Channel, ClientName
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -18,13 +18,19 @@ class HealthTransition:
 
 
 class Component:
-    """A part of the node whose health is tracked, such as the aMule client."""
+    """A part of the node whose health is tracked, such as the aMule client or its Kad channel."""
 
     def __init__(
-        self, *, name: str, client_name: ClientName, rules: tuple[HealthRule, ...]
+        self,
+        *,
+        name: str,
+        client_name: ClientName,
+        channel: Channel | None = None,
+        rules: tuple[HealthRule, ...],
     ) -> None:
         self.name = name  # "client amuled", as the log names it
         self.client_name = client_name  # "amuled", as the alerts name it
+        self.channel = channel  # "kad" for a part of one channel, as the alerts name it
         self._latest_detected: dict[HealthRule, tuple[bool, ...]] = dict.fromkeys(rules, ())
         self._states = dict.fromkeys(rules, HealthState.UNKNOWN)
 
