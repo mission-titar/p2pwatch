@@ -769,7 +769,10 @@ part. Chaque canal du client est aussi une partie, avec deux règles : hors de s
 d'affilée, il est en échec (« amuled kad: off its network for 5 min ») ; non joignable par les pairs
 6 lectures d'affilée, aussi (« amuled kad: not connectable for 5 min »). Un champ qu'aMule n'a pas
 donné n'enregistre rien, si bien que pendant qu'aMule ne répond pas, les canaux gardent leur état.
-`NodeHealth` journalise chaque changement d'état et le transmet aux alertes (`HealthAlerter`). Plus
+Le suivi des téléchargements est une partie aussi : à chaque mesure de l'espace libre, la décision
+de téléchargement enregistre si le disque est sous son plancher. Une mesure basse suffit pour
+l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
+redevenir sain, et cette alerte n'a pas de fin. `NodeHealth` journalise chaque changement d'état et le transmet aux alertes (`HealthAlerter`). Plus
 tard, le même modèle servira à reconstruire une partie dont les bugs reviennent.
 
 ## 11. Invariants de conception (récapitulatif)

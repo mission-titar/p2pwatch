@@ -350,8 +350,8 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case DiskSpaceLow():
             return _relayed(
                 Severity.WARNING,
-                message=f"download disk low: {event.free_bytes / 2**30:.1f} GiB free, "
-                f"under the {event.min_free_bytes / 2**30:.1f} GiB floor (no new download)",
+                message=f"download disk low: under the {event.min_free_bytes / 2**30:.1f} GiB "
+                "floor (no new download)",
                 node_id=event.node_id,
             )
         case SourceFirstUseful():

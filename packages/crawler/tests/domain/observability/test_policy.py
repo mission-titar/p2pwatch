@@ -1,5 +1,5 @@
 """``plan_observability`` is an exhaustive match: one case per event + each conditional branch
-(a rise or not, first_occurrence true/false)."""
+(a rise or not)."""
 
 from datetime import timedelta
 
@@ -213,10 +213,10 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
-        ev.DiskSpaceLow(free_bytes=3 * 2**29, min_free_bytes=10 * 2**30, node_id=_NODE_ID),
+        ev.DiskSpaceLow(min_free_bytes=10 * 2**30, node_id=_NODE_ID),
         _relayed(
             Severity.WARNING,
-            message="download disk low: 1.5 GiB free, under the 10.0 GiB floor (no new download)",
+            message="download disk low: under the 10.0 GiB floor (no new download)",
         ),
     ),
     (

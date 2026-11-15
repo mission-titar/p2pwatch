@@ -127,6 +127,7 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -478,11 +479,17 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(SearchWorker.__module__),
                 )
             ]
+            # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
+            download_config = crawler_config.download
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__),
                 subscribers=(
                     HealthAlerter(
-                        observability_dispatcher=observability_dispatcher, node_id=node_id
+                        observability_dispatcher=observability_dispatcher,
+                        node_id=node_id,
+                        min_free_bytes=(
+                            None if download_config is None else download_config.min_free_bytes
+                        ),
                     ).send,
                 ),
             )
@@ -524,10 +531,8 @@ class CrawlerComposition(CrawlerRunner):
                 status_loop.run,
             ]
 
-            # Download enabled ⟺ the ``download`` section is present (``enabled: true``). Its loop
-            # shares the catalog's stores and ``local_connection`` (one writer, on the event loop),
-            # and the search session.
-            download_config = crawler_config.download
+            # The download loop shares the catalog's stores and ``local_connection`` (one writer,
+            # on the event loop), and the search session.
             if download_config is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
                 source_point_store = SqliteSourcePointStore(catalog_connection)
@@ -562,7 +567,12 @@ class CrawlerComposition(CrawlerRunner):
                         download_tracker=download_tracker,
                         wall_clock=wall_clock,
                         observability_dispatcher=observability_dispatcher,
-                        node_id=node_id,
+                        node_health=node_health,
+                        download_tracking_component=Component(
+                            name=f"download tracking {_AMULE_CLIENT_NAME}",
+                            client_name=_AMULE_CLIENT_NAME,
+                            rules=(DISK_SPACE_LOW,),
+                        ),
                         logger=StdlibLogger(DownloadDecider.__module__),
                     ),
                     download_starter=DownloadStarter(

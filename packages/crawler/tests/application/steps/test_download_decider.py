@@ -11,7 +11,7 @@ from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
-from tests.fakes.adapters.driven.fake_logger import LoggedLine
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.support.application.steps.download_cycle import (
@@ -312,27 +312,40 @@ async def test_each_cycle_reports_the_measured_free_space() -> None:
     )
 
 
+_GIB = 2**30
+
+
 @pytest.mark.asyncio
-async def test_low_disk_warns_once_per_crossing_and_rearms_at_the_floor() -> None:
-    observability = ObservabilityOverFakes()
-    free_space_meter = FakeFreeSpaceMeter(500)
+async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_space() -> None:
+    observability, health_logger = ObservabilityOverFakes(), FakeLogger()
+    free_space_meter = FakeFreeSpaceMeter(5 * _GIB)
     cycle = build_cycle(
         client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
         free_space_meter=free_space_meter,
-        min_free=600,
+        min_free=10 * _GIB,
         observability_dispatcher=observability.dispatcher,
+        health_logger=health_logger,
     )
-    warnings_per_cycle: list[int] = []
-    for free in (500, 400, 600, 599):  # cross down, stay low, back AT the floor, cross again
+    alerts_per_cycle: list[int] = []
+    # Two dips of two low readings, one reading exactly at the floor between them.
+    for free in (5 * _GIB, 4 * _GIB, 10 * _GIB, 10 * _GIB - 1, 3 * _GIB):
         free_space_meter.free = free
         before = len(observability.notifier.calls)
         await cycle.run()
-        warnings_per_cycle.append(len(observability.notifier.calls) - before)
-    assert warnings_per_cycle == [1, 0, 0, 1]
-    low = "download disk low: 0.0 GiB free, under the 0.0 GiB floor (no new download)"
+        alerts_per_cycle.append(len(observability.notifier.calls) - before)
+    assert alerts_per_cycle == [1, 0, 0, 1, 0]
+    low = "download disk low: under the 10.0 GiB floor (no new download)"
     relayed = (
         Audience.OPERATIONS,
         RelayedLogLine(message=low, severity=Severity.WARNING, node_id=NODE_ID),
     )
     assert observability.notifier.calls == [relayed, relayed]
+    changes = ("unknown to failing", "failing to healthy", "healthy to failing")
+    assert health_logger.lines == [
+        LoggedLine(
+            level="info" if change.endswith("healthy") else "warning",
+            message=f"download tracking amuled, disk space low: {change}",
+        )
+        for change in changes
+    ]
