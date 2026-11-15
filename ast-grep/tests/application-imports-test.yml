@@ -1,6 +1,7 @@
 id: application-imports
 valid:
   - import asyncio
+  - from abc import ABC, abstractmethod
   - from contextlib import suppress
   - from amule_bump.application.ports.driven.upstream_client import UpstreamClient
 invalid:

@@ -1,4 +1,5 @@
-"""Runs the crawler's loops until the shutdown is requested, then cancels them all."""
+"""Runs every task the node repeats, such as the status reading, until the shutdown is requested,
+then cancels them all."""
 
 import asyncio
 from collections.abc import Sequence
@@ -15,7 +16,7 @@ class ShutdownBoundArmer(Protocol):
     def __call__(self) -> None: ...
 
 
-class LoopSupervisor:
+class Supervisor:
     """Runs the loops it is given until the run state says the shutdown was requested."""
 
     def __init__(self, *, run_state_reader: RunStateReader) -> None:

@@ -134,9 +134,14 @@ Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k
 `crawler.yml` refuse une section `port_sync:`.
 
 Chaque boucle est une itération suivie d'un sommeil (`*_interval_seconds` depuis la config),
-supervisée par un `TaskGroup` : une boucle qui crashe bruyamment annule ses sœurs (fail-fast), mais
-les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10, discipline de
-frontière).
+supervisée par un `TaskGroup` (`Supervisor`) : une boucle qui crashe bruyamment annule ses sœurs
+(fail-fast), mais les erreurs d'I/O *attendues* sont absorbées à l'intérieur d'un cycle (voir §10,
+discipline de frontière).
+
+La lecture du statut est la première de ces tâches écrite comme un `Work` : une attente, puis un
+tour (`run_once()`), encore. L'attente vient avant chaque tour, le premier compris, et chaque
+`Work` la calcule depuis son propre état : pour le statut, ce qui reste de la minute depuis la fin
+de la lecture précédente, rien avant la première.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -263,8 +268,8 @@ Points clés en chemin :
   redondance multi-nœuds est entièrement affaire de faire tourner plusieurs nœuds et de fusionner
   leurs catalogues.
 - **Le statut n'est pas la liveness** : « le processus est vivant » n'implique pas « on peut
-  trouver quelque chose là, maintenant ». Une boucle lit le statut de chaque client toutes les
-  minutes, par canal (`connected`, `connectable`), et alerte sur un échec qui dure : 5 min pour un
+  trouver quelque chose là, maintenant ». `StatusWatcher` lit le statut de chaque client toutes
+  les minutes, par canal (`connected`, `connectable`), et alerte sur un échec qui dure : 5 min pour un
   canal, 2 min pour l'API injoignable. La fin de l'alerte part environ neuf lectures après le
   rétablissement (§10.1).
 - **Résilience** : une `StoreError` à l'écriture du backoff est journalisée, et l'écriture
@@ -707,7 +712,7 @@ flowchart LR
   démarrage pose le fichier `down` du service, et s6 ne le lance jamais. Allumé, il valide les
   réglages ([Devenir High-ID](../high-id.md)) avant tout, et sort en nommant une valeur invalide.
 - **Aucun événement, aucune métrique.** Le port-sync journalise chaque changement et chaque échec,
-  rien de plus. Le Low-ID se lit dans le cœur, par la boucle de statut : la jauge
+  rien de plus. Le Low-ID se lit dans le cœur, par la lecture du statut : la jauge
   `p2pwatch_channel_connectable` et l'alerte sur un canal non joignable depuis 5 minutes.
 
 *Risque accepté : un High-ID augmente l'exposition, voir [Devenir High-ID](../high-id.md).*
@@ -801,9 +806,9 @@ et le transmet aux alertes (`HealthAlerter`).
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
-| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/loop_supervisor.py` (`LoopSupervisor`) |
+| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_loop.py`, `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
+| Boucles | `application/steps/` : `search_task_runner.py` (`SearchTaskRunner`, sur les `SearchWorker` de `search_worker.py` et leur `BackoffRegistry` de `backoff_registry.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_loop.py` (`DownloadLoop`, qui répète le cycle `DownloadCycle` de `download_cycle.py` et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`, `source_watcher.py`, et `download_labeler.py`, qui nomme un téléchargement dans ses notifications) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

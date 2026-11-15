@@ -16,7 +16,7 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.loop_supervisor import LoopSupervisor, SupervisedLoop
+from p2pwatch.application.steps.supervisor import SupervisedLoop, Supervisor
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -100,7 +100,7 @@ class _Crawl:
             backoff=self.backoff,
             loops=[self._loop("search"), self._loop("status")],
             download_enabled=download_enabled,
-            loop_supervisor=LoopSupervisor(run_state_reader=self.run_state),
+            supervisor=Supervisor(run_state_reader=self.run_state),
             logger=self.logger,
         )
 

@@ -5,12 +5,12 @@ from collections.abc import Sequence
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
-from p2pwatch.application.steps.loop_supervisor import (
-    LoopSupervisor,
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.supervisor import (
     ShutdownBoundArmer,
     SupervisedLoop,
+    Supervisor,
 )
-from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import CrawlerStarted
 
@@ -28,7 +28,7 @@ class CrawlerLifecycle:
         backoff: BackoffRegistry,
         loops: Sequence[SupervisedLoop],
         download_enabled: bool,
-        loop_supervisor: LoopSupervisor,
+        supervisor: Supervisor,
         logger: Logger,
     ) -> None:
         self._node_id = node_id
@@ -37,7 +37,7 @@ class CrawlerLifecycle:
         self._backoff = backoff
         self._loops = loops
         self._download_enabled = download_enabled
-        self._loop_supervisor = loop_supervisor
+        self._supervisor = supervisor
         self._logger = logger
 
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
@@ -52,4 +52,4 @@ class CrawlerLifecycle:
         # Before the loops, so the first search's tier actions (download wake, notify) see the
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed()
-        await self._loop_supervisor.supervise(self._loops, arm_shutdown_bound=arm_shutdown_bound)
+        await self._supervisor.supervise(self._loops, arm_shutdown_bound=arm_shutdown_bound)

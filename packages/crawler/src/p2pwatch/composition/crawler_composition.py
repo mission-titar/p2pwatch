@@ -7,9 +7,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
-  session the status and download loops share.
+  session the status watcher and the download loop share.
 
-Loops: the search tasks (``SearchTaskRunner``), the status loop, and the download loop when
+Loops: the search tasks (``SearchTaskRunner``), the status watcher, and the download loop when
 configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
 shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
@@ -103,18 +103,18 @@ from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_alerter import HealthAlerter
-from p2pwatch.application.steps.loop_supervisor import (
-    LoopSupervisor,
-    ShutdownBoundArmer,
-    SupervisedLoop,
-)
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
-from p2pwatch.application.steps.status_loop import StatusLoop
+from p2pwatch.application.steps.status_watcher import StatusWatcher
+from p2pwatch.application.steps.supervisor import (
+    ShutdownBoundArmer,
+    SupervisedLoop,
+    Supervisor,
+)
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -488,14 +488,13 @@ class CrawlerComposition(CrawlerRunner):
                     ).send,
                 ),
             )
-            # The status and download loops share the search session: one session per node.
-            status_loop = StatusLoop(
+            # The status watcher and the download loop share the search session: one per node.
+            status_watcher = StatusWatcher(
                 client_name=_AMULE_CLIENT_NAME,
                 client=client,
                 wall_clock=wall_clock,
                 monotonic_clock=monotonic_clock,
                 observability_dispatcher=observability_dispatcher,
-                run_state_reader=run_state_store,
                 status_reading_writer=status_reading_store,
                 node_health=node_health,
                 client_component=client_component(_AMULE_CLIENT_NAME),
@@ -514,7 +513,7 @@ class CrawlerComposition(CrawlerRunner):
             )
             loops: list[SupervisedLoop] = [
                 search_task_runner.run,
-                status_loop.run,
+                status_watcher.run,
             ]
 
             # The download loop shares the catalog's stores and ``local_connection`` (one writer,
@@ -607,7 +606,7 @@ class CrawlerComposition(CrawlerRunner):
                 backoff=backoff,
                 loops=loops,
                 download_enabled=download_config is not None,
-                loop_supervisor=LoopSupervisor(run_state_reader=run_state_store),
+                supervisor=Supervisor(run_state_reader=run_state_store),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
