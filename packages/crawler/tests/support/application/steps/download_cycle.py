@@ -21,11 +21,10 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
-from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
+from p2pwatch.domain.download.disk_space import download_tracking_component
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
@@ -170,11 +169,7 @@ def build_cycle(
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
             node_health=node_health,
-            download_tracking_component=Component(
-                name="download tracking amuled",
-                client_name=ClientName("amuled"),
-                rules=(DISK_SPACE_LOW,),
-            ),
+            download_tracking_component=download_tracking_component(ClientName("amuled")),
             logger=logger,
         ),
         download_starter=DownloadStarter(

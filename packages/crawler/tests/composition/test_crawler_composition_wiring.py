@@ -31,6 +31,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 )
 from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.composition.crawler_composition import CrawlerComposition
 from p2pwatch.domain.client_errors import ClientAuthError
 from p2pwatch.domain.file_key import FileKey, Network
@@ -375,6 +376,36 @@ async def test_a_disk_under_its_floor_alerts_with_the_floor_from_the_config(
     assert "download tracking amuled, disk space low: unknown to failing" in caplog.messages
     low = "download disk low: under the 1073741824.0 GiB floor (no new download)"
     assert caplog.messages.count(low) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_reading_of_both_channels_connected_and_connectable_records_every_rule(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A rule its component lacks raises at its first record, which stops the node.
+    status = {
+        "ec_connected": True,
+        "ed2k": {"state": "connected", "high_id": True},
+        "kad": {"state": "connected", "firewalled_tcp": False},
+    }
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+    dispatcher_logger = logging.getLogger(ObservabilityDispatcher.__module__)
+    # Its handler runs on the loop, so the reading's records end before the stop is seen.
+    sigterm = _SigtermAtRecord(
+        "status amuled kad: connected yes, connectable yes",
+        default_handler=signal.getsignal(signal.SIGTERM),
+    )
+    dispatcher_logger.addHandler(sigterm)
+    try:
+        with (
+            FakeAmuleApiServer(FakeAmuleApi(status=status)) as server,
+            caplog.at_level(logging.DEBUG),
+        ):
+            await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
+    finally:
+        dispatcher_logger.removeHandler(sigterm)
+
+    assert "status amuled ed2k: connected yes, connectable yes" in caplog.messages
 
 
 @pytest.mark.asyncio
