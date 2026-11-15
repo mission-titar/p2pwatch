@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from p2pwatch.application.steps.loop_supervisor import LoopSupervisor
+from p2pwatch.application.steps.supervisor import Supervisor
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 
 
@@ -35,7 +35,7 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_lo
     run_state = FakeRunStateStore()
     search, status = _BlockedLoop("search", events=events), _BlockedLoop("status", events=events)
     supervision = asyncio.create_task(
-        LoopSupervisor(run_state_reader=run_state).supervise(
+        Supervisor(run_state_reader=run_state).supervise(
             [search.run, status.run], arm_shutdown_bound=lambda: events.append("armed")
         )
     )
@@ -60,7 +60,7 @@ async def test_a_loop_that_ends_neither_stops_the_others_nor_arms_the_bound() ->
         ended.set()
 
     supervision = asyncio.create_task(
-        LoopSupervisor(run_state_reader=run_state).supervise(
+        Supervisor(run_state_reader=run_state).supervise(
             [end_at_once, status.run], arm_shutdown_bound=lambda: events.append("armed")
         )
     )
@@ -80,7 +80,7 @@ async def test_a_failing_loop_escapes_as_an_exception_group_without_arming_the_b
     status = _BlockedLoop("status", events=events)
 
     with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a worker crashed")):
-        await LoopSupervisor(run_state_reader=FakeRunStateStore()).supervise(
+        await Supervisor(run_state_reader=FakeRunStateStore()).supervise(
             [status.run, _fails], arm_shutdown_bound=lambda: events.append("armed")
         )
 
