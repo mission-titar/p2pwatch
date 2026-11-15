@@ -10,6 +10,10 @@ at its limits "A port-sync bug restarts amuled too" and "A `ListenPortError` tha
 lot 4's D20, every port-sync error logged and retried at the next poll)`), and commits the inventory's added probes
 under `agents/reference/2026-11-09-v5-lot4-instruments/`.
 
+(Corrected 2026-11-15: lot 4b moved to `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces every
+part of this spec about lot 4b, its first stack #718 to #754 left unmerged; lot 4c is to be rewritten on that spec's
+names before it starts. This spec keeps lot 4a's record and appendix C's facts.)
+
 ## 1. In short
 
 Today every loop of the crawler runs in one task group with no restart: an unexpected error anywhere (a bug on the
@@ -46,6 +50,8 @@ found around it.
 - The operator pages are lot 7's (umbrella D19); section 6 lists what they must say.
 
 ## 3. Decisions
+
+(Moved: lot 4b's part of this section is in `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces it.)
 
 ### The unit and its supervision
 
@@ -204,6 +210,8 @@ Commands for each row: appendix B. The rc row is checked on the operator's node 
 
 ### Lot 4b
 
+(Moved: lot 4b is specified by `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces this section's lot 4b.)
+
 | Check | After the lot | On `main` |
 |---|---|---|
 | A bug on every Kad search | the eD2k searches go on; Kad failing; the search role and the crawler degraded | the crawler stops |
@@ -215,6 +223,8 @@ Commands for each row: appendix B. The rc row is checked on the operator's node 
 | The connectivity alerts | still sent, at today's entry; their end held by the hysteresis | sent by the status loop's timers, ended at the first good reading |
 
 ### Lot 4c
+
+(To rewrite: lot 4c is rewritten on the names of `agents/specs/2026-11-15-v5-lot-4b-health-model.md` before it starts; this section is its draft.)
 
 | Check | After the lot | On `main` |
 |---|---|---|
@@ -265,6 +275,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 
 ### Lot 4b
 
+(Moved: lot 4b is specified by `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces this section's lot 4b.)
+
 | Block | Branch | Content |
 |---|---|---|
 | 10 | `feat/health-outcome` | `DeclaredFailure`, `Outcome`, `Health`, `HealthTransition` |
@@ -284,6 +296,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 | 70 | `docs/lot-4b-wrap` | closing block |
 
 ### Lot 4c
+
+(To rewrite: lot 4c is rewritten on the names of `agents/specs/2026-11-15-v5-lot-4b-health-model.md` before it starts; this section is its draft.)
 
 | Block | Branch | Content |
 |---|---|---|
@@ -305,6 +319,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 | 90 | `docs/lot-4c-wrap` | closing block |
 
 ## 6. Limits and scope
+
+(Moved: lot 4b's part of this section is in `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces it.)
 
 ### Accepted limits
 
@@ -357,6 +373,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 ## Appendix A. Design, block by block
 
 ### The health library (lots 4b, 4c)
+
+(Moved: lot 4b is specified by `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces this section's lot 4b.) (To rewrite: lot 4c is rewritten on the names of `agents/specs/2026-11-15-v5-lot-4b-health-model.md` before it starts; this section is its draft.)
 
 - **Its shape**, as the operator read it in the discussion (names may move with the Naming rules):
 
@@ -577,6 +595,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 
 ### Lot 4b
 
+(Moved: lot 4b is specified by `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces this section's lot 4b.)
+
 - **Blocks 10, 15, 20, 25**: `domain/health/`, pure (no I/O, the clock injected); `DeclaredFailure` at the domain's
   root, the base of every port's declared failures; tach entries; glossary lines for every D8 name; the condition's
   tests include section 4's pattern.
@@ -597,6 +617,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 - **Block 70**: the handoff, `BACKLOG.md`'s sub-entry 4b deleted, the holistic review's fixes.
 
 ### Lot 4c
+
+(To rewrite: lot 4c is rewritten on the names of `agents/specs/2026-11-15-v5-lot-4b-health-model.md` before it starts; this section is its draft.)
 
 - **Blocks 10, 15, 18**: `HealthAlert` and the grouping in the domain; the five events `ChannelDegraded`,
   `ChannelRecovered`, `ClientUnreachableLasting`, `ClientReachableAgain`, `DiskSpaceLow` replaced; the apprise texts.
@@ -620,6 +642,8 @@ start of each block (4b's and 4c's blocks estimate code not yet written).
 - **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4c deleted, the holistic review's fixes.
 
 ## Appendix B. Acceptance, in detail
+
+(Moved: lot 4b's part of this section is in `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, which replaces it.)
 
 | Row | Command, and the output that fails it |
 |---|---|
