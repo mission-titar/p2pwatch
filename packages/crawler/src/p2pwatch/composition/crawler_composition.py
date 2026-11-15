@@ -93,6 +93,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
+from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.download_cycle import DownloadCycle
@@ -505,10 +506,12 @@ class CrawlerComposition(CrawlerRunner):
             search_task_runner = SearchTaskRunner(
                 workers=workers,
                 keywords=crawler_config.search.keywords,
-                backoff=backoff,
-                backoff_state_writer=backoff_state_store,
+                backoff_saver=BackoffSaver(
+                    backoff=backoff,
+                    backoff_state_writer=backoff_state_store,
+                    logger=StdlibLogger(BackoffSaver.__module__),
+                ),
                 monotonic_clock=monotonic_clock,
-                logger=StdlibLogger(SearchTaskRunner.__module__),
             )
             loops: list[SupervisedLoop] = [
                 search_task_runner.run,

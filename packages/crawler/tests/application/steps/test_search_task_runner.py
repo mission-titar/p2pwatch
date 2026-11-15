@@ -6,7 +6,6 @@ The tasks share one simulated time, so these tests run on the virtual-time loop.
 import asyncio
 from collections.abc import Coroutine
 from contextlib import suppress
-from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -16,6 +15,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
+from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
@@ -23,10 +23,10 @@ from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
-from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.search.backoff import BackoffKey
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
-from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_never_suspending_search_client import (
@@ -36,7 +36,7 @@ from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.virtual_time import EPOCH, VirtualLoop
+from tests.support.virtual_time import VirtualLoop
 
 _NODE_ID = NodeId("n1")
 _HOUR = 3600.0
@@ -73,7 +73,6 @@ class _Tasks:
             jitter_generator=FakeJitterGenerator(),
             backoff_state_reader=self.state,
         )
-        self.logger = FakeLogger()
 
     def searching(self, client: Any, *, keywords: list[str]) -> Coroutine[Any, Any, None]:
         dispatcher = ObservabilityOverFakes().dispatcher
@@ -106,10 +105,10 @@ class _Tasks:
         return SearchTaskRunner(
             workers=[worker],
             keywords=keywords,
-            backoff=self.backoff,
-            backoff_state_writer=self.state,
+            backoff_saver=BackoffSaver(
+                backoff=self.backoff, backoff_state_writer=self.state, logger=FakeLogger()
+            ),
             monotonic_clock=self.monotonic_clock,
-            logger=self.logger,
         ).run()
 
     def run_for(
@@ -186,48 +185,6 @@ def test_the_backoff_is_saved_at_each_change(tasks: _Tasks) -> None:
         set(),
     ]
     assert tasks.state.read_backoff_states() == {}
-
-
-def test_the_backoff_resumed_after_the_tasks_were_built_is_not_saved_again(
-    tasks: _Tasks,
-) -> None:
-    resumed = {
-        BackoffKey(client_name=ClientName("amuled"), channel=Channel("ed2k")): BackoffState(
-            attempts=1, started_at=EPOCH, delay=timedelta(seconds=60)
-        )
-    }
-    tasks.state.set_backoff_states(resumed)  # the previous run's save
-
-    async def resume_once_built() -> None:
-        searching = tasks.searching(
-            FakeTimedSearchClient({Channel("kad"): 30.0}), keywords=["keroro"]
-        )
-        tasks.backoff.resume_waits()
-        with suppress(TimeoutError):
-            async with asyncio.timeout(100.0):
-                await searching
-
-    tasks.loop.run_until_complete(resume_once_built())
-    assert tasks.state.saved == [resumed]
-
-
-def test_a_failed_save_is_logged_and_retried_after_the_next_search(tasks: _Tasks) -> None:
-    tasks.state.failures = 1
-    refused: list[Exception] = [SearchFailedError("refused"), SearchFailedError("refused")]
-    client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=refused)
-    tasks.run_for(100.0, client=client, keywords=["keroro"])
-    assert tasks.logger.lines == [
-        LoggedLine(
-            level="error",
-            message="backoff not saved (database is locked): retried after the next search",
-        )
-    ]
-    second_failure = BackoffState(
-        attempts=2, started_at=EPOCH + timedelta(seconds=60), delay=timedelta(seconds=120)
-    )
-    assert tasks.state.saved == [
-        {BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad")): second_failure}
-    ]
 
 
 def test_a_search_that_never_suspends_does_not_starve_the_loop(tasks: _Tasks) -> None:
