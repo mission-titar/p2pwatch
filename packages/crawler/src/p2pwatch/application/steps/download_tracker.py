@@ -114,7 +114,7 @@ class DownloadTracker:
     async def _record_completion(
         self, file: FileKey, *, states: dict[FileKey, DownloadState]
     ) -> None:
-        """Marks ``completed`` (stamps completed_at) and notifies (step 2, §5).
+        """Marks ``completed`` (stamps completed_at) and notifies.
 
         ``completed`` is terminal: the file stays where the client put it, nothing moves it and
         nothing opens it. The caller skips files already ``completed``, so the notification fires
@@ -193,7 +193,7 @@ class DownloadTracker:
                 file, state=DownloadState.FAILED, failure_reason=FailureReason.LOST
             )
             self._logger.warning(
-                "file=%s unseen by the client for %ss: marked failed",
+                "file=%s unseen by the client for %g s: marked failed",
                 file.native_id,
                 self._lost_after.total_seconds(),
             )

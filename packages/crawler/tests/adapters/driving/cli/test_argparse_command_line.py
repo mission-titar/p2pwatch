@@ -120,7 +120,7 @@ def test_crawl_exits_zero_when_the_shutdown_deadline_fires(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     # The bound firing is the crawler keeping its promise not to hang, not a crash.
-    crawler_runner = FakeCrawlerRunner(ShutdownDeadlineError("cut after 10.0 s"))
+    crawler_runner = FakeCrawlerRunner(ShutdownDeadlineError("cut after 10 s"))
 
     assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 0
 

@@ -1,0 +1,8 @@
+id: component-record-through-node-health
+valid:
+  - "await self._node_health.record(on=component, rule=CLIENT_UNREACHABLE, detected=True)"
+  - "self._observation_writer.record_observation(observation)"
+  - "store.record(decision)"
+invalid:
+  - "component.record(rule=CLIENT_UNREACHABLE, detected=True)"
+  - "transition = self._client_component.record(rule=rule, detected=status is None)"

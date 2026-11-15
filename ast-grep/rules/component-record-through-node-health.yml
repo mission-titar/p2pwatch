@@ -1,0 +1,15 @@
+id: component-record-through-node-health
+language: python
+severity: error
+message: A check is recorded through `NodeHealth.record(on=..., rule=..., detected=...)`, which logs each change of health and passes it to the alerts; only `NodeHealth` and the domain's tests call `Component.record`.
+files: ["packages/crawler/**/*.py"]
+ignores:
+  - "packages/crawler/src/p2pwatch/application/steps/node_health.py"
+  - "packages/crawler/tests/domain/**"
+rule:
+  # `NodeHealth.record` alone also takes `on=`.
+  kind: call
+  all:
+    - has: { field: function, kind: attribute, has: { field: attribute, regex: ^record$ } }
+    - has: { field: arguments, has: { kind: keyword_argument, has: { field: name, regex: ^rule$ } } }
+    - not: { has: { field: arguments, has: { kind: keyword_argument, has: { field: name, regex: ^on$ } } } }

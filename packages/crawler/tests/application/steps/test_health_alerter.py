@@ -72,7 +72,7 @@ async def test_the_client_failing_after_being_healthy_sends_unreachable_for_2_mi
 
 
 @pytest.mark.asyncio
-async def test_the_client_recovering_sends_reachable_again() -> None:
+async def test_the_client_healthy_again_sends_reachable_again() -> None:
     assert await _sent(previous=HealthState.FAILING, current=HealthState.HEALTHY) == [
         _REACHABLE_AGAIN
     ]
@@ -88,11 +88,12 @@ async def test_the_client_healthy_from_its_first_readings_sends_nothing() -> Non
     ("previous", "current"),
     [(HealthState.HEALTHY, HealthState.FAILING), (HealthState.FAILING, HealthState.HEALTHY)],
 )
-async def test_another_rule_failing_or_recovering_sends_nothing(
+async def test_a_rule_it_has_no_alert_for_raises(
     *, previous: HealthState, current: HealthState
 ) -> None:
     other = replace(CLIENT_UNREACHABLE, name="other")
-    assert await _sent(previous=previous, current=current, rule=other) == []
+    with pytest.raises(ValueError, match="^client amuled, other: no alert for this rule$"):
+        await _sent(previous=previous, current=current, rule=other)
 
 
 _CHANNEL_ALERTS = pytest.mark.parametrize(
