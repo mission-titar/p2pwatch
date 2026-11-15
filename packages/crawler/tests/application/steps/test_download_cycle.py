@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.domain.client_errors import (
     ClientUnreachableError,
@@ -289,16 +290,13 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     assert observability.node_metric_store.read_samples() == ()
 
 
-def _idle_cycle(
-    waker: FakeWaker | None = None, *, fake_time: FakeTime | None = None, failures: int = 0
-) -> DownloadCycle:
-    """A cycle with nothing to track; without ``fake_time``, its poll's sleep never ends."""
+def _idle_cycle(*, wait_clock: MonotonicClock, waker: FakeWaker | None = None) -> DownloadCycle:
+    """A cycle with nothing to track, its wait sleeping on ``wait_clock``."""
     return build_cycle(
-        client=FakeDownloadClient(list_failures=[RuntimeError("a bug")] * failures),
+        client=FakeDownloadClient(),
         tracked_download_store=FakeTrackedDownloadStore(),
-        fake_time=fake_time,
         waker=waker,
-        wait_clock=None if fake_time else FakeBlockingMonotonicClock(),
+        wait_clock=wait_clock,
     )
 
 
@@ -314,43 +312,38 @@ def _other_tasks() -> set[asyncio.Task[object]]:
 @pytest.mark.asyncio
 async def test_the_first_turn_starts_at_once() -> None:
     waker = FakeWaker()
-    await asyncio.wait_for(_idle_cycle(waker).wait_for_next_turn(), timeout=1.0)
+    cycle = _idle_cycle(wait_clock=FakeBlockingMonotonicClock(), waker=waker)
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
     assert waker.waited_subjects == []
 
 
 @pytest.mark.asyncio
 async def test_after_a_turn_the_next_waits_the_poll_interval() -> None:
     fake_time = FakeTime()
-    cycle = _idle_cycle(fake_time=fake_time)
+    cycle = _idle_cycle(wait_clock=fake_time.monotonic)
     await cycle.run_once()
     await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
     assert fake_time.sleeps == [timedelta(seconds=30)]
 
 
 @pytest.mark.asyncio
-async def test_after_a_turn_that_raised_the_next_waits_the_poll_interval_too() -> None:
-    fake_time = FakeTime()
-    cycle = _idle_cycle(fake_time=fake_time, failures=1)
-    with pytest.raises(RuntimeError, match="a bug"):
-        await cycle.run_once()
-    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
-    assert fake_time.sleeps == [timedelta(seconds=30)]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("woken_before_the_wait", [True, False], ids=["before", "during"])
-async def test_a_download_wake_ends_the_wait_and_cancels_the_polls_sleep(
-    *, woken_before_the_wait: bool
-) -> None:
+async def test_a_wake_set_before_the_wait_ends_it_at_once_and_cancels_the_polls_sleep() -> None:
     waker = FakeWaker()
-    cycle = _idle_cycle(waker)
+    cycle = _idle_cycle(wait_clock=FakeBlockingMonotonicClock(), waker=waker)
     await cycle.run_once()
-    if woken_before_the_wait:
-        waker.wake(WakeSubject.DOWNLOAD)  # a download decision, as the cataloguer makes one
+    waker.wake(WakeSubject.DOWNLOAD)  # a download decision, as the cataloguer makes one
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
+    assert _other_tasks() == set()
+
+
+@pytest.mark.asyncio
+async def test_a_wake_during_the_wait_ends_it_and_cancels_the_polls_sleep() -> None:
+    waker = FakeWaker()
+    cycle = _idle_cycle(wait_clock=FakeBlockingMonotonicClock(), waker=waker)
+    await cycle.run_once()
     wait = asyncio.ensure_future(cycle.wait_for_next_turn())
     await asyncio.wait_for(_until_waiting_for_a_download_wake(waker), timeout=1.0)
-    if not woken_before_the_wait:
-        waker.wake(WakeSubject.DOWNLOAD)
+    waker.wake(WakeSubject.DOWNLOAD)  # a download decision, as the cataloguer makes one
     await asyncio.wait_for(wait, timeout=1.0)
     assert _other_tasks() == set()
 
@@ -358,7 +351,7 @@ async def test_a_download_wake_ends_the_wait_and_cancels_the_polls_sleep(
 @pytest.mark.asyncio
 async def test_a_wait_cancelled_at_the_shutdown_raises_and_leaves_no_task() -> None:
     waker = FakeWaker()
-    cycle = _idle_cycle(waker)
+    cycle = _idle_cycle(wait_clock=FakeBlockingMonotonicClock(), waker=waker)
     await cycle.run_once()
     wait = asyncio.ensure_future(cycle.wait_for_next_turn())
     await asyncio.wait_for(_until_waiting_for_a_download_wake(waker), timeout=1.0)

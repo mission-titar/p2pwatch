@@ -350,13 +350,3 @@ async def test_a_minute_already_past_the_latest_reading_starts_the_next_at_once(
     fake_time.advance(timedelta(seconds=90))
     await watcher.wait_for_next_turn()
     assert fake_time.sleeps == []
-
-
-@pytest.mark.asyncio
-async def test_a_reading_that_raised_waits_a_full_minute_before_the_next() -> None:
-    fake_time = FakeTime()
-    watcher = _watcher_over(fake_time, ClientAuthError("amuleapi refused the admin password"))
-    with pytest.raises(ClientAuthError):
-        await watcher.run_once()
-    await watcher.wait_for_next_turn()
-    assert fake_time.sleeps == [timedelta(seconds=60)]

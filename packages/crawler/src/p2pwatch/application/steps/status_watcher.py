@@ -70,10 +70,8 @@ class StatusWatcher(Work):
 
     async def run_once(self) -> None:
         """Reads the status once, publishes it and records the health it shows."""
-        try:
-            await self._read()
-        finally:  # a reading that raised ended too, and spaces the next one
-            self._latest_reading_ended_at = self._monotonic_clock.now()
+        await self._read()
+        self._latest_reading_ended_at = self._monotonic_clock.now()
 
     async def _read(self) -> None:
         status: ClientStatus | None

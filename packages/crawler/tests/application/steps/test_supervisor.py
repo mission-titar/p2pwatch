@@ -54,14 +54,14 @@ class _BlockedWork(Work):
             raise
 
 
-class _CrashingWork(Work):
+class _RaisingWork(Work):
     """A work whose first turn raises, as a bug would."""
 
     async def wait_for_next_turn(self) -> None:
         """Waits for nothing: the first turn starts at once."""
 
     async def run_once(self) -> None:
-        raise ValueError("a turn crashed")
+        raise ValueError("a turn raised")
 
 
 class _WorkStoppingTheNode(Work):
@@ -132,13 +132,13 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_wo
 
 
 @pytest.mark.asyncio
-async def test_a_crashing_turn_escapes_as_an_exception_group_without_arming_the_bound() -> None:
+async def test_a_turn_that_raises_escapes_as_an_exception_group_without_arming_the_bound() -> None:
     events: list[str] = []
     status = _BlockedWork("status", events=events)
 
-    with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a turn crashed")):
+    with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a turn raised")):
         await Supervisor(run_state_reader=FakeRunStateStore()).supervise(
-            [status, _CrashingWork()], arm_shutdown_bound=lambda: events.append("armed")
+            [status, _RaisingWork()], arm_shutdown_bound=lambda: events.append("armed")
         )
 
     assert events == ["status cancelled"]
@@ -157,7 +157,7 @@ async def test_a_shutdown_requested_before_the_start_starts_no_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_shutdown_requested_during_a_turn_lets_no_other_turn_start() -> None:
+async def test_a_shutdown_requested_during_a_turn_lets_that_work_take_no_further_turn() -> None:
     work = _WorkStoppingTheNode()
     supervisor = Supervisor(run_state_reader=work.run_state)
 

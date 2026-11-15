@@ -117,7 +117,7 @@ def build_cycle(
     health_logger: FakeLogger | None = None,
     poll_interval_seconds: float = 30.0,
     waker: FakeWaker | None = None,
-    wait_clock: MonotonicClock | None = None,  # the wait's alone: the tracker reads the time
+    wait_clock: MonotonicClock | None = None,  # the wait's own: the tracker reads fake_time's
 ) -> DownloadCycle:
     fake_time = fake_time or FakeTime()
     wall_clock = wall_clock or fake_time.wall

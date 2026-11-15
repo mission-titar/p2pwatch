@@ -12,7 +12,7 @@ class FakeBlockingMonotonicClock(MonotonicClock):
     """
 
     def now(self) -> NoReturn:
-        raise AssertionError("the download loop reads no time from its sleep's clock")
+        raise AssertionError("download tracking reads no time from its wait's clock")
 
     async def sleep(self, duration: timedelta) -> None:
         await asyncio.Event().wait()  # NEVER resolves
