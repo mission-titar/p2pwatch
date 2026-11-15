@@ -754,6 +754,21 @@ démon sont
 **absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
 `InMemoryNodeMetricStore`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
 
+### 10.1 La santé des parties du nœud
+
+Le nœud suit la santé de chacune de ses parties, par exemple le client aMule (`Component`).
+Chaque partie a ses règles (`HealthRule`), par exemple « aMule ne répond pas ». À chaque
+vérification, le code enregistre dans `NodeHealth` si la règle a détecté son cas :
+`record(on=..., rule=..., detected=...)`. D'après ses dernières vérifications, la règle dit si la
+partie est saine ou en échec (`HealthState`). Exemple : la lecture d'état demande son état à aMule
+chaque minute. Détecté 3 fois d'affilée, le client est en échec, et l'alerte « amuled unreachable
+for 2 min » part. Détecté moins de 2 fois sur les 10 dernières, il redevient sain, et « amuled
+reachable again » part. Redevenir sain prend plus longtemps que tomber en échec, si bien qu'un
+client capricieux n'alerte pas en boucle. Avant 3 vérifications, son état est inconnu, et rien ne
+part. `NodeHealth` journalise chaque changement d'état et le transmet aux alertes
+(`HealthAlerter`). Plus tard, le même modèle servira à reconstruire une partie dont les bugs
+reviennent.
+
 ## 11. Invariants de conception (récapitulatif)
 
 - **Le catalogue enregistre des fichiers et, là où un protocole en publie un, l'identifiant
@@ -789,6 +804,7 @@ démon sont
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
+| Santé | `domain/health/` (composants, règles, transitions), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
