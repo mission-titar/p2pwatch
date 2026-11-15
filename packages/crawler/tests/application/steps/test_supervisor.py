@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.work import Work
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 
 
@@ -23,6 +24,21 @@ class _BlockedLoop:
         except asyncio.CancelledError:
             self._events.append(f"{self._name} cancelled")
             raise
+
+
+class _WorkStoppingTheNode(Work):
+    """Requests the shutdown at each turn, as the webui's restart button does; never waits."""
+
+    def __init__(self) -> None:
+        self.run_state = FakeRunStateStore()
+        self.turns = 0
+
+    async def wait_for_next_turn(self) -> None:
+        pass
+
+    async def run_once(self) -> None:
+        self.turns += 1
+        self.run_state.set_shutdown_requested()
 
 
 async def _fails() -> None:
@@ -85,3 +101,25 @@ async def test_a_failing_loop_escapes_as_an_exception_group_without_arming_the_b
         )
 
     assert events == ["status cancelled"]
+
+
+@pytest.mark.asyncio
+async def test_a_shutdown_requested_before_the_start_starts_no_loop() -> None:
+    run_state = FakeRunStateStore()
+    run_state.set_shutdown_requested()
+    status = _BlockedLoop("status", events=[])
+    supervisor = Supervisor(run_state_reader=run_state)
+
+    await asyncio.wait_for(supervisor.supervise([status.run], arm_shutdown_bound=lambda: None), 1)
+
+    assert not status.started.is_set()
+
+
+@pytest.mark.asyncio
+async def test_a_shutdown_requested_during_a_turn_lets_no_other_turn_start() -> None:
+    work = _WorkStoppingTheNode()
+    supervisor = Supervisor(run_state_reader=work.run_state)
+
+    await asyncio.wait_for(supervisor.supervise([work.run], arm_shutdown_bound=lambda: None), 1)
+
+    assert work.turns == 1
