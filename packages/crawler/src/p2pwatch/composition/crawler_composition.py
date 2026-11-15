@@ -21,7 +21,7 @@ import asyncio
 import ctypes
 import logging
 import sys
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from importlib.metadata import version
@@ -185,6 +185,14 @@ async def shutdown_bound(*, deadline_seconds: float) -> AsyncIterator[ShutdownBo
         if not timeout.expired():
             raise
         raise ShutdownDeadlineError(f"cut after {deadline_seconds:g} s") from error
+
+
+def works_in_start_order(
+    *, status_watcher: Work, tracking: Sequence[Work], searches: Sequence[Work]
+) -> list[Work]:
+    """The works in the order the supervisor starts them: the status reading, then download and
+    source tracking where configured, then the searches, which send their requests last."""
+    return [status_watcher, *tracking, *searches]
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
@@ -510,7 +518,7 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 monotonic_clock=monotonic_clock,
             )
-            works: list[Work] = [*searches, status_watcher]
+            tracking: tuple[Work, ...] = ()
 
             # Download and source tracking share the catalog's stores and ``local_connection``
             # (one writer, on the event loop), and the search session.
@@ -580,7 +588,7 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     logger=StdlibLogger(SourceWatcher.__module__),
                 )
-                works.extend((download_cycle, source_watcher))
+                tracking = (download_cycle, source_watcher)
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
@@ -597,7 +605,9 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                works=works,
+                works=works_in_start_order(
+                    status_watcher=status_watcher, tracking=tracking, searches=searches
+                ),
                 download_enabled=download_config is not None,
                 supervisor=Supervisor(run_state_reader=run_state_store),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),

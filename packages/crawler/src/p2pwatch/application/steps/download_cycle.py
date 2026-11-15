@@ -80,7 +80,8 @@ class DownloadCycle(Work):
                         await task
 
     async def run_once(self) -> None:
-        """Takes one download round. Never raises: tolerates/absorbs.
+        """Takes one download round: absorbs an unavailable client and a store failure; a refused
+        password or a bug leaves the turn.
 
         Two distinct error DOCTRINES (anti-starvation):
 
@@ -104,7 +105,10 @@ class DownloadCycle(Work):
         The unavailability is handled by the next cycle's retry + the warning log. Intentional
         asymmetry.
         """
-        self._turn_taken = True  # first, so a turn that raised still waits before the next one
+        await self._round()
+        self._turn_taken = True
+
+    async def _round(self) -> None:
         # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.
         try:
             listed_statuses = await self._download_client.downloads()

@@ -112,8 +112,8 @@ après l'avoir changée.
 `webui.source_period_gap_seconds` (`990` par défaut) règle l'affichage de l'historique des sources
 dans le catalogue web : deux points d'une même source plus éloignés que ce nombre de secondes ouvrent
 une nouvelle période. 990, c'est 3 x (300 + 30), trois intervalles entre relevés aux réglages par
-défaut, chacun avec une marge d'un tour de téléchargement, pour qu'une lecture manquée ne coupe pas
-une période. Si vous changez
+défaut, chacun avec une marge égale à `download.poll_interval_seconds`, pour qu'une lecture manquée
+ne coupe pas une période. Si vous changez
 `download.sources_interval_seconds` ou `download.poll_interval_seconds`, gardez-le à
 3 x (`sources_interval_seconds` + `poll_interval_seconds`).
 

@@ -100,7 +100,7 @@ flowchart RL
 
 | Paquet | Dist | Rôle |
 |---|---|---|
-| `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les boucles de recherche et de téléchargement, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
+| `p2pwatch` | `p2pwatch` | **Crawler** : pilote `amuled` par amuleapi, fait tourner les recherches et le suivi des téléchargements, la persistance, l'observabilité. Contient le sous-paquet webui in-process `p2pwatch.adapters.driving.webui` (visualiseur de catalogue en lecture seule). |
 | `p2pwatch_amule` | `p2pwatch-amule` | **Le conteneur d'aMule**, bibliothèque standard seule : son one-shot de démarrage (`python -m p2pwatch_amule boot`), le port-sync (`python -m p2pwatch_amule port-sync`, §9) et le healthcheck (`python -m p2pwatch_amule health`, §13). |
 | `pytest_settings` | `pytest-settings` | **Configuration de test partagée**, un seul module et non un hexagone : les réglages de pytest que la suite de chaque paquet applique, chargés par son point d'entrée `pytest11`. Hors de la portée de vulture, comme les tests. Jamais livré dans une image de prod. |
 | `vex_checks` | `vex-checks` | **Outillage dev/CI** : garde honnêtes nos affirmations OpenVEX. Jamais livré dans une image de prod. |
@@ -128,10 +128,10 @@ flowchart TB
 
 - **Téléchargement** (`download.enabled: true`, le défaut livré) : recherche **plus**
   téléchargement.
-- **Catalogue seul** (`download` absent ou `enabled: false`) : **seule la boucle de recherche
-  tourne**, avec celle du statut. Le nœud catalogue et notifie, et ne télécharge rien.
+- **Catalogue seul** (`download` absent ou `enabled: false`) : **seules les recherches
+  tournent**, avec la lecture du statut. Le nœud catalogue et notifie, et ne télécharge rien.
 
-Le port-sync n'est pas une boucle du crawler : il tourne dans le conteneur `ed2k` (§9), et
+Le port-sync n'est pas un `Work` du crawler : il tourne dans le conteneur `ed2k` (§9), et
 `crawler.yml` refuse une section `port_sync:`.
 
 Les recherches, la lecture du statut, le suivi des téléchargements et celui des sources sont des
@@ -661,7 +661,7 @@ flowchart LR
 Un état qu'aMule traverse de lui-même (`idle`, `connecting`...) prend l'utilité du dernier point de
 la source sur ce fichier et ce nœud (par `source_id`, ou par nom sans user hash), si ce point tombe
 dans les `3 x (download.sources_interval_seconds + download.poll_interval_seconds)` qui précèdent la
-lecture et que son compteur ne dépasse pas celui de la lecture ; sinon le rôle est `undetermined`.
+lecture (le poll n'y est qu'une marge par intervalle) et que son compteur ne dépasse pas celui de la lecture ; sinon le rôle est `undetermined`.
 Le délai tolère une lecture manquée.
 
 Toutes ces tables sont append-only, comme le reste du catalogue. `merge` copie `sources` et
@@ -811,9 +811,9 @@ et le transmet aux alertes (`HealthAlerter`).
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
-| Démarrage et boucles | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
+| Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Boucles | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
+| Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

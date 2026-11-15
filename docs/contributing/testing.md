@@ -135,7 +135,7 @@ Le projet a **deux niveaux** :
 |---|---|---|---|---|---|
 | `api_integration` | crawler | L'adapter amuleapi (login, statut réseau, une recherche) face à un vrai démon | **Oui** (à lancer soi-même) | Un démon que vous fournissez, désigné par `P2PWATCH_TEST_API_HOST` (§3.0) | `( cd packages/crawler && uv run pytest -m api_integration --no-cov )` |
 | `download_integration` | crawler | La mécanique du téléchargement (`start`, puis le fichier listé par `downloads`) face à un vrai démon | **Oui** (à lancer soi-même) | Le même démon que ci-dessus (§3.0) | `( cd packages/crawler && uv run pytest -m download_integration --no-cov )` |
-| `orchestration_integration` | crawler | Une boucle de crawl complète (une recherche menée par les tâches, puis un arrêt borné) face à un vrai démon | **Oui** (à lancer soi-même) | Le même démon que ci-dessus (§3.0) | `( cd packages/crawler && uv run pytest -m orchestration_integration --no-cov )` |
+| `orchestration_integration` | crawler | Un crawl complet (une recherche, puis un arrêt borné) face à un vrai démon | **Oui** (à lancer soi-même) | Le même démon que ci-dessus (§3.0) | `( cd packages/crawler && uv run pytest -m orchestration_integration --no-cov )` |
 | `compose_integration` | crawler | Smoke e2e des deux conteneurs assemblés (sans VPN), le port-sync, et le rendu des deux variantes de `deploy/` | **Oui** (compose v2) | docker compose v2 ; le build des deux images ; un utilisateur non root | `( cd packages/crawler && uv run pytest -m compose_integration --no-cov )` |
 
 ---
