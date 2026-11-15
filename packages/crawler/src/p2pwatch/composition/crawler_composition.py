@@ -9,9 +9,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status watcher, download tracking and source tracking share.
 
-Loops: the search tasks (``SearchTaskRunner``), the status watcher, and download and source
-tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui
-requests the shutdown.
+Loops: one search per channel and keyword (``KeywordSearch``), the status watcher, and download and
+source tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the
+webui requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
@@ -103,10 +103,10 @@ from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_alerter import HealthAlerter
+from p2pwatch.application.steps.keyword_search import keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_task_runner import SearchTaskRunner
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
@@ -432,8 +432,8 @@ class CrawlerComposition(CrawlerRunner):
                 database_opener=database_opener,
             )
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
-            # (backoff survives restart, spec §3/§7), injected into ALL workers + passed to the
-            # search tasks that persist it. Single writer on the event loop.
+            # (backoff survives restart, spec §3/§7), injected into ALL workers + the saver the
+            # searches share. Single writer on the event loop.
             backoff = BackoffRegistry(
                 _backoff_policy(crawler_config),
                 wall_clock=wall_clock,
@@ -503,8 +503,8 @@ class CrawlerComposition(CrawlerRunner):
                     for channel in client.channels()
                 },
             )
-            search_task_runner = SearchTaskRunner(
-                workers=workers,
+            searches = keyword_searches(
+                search_workers=workers,
                 keywords=crawler_config.search.keywords,
                 backoff_saver=BackoffSaver(
                     backoff=backoff,
@@ -513,10 +513,8 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 monotonic_clock=monotonic_clock,
             )
-            loops: list[SupervisedLoop] = [
-                search_task_runner.run,
-                status_watcher.run,
-            ]
+            loops: list[SupervisedLoop] = [search.run for search in searches]
+            loops.append(status_watcher.run)
 
             # Download and source tracking share the catalog's stores and ``local_connection``
             # (one writer, on the event loop), and the search session.
