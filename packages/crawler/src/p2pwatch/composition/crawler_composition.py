@@ -7,11 +7,11 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (migrations checked at startup, fail-fast §14).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
-  session the status watcher and download tracking share.
+  session the status watcher, download tracking and source tracking share.
 
-Loops: the search tasks (``SearchTaskRunner``), the status watcher, and download tracking when
-configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui requests the
-shutdown.
+Loops: the search tasks (``SearchTaskRunner``), the status watcher, and download and source
+tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui
+requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the loops (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
@@ -487,7 +487,7 @@ class CrawlerComposition(CrawlerRunner):
                     ).send,
                 ),
             )
-            # The status watcher and download tracking share the search session: one per node.
+            # The status watcher and the two tracking works share the search session: one per node.
             status_watcher = StatusWatcher(
                 client_name=_AMULE_CLIENT_NAME,
                 client=client,
@@ -515,8 +515,8 @@ class CrawlerComposition(CrawlerRunner):
                 status_watcher.run,
             ]
 
-            # Download tracking shares the catalog's stores and ``local_connection`` (one writer,
-            # on the event loop), and the search session.
+            # Download and source tracking share the catalog's stores and ``local_connection``
+            # (one writer, on the event loop), and the search session.
             if download_config is not None:
                 tracked_download_store = SqliteTrackedDownloadStore(local_connection)
                 source_point_store = SqliteSourcePointStore(catalog_connection)
@@ -562,27 +562,28 @@ class CrawlerComposition(CrawlerRunner):
                         observation_reader=observation_store,
                         logger=StdlibLogger(DownloadStarter.__module__),
                     ),
-                    source_watcher=SourceWatcher(
-                        source_client=client,
-                        tracked_download_reader=tracked_download_store,
-                        source_point_writer=source_point_store,
-                        source_point_reader=source_point_store,
-                        download_labeler=download_labeler,
-                        reappeared_after=download_config.reappeared_after,
-                        sources_interval=download_config.sources_interval,
-                        time_between_source_reads=download_config.time_between_source_reads,
-                        wall_clock=wall_clock,
-                        monotonic_clock=monotonic_clock,
-                        observability_dispatcher=observability_dispatcher,
-                        node_id=node_id,
-                        logger=StdlibLogger(SourceWatcher.__module__),
-                    ),
                     poll_interval_seconds=download_config.poll_interval_seconds,
                     monotonic_clock=monotonic_clock,
                     waker=waker,
                     logger=StdlibLogger(DownloadCycle.__module__),
                 )
-                loops.append(download_cycle.run)
+                source_watcher = SourceWatcher(
+                    download_client=client,
+                    source_client=client,
+                    tracked_download_reader=tracked_download_store,
+                    source_point_writer=source_point_store,
+                    source_point_reader=source_point_store,
+                    download_labeler=download_labeler,
+                    reappeared_after=download_config.reappeared_after,
+                    sources_interval=download_config.sources_interval,
+                    time_between_source_reads=download_config.time_between_source_reads,
+                    wall_clock=wall_clock,
+                    monotonic_clock=monotonic_clock,
+                    observability_dispatcher=observability_dispatcher,
+                    node_id=node_id,
+                    logger=StdlibLogger(SourceWatcher.__module__),
+                )
+                loops.extend((download_cycle.run, source_watcher.run))
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,

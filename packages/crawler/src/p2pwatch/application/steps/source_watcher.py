@@ -1,8 +1,14 @@
-"""Reads the sources of our downloads, records their points and alerts."""
+"""Source tracking: every ``sources_interval``, reads the sources of each of our downloads the
+client lists, records them as points and alerts on the useful ones.
+
+Errors: an unavailable client or a ``StoreError`` reading the tracked downloads ends the turn, a
+``StoreError`` writing one download's points skips that download; the next turn tries again.
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from p2pwatch.application.ports.driven.download_client import DownloadClient
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.source_client import SourceClient
@@ -12,6 +18,8 @@ from p2pwatch.application.ports.driven.tracked_download_reader import TrackedDow
 from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.work import Work
+from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.identifiers import NodeId
@@ -30,6 +38,9 @@ from p2pwatch.domain.source import (
 from p2pwatch.domain.source_alerts import FirstUseful, source_alert
 from p2pwatch.domain.store_error import StoreError
 
+# A read the client refuses is the client unavailable, as an unreachable one is.
+_UNAVAILABLE = (ClientUnreachableError, ReadRejectedError)
+
 
 @dataclass(kw_only=True)
 class _AlertRound:
@@ -41,13 +52,14 @@ class _AlertRound:
     alerts_allowed: bool | None = None
 
 
-class SourceWatcher:
-    """Reads the sources of our downloads, records their points and alerts; owns the instant of
-    its last read."""
+class SourceWatcher(Work):
+    """Reads the sources of our downloads every ``sources_interval``, such as every 5 minutes,
+    from the start of one turn to the start of the next, a failed turn included."""
 
     def __init__(
         self,
         *,
+        download_client: DownloadClient,
         source_client: SourceClient,
         tracked_download_reader: TrackedDownloadReader,
         source_point_writer: SourcePointWriter,
@@ -62,6 +74,7 @@ class SourceWatcher:
         node_id: NodeId,
         logger: Logger,
     ) -> None:
+        self._download_client = download_client
         self._source_client = source_client
         self._tracked_download_reader = tracked_download_reader
         self._source_point_writer = source_point_writer
@@ -75,20 +88,31 @@ class SourceWatcher:
         self._observability_dispatcher = observability_dispatcher
         self._node_id = node_id
         self._logger = logger
-        self._sources_read_at: MonotonicInstant | None = None
+        self._latest_turn_started_at: MonotonicInstant | None = None
 
-    async def record_sources(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
-        """Records the sources of each of our downloads the client lists, completed ones aside,
-        then alerts on them. A store failure skips that
-        download's; a client failure propagates.
-
-        Runs once ``sources_interval`` has passed on the monotonic clock since its last start,
-        failed or not."""
-        started_at = self._monotonic_clock.now()
-        last = self._sources_read_at
-        if last is not None and started_at - last < self._sources_interval:
+    async def wait_for_next_turn(self) -> None:
+        """Waits until ``sources_interval`` has passed since the latest turn started; the first
+        turn waits nothing."""
+        if self._latest_turn_started_at is None:
             return
-        self._sources_read_at = started_at
+        left = self._sources_interval - (self._monotonic_clock.now() - self._latest_turn_started_at)
+        if left > timedelta(0):
+            await self._monotonic_clock.sleep(left)
+
+    async def run_once(self) -> None:
+        """Lists the client's downloads, then records and alerts on the sources of ours."""
+        # Stamped before the read, so a turn whose read fails still waits a full interval.
+        self._latest_turn_started_at = self._monotonic_clock.now()
+        try:
+            await self._record_sources(await self._download_client.downloads())
+        except _UNAVAILABLE as error:
+            self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
+        except StoreError as error:
+            self._logger.error("download sources store failure (%s): step skipped, retry", error)
+
+    async def _record_sources(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
+        """Records the sources of each of our downloads the client lists, completed ones aside,
+        then alerts on them; a store failure skips that download's."""
         tracked = self._tracked_download_reader.read_tracked_states()
         round_ = _AlertRound(started_at=self._wall_clock.now())
         for status in listed_statuses:
