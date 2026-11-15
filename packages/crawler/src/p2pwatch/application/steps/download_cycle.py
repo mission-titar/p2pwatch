@@ -52,9 +52,9 @@ class DownloadCycle:
         self._logger = logger
 
     async def run(self) -> None:
-        """ONE iteration of the download loop (spec §5). Never raises: tolerates/absorbs.
+        """ONE iteration of the download loop. Never raises: tolerates/absorbs.
 
-        Two distinct error DOCTRINES (item I2 - anti-starvation):
+        Two distinct error DOCTRINES (anti-starvation):
 
         - An unavailable client (``ClientUnreachableError`` from step 0, ``start_unlisted`` or the
           sources step; on the two reads, also a refused read, ``ReadRejectedError``) = dead
@@ -66,16 +66,15 @@ class DownloadCycle:
           sources step per download. ``start_unlisted`` re-reads ``read_tracked_states``
           FRESHLY, so it runs even if an upstream step partially failed. "NEVER abandon a
           stalled download": the 1→2→3→4 order is preserved, each step is best-effort, and
-          step 5, the sources, only observes, so it comes last (stage 4, D8).
+          step 5, the sources, only observes, so it comes last.
 
         The stores are sync → cancellation (shutdown) lands at the network ``await``, never
         mid-write.
 
-        DECISION (audit 2026-06-23 / observability#5): a ``ClientUnreachableError`` here does
-        NOT dispatch ``ClientUnreachable`` (unlike the search tasks). The E-D5 taxonomy files
-        this event under SEARCH only; the download loop is single-client and the label
-        ``client=...`` would be meaningless (counter shared with the search workers). The
-        unavailability is handled by the next cycle's retry + the warning log. Intentional
+        A ``ClientUnreachableError`` here does NOT dispatch ``ClientUnreachable``, unlike the
+        search tasks: the event is the searches'. The download loop is single-client, so its
+        ``client=...`` label would say nothing, and its counter is shared with the search workers.
+        The unavailability is handled by the next cycle's retry + the warning log. Intentional
         asymmetry.
         """
         # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.

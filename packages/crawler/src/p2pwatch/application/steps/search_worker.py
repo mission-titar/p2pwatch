@@ -71,7 +71,7 @@ class SearchWorker:
 
     async def _record_observations(self, channel: Channel, *, answer: SearchAnswer) -> int:
         """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
-        ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog`` (spec §7)."""
+        ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog``."""
         await self._observability_dispatcher.dispatch(
             SearchExecuted(
                 client_name=self._client_name,

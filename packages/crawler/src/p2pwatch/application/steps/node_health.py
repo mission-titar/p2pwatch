@@ -15,7 +15,7 @@ class HealthSubscriber(Protocol):
 
 class NodeHealth:
     """The node's health: every part's checks come here, and each change is logged and passed on
-    to the alerts (and, later, to the restarts)."""
+    to its subscribers, such as the alerts."""
 
     def __init__(self, *, logger: Logger, subscribers: Sequence[HealthSubscriber]) -> None:
         self._logger = logger

@@ -54,7 +54,7 @@ async def test_start_rejected_marks_failed_and_does_not_crash() -> None:
         decision_reader=decision_reader,
         observation_reader=observation_reader,
     )
-    await cycle.run()  # does not raise (application failure tolerated per hash)
+    await cycle.run()  # does not raise: a rejected start fails its file alone
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.FAILED
     )  # link rejected → marked failed

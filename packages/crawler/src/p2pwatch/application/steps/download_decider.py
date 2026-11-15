@@ -66,7 +66,7 @@ class DownloadDecider:
         self._logger = logger
 
     async def queue_new_candidates(self, outstanding_bytes: int) -> None:
-        """Replays tier=download decisions missing from ``downloads`` (step 3, spec §5).
+        """Replays tier=download decisions missing from ``downloads``.
 
         ``outstanding_bytes`` is what the client still has to transfer, measured from the cycle's
         snapshot; ``free_bytes`` is read once here. Both are MEASURED, never declared.
