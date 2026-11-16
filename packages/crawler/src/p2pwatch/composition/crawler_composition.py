@@ -532,7 +532,7 @@ class CrawlerComposition(CrawlerRunner):
                 },
             )
             time_limits = AmuleWorkTimeLimits(
-                request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
+                request_bound=client.request_bound,
                 search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
                 notification_timeout=timedelta(seconds=observability.notification_timeout_seconds),
                 keywords=dedupe_keywords(crawler_config.search.keywords),
@@ -625,6 +625,17 @@ class CrawlerComposition(CrawlerRunner):
                     for work in (download_cycle, source_watcher)
                 )
 
+            works = works_in_start_order(
+                status_watcher=SupervisedWork(
+                    work=status_watcher,
+                    time_limit=time_limits.of_status_reading(channel_count=len(client.channels())),
+                ),
+                tracking=tracking,
+                searches=searches,
+            )
+            for supervised in works:
+                seconds = supervised.time_limit.total_seconds()
+                _logger.debug("%s: time limit %g s", supervised.work, seconds)
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
@@ -640,16 +651,7 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                works=works_in_start_order(
-                    status_watcher=SupervisedWork(
-                        work=status_watcher,
-                        time_limit=time_limits.of_status_reading(
-                            channel_count=len(client.channels())
-                        ),
-                    ),
-                    tracking=tracking,
-                    searches=searches,
-                ),
+                works=works,
                 download_enabled=download_config is not None,
                 supervisor=Supervisor(
                     run_state_reader=run_state_store,

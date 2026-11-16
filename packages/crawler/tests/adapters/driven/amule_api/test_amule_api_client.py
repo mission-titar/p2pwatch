@@ -552,6 +552,10 @@ def test_the_client_declares_the_channels_it_searches() -> None:
     assert _client(FakeAmuleApi()).channels() == ("ed2k", "kad")
 
 
+def test_the_client_declares_the_bound_it_sets_on_each_request() -> None:
+    assert _client(FakeAmuleApi()).request_bound == timedelta(seconds=60)
+
+
 @pytest.mark.asyncio
 async def test_search_answers_the_results_with_their_keyword_and_counts_what_it_drops() -> None:
     rows = [_result(f"Keroro.{index:04d}.avi") | {"hash": f"{index:032x}"} for index in range(501)]
