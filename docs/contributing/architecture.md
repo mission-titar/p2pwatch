@@ -72,6 +72,10 @@ Conséquences de cette forme, chacune porteuse ailleurs dans ce document :
 - **Les conteneurs démarrent sans ordre** (pas de `depends_on` entre eux), donc le crawler frappe
   couramment à la porte avant qu'`amuled` n'ait démarré `amuleapi` ; « démon injoignable au
   démarrage » est toléré et absorbé par le backoff.
+- **Une requête à amuleapi dure 60 s au plus en tout** : le timeout de httpx (10 s) borne chacune
+  de ses phases (la connexion, l'envoi, chaque lecture) et jamais l'ensemble, si bien qu'un serveur
+  qui égrène sa réponse octet par octet la garderait ouverte sans fin. Passé 60 s, aMule est
+  injoignable, comme pour une connexion refusée.
 - **Le PID 1 d'`ed2k` est root** (son one-shot `python -m p2pwatch_amule boot` crée
   l'utilisateur `amule` depuis `PUID`/`PGID` et prend les bind mounts), puis chaque service
   abandonne ses privilèges avec `setpriv`. Le cœur n'a ni point d'entrée ni root : `user:` dans

@@ -4,7 +4,7 @@ import asyncio
 import socket
 import struct
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from typing import Protocol
 
@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
+from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.domain.client_errors import ClientUnreachableError
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.fake_amule_api import PASSWORD
@@ -23,12 +24,15 @@ class ConnectionHandler(Protocol):
     ) -> None: ...
 
 
-def _client(port: int, *, timeout_seconds: float = 5.0) -> AmuleApiClient:
+def _client(
+    port: int, *, timeout_seconds: float = 5.0, request_bound_seconds: float = 10.0
+) -> AmuleApiClient:
     return AmuleApiClient(
         "127.0.0.1",
         port=port,
         password=PASSWORD,
         timeout_seconds=timeout_seconds,
+        request_bound_seconds=request_bound_seconds,
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=FakeTime().monotonic,
@@ -99,6 +103,40 @@ async def test_an_answer_past_the_timeout_is_an_unreachable_daemon() -> None:
                 await client.status()
         finally:
             released.set()
+        await client.close()
+
+
+@pytest.mark.asyncio
+async def test_an_answer_trickled_past_the_request_bound_is_an_unreachable_daemon() -> None:
+    """Each byte comes within the 0.2 s each read may take, so only the bound on the whole
+    request, 0.5 s, can end it."""
+    released = asyncio.Event()
+
+    async def trickle(*, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\n")
+        with suppress(ConnectionError):  # the client hangs up once its bound expires
+            while not released.is_set():
+                writer.write(b" ")
+                await writer.drain()
+                await AsyncioMonotonicClock().sleep(timedelta(seconds=0.05))
+        writer.close()
+
+    async with _serving(trickle) as port:
+        client = _client(port, timeout_seconds=0.2, request_bound_seconds=0.5)
+        status = asyncio.create_task(client.status())
+        try:
+            # Four times the bound, so a loaded machine's slowness never fails the test.
+            finished, _ = await asyncio.wait({status}, timeout=2.0)
+
+            assert finished == {status}, "the request outlived its 0.5 s bound"
+            with pytest.raises(
+                ClientUnreachableError, match="POST /auth/login: no whole answer within 0.5 s"
+            ):
+                status.result()
+        finally:
+            released.set()
+            status.cancel()
         await client.close()
 
 
