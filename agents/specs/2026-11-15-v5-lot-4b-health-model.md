@@ -86,7 +86,9 @@ lot 4 spec's decision numbers, which this spec does not keep.
   other exception, logged with its trace. An error or a bug fails that turn alone. After a bug, the next turn waits at
   least 60 s.** *The part that must be correct for the rest to fail safely is small (Armstrong); without the wait, a
   bug that strikes at once would rerun at full speed, a trace per turn.* Lot 4b3.
-- **D9. Every error a port of the core declares derives from `ExpectedError`; any other exception is a bug.** *The
+- **D9. Every error a port of the core declares derives from `ExpectedError`; any other exception is a bug.**
+  (Corrected: every error a driven port declares, the operator on 2026-11-11, "every failure a driven port declares";
+  a driving port's error goes to the command line, never into a turn.) *The
   supervisor tells them apart by their type alone, a new port's error follows the same rule, and an exception nobody
   declared is a bug by construction. No static tool proves which exceptions a library call raises (lot 4 spec,
   appendix C), so each port's contract tests provoke its real failures instead.* Lot 4b3.
@@ -243,6 +245,7 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 | 30 | `fix/amuleapi-request-total-bound` | a request to aMule bounded at 60 s | #733, 83 lines, 10 files |
 | 40 | `feat/search-starts-kept` | each client's latest search starts kept in `local.db` | #734, 841 lines, 25 files, accepted |
 | 50 | `feat/turn-time-limit` | each work's time limit; the notifications shielded | #735, 454 lines, 12 files, and #751's shield |
+| 55 | `feat/notifications-shielded` | the notifications shielded (Corrected: split out of block 50, which with the shield came to about 570 lines and 21 files, the lead on 2026-11-16) | #751's shield |
 | 90 | `docs/lot-4b3-wrap` | closing block | |
 
 ### Lot 4b4, the restarts of the aMule client
@@ -464,7 +467,9 @@ its turn, the first one included, its wait computed from its own state.
   before the next turn after a bug, the later of that and the work's own wait; the status reading lets a refused
   password through, source tracking its `StoreError`. `Work` and every test double name themselves for the log. Past
   the file bound: each port's error re-based is one line in each of its files, and splitting it from its first reader
-  leaves a base class nobody reads, accepted by the operator on 2026-11-11 ("recos ok").
+  leaves a base class nobody reads, accepted by the operator on 2026-11-11 ("recos ok"). (Corrected: past the line
+  bound too, 546 lines, accepted by the operator on 2026-11-16, "A": the three ways a turn ends cannot come without
+  their acceptance tests.)
 - **Block 20** (draft #730): the search raises `SearchFailedError` and `ClientUnreachableError` once its backoff and
   events are done, `BackoffSaver` setting the backoff in a `finally`, a cancelled turn included.
 - **Block 30** (draft #733): the amuleapi adapter bounds a whole request at 60 s, its expiry a
@@ -475,6 +480,7 @@ its turn, the first one included, its wait computed from its own state.
   lock, a Kad slot converted to the wall clock) and reads them once when it is built, each through `remaining_wait`. A
   `StoreError` is logged: on the read the client starts without them, on the write the search goes on. Past both
   bounds: no cut leaves each part with a production user, accepted by the operator on 2026-11-12 ("approuvé").
+  (Corrected: 934 lines, past the 841 of its draft: its tests written out, four tests added.)
 - **Block 50** (draft #735, and #751's shield): `SupervisedWork` (a work and its time limit); the turn raced against
   `MonotonicClock.sleep` in a task group whose expiry cancels the turn, a turn past it a `TurnTimeoutError` counted as a
   bug; the yield after a turn removed. Each limit is the sum of the bounds on its turn's path plus 5 minutes (`S` the
@@ -514,7 +520,8 @@ its turn, the first one included, its wait computed from its own state.
   and the supervisor reach them through one holder, refusing a read before they are set. Rebuilds in vain counted, none
   past three, the count reset when every bugs rule of the object's components is healthy again; a rebuild that raises
   records detected on each bugs rule of the object's components and is tried again after 60 s; a login cancelled
-  during a rebuild closes its httpx client. Past both bounds: the policy, the port and the client's rebuild cannot run
+  during a rebuild closes its httpx client (Corrected: brought into lot 4b3's closing block, the time limit cancelling a
+  turn in its login there already). Past both bounds: the policy, the port and the client's rebuild cannot run
   apart, accepted by the operator on 2026-11-12 ("reco ok", "ça me semble ok").
 - **Block 90**: the handoff, the holistic review's fixes, the matching comparison.
 
@@ -585,10 +592,10 @@ traps, the composition's build order, recording inside and outside a turn, the n
 | Disk | a download decision test: two low readings, one above, two low; fails unless exactly two alerts are sent, neither with the free space |
 | Lot 4b2 unchanged | each work's own tests; fails on a behaviour test of `main` removed rather than moved, the pull request listing each move |
 | Source read | a source tracking test whose list read fails once; fails if the next read comes before a full `sources_interval` |
-| Kad bug | the umbrella's probe `agents/reference/2026-11-04-v5-audit-instruments/fault-isolation/test_fault_isolation.py::test_a_kad_bug_stops_the_working_ed2k_tasks_too`, inverted and moved into the package's tests; fails if the eD2k searches stop |
+| Kad bug | the umbrella's probe `agents/reference/2026-11-04-v5-audit-instruments/fault-isolation/test_fault_isolation.py::test_a_kad_bug_stops_the_working_ed2k_tasks_too`, inverted and moved into the package's tests; fails if the eD2k searches stop (Corrected: rewritten over `Supervisor` and `keyword_searches` as `test_keyword_search.py::test_a_bug_on_every_kad_search_leaves_the_ed2k_searches_going_on`, the dated probe left as it is) |
 | One keyword's bug | a supervisor test, two keywords, one raising at every search; fails if the other's searches stop |
 | 60 s after a bug | a supervisor test whose work raises at once, its own wait 1 s; fails if two turns start closer than 60 s |
-| Time limit | a supervisor test over `FakeBlockingMonotonicClock`, a work whose turn never returns; fails if no bug is recorded once its limit has passed |
+| Time limit | a supervisor test over `FakeBlockingMonotonicClock`, a work whose turn never returns; fails if no bug is recorded once its limit has passed (Corrected: over `FakeLoopMonotonicClock` on the virtual-time loop, since a blocking clock's sleep never ends and no limit could pass) |
 | Ten eD2k keywords | `test_keyword_search.py`'s test of ten keywords queued on the real adapter's eD2k lock over `FakeAmuleApi`'s transport, each search held for its budget; fails on any bug |
 | Password refused | a supervisor test whose client raises `ClientAuthError` at every call; fails if the node stops or a turn records a bug |
 | Request bound | an adapter test on the real loop against a socket trickling its answer, the bound set under a second; fails if the call outlives its bound |
