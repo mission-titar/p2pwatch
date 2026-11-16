@@ -148,6 +148,11 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     def channels(self) -> tuple[Channel, ...]:
         return tuple(_SEARCH_TYPES)
 
+    @property
+    def request_bound(self) -> timedelta:
+        """The longest one request to amuleapi lasts, its phases in all."""
+        return timedelta(seconds=self._request_bound_seconds)
+
     async def _connect(self) -> httpx.AsyncClient:
         """The session, opened and logged in if there is none. Serialized: callers arriving
         during a login wait for it rather than open a session each."""

@@ -385,6 +385,44 @@ async def test_a_disk_under_its_floor_alerts_with_the_floor_from_the_config(
 
 
 @pytest.mark.asyncio
+async def test_each_work_is_handed_the_time_limit_its_path_bounds(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 0.05,
+        "min_free_bytes": 1,
+        "output_dir": str(tmp_path),
+    }
+    config = _config(
+        tmp_path,
+        # The keyword written twice is searched once, and counted once ahead of the other.
+        search=_config(tmp_path)["search"] | {"keywords": ["keroro", "keroro mission", "keroro"]},
+        observability={"log_level": "DEBUG", "notification_timeout_seconds": 10},
+        download=download,
+    )
+    config_path = _write(tmp_path / "crawler.yml", config=config)
+
+    with caplog.at_level(logging.DEBUG):
+        await _crawl_until_a_search_is_read(config_path, targets_path=_SHIPPED_TARGETS)
+
+    # One call to amuled: six requests of 60 s; each limit then adds its 300 s of margin. The
+    # status reading: two calls, an alert for the client and two for each of its two channels.
+    # An eD2k search: the other keyword's search ahead (its budget, then two calls), the spacing,
+    # its budget and three calls. A Kad search: a spacing for each keyword on its Kad word, two
+    # budgets and four calls. Download and source tracking: two calls and one notification.
+    assert [message for message in caplog.messages if ": time limit " in message] == [
+        "status reading amuled: time limit 1070 s",
+        "download tracking amuled: time limit 1030 s",
+        "source tracking amuled: time limit 1030 s",
+        "search 'keroro' amuled ed2k: time limit 2400 s",
+        "search 'keroro mission' amuled ed2k: time limit 2400 s",
+        "search 'keroro' amuled kad: time limit 2100 s",
+        "search 'keroro mission' amuled kad: time limit 2100 s",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_a_reading_of_both_channels_connected_and_connectable_records_every_rule(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
