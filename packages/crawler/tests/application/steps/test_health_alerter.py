@@ -17,6 +17,7 @@ from p2pwatch.domain.status_reading import (
     channel_component,
     client_component,
 )
+from p2pwatch.domain.work_components import BUGS, status_reading_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -94,6 +95,27 @@ async def test_a_rule_it_has_no_alert_for_raises(
     other = replace(CLIENT_UNREACHABLE, name="other")
     with pytest.raises(ValueError, match="^client amuled, other: no alert for this rule$"):
         await _sent(previous=previous, current=current, rule=other)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "on",
+    [status_reading_component(ClientName("amuled")), _KAD, _DOWNLOAD_TRACKING],
+    ids=["a task's part", "a channel", "download tracking"],
+)
+@pytest.mark.parametrize(
+    ("previous", "current"),
+    [
+        (HealthState.UNKNOWN, HealthState.FAILING),
+        (HealthState.HEALTHY, HealthState.FAILING),
+        (HealthState.FAILING, HealthState.HEALTHY),
+    ],
+)
+async def test_a_part_failing_or_healthy_again_under_the_bugs_rule_sends_nothing(
+    *, on: Component, previous: HealthState, current: HealthState
+) -> None:
+    # The log line of the change is all the operator gets of it.
+    assert await _sent(previous=previous, current=current, rule=BUGS, on=on) == []
 
 
 _CHANNEL_ALERTS = pytest.mark.parametrize(

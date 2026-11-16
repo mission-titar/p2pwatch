@@ -3,6 +3,7 @@
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.work_components import BUGS
 
 # As the disk alert always did: failing at the first reading under the floor, healthy at the first
 # reading at or above it, so each dip alerts once.
@@ -14,8 +15,10 @@ DISK_SPACE_LOW = HealthRule(
 
 
 def download_tracking_component(client_name: ClientName) -> Component:
-    """Download tracking, judged by whether the download disk is under its floor: "download
-    tracking amuled"."""
+    """Download tracking, judged by whether the download disk is under its floor and by its bugs:
+    "download tracking amuled"."""
     return Component(
-        name=f"download tracking {client_name}", client_name=client_name, rules=(DISK_SPACE_LOW,)
+        name=f"download tracking {client_name}",
+        client_name=client_name,
+        rules=(DISK_SPACE_LOW, BUGS),
     )

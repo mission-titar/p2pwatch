@@ -21,6 +21,7 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.keyword_search import SearchTimeLimitOf, keyword_searches
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
@@ -28,6 +29,7 @@ from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.status_reading import channel_component
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -84,6 +86,7 @@ class _Searches:
         )
         self.run_state = FakeRunStateStore()
         self.supervisor_logger = FakeLogger()
+        self.health_logger = FakeLogger()
 
     def works(
         self,
@@ -128,6 +131,10 @@ class _Searches:
             ),
             monotonic_clock=self.monotonic_clock,
             time_limit_of=time_limit_of,
+            channel_components=[
+                channel_component(client_name=worker.client_name, channel=channel)
+                for channel in worker.channels
+            ],
         )
 
     async def searching(
@@ -142,6 +149,7 @@ class _Searches:
         supervisor = Supervisor(
             run_state_reader=self.run_state,
             monotonic_clock=self.monotonic_clock,
+            node_health=NodeHealth(logger=self.health_logger, subscribers=()),
             logger=self.supervisor_logger,
         )
         await supervisor.supervise(
@@ -233,6 +241,49 @@ def test_a_bug_on_one_keywords_searches_leaves_the_other_keyword_searching(
         "bug in search 'keroro' amuled kad"
     ]
     assert searches.backoff.snapshot() == {}  # a bug never backs its channel off
+
+
+def test_a_bug_on_every_kad_search_fails_kad_and_its_searches_and_nothing_of_ed2k(
+    searches: _Searches,
+) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("ed2k"): 30.0, Channel("kad"): 30.0}, broken_channels=frozenset({Channel("kad")})
+    )
+
+    # Each Kad search meets its bug at 30 s, 120 s and 210 s.
+    searches.run_for(215.0, client=client, keywords=["keroro", "titar"])
+
+    failing = [line.message for line in searches.health_logger.lines if line.level == "warning"]
+    healthy = [line.message for line in searches.health_logger.lines if line.level == "info"]
+    # Kad meets the bugs of both its searches: its third comes at 120 s.
+    assert failing == [
+        "channel amuled kad, bugs: unknown to failing",
+        "search 'keroro' amuled kad, bugs: unknown to failing",
+        "search 'titar' amuled kad, bugs: unknown to failing",
+    ]
+    assert sorted(healthy) == [
+        "channel amuled ed2k, bugs: unknown to healthy",
+        "search 'keroro' amuled ed2k, bugs: unknown to healthy",
+        "search 'titar' amuled ed2k, bugs: unknown to healthy",
+    ]
+
+
+def test_a_bug_on_one_keywords_searches_fails_that_search_alone(searches: _Searches) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, broken_keywords=frozenset({Keyword("keroro")})
+    )
+
+    # The broken keyword meets its bug at 30 s, 120 s and 210 s.
+    searches.run_for(215.0, client=client, keywords=["keroro", "titar"])
+
+    failing = [line.message for line in searches.health_logger.lines if line.level == "warning"]
+    healthy = [line.message for line in searches.health_logger.lines if line.level == "info"]
+    assert failing == ["search 'keroro' amuled kad, bugs: unknown to failing"]
+    # The other keyword's turns come between its bugs: Kad never meets three in a row.
+    assert sorted(healthy) == [
+        "channel amuled kad, bugs: unknown to healthy",
+        "search 'titar' amuled kad, bugs: unknown to healthy",
+    ]
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:

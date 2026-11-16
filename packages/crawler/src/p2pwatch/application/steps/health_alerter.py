@@ -24,6 +24,7 @@ from p2pwatch.domain.status_reading import (
     CLIENT_UNREACHABLE,
     UNREACHABLE_ALERT_AFTER,
 )
+from p2pwatch.domain.work_components import BUGS
 
 # The field of the status reading each channel rule is about, as its alert names it.
 _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
@@ -49,6 +50,8 @@ class HealthAlerter:
 
     async def send(self, transition: HealthTransition) -> None:
         alert: Event | None
+        if transition.rule == BUGS:  # a part meeting bugs has no alert: its log line tells it
+            return
         if transition.current is HealthState.FAILING:
             alert = self._alert(transition)
         elif transition.previous is HealthState.FAILING:  # healthy from the start: none to end

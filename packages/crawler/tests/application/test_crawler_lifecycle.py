@@ -17,6 +17,7 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
@@ -156,7 +157,7 @@ class _Crawl:
             ),
             backoff=self.backoff,
             works=[
-                SupervisedWork(work=work, time_limit=timedelta(days=1))
+                SupervisedWork(work=work, time_limit=timedelta(days=1), components=())
                 for work in (
                     _WorkSendingACompletion(
                         "search",
@@ -173,6 +174,7 @@ class _Crawl:
                 run_state_reader=self.run_state,
                 # Its sleeps never end: with instant ones, every time limit would expire at once.
                 monotonic_clock=FakeBlockingMonotonicClock(),
+                node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
                 logger=FakeLogger(),
             ),
             logger=self.logger,
