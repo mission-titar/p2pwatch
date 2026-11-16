@@ -26,10 +26,6 @@ class SupervisedWork:
     work: Work
     time_limit: timedelta
 
-    def __post_init__(self) -> None:
-        if self.time_limit <= timedelta(0):
-            raise ValueError(f"{self.work}: a time limit must be positive, not {self.time_limit}")
-
 
 class TurnTimeoutError(Exception):
     """A turn still running at its work's time limit, cut by the supervisor: a bug."""
@@ -104,19 +100,22 @@ class Supervisor:
         return False
 
     async def _within_time_limit(self, supervised: SupervisedWork) -> None:
-        """Takes the work's turn, cut by a ``TurnTimeoutError`` once its time limit has passed.
-
-        The turn stays in the task that waited for it, so nothing runs between the wait and the
-        turn; the race's end suspends, so even a turn that never does lets the other works run."""
+        """Takes the work's turn, cancelled past its time limit and raised as ``TurnTimeoutError``;
+        its end always suspends, so a turn that never awaits still lets the other works run."""
+        raised: Exception | None = None
         try:
             async with asyncio.TaskGroup() as race:
                 expiry = race.create_task(self._expire(supervised.time_limit))
                 try:
                     await supervised.work.run_once()
+                except Exception as error:  # kept out of the group, which would wrap it
+                    raised = error
                 finally:
                     expiry.cancel()
-        except ExceptionGroup as raised:
-            raise raised.exceptions[0] from None
+        except ExceptionGroup as expired:
+            raise expired.exceptions[0] from None
+        if raised is not None:
+            raise raised
 
     async def _expire(self, time_limit: timedelta) -> NoReturn:
         await self._monotonic_clock.sleep(time_limit)

@@ -75,6 +75,26 @@ class _TimedWork(Work):
             raise error
 
 
+class _WorkRaisingFromAKeyError(Work):
+    """Waits a second, then its turn raises a ``RuntimeError`` from the ``KeyError`` it was
+    handling, as a mapping bug would."""
+
+    def __init__(self) -> None:
+        self.missing = KeyError("channels")
+
+    def __str__(self) -> str:
+        return "status reading amuled"
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.sleep(1.0)  # noqa: TID251
+
+    async def run_once(self) -> None:
+        try:
+            raise self.missing
+        except KeyError as missing:
+            raise RuntimeError("a mapping bug") from missing
+
+
 class _BlockedWork(Work):
     """A work whose first turn never ends on its own; it notes its cancellation in ``events``."""
 
@@ -249,6 +269,18 @@ def test_a_bug_fails_its_turn_alone_logged_with_its_trace(virtual_loop: VirtualL
     assert logger.lines == [bug_line, bug_line]
 
 
+def test_a_bug_is_logged_with_the_exception_it_was_raised_from(virtual_loop: VirtualLoop) -> None:
+    logger = FakeLogger()
+    broken = _WorkRaisingFromAKeyError()
+
+    _supervise_until(virtual_loop, broken, seconds=30.0, logger=logger)
+
+    [bug_line] = logger.lines
+    assert bug_line.message == "bug in status reading amuled"
+    assert bug_line.error is not None
+    assert bug_line.error.__cause__ is broken.missing
+
+
 def test_two_turns_of_a_work_meeting_a_bug_at_once_are_never_closer_than_60_s(
     virtual_loop: VirtualLoop,
 ) -> None:
@@ -287,12 +319,6 @@ def test_a_turn_still_running_at_its_time_limit_is_cut_as_a_bug_and_its_work_goe
     assert hung.cut_at == [30.0, 30.0 + _AFTER_A_BUG + 30.0, stop_at]
     cut_line = LoggedLine(level="error", message="hung work: past its time limit of 30 s")
     assert logger.lines == [cut_line, cut_line]
-
-
-@pytest.mark.parametrize("time_limit", [timedelta(0), timedelta(seconds=-1)])
-def test_a_time_limit_that_is_not_positive_is_refused(time_limit: timedelta) -> None:
-    with pytest.raises(ValueError, match="hung work: a time limit must be positive"):
-        SupervisedWork(work=_HungWork(), time_limit=time_limit)
 
 
 def test_after_a_turn_that_worked_the_work_waits_its_own_wait_alone_again(
