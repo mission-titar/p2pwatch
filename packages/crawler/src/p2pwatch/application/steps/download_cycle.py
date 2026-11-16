@@ -102,8 +102,8 @@ class DownloadCycle(Work):
           upstream step partially failed. "NEVER abandon a stalled download": the 1→2→3→4 order
           is preserved, each step is best-effort.
 
-        The stores are sync → cancellation (shutdown) lands at the network ``await``, never
-        mid-write.
+        The stores are sync → a cancellation (the shutdown, the time limit) lands at the network
+        ``await``, never mid-write.
 
         A ``ClientUnreachableError`` here does NOT dispatch ``ClientUnreachable``, unlike the
         searches: the event is theirs. Download tracking is single-client, so its

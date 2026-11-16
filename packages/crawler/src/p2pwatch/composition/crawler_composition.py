@@ -4,8 +4,8 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
   ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore``, ``SqliteBackoffStateStore`` and
   ``SqliteSearchStartStore``
-  (single writer, invariant §11), connections opened by the ``SqliteDatabaseOpener``
-  (migrations checked at startup, fail-fast §14).
+  (each built once), connections opened by the ``SqliteDatabaseOpener``
+  (migrations applied at startup, a failed one stopping the start).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
   session the status watcher, download tracking and source tracking share.
