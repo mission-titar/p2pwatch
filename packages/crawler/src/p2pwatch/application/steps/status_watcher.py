@@ -1,8 +1,8 @@
 """Reads one client's status every minute: each reading feeds the channel gauges and the health
-of the client and of each channel.
+of the client, of each channel and of download tracking, which needs a channel connected.
 
-A field aMule did not give records nothing, so while aMule does not answer each channel keeps its
-health.
+A field aMule did not give records nothing, so while aMule does not answer each channel and
+download tracking keep their health.
 """
 
 from collections.abc import Mapping
@@ -16,6 +16,7 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
+from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
@@ -33,7 +34,7 @@ from p2pwatch.domain.status_reading import (
 
 class StatusWatcher(Work):
     """Reads one client's status every minute, a minute from the end of one reading to the start
-    of the next, and each of ``channel_components``' channels in it."""
+    of the next, each of ``channel_components``' channels in it, and whether any is connected."""
 
     def __init__(
         self,
@@ -47,6 +48,7 @@ class StatusWatcher(Work):
         node_health: NodeHealth,
         client_component: Component,
         channel_components: Mapping[Channel, Component],
+        download_tracking_component: Component | None,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -57,6 +59,7 @@ class StatusWatcher(Work):
         self._node_health = node_health
         self._client_component = client_component
         self._channel_components = channel_components
+        self._download_tracking_component = download_tracking_component  # None: no download
         self._latest_reading_ended_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
@@ -98,6 +101,13 @@ class StatusWatcher(Work):
         channels = {c.channel: c for c in status.channels} if status else {}
         for channel, component in self._channel_components.items():
             await self._read_channel(channel, reading=channels.get(channel), on=component)
+        if status is not None and self._download_tracking_component is not None:
+            on_a_network = any(channel.connected for channel in status.channels)
+            await self._node_health.record(
+                on=self._download_tracking_component,
+                rule=CONNECTED_TO_NO_NETWORK,
+                detected=not on_a_network,
+            )
 
     def _publish(self, status: ClientStatus | None) -> None:
         reading = StatusReading(read_at=self._wall_clock.now(), status=status)

@@ -77,6 +77,8 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `expected error` | `ExpectedError`, an error the code expects from outside, the base of every error a driven port declares: aMule down (`ClientError`), a store refusing a write (`StoreError`) | a `declared failure` |
 | `bug` | an exception nobody expected: anything a turn raises but an `ExpectedError` | an `unexpected error`, a `failure` |
 | `bugs rule` | `BUGS`, the health rule of every part a turn is recorded on: failing once 3 turns in a row met a bug, healthy again under 2 in the last 10; the supervisor records it after each turn, a search's on its channel too, and no alert names it | a failures rule |
+| `searches failed` | `SEARCHES_FAILED`, a channel's health rule: each search records whether the network refused it (`SearchFailedError`), failing once 3 in a row were refused, healthy again under 2 in the last 10; an unreachable client or a refused password records nothing, and no alert names it | a search's bug, which is the bugs rule's |
+| `connected to no network` | `CONNECTED_TO_NO_NETWORK`, download tracking's health rule: each status reading records whether no channel of the client is connected, failing at 6 readings in a row, healthy again under 2 in the last 10; an unreachable reading records nothing, and no alert names it | a channel's `not connected` |
 | `config problem` | `ConfigProblem`, one problem of a config file: the file, the key or none, the message | a refusal, an error |
 | `schema` | a pydantic model of a config file as written, in the config adapter only: `CrawlerConfigSchema` | the domain object it builds |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |

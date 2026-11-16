@@ -129,6 +129,7 @@ from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.download.disk_space import download_tracking_component
+from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
@@ -522,18 +523,6 @@ class CrawlerComposition(CrawlerRunner):
                 channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
                 for channel in client.channels()
             }
-            # The status watcher and the two tracking works share the search session: one per node.
-            status_watcher = StatusWatcher(
-                client_name=_AMULE_CLIENT_NAME,
-                client=client,
-                wall_clock=wall_clock,
-                monotonic_clock=monotonic_clock,
-                observability_dispatcher=observability_dispatcher,
-                status_reading_writer=status_reading_store,
-                node_health=node_health,
-                client_component=client_component(_AMULE_CLIENT_NAME),
-                channel_components=channel_components,
-            )
             time_limits = AmuleWorkTimeLimits(
                 request_bound=client.request_bound,
                 search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
@@ -550,9 +539,11 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 monotonic_clock=monotonic_clock,
                 time_limit_of=time_limits.of_search,
+                node_health=node_health,
                 channel_components=channel_components.values(),
             )
             tracking: tuple[SupervisedWork, ...] = ()
+            download_tracking: Component | None = None
 
             # Download and source tracking share the catalog's stores and ``local_connection``
             # (one writer, on the event loop), and the search session.
@@ -576,7 +567,7 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     logger=StdlibLogger(DownloadTracker.__module__),
                 )
-                # The disk's readings and the bugs of the cycle's turns are recorded on one part.
+                # One part for the disk's readings, the client's networks and the cycle's bugs.
                 download_tracking = download_tracking_component(_AMULE_CLIENT_NAME)
                 download_cycle = DownloadCycle(
                     client_name=_AMULE_CLIENT_NAME,
@@ -635,6 +626,20 @@ class CrawlerComposition(CrawlerRunner):
                         (source_watcher, source_tracking_component(_AMULE_CLIENT_NAME)),
                     )
                 )
+
+            # The status watcher and the two tracking works share the search session: one per node.
+            status_watcher = StatusWatcher(
+                client_name=_AMULE_CLIENT_NAME,
+                client=client,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+                observability_dispatcher=observability_dispatcher,
+                status_reading_writer=status_reading_store,
+                node_health=node_health,
+                client_component=client_component(_AMULE_CLIENT_NAME),
+                channel_components=channel_components,
+                download_tracking_component=download_tracking,
+            )
 
             works = works_in_start_order(
                 status_watcher=SupervisedWork(

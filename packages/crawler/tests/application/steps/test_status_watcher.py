@@ -14,6 +14,8 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
+from p2pwatch.domain.download.disk_space import download_tracking_component
+from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -86,6 +88,7 @@ def _status_watcher(
     observability: _Observability,
     status_reading_writer: StatusReadingWriter | None = None,
     channels: Sequence[Channel] = _CHANNELS,
+    download_tracking: Component | None = None,
 ) -> StatusWatcher:
     return StatusWatcher(
         client_name=client_name,
@@ -100,6 +103,7 @@ def _status_watcher(
             channel: channel_component(client_name=client_name, channel=channel)
             for channel in channels
         },
+        download_tracking_component=download_tracking,
     )
 
 
@@ -110,7 +114,10 @@ async def _take_turns(watcher: StatusWatcher, *, turns: int) -> None:
 
 
 async def _run(
-    *readings: _Reading, client: ClientName = _AMULED, channels: Sequence[Channel] = _CHANNELS
+    *readings: _Reading,
+    client: ClientName = _AMULED,
+    channels: Sequence[Channel] = _CHANNELS,
+    download_tracking: Component | None = None,
 ) -> _Observability:
     fake_time = FakeTime()
     observability = _Observability(fake_time)
@@ -120,6 +127,7 @@ async def _run(
         fake_time=fake_time,
         observability=observability,
         channels=channels,
+        download_tracking=download_tracking,
     )
     await _take_turns(watcher, turns=len(readings))
     return observability
@@ -257,6 +265,61 @@ async def test_a_refused_password_raises_out_of_the_turn() -> None:
         await _run(ClientAuthError("amuleapi refused the admin password"), _status(ed2k=_UP))
 
 
+_NO_NETWORK = _status(ed2k=(False, None), kad=(False, None))
+
+
+def _no_network_lines(observability: _Observability) -> list[LoggedLine]:
+    """The log lines of each change of download tracking's health under "connected to no
+    network"."""
+    return [
+        line
+        for line in observability.health_logger.lines
+        if ", connected to no network: " in line.message
+    ]
+
+
+@pytest.mark.asyncio
+async def test_six_readings_on_no_network_fail_download_tracking_and_nine_on_one_heal_it() -> None:
+    on_ed2k_alone = _status(ed2k=_UP, kad=(False, None))
+    observability = await _run(
+        *[_NO_NETWORK] * 6,
+        *[on_ed2k_alone] * 9,
+        download_tracking=download_tracking_component(_AMULED),
+    )
+    assert _no_network_lines(observability) == [
+        LoggedLine(
+            level="warning",
+            message="download tracking amuled, connected to no network: unknown to failing",
+        ),
+        LoggedLine(
+            level="info",
+            message="download tracking amuled, connected to no network: failing to healthy",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_reading_tells_nothing_of_the_client_s_networks() -> None:
+    held = await _run(
+        *[_NO_NETWORK] * 5, _DOWN, download_tracking=download_tracking_component(_AMULED)
+    )
+    failed = await _run(
+        *[_NO_NETWORK] * 5,
+        _DOWN,
+        _NO_NETWORK,
+        download_tracking=download_tracking_component(_AMULED),
+    )
+
+    # The sixth reading on no network is the seventh reading: aMule unreachable records nothing.
+    assert _no_network_lines(held) == []
+    assert _no_network_lines(failed) == [
+        LoggedLine(
+            level="warning",
+            message="download tracking amuled, connected to no network: unknown to failing",
+        )
+    ]
+
+
 @pytest.mark.asyncio
 async def test_unreachable_for_one_minute_never_alerts() -> None:
     assert await _alerts(_DOWN, _DOWN, _status(ed2k=_UP)) == []
@@ -384,6 +447,7 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
         node_health=observability.node_health,
         client_component=client_component(_AMULED),
         channel_components={},
+        download_tracking_component=None,
     )
     run_state, logger = FakeRunStateStore(), FakeLogger()
     virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)

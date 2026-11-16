@@ -37,6 +37,13 @@ CHANNEL_NOT_CONNECTABLE = HealthRule(
 # A channel's sixth reading in a row comes 5 minutes after the first.
 CHANNEL_ALERT_AFTER = (_CHANNEL_DETECTED_IN_A_ROW - 1) * STATUS_PERIOD
 
+# A channel whose network refuses its searches, such as Kad answering with an error.
+SEARCHES_FAILED = HealthRule(
+    name="searches failed",
+    fails_at=Detections(times=3, among_last=3),
+    recovers_under=Detections(times=2, among_last=10),
+)
+
 
 def client_component(client_name: ClientName) -> Component:
     """The client, judged by whether its API answers: "client amuled"."""
@@ -46,13 +53,13 @@ def client_component(client_name: ClientName) -> Component:
 
 
 def channel_component(*, client_name: ClientName, channel: Channel) -> Component:
-    """One of the client's channels, judged by whether it is connected and connectable, and by the
-    bugs of its searches: "channel amuled kad"."""
+    """One of the client's channels, judged by whether it is connected and connectable, whether the
+    network refuses its searches, and by their bugs: "channel amuled kad"."""
     return Component(
         name=f"channel {client_name} {channel}",
         client_name=client_name,
         channel=channel,
-        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, BUGS),
+        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, SEARCHES_FAILED, BUGS),
     )
 
 
