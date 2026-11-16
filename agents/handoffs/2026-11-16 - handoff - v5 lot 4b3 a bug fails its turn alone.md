@@ -83,7 +83,8 @@ The spec's section 6, those this lot reaches:
 | 40 | #780 | `feat/search-starts-kept` | each client's latest search starts kept in `local.db` | 934, 25, accepted |
 | 50 | #781 | `feat/turn-time-limit` | each work's time limit | 459, 13 |
 | 55 | #782 | `feat/notifications-shielded` | a decision's or a completion's notification sent even when its turn is cut | 154, 10 |
-| 90 | | `docs/lot-4b3-wrap` | the holistic review's fixes, this handoff | 479, 25: split in two, below |
+| 80 | | `fix/lot-4b3-review-fixes` | the holistic review's fixes to the code: a bug's cause, the cancelled login, the shielded sends' bugs and the shutdown, the backoff in seconds, the false words | 378, 18 |
+| 90 | | `docs/lot-4b3-wrap` | the review's last fixes (the guard, the names, the limits read by a wiring test), this handoff | 101, 10 |
 
 - **Past a bound, accepted by the operator**: block 10 past both, the files on 2026-11-11 (the spec's row: each
   port's error re-based is one line in each of its files) and the lines on 2026-11-16 ("A": the three ways a turn
@@ -92,10 +93,8 @@ The spec's section 6, those this lot reaches:
   operator accepted past both bounds.
 - **Block 55 split out of block 50**, as the spec's row foresees: with the shield, block 50 would have been about 570
   lines and 21 files (the lead, 2026-11-16).
-- **The closing block passed the file bound** (479 lines, 25 files, 2026-11-16): its commits split after the comments'
-  rewording, 378 lines and 18 files from block 55 to it (the review's code fixes), then 101 lines and 10 files (the
-  guard of `of_search`, the names, the composition's limits read by a wiring test), this handoff and the spec's
-  corrections on top. Each part's tip passed the gate; the lead cuts the branches.
+- **The closing block passed the file bound** (479 lines, 25 files, 2026-11-16) and split into blocks 80 and 90, cut by
+  the lead after the comments' rewording; each tip passed the gate.
 - **Departures, per block**:
   - **10**: `ExpectedError` re-bases the errors of the **driven** ports only (the operator, 2026-11-11, "every failure
     a driven port declares"); the driving ports' errors (`MergeError`, `InvalidConfigError`, `OutOfSpaceError`,
@@ -129,7 +128,7 @@ The spec's section 6, those this lot reaches:
     `works_in_start_order` generic; the draft's "a turn ending within its limit keeps its outcome" test not kept (the
     existing end-of-turn tests hold it, shown by a mutation). The adapter publishes `ED2K`, `KAD`, `START_SPACING`,
     `kad_word_of`.
-  - **90**: the composition's limits read through a debug line it writes per work, and `AmuleWorkTimeLimits` given the
+  - **80, 90**: the composition's limits read through a debug line it writes per work, and `AmuleWorkTimeLimits` given the
     bound the client declares (`AmuleApiClient.request_bound`) rather than the constant beside it, so one wiring test
     reads both: no other seam lets a test read what the composition hands the lifecycle without patching it. The two
     doubles a test module held moved to `tests/fakes/` (`FakeRaisingNodeMetricStore`, exempted from its contract as a
