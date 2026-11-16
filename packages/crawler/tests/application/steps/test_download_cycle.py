@@ -6,6 +6,7 @@ import pytest
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.download_cycle import DownloadCycle
 from p2pwatch.domain.client_errors import (
+    ClientAuthError,
     ClientUnreachableError,
     DownloadRejectedError,
     ReadRejectedError,
@@ -327,6 +328,20 @@ async def test_after_a_turn_the_next_waits_the_poll_interval() -> None:
 
 
 @pytest.mark.asyncio
+async def test_after_a_turn_that_raised_the_next_waits_the_poll_interval_too() -> None:
+    fake_time = FakeTime()
+    cycle = build_cycle(
+        client=FakeDownloadClient(list_failures=[ClientAuthError("amuleapi refused the password")]),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        wait_clock=fake_time.monotonic,
+    )
+    with pytest.raises(ClientAuthError):
+        await cycle.run_once()
+    await asyncio.wait_for(cycle.wait_for_next_turn(), timeout=1.0)
+    assert fake_time.sleeps == [timedelta(seconds=30)]
+
+
+@pytest.mark.asyncio
 async def test_a_wake_set_before_the_wait_ends_it_at_once_and_cancels_the_polls_sleep() -> None:
     waker = FakeWaker()
     cycle = _idle_cycle(wait_clock=FakeBlockingMonotonicClock(), waker=waker)
@@ -359,3 +374,10 @@ async def test_a_wait_cancelled_at_the_shutdown_raises_and_leaves_no_task() -> N
     with pytest.raises(asyncio.CancelledError):
         await wait
     assert _other_tasks() == set()
+
+
+def test_download_tracking_is_named_after_its_client() -> None:
+    cycle = build_cycle(
+        client=FakeDownloadClient(), tracked_download_store=FakeTrackedDownloadStore()
+    )
+    assert str(cycle) == "download tracking amuled"

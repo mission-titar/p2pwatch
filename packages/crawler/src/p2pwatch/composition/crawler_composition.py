@@ -543,6 +543,7 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(DownloadTracker.__module__),
                 )
                 download_cycle = DownloadCycle(
+                    client_name=_AMULE_CLIENT_NAME,
                     download_client=client,
                     download_tracker=download_tracker,
                     download_decider=DownloadDecider(
@@ -573,6 +574,7 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(DownloadCycle.__module__),
                 )
                 source_watcher = SourceWatcher(
+                    client_name=_AMULE_CLIENT_NAME,
                     download_client=client,
                     source_client=client,
                     tracked_download_reader=tracked_download_store,
@@ -609,7 +611,11 @@ class CrawlerComposition(CrawlerRunner):
                     status_watcher=status_watcher, tracking=tracking, searches=searches
                 ),
                 download_enabled=download_config is not None,
-                supervisor=Supervisor(run_state_reader=run_state_store),
+                supervisor=Supervisor(
+                    run_state_reader=run_state_store,
+                    monotonic_clock=monotonic_clock,
+                    logger=StdlibLogger(Supervisor.__module__),
+                ),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the

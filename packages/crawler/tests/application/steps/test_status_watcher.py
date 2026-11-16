@@ -12,6 +12,7 @@ from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
+from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
@@ -25,12 +26,16 @@ from p2pwatch.domain.status_reading import (
     client_component,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
+from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
+from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
 
@@ -350,3 +355,49 @@ async def test_a_minute_already_past_the_latest_reading_starts_the_next_at_once(
     fake_time.advance(timedelta(seconds=90))
     await watcher.wait_for_next_turn()
     assert fake_time.sleeps == []
+
+
+@pytest.mark.asyncio
+async def test_a_reading_that_raised_waits_a_full_minute_before_the_next() -> None:
+    fake_time = FakeTime()
+    watcher = _watcher_over(fake_time, ClientAuthError("amuleapi refused the admin password"))
+    with pytest.raises(ClientAuthError):
+        await watcher.run_once()
+    await watcher.wait_for_next_turn()
+    assert fake_time.sleeps == [timedelta(seconds=60)]
+
+
+def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_on(
+    virtual_loop: VirtualLoop,
+) -> None:
+    refused = ClientAuthError("amuleapi refused the admin password")
+    observability = _Observability(FakeTime())
+    monotonic_clock = FakeLoopMonotonicClock(virtual_loop)
+    watcher = StatusWatcher(
+        client_name=_AMULED,
+        client=FakeStatusClient([refused] * 5),
+        wall_clock=FakeLoopWallClock(virtual_loop),
+        monotonic_clock=monotonic_clock,
+        observability_dispatcher=observability.dispatcher,
+        status_reading_writer=FakeStatusReadingStore((_AMULED,)),
+        node_health=observability.node_health,
+        client_component=client_component(_AMULED),
+        channel_components={},
+    )
+    run_state, logger = FakeRunStateStore(), FakeLogger()
+    virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)
+    supervisor = Supervisor(
+        run_state_reader=run_state, monotonic_clock=monotonic_clock, logger=logger
+    )
+
+    # Returns at the shutdown, with no exception: the node ran on.
+    virtual_loop.run_until_complete(
+        supervisor.supervise([watcher], arm_shutdown_bound=lambda: None)
+    )
+
+    message = "status reading amuled: amuleapi refused the admin password"
+    assert logger.lines == [LoggedLine(level="warning", message=message)] * 5
+
+
+def test_the_status_reading_is_named_after_its_client() -> None:
+    assert str(_watcher_over(FakeTime())) == "status reading amuled"

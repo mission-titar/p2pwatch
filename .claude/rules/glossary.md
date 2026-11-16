@@ -73,7 +73,9 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `health transition` | `HealthTransition`, a change of one part's state under one rule, such as the aMule client going from healthy to failing | `event`, the observability's |
 | `node health` | `NodeHealth`, the node's health: every part's checks come here through `record(on=..., rule=..., detected=...)`, and each change is logged and passed on to the alerts | `recorder`, `registry` |
 | `health alerter` | `HealthAlerter`, sends the client's, its channels' and the download disk's alerts when their health changes: "amuled unreachable for 2 min" when the client turns failing, "amuled reachable again" when it turns healthy | `translator` |
-| `inaccessible path` | `InaccessiblePathError`, a path the filesystem refuses to examine (removed, under a file, behind a directory it cannot search, its name too long): the declared failure of `FreeSpaceMeter` and `CatalogFinder` | a raw `OSError` past its adapter |
+| `inaccessible path` | `InaccessiblePathError`, a path the filesystem refuses to examine (removed, under a file, behind a directory it cannot search, its name too long): the expected error of `FreeSpaceMeter` and `CatalogFinder` | a raw `OSError` past its adapter |
+| `expected error` | `ExpectedError`, an error the code expects from outside, the base of every error a driven port declares: aMule down (`ClientError`), a store refusing a write (`StoreError`) | a `declared failure` |
+| `bug` | an exception nobody expected: anything a turn raises but an `ExpectedError` | an `unexpected error`, a `failure` |
 | `config problem` | `ConfigProblem`, one problem of a config file: the file, the key or none, the message | a refusal, an error |
 | `schema` | a pydantic model of a config file as written, in the config adapter only: `CrawlerConfigSchema` | the domain object it builds |
 | `error_label` | the label a parser prints in its errors | `what`, `label`, `field` |
@@ -93,7 +95,7 @@ The words the code, the docs and the specs share (`.claude/CLAUDE.md`, Naming).
 | `use case` | an operation called from outside through a driving port, in `application/use_cases/`: `ValidateConfig` | `service`, `interactor` |
 | `step` | a piece of the program the composition builds, behind no driving port: a class in `application/steps/`, one per module, `NodeIdResolver` | a use case |
 | `work`, `turn` | `Work`, a task the node repeats: a wait, then a turn, again, such as `StatusWatcher` reading aMule's status every minute; each work computes its wait from its own state, and the first turn waits too | a `loop`; an asyncio `Task` |
-| `supervisor` | `Supervisor`, takes each work's turns, each after its wait, until the shutdown is requested, then cancels them all | `LoopSupervisor` |
+| `supervisor` | `Supervisor`, takes each work's turns, each after its wait, until the shutdown is requested, then cancels them all; a turn that raises fails alone, a bug's work waiting at least 60 s before its next turn | `LoopSupervisor` |
 | `lifecycle` | the program from its start to its stop, which the composition runs: `CrawlerLifecycle`, `PortSyncLifecycle`, behind no driving port | `app` |
 | `micros` | an integer of microseconds: an instant counts from the epoch; a column holding one is named `<x>_micros` too | a bare `_at` on an `int`, a column's included |
 | `id`, `db`, `sql`, `url`, `api`, `json`, `ecid`, `mib`, `iso`, `min`, `max`, `conf`, `argv`, `env`, `cwd`, `uid`, `gid` | the abbreviations allowed (`conf`: aMule's `amule.conf`; `argv`, `env`, `cwd`: what a `__main__.py` reads of its process; `uid`, `gid`: POSIX's user and group ids) | `dir` for `directory` |

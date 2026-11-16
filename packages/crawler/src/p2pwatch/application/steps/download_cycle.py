@@ -29,6 +29,7 @@ from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.inaccessible_path_error import InaccessiblePathError
 from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
@@ -44,6 +45,7 @@ class DownloadCycle(Work):
     def __init__(
         self,
         *,
+        client_name: ClientName,
         download_client: DownloadClient,
         download_tracker: DownloadTracker,
         download_decider: DownloadDecider,
@@ -53,6 +55,7 @@ class DownloadCycle(Work):
         waker: Waker,
         logger: Logger,
     ) -> None:
+        self._client_name = client_name
         self._download_client = download_client
         self._download_tracker = download_tracker
         self._download_decider = download_decider
@@ -62,6 +65,9 @@ class DownloadCycle(Work):
         self._waker = waker
         self._logger = logger
         self._turn_taken = False
+
+    def __str__(self) -> str:
+        return f"download tracking {self._client_name}"
 
     async def wait_for_next_turn(self) -> None:
         """Returns at once before the first turn, then after the poll interval or the download
@@ -105,8 +111,10 @@ class DownloadCycle(Work):
         The unavailability is handled by the next cycle's retry + the warning log. Intentional
         asymmetry.
         """
-        await self._round()
-        self._turn_taken = True
+        try:
+            await self._round()
+        finally:  # a round that raised waits the poll interval before the next one too
+            self._turn_taken = True
 
     async def _round(self) -> None:
         # Step 0 - SNAPSHOT: client I/O → unreachable or refused = dead daemon = ABORT.

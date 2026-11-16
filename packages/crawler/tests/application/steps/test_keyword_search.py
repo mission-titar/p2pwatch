@@ -18,11 +18,11 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.keyword_search import keyword_searches
+from p2pwatch.application.steps.keyword_search import KeywordSearch, keyword_searches
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.domain.client_errors import SearchFailedError
-from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -76,10 +76,10 @@ class _Searches:
             backoff_state_reader=self.state,
         )
         self.run_state = FakeRunStateStore()
+        self.supervisor_logger = FakeLogger()
 
-    async def searching(self, client: Any, *, keywords: list[str]) -> None:
-        """Runs every search the node would list for ``keywords`` under the supervisor, until the
-        shutdown is requested."""
+    def works(self, client: Any, *, keywords: list[str]) -> list[KeywordSearch]:
+        """Every search the node would list for ``keywords``, over one client named ``amuled``."""
         dispatcher = ObservabilityOverFakes().dispatcher
         file_judge = FileJudge(
             observation_reader=self.observation_store,
@@ -107,7 +107,7 @@ class _Searches:
             observability_dispatcher=dispatcher,
             logger=FakeLogger(),
         )
-        searches = keyword_searches(
+        return keyword_searches(
             search_workers=[worker],
             keywords=keywords,
             backoff_saver=BackoffSaver(
@@ -115,8 +115,17 @@ class _Searches:
             ),
             monotonic_clock=self.monotonic_clock,
         )
-        await Supervisor(run_state_reader=self.run_state).supervise(
-            searches, arm_shutdown_bound=lambda: None
+
+    async def searching(self, client: Any, *, keywords: list[str]) -> None:
+        """Runs every search the node would list for ``keywords`` under the supervisor, until the
+        shutdown is requested."""
+        supervisor = Supervisor(
+            run_state_reader=self.run_state,
+            monotonic_clock=self.monotonic_clock,
+            logger=self.supervisor_logger,
+        )
+        await supervisor.supervise(
+            self.works(client, keywords=keywords), arm_shutdown_bound=lambda: None
         )
 
     def run_for(
@@ -160,6 +169,46 @@ def test_channels_do_not_wait_for_each_other(searches: _Searches) -> None:
     searches.run_for(_HOUR, client=client, keywords=["keroro"])
     counts = {name: sum(1 for *_, c in client.searches if c == name) for name in client.channels()}
     assert counts[Channel("ed2k")] >= 5 * counts[Channel("kad")]
+
+
+def test_a_bug_on_every_kad_search_leaves_the_ed2k_searches_going_on(searches: _Searches) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("ed2k"): 30.0, Channel("kad"): 30.0}, broken_channels=frozenset({Channel("kad")})
+    )
+
+    searches.run_for(100.0, client=client, keywords=["keroro", "titar"])
+
+    starts = {
+        channel: sorted(
+            start for start, _, searched_on in client.searches if searched_on == channel
+        )
+        for channel in ("ed2k", "kad")
+    }
+    # Each Kad search meets its bug at 30 s, and its next turn waits 60 s.
+    assert starts == {
+        "ed2k": [0.0, 0.0, 30.0, 30.0, 60.0, 60.0, 90.0, 90.0],
+        "kad": [0.0, 0.0, 90.0, 90.0],
+    }
+
+
+def test_a_bug_on_one_keywords_searches_leaves_the_other_keyword_searching(
+    searches: _Searches,
+) -> None:
+    client = FakeTimedSearchClient(
+        {Channel("kad"): 30.0}, broken_keywords=frozenset({Keyword("keroro")})
+    )
+
+    searches.run_for(100.0, client=client, keywords=["keroro", "titar"])
+
+    starts = {
+        keyword: [start for start, searched, _ in client.searches if searched == keyword]
+        for keyword in ("keroro", "titar")
+    }
+    assert starts == {"keroro": [0.0, 90.0], "titar": [0.0, 30.0, 60.0, 90.0]}
+    assert [line.message for line in searches.supervisor_logger.lines] == [
+        "bug in search 'keroro' amuled kad"
+    ]
+    assert searches.backoff.snapshot() == {}  # a bug never backs its channel off
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:
@@ -239,3 +288,8 @@ def test_a_search_that_never_suspends_does_not_starve_the_loop(searches: _Search
 
     searches.loop.run_until_complete(main())
     assert client.calls >= 100
+
+
+def test_each_search_is_named_after_its_keyword_client_and_channel(searches: _Searches) -> None:
+    [work] = searches.works(FakeTimedSearchClient({Channel("kad"): 30.0}), keywords=["keroro"])
+    assert str(work) == "search 'keroro' amuled kad"

@@ -1,8 +1,9 @@
 """Source tracking: every ``sources_interval``, reads the sources of each of our downloads the
 client lists, records them as points and alerts on the useful ones.
 
-Errors: an unavailable client or a ``StoreError`` reading the tracked downloads ends the turn, a
-``StoreError`` writing one download's points skips that download; the next turn tries again.
+Errors: an unavailable client ends the turn, a ``StoreError`` reading the tracked downloads leaves
+it for the supervisor to log, one writing a download's points skips that download; the next turn
+tries again.
 """
 
 from dataclasses import dataclass, field
@@ -22,7 +23,7 @@ from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey
-from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import SourceFirstUseful, SourceReappeared
 from p2pwatch.domain.source import (
@@ -59,6 +60,7 @@ class SourceWatcher(Work):
     def __init__(
         self,
         *,
+        client_name: ClientName,
         download_client: DownloadClient,
         source_client: SourceClient,
         tracked_download_reader: TrackedDownloadReader,
@@ -74,6 +76,7 @@ class SourceWatcher(Work):
         node_id: NodeId,
         logger: Logger,
     ) -> None:
+        self._client_name = client_name
         self._download_client = download_client
         self._source_client = source_client
         self._tracked_download_reader = tracked_download_reader
@@ -89,6 +92,9 @@ class SourceWatcher(Work):
         self._node_id = node_id
         self._logger = logger
         self._latest_turn_started_at: MonotonicInstant | None = None
+
+    def __str__(self) -> str:
+        return f"source tracking {self._client_name}"
 
     async def wait_for_next_turn(self) -> None:
         """Waits until ``sources_interval`` has passed since the latest turn started; the first
@@ -107,8 +113,6 @@ class SourceWatcher(Work):
             await self._record_sources(await self._download_client.downloads())
         except _UNAVAILABLE as error:
             self._logger.warning("download daemon unreachable (%s): sources skipped, retry", error)
-        except StoreError as error:
-            self._logger.error("download sources store failure (%s): step skipped, retry", error)
 
     async def _record_sources(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
         """Records the sources of each of our downloads the client lists, completed ones aside,
