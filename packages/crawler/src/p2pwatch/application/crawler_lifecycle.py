@@ -13,7 +13,7 @@ from p2pwatch.domain.observability.events import CrawlerStarted
 
 class CrawlerLifecycle:
     """Resumes the saved backoffs, announces the node online, re-evaluates the catalog if the
-    policy changed, then has the supervisor run the works."""
+    policy changed, has the supervisor run the works, then finishes the sends they left."""
 
     def __init__(
         self,
@@ -37,7 +37,8 @@ class CrawlerLifecycle:
         self._logger = logger
 
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
-        """Runs until the shutdown is requested, arming the bound before the works are cancelled."""
+        """Runs until the shutdown is requested, arming the bound before the works are cancelled;
+        returns once the notifications their turns left in flight are sent."""
         self._backoff.resume_waits()
         self._logger.info("crawler started: node_id=%s", self._node_id)
         if self._download_enabled:
@@ -49,3 +50,4 @@ class CrawlerLifecycle:
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed()
         await self._supervisor.supervise(self._works, arm_shutdown_bound=arm_shutdown_bound)
+        await self._observability_dispatcher.finish_shielded_dispatches()

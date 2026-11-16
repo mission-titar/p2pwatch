@@ -3,6 +3,7 @@ A notification failing or timing out is absorbed and logged: it never breaks the
 
 import asyncio
 from collections.abc import Awaitable
+from contextlib import suppress
 from typing import assert_never
 
 from p2pwatch.application.ports.driven.logger import Logger
@@ -67,6 +68,13 @@ class ObservabilityDispatcher:
                 )
             )
             raise
+
+    async def finish_shielded_dispatches(self) -> None:
+        """Waits for the shielded dispatches still sending, each within its notification timeout,
+        such as a completion's whose turn the shutdown cut: they end before the resources close."""
+        for dispatch in tuple(self._shielded_dispatches):
+            with suppress(Exception):  # logged by its done callback, its caller gone
+                await asyncio.shield(dispatch)
 
     def _log_a_bug(self, bug: BaseException | None, *, event: Event) -> None:
         """Logs ``bug``, if any, of a shielded dispatch whose caller has left."""
