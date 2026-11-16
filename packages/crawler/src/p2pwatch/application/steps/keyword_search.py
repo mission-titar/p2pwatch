@@ -42,7 +42,8 @@ class KeywordSearch(Work):
             await self._monotonic_clock.sleep(wait)
 
     async def run_once(self) -> None:
-        """Searches the keyword once, then saves the backoff if the search changed it."""
+        """Searches the keyword once, then saves the backoff if the search changed it, a failed
+        search included."""
         with self._backoff_saver.saving():
             await self._search_worker.search(self._keyword, channel=self._channel)
 

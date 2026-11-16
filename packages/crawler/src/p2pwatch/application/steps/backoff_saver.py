@@ -30,12 +30,14 @@ class BackoffSaver:
     @contextmanager
     def saving(self) -> Iterator[None]:
         """Wraps one search, then sets the backoff in the store if it differs from the one last
-        saved."""
+        saved, a search that raised or was cancelled included."""
         if self._saved is None:
             # At the first search, once the start resumed the saved backoff, so none is rewritten.
             self._saved = self._backoff.snapshot()
-        yield
-        self._save()
+        try:
+            yield
+        finally:  # a failed search raises once backed off; a cancelled one may have backed off
+            self._save()
 
     def _save(self) -> None:
         current = self._backoff.snapshot()

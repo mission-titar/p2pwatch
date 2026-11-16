@@ -27,7 +27,7 @@ from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
-from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_never_suspending_search_client import (
@@ -226,6 +226,33 @@ def test_an_unreachable_client_sleeps_until_its_backoff_ends(searches: _Searches
     searches.run_for(100.0, client=client, keywords=["keroro"])
     # The first search fails; the other channel's search meets the backoff it set.
     assert [start for start, *_ in client.searches] == [0.0, 60.0, 60.0, 90.0, 90.0]
+
+
+@pytest.mark.parametrize(
+    ("error", "line", "backed_off"),
+    [
+        (
+            SearchFailedError("refused"),
+            "search 'keroro' amuled kad: refused",
+            BackoffKey(client_name=ClientName("amuled"), channel=Channel("kad")),
+        ),
+        (
+            make_unreachable(),
+            "search 'keroro' amuled kad: down",
+            BackoffKey(client_name=ClientName("amuled"), channel=None),
+        ),
+    ],
+    ids=["a-refused-search", "an-unreachable-client"],
+)
+def test_a_failed_search_fails_its_turn_as_an_expected_error_once_its_backoff_is_saved(
+    searches: _Searches, *, error: Exception, line: str, backed_off: BackoffKey
+) -> None:
+    client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=[error])
+
+    searches.run_for(50.0, client=client, keywords=["keroro"])
+
+    assert searches.supervisor_logger.lines == [LoggedLine(level="warning", message=line)]
+    assert [set(saved) for saved in searches.state.saved] == [{backed_off}]
 
 
 def test_a_search_woken_from_its_wait_waits_again_for_a_backoff_set_meanwhile(
