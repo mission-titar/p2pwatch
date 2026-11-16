@@ -30,6 +30,7 @@ from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
+from tests.fakes.adapters.driven.fake_raising_node_metric_store import FakeRaisingNodeMetricStore
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 
 _NODE_ID = NodeId("titar-node-1")
@@ -227,3 +228,22 @@ async def test_a_shielded_dispatch_whose_caller_is_cancelled_mid_send_still_send
             ),
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_bug_in_a_shielded_dispatch_its_caller_left_is_logged_with_its_kind() -> None:
+    logger = FakeLogger()
+    bug = RuntimeError("a metrics bug")
+    dispatcher = _dispatcher(
+        FakeRaisingNodeMetricStore(bug), notifier=FakeNotifier(), logger=logger
+    )
+    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
+    await asyncio.sleep(0)  # noqa: TID251  # the caller hands the dispatch to a task, not yet run
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert logger.lines[-1] == LoggedLine(
+        level="error", message="bug in the notification of DownloadCompleted", error=bug
+    )

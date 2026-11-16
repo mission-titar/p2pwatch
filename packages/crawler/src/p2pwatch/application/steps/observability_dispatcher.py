@@ -1,5 +1,5 @@
 """The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies its audience.
-A notification failing or timing out is absorbed and logged: it never breaks the crawl (E-D13)."""
+A notification failing or timing out is absorbed and logged: it never breaks the crawl."""
 
 import asyncio
 from collections.abc import Awaitable
@@ -57,7 +57,21 @@ class ObservabilityDispatcher:
         dispatch = asyncio.ensure_future(self.dispatch(event))
         self._shielded_dispatches.add(dispatch)
         dispatch.add_done_callback(self._shielded_dispatches.discard)
-        await asyncio.shield(dispatch)
+        try:
+            await asyncio.shield(dispatch)
+        except asyncio.CancelledError:
+            # No turn will see a bug of the dispatch from now on: logged here instead, once it ends.
+            dispatch.add_done_callback(
+                lambda left: (
+                    None if left.cancelled() else self._log_a_bug(left.exception(), event=event)
+                )
+            )
+            raise
+
+    def _log_a_bug(self, bug: BaseException | None, *, event: Event) -> None:
+        """Logs ``bug``, if any, of a shielded dispatch whose caller has left."""
+        if bug is not None:
+            self._logger.exception("bug in the notification of %s", type(event).__name__, error=bug)
 
     def _log_at_severity(self, severity: Severity, *, message: str) -> None:
         """Writes ``message`` at the level ``severity`` maps to, a success being an info."""
