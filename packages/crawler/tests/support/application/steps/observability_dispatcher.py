@@ -12,10 +12,10 @@ class ObservabilityOverFakes:
     """An ``ObservabilityDispatcher`` whose log lines, node metrics and notifications a test
     reads."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, notifier: FakeNotifier | None = None) -> None:
         self.logger = FakeLogger()
         self.node_metric_store = FakeNodeMetricStore()
-        self.notifier = FakeNotifier()
+        self.notifier = notifier or FakeNotifier()
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             node_metric_writer=self.node_metric_store,

@@ -2,6 +2,7 @@
 A notification failing or timing out is absorbed and logged: it never breaks the crawl (E-D13)."""
 
 import asyncio
+from collections.abc import Awaitable
 from typing import assert_never
 
 from p2pwatch.application.ports.driven.logger import Logger
@@ -28,6 +29,8 @@ class ObservabilityDispatcher:
         self._node_metric_writer = node_metric_writer
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
+        # Held to their end: the loop keeps only a weak reference to a task (see asyncio.shield).
+        self._shielded_dispatches: set[Awaitable[None]] = set()
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
@@ -47,6 +50,14 @@ class ObservabilityDispatcher:
             )
         except Exception as error:  # Notifications never break the crawl.
             self._logger.warning("notification %s failed (%s)", audience.value, error)
+
+    async def dispatch_shielded(self, event: Event) -> None:
+        """Dispatches ``event`` in a task of its own, which goes on when the caller is cancelled:
+        a turn cut at its time limit right after a decision's write still sends its notification."""
+        dispatch = asyncio.ensure_future(self.dispatch(event))
+        self._shielded_dispatches.add(dispatch)
+        dispatch.add_done_callback(self._shielded_dispatches.discard)
+        await asyncio.shield(dispatch)
 
     def _log_at_severity(self, severity: Severity, *, message: str) -> None:
         """Writes ``message`` at the level ``severity`` maps to, a success being an info."""
