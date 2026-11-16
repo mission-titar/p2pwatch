@@ -62,16 +62,16 @@ from p2pwatch.domain.source import SourceReading
 from p2pwatch.domain.status_reading import ClientStatus
 from p2pwatch.domain.store_error import StoreError
 
-_ED2K = Channel("ed2k")
-_KAD = Channel("kad")
-_SEARCH_TYPES = {_ED2K: "global", _KAD: "kad"}
+ED2K = Channel("ed2k")
+KAD = Channel("kad")
+_SEARCH_TYPES = {ED2K: "global", KAD: "kad"}
 
 # The scope of eD2k's spacing: the whole channel, where Kad spaces each Kad word apart.
 _ED2K_SCOPE = ""
 
 # Least time between two ed2k starts, and between two Kad starts on one Kad word (spec stage 2,
 # D5): rules of the networks, not settings, since a key would invite lowering them until the ban.
-_START_SPACING = timedelta(seconds=60)
+START_SPACING = timedelta(seconds=60)
 
 # Kad's keyword separators (aMule `SearchManager.h:128`).
 _KAD_SEPARATORS = re.compile(r'[ ()\[\]{}<>,._\-!?:;\\/"]')
@@ -141,7 +141,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         monotonic_now, wall_now = self._monotonic_clock.now(), self._wall_clock.now()
         return {
             (start.channel, start.scope): monotonic_now
-            + remaining_wait(start.started_at, duration=_START_SPACING, now=wall_now)
+            + remaining_wait(start.started_at, duration=START_SPACING, now=wall_now)
             for start in starts
         }
 
@@ -211,10 +211,10 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
                 await self._await_end(search_id, budget_seconds=budget_seconds, widen=True)
             else:
                 async with self._ed2k_lock:
-                    next_start = self._next_start_by_scope.get((_ED2K, _ED2K_SCOPE))
+                    next_start = self._next_start_by_scope.get((ED2K, _ED2K_SCOPE))
                     if next_start is not None:
                         await self._sleep_until(next_start)
-                    self._reserve(_ED2K, scope=_ED2K_SCOPE, start=self._monotonic_clock.now())
+                    self._reserve(ED2K, scope=_ED2K_SCOPE, start=self._monotonic_clock.now())
                     search_id = await self._post_search(keyword, search_type=search_type)
                     await self._await_end(search_id, budget_seconds=budget_seconds, widen=False)
             rows = await self._collect(f"/search/{search_id}/results", list_key="results")
@@ -226,15 +226,15 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     async def _start_kad(self, keyword: Keyword, *, budget_seconds: float) -> int | None:
         """Starts in the Kad word's next free slot, reserved before sleeping; ``None`` without a
         Kad word. A held Kad word is retried each poll, for one budget from the first attempt."""
-        kad_word = _kad_word(keyword)
+        kad_word = kad_word_of(keyword)
         # A keyword without a Kad word splits on a separator or is under 3 bytes: never a Kad word.
-        scope_key = (_KAD, kad_word or keyword)
+        scope_key = (KAD, kad_word or keyword)
         now = self._monotonic_clock.now()
         slot = max(now, self._next_start_by_scope.get(scope_key, now))
         if kad_word is None:
-            self._next_start_by_scope[scope_key] = slot + _START_SPACING
+            self._next_start_by_scope[scope_key] = slot + START_SPACING
         else:
-            self._reserve(_KAD, scope=kad_word, start=slot)
+            self._reserve(KAD, scope=kad_word, start=slot)
         await self._sleep_until(slot)
         if kad_word is None:
             if keyword not in self._keywords_without_kad_word:
@@ -254,7 +254,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
     def _reserve(self, channel: Channel, *, scope: str, start: MonotonicInstant) -> None:
         """Spaces the scope's next start from ``start`` and keeps ``start`` in the store, on the
         wall clock; a store that refuses it is logged and the search goes on."""
-        self._next_start_by_scope[channel, scope] = start + _START_SPACING
+        self._next_start_by_scope[channel, scope] = start + START_SPACING
         started_at = self._wall_clock.now() + (start - self._monotonic_clock.now())
         latest_start = LatestSearchStart(channel=channel, scope=scope, started_at=started_at)
         try:
@@ -518,7 +518,7 @@ def _decode(response: httpx.Response) -> dict[str, Any]:
     return decoded_body if isinstance(decoded_body, dict) else {}
 
 
-def _kad_word(keyword: Keyword) -> str | None:
+def kad_word_of(keyword: Keyword) -> str | None:
     """Kad's key for a keyword search: its first word of 3 UTF-8 bytes or more, lowercased
     (aMule ``SearchManager.cpp:283-292``)."""
     words = _KAD_SEPARATORS.split(keyword)
