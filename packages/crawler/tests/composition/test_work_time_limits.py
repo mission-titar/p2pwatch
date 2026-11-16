@@ -3,8 +3,6 @@ margin of 5 minutes."""
 
 from datetime import timedelta
 
-import pytest
-
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN, AmuleWorkTimeLimits
 from p2pwatch.domain.identifiers import Channel, Keyword
 
@@ -81,11 +79,6 @@ def test_a_kad_search_without_a_kad_word_waits_one_spacing() -> None:
     limit = limits.of_search(Keyword("ab"), channel=Channel("kad"))
 
     assert limit == _START_SPACING + 2 * _BUDGET + 4 * _CALL + TIME_LIMIT_MARGIN
-
-
-def test_a_search_on_a_channel_amule_lacks_is_refused() -> None:
-    with pytest.raises(ValueError, match="aMule has no channel bittorrent"):
-        _limits().of_search(Keyword("keroro 01"), channel=Channel("bittorrent"))
 
 
 def test_download_and_source_tracking_bound_their_two_calls_and_one_notification() -> None:

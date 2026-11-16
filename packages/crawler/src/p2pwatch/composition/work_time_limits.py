@@ -7,7 +7,6 @@ from datetime import timedelta
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import (
     ED2K,
-    KAD,
     START_SPACING,
     kad_word_of,
 )
@@ -46,14 +45,12 @@ class AmuleWorkTimeLimits:
             # One eD2k search at a time on a client: every other keyword's, start to end, first.
             ahead = len(others) * max(START_SPACING, budget + 2 * call)
             path = ahead + START_SPACING + budget + 3 * call
-        elif channel == KAD:
+        else:  # Kad, aMule's other channel
             # One start per spacing on a Kad word, so one for each keyword sharing it; a start
             # retried for a budget while Kad holds the word, then polled for another.
             kad_word = kad_word_of(keyword)
             sharing = sum(1 for other in others if kad_word and kad_word_of(other) == kad_word)
             path = (1 + sharing) * START_SPACING + 2 * budget + 4 * call
-        else:
-            raise ValueError(f"aMule has no channel {channel}")
         return path + TIME_LIMIT_MARGIN
 
     def of_tracking(self) -> timedelta:
