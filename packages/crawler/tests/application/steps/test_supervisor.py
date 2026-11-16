@@ -1,28 +1,42 @@
 """The supervisor takes each work's turns, each after its wait, until the shutdown is requested,
-whoever asks for it; the shutdown's bound is armed before the works are cancelled."""
+whoever asks for it; the shutdown's bound is armed before the works are cancelled.
+
+A turn that raises fails alone: an expected error is one warning line, any other exception is a
+bug, logged with its trace, and its work's next turn comes at least 60 s later. The timed tests
+share one simulated time, on the virtual-time loop.
+"""
 
 import asyncio
+import itertools
+from collections.abc import Iterable
 
 import pytest
 
-from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.supervisor import WAIT_AFTER_A_BUG, Supervisor
 from p2pwatch.application.steps.work import Work
+from p2pwatch.domain.client_errors import SearchFailedError
+from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
+from tests.support.virtual_time import VirtualLoop
 
 # Every wait on a work's start is bounded: a work that never starts would hang the test.
 _START_BOUND_SECONDS = 1.0
-
-
-class _LastTurnError(Exception):
-    """Raised by the last turn of a ``_CountedWork``, so its test's supervision ends."""
+_AFTER_A_BUG = WAIT_AFTER_A_BUG.total_seconds()
 
 
 class _CountedWork(Work):
-    """Notes each wait and each turn, neither of which suspends; its last turn raises."""
+    """Notes each wait and each turn, neither of which suspends; its last turn requests the
+    shutdown."""
 
     def __init__(self, *, turns: int) -> None:
         self.calls: list[str] = []
+        self.run_state = FakeRunStateStore()
         self._turns_left = turns
+
+    def __str__(self) -> str:
+        return "counted work"
 
     async def wait_for_next_turn(self) -> None:
         self.calls.append("wait")
@@ -31,7 +45,30 @@ class _CountedWork(Work):
         self.calls.append("turn")
         self._turns_left -= 1
         if self._turns_left == 0:
-            raise _LastTurnError
+            self.run_state.set_shutdown_requested()
+
+
+class _TimedWork(Work):
+    """Waits ``wait_seconds`` before each turn, the first included, and notes when each turn
+    starts; each turn raises the next of ``errors``, until they run out."""
+
+    def __init__(self, name: str, *, wait_seconds: float, errors: Iterable[Exception] = ()) -> None:
+        self._name = name
+        self._wait_seconds = wait_seconds
+        self._errors = iter(errors)
+        self.turns: list[float] = []
+
+    def __str__(self) -> str:
+        return self._name
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.sleep(self._wait_seconds)  # noqa: TID251
+
+    async def run_once(self) -> None:
+        self.turns.append(asyncio.get_running_loop().time())
+        error = next(self._errors, None)
+        if error is not None:
+            raise error
 
 
 class _BlockedWork(Work):
@@ -41,6 +78,9 @@ class _BlockedWork(Work):
         self._name = name
         self._events = events
         self.started = asyncio.Event()
+
+    def __str__(self) -> str:
+        return self._name
 
     async def wait_for_next_turn(self) -> None:
         """Waits for nothing: the first turn starts at once."""
@@ -54,14 +94,17 @@ class _BlockedWork(Work):
             raise
 
 
-class _RaisingWork(Work):
-    """A work whose first turn raises, as a bug would."""
+class _WorkWhoseWaitRaises(Work):
+    """A work whose wait raises, as a bug in it would."""
+
+    def __str__(self) -> str:
+        return "work whose wait raises"
 
     async def wait_for_next_turn(self) -> None:
-        """Waits for nothing: the first turn starts at once."""
+        raise ValueError("a wait raised")
 
     async def run_once(self) -> None:
-        raise ValueError("a turn raised")
+        """Never reached: its wait raises first."""
 
 
 class _WorkStoppingTheNode(Work):
@@ -71,6 +114,9 @@ class _WorkStoppingTheNode(Work):
         self.run_state = FakeRunStateStore()
         self.turns = 0
 
+    def __str__(self) -> str:
+        return "work stopping the node"
+
     async def wait_for_next_turn(self) -> None:
         """Waits for nothing: each turn starts at once."""
 
@@ -79,17 +125,36 @@ class _WorkStoppingTheNode(Work):
         self.run_state.set_shutdown_requested()
 
 
-@pytest.mark.asyncio
-async def test_each_turn_comes_after_its_wait_and_an_exception_in_a_turn_ends_the_supervision() -> (
-    None
-):
-    work = _CountedWork(turns=2)
-    supervision = Supervisor(run_state_reader=FakeRunStateStore()).supervise(
-        [work], arm_shutdown_bound=lambda: None
+def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
+    """A supervisor for the tests where no turn meets a bug: its clock's sleep never ends."""
+    return Supervisor(
+        run_state_reader=run_state,
+        monotonic_clock=FakeBlockingMonotonicClock(),
+        logger=FakeLogger(),
     )
 
-    with pytest.RaisesGroup(_LastTurnError):
-        await asyncio.wait_for(supervision, 1.0)
+
+def _supervise_until(
+    loop: VirtualLoop, *works: Work, seconds: float, logger: FakeLogger | None = None
+) -> None:
+    """Takes the turns of ``works`` on ``loop`` until the shutdown requested at ``seconds``."""
+    run_state = FakeRunStateStore()
+    loop.call_later(seconds, run_state.set_shutdown_requested)
+    supervisor = Supervisor(
+        run_state_reader=run_state,
+        monotonic_clock=FakeLoopMonotonicClock(loop),
+        logger=logger or FakeLogger(),
+    )
+    loop.run_until_complete(supervisor.supervise(works, arm_shutdown_bound=lambda: None))
+
+
+@pytest.mark.asyncio
+async def test_each_turn_comes_after_its_wait_the_first_included() -> None:
+    work = _CountedWork(turns=2)
+
+    await asyncio.wait_for(
+        _supervisor(work.run_state).supervise([work], arm_shutdown_bound=lambda: None), 1.0
+    )
 
     assert work.calls == ["wait", "turn", "wait", "turn"]
 
@@ -98,17 +163,84 @@ async def test_each_turn_comes_after_its_wait_and_an_exception_in_a_turn_ends_th
 async def test_a_turn_that_never_suspends_still_lets_other_tasks_run_after_it() -> None:
     work = _CountedWork(turns=3)
     supervision = asyncio.create_task(
-        Supervisor(run_state_reader=FakeRunStateStore()).supervise(
-            [work], arm_shutdown_bound=lambda: None
-        )
+        _supervisor(work.run_state).supervise([work], arm_shutdown_bound=lambda: None)
     )
 
     await asyncio.sleep(0)  # noqa: TID251  # the supervisor starts the work's task
     await asyncio.sleep(0)  # noqa: TID251  # the work takes its first turn, then lets this test run
 
     assert work.calls == ["wait", "turn"]
-    with pytest.RaisesGroup(_LastTurnError):
-        await asyncio.wait_for(supervision, 1.0)
+    await asyncio.wait_for(supervision, 1.0)
+
+
+def test_an_expected_error_fails_its_turn_alone_in_one_warning_line(
+    virtual_loop: VirtualLoop,
+) -> None:
+    logger = FakeLogger()
+    refused = _TimedWork(
+        "search 'keroro' amuled kad",
+        wait_seconds=10.0,
+        errors=itertools.repeat(SearchFailedError("amuled refused the search")),
+    )
+    searching = _TimedWork("search 'keroro' amuled ed2k", wait_seconds=10.0)
+
+    _supervise_until(virtual_loop, refused, searching, seconds=35.0, logger=logger)
+
+    # Neither waits longer than its own wait: an expected error is no bug.
+    assert refused.turns == searching.turns == [10.0, 20.0, 30.0]
+    message = "search 'keroro' amuled kad: amuled refused the search"
+    assert logger.lines == [LoggedLine(level="warning", message=message)] * 3
+
+
+def test_a_bug_fails_its_turn_alone_logged_with_its_trace(virtual_loop: VirtualLoop) -> None:
+    logger = FakeLogger()
+    bug = KeyError("channels")
+    broken = _TimedWork("status reading amuled", wait_seconds=1.0, errors=itertools.repeat(bug))
+    searching = _TimedWork("search 'keroro' amuled ed2k", wait_seconds=30.0)
+
+    _supervise_until(virtual_loop, broken, searching, seconds=100.0, logger=logger)
+
+    assert searching.turns == [30.0, 60.0, 90.0]
+    assert broken.turns == [1.0, 61.0]
+    bug_line = LoggedLine(level="error", message="bug in status reading amuled", error=bug)
+    assert logger.lines == [bug_line, bug_line]
+
+
+def test_two_turns_of_a_work_meeting_a_bug_at_once_are_never_closer_than_60_s(
+    virtual_loop: VirtualLoop,
+) -> None:
+    # Its own wait is 1 s: without the 60 s after a bug, its turns would follow each other.
+    broken = _TimedWork("broken", wait_seconds=1.0, errors=itertools.repeat(RuntimeError("bug")))
+
+    _supervise_until(virtual_loop, broken, seconds=200.0)
+
+    assert broken.turns == [1.0, 1.0 + _AFTER_A_BUG, 1.0 + 2 * _AFTER_A_BUG, 1.0 + 3 * _AFTER_A_BUG]
+
+
+def test_after_a_bug_a_wait_of_its_own_longer_than_60_s_is_waited_alone(
+    virtual_loop: VirtualLoop,
+) -> None:
+    broken_once = _TimedWork("broken once", wait_seconds=100.0, errors=[RuntimeError("bug")])
+
+    _supervise_until(virtual_loop, broken_once, seconds=250.0)
+
+    # The later of the two waits, never their sum.
+    assert broken_once.turns == [100.0, 200.0]
+
+
+def test_after_a_turn_that_worked_the_work_waits_its_own_wait_alone_again(
+    virtual_loop: VirtualLoop,
+) -> None:
+    broken_once = _TimedWork("broken once", wait_seconds=10.0, errors=[RuntimeError("bug")])
+
+    _supervise_until(virtual_loop, broken_once, seconds=95.0)
+
+    assert broken_once.turns == [
+        10.0,
+        10.0 + _AFTER_A_BUG,
+        20.0 + _AFTER_A_BUG,
+        30.0 + _AFTER_A_BUG,
+    ]
 
 
 @pytest.mark.asyncio
@@ -117,7 +249,7 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_wo
     run_state = FakeRunStateStore()
     search, status = _BlockedWork("search", events=events), _BlockedWork("status", events=events)
     supervision = asyncio.create_task(
-        Supervisor(run_state_reader=run_state).supervise(
+        _supervisor(run_state).supervise(
             [search, status], arm_shutdown_bound=lambda: events.append("armed")
         )
     )
@@ -132,15 +264,15 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_wo
 
 
 @pytest.mark.asyncio
-async def test_a_turn_that_raises_escapes_as_an_exception_group_without_arming_the_bound() -> None:
+async def test_a_wait_that_raises_escapes_as_an_exception_group_without_arming_the_bound() -> None:
     events: list[str] = []
     status = _BlockedWork("status", events=events)
 
-    supervision = Supervisor(run_state_reader=FakeRunStateStore()).supervise(
-        [status, _RaisingWork()], arm_shutdown_bound=lambda: events.append("armed")
+    supervision = _supervisor(FakeRunStateStore()).supervise(
+        [status, _WorkWhoseWaitRaises()], arm_shutdown_bound=lambda: events.append("armed")
     )
 
-    with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a turn raised")):
+    with pytest.RaisesGroup(pytest.RaisesExc(ValueError, match="a wait raised")):
         await asyncio.wait_for(supervision, 1.0)
 
     assert events == ["status cancelled"]
@@ -151,9 +283,10 @@ async def test_a_shutdown_requested_before_the_start_starts_no_turn() -> None:
     run_state = FakeRunStateStore()
     run_state.set_shutdown_requested()
     status = _BlockedWork("status", events=[])
-    supervisor = Supervisor(run_state_reader=run_state)
 
-    await asyncio.wait_for(supervisor.supervise([status], arm_shutdown_bound=lambda: None), 1)
+    await asyncio.wait_for(
+        _supervisor(run_state).supervise([status], arm_shutdown_bound=lambda: None), 1
+    )
 
     assert not status.started.is_set()
 
@@ -161,8 +294,9 @@ async def test_a_shutdown_requested_before_the_start_starts_no_turn() -> None:
 @pytest.mark.asyncio
 async def test_a_shutdown_requested_during_a_turn_lets_that_work_take_no_further_turn() -> None:
     work = _WorkStoppingTheNode()
-    supervisor = Supervisor(run_state_reader=work.run_state)
 
-    await asyncio.wait_for(supervisor.supervise([work], arm_shutdown_bound=lambda: None), 1)
+    await asyncio.wait_for(
+        _supervisor(work.run_state).supervise([work], arm_shutdown_bound=lambda: None), 1
+    )
 
     assert work.turns == 1

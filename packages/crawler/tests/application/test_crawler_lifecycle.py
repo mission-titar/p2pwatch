@@ -55,6 +55,9 @@ class _WorkWaitingForTheStop(Work):
         self._name = name
         self._on_start = on_start
 
+    def __str__(self) -> str:
+        return self._name
+
     async def wait_for_next_turn(self) -> None:
         """Waits for nothing: the first turn starts at once."""
 
@@ -124,7 +127,11 @@ class _Crawl:
                 _WorkWaitingForTheStop("status", on_start=self._work_started),
             ],
             download_enabled=download_enabled,
-            supervisor=Supervisor(run_state_reader=self.run_state),
+            supervisor=Supervisor(
+                run_state_reader=self.run_state,
+                monotonic_clock=self.fake_time.monotonic,
+                logger=FakeLogger(),
+            ),
             logger=self.logger,
         )
 

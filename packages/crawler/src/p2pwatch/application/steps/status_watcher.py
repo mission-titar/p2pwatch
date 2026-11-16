@@ -59,6 +59,9 @@ class StatusWatcher(Work):
         self._channel_components = channel_components
         self._latest_reading_ended_at: MonotonicInstant | None = None
 
+    def __str__(self) -> str:
+        return f"status reading {self._client_name}"
+
     async def wait_for_next_turn(self) -> None:
         """Waits until a minute has passed since the latest reading ended; the first one waits
         nothing."""
@@ -70,15 +73,17 @@ class StatusWatcher(Work):
 
     async def run_once(self) -> None:
         """Reads the status once, publishes it and records the health it shows."""
-        await self._read()
-        self._latest_reading_ended_at = self._monotonic_clock.now()
+        try:
+            await self._read()
+        finally:  # a reading that raised, a refused password included, spaces the next one too
+            self._latest_reading_ended_at = self._monotonic_clock.now()
 
     async def _read(self) -> None:
         status: ClientStatus | None
         try:
             status = await self._client.status()
         except ClientAuthError:
-            raise  # a wrong password is config, not an outage
+            raise  # a wrong password is configuration, not an outage: logged at each turn
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             status = None
         self._publish(status)

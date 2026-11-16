@@ -32,3 +32,20 @@ def test_a_record_carries_its_callers_location(caplog: pytest.LogCaptureFixture)
         __file__,
         "test_a_record_carries_its_callers_location",
     )
+
+
+def test_an_exception_writes_an_error_record_carrying_the_errors_trace(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    error = KeyError("channels")
+
+    with caplog.at_level(logging.ERROR, logger=_NAME):
+        StdlibLogger(_NAME).exception("bug in %s", "status reading amuled", error=error)
+
+    assert [
+        (record.levelno, record.getMessage(), record.exc_info and record.exc_info[1])
+        for record in caplog.records
+    ] == [(logging.ERROR, "bug in status reading amuled", error)]
+    assert caplog.records[0].funcName == (
+        "test_an_exception_writes_an_error_record_carrying_the_errors_trace"
+    )

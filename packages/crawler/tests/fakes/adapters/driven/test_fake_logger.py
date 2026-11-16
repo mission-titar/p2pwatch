@@ -17,3 +17,13 @@ def test_a_logged_line_keeps_its_level_and_its_formatted_message() -> None:
             level="error", message="100% lost"
         ),  # no argument: kept as written, as logging does
     ]
+
+
+def test_an_exception_keeps_its_error_beside_its_error_line() -> None:
+    logger, error = FakeLogger(), KeyError("channels")
+
+    logger.exception("bug in %s", "status reading amuled", error=error)
+
+    assert logger.lines == [
+        LoggedLine(level="error", message="bug in status reading amuled", error=error)
+    ]

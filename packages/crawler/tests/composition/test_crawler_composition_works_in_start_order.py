@@ -11,6 +11,9 @@ class _NamedWork(Work):
     def __init__(self, name: str) -> None:
         self.name = name
 
+    def __str__(self) -> str:
+        return self.name
+
     async def wait_for_next_turn(self) -> None:
         """Never called."""
 

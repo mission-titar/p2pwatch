@@ -17,6 +17,7 @@ from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.domain.client_errors import ClientUnreachableError, ReadRejectedError
 from p2pwatch.domain.download.states import DownloadState
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.json_object_text import JsonObjectText
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
@@ -28,6 +29,7 @@ from p2pwatch.domain.source import (
     SourceReading,
     SourceRole,
 )
+from p2pwatch.domain.store_error import StoreError
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -72,6 +74,7 @@ def _source_watcher(
     fake_time = fake_time or FakeTime()
     sources = sources or FakeSourcePointStore()
     return SourceWatcher(
+        client_name=ClientName("amuled"),
         download_client=client,
         source_client=source_client or FakeSourceClient(),
         tracked_download_reader=tracked_download_store,
@@ -276,23 +279,18 @@ async def test_a_client_unavailable_reading_sources_ends_the_turn(failure: Excep
 
 
 @pytest.mark.asyncio
-async def test_a_store_failure_reading_the_tracked_downloads_reads_no_source() -> None:
+async def test_a_store_failure_reading_the_tracked_downloads_leaves_the_turn_unlogged() -> None:
     source_client, logger = FakeSourceClient(), FakeLogger()
-    await _source_watcher(
+    watcher = _source_watcher(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
         source_client=source_client,
         tracked_download_store=FakeTrackedDownloadStore(fail_tracked_states=True),
         logger=logger,
-    ).run_once()  # does not raise
+    )
+    with pytest.raises(StoreError, match="read_tracked_states failed"):  # the supervisor logs it
+        await watcher.run_once()
     assert source_client.source_reads == []
-    assert logger.lines == [
-        LoggedLine(
-            level="error",
-            message=(
-                "download sources store failure (read_tracked_states failed): step skipped, retry"
-            ),
-        )
-    ]
+    assert logger.lines == []
 
 
 async def _take_turns(watcher: SourceWatcher, *, turns: int) -> None:
@@ -773,3 +771,10 @@ async def test_a_source_back_after_13_hours_through_an_undetermined_read_reappea
             _PEER, source_name="peer", absent_for=timedelta(hours=13, seconds=32), filename=HASH_A
         )
     ]
+
+
+def test_source_tracking_is_named_after_its_client() -> None:
+    watcher = _source_watcher(
+        client=FakeDownloadClient(), tracked_download_store=FakeTrackedDownloadStore()
+    )
+    assert str(watcher) == "source tracking amuled"

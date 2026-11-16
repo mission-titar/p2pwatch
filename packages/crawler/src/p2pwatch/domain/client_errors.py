@@ -1,7 +1,9 @@
 """The errors every client adapter raises, so the application never imports one."""
 
+from p2pwatch.domain.expected_error import ExpectedError
 
-class ClientError(Exception):
+
+class ClientError(ExpectedError):
     """Base of the client errors."""
 
 
@@ -22,4 +24,4 @@ class ReadRejectedError(ClientError):
 
 
 class ClientAuthError(ClientError):
-    """The client refused our credentials: a config problem, the crawler fails fast."""
+    """The client refused our credentials: a configuration problem, which no retry repairs."""

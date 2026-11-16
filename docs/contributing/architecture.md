@@ -136,10 +136,15 @@ Le port-sync n'est pas un `Work` du crawler : il tourne dans le conteneur `ed2k`
 
 Les recherches, la lecture du statut, le suivi des téléchargements et celui des sources sont des
 `Work` : une attente, puis un tour (`run_once()`), encore. Le `Supervisor` fait tourner chacun dans
-sa tâche d'un `TaskGroup` et cède la boucle d'événements après chaque tour. Un tour qui lève une
-exception annule tous les autres et arrête le nœud (fail-fast), mais les erreurs d'I/O *attendues*
-sont absorbées à l'intérieur d'un tour (voir §10, discipline de frontière). À l'arrêt demandé, il
-arme le délai d'arrêt, puis annule chaque `Work`. L'attente vient avant chaque tour, le premier
+sa tâche d'un `TaskGroup` et cède la boucle d'événements après chaque tour. Un tour qui lève
+échoue seul, et les autres `Work` continuent. Une erreur attendue (`ExpectedError`, la base de
+toute erreur qu'un port piloté déclare : aMule injoignable, une recherche refusée, un mot de passe
+refusé) s'écrit en une ligne d'avertissement, `<work>: <erreur>`. Toute autre exception est un bug,
+écrit avec sa trace, `bug in <work>`, et le tour suivant de ce `Work` attend au moins 60 s : le
+plus tardif de ces 60 s et de sa propre attente, jamais leur somme. Une attente qui lève arrête
+encore le nœud. Chaque `Work` se nomme dans ces lignes : `status reading amuled`,
+`download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`. À l'arrêt
+demandé, il arme le délai d'arrêt, puis annule chaque `Work`. L'attente vient avant chaque tour, le premier
 compris, et chaque `Work` la calcule depuis son propre état : pour une recherche, la fin du backoff
 de son client et de son canal, si bien qu'un backoff repris au démarrage retarde aussi la première
 (§5) ; pour le statut, ce qui reste de la minute depuis la fin de la lecture précédente, rien avant
@@ -763,7 +768,8 @@ par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de b
 **Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
 démon sont
 **absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
-`InMemoryNodeMetricStore`) **crashe bruyamment**, parce que c'est un bug, pas un transitoire.
+`InMemoryNodeMetricStore`) est un bug, pas un transitoire : il fait échouer son tour, écrit avec sa
+trace, et le tour suivant de son `Work` attend au moins 60 s (§3).
 
 ### 10.1 La santé des parties du nœud
 
@@ -803,8 +809,8 @@ et le transmet aux alertes (`HealthAlerter`).
   DAG.
 - **`catalog.db` est append-only, chaque table, et fusionnable ; `local.db` n'est jamais
   fusionnée.**
-- **Discipline de frontière** : absorber les échecs d'I/O externes attendus, laisser crasher le code
-  interne testé.
+- **Discipline de frontière** : absorber les échecs d'I/O externes attendus ; un bug du code
+  interne fait échouer son tour seul, écrit avec sa trace.
 
 ## 12. Repères dans le code
 
