@@ -7,8 +7,8 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (each built once), connections opened by the ``SqliteDatabaseOpener``
   (migrations applied at startup, a failed one stopping the start).
 - the ``MatchingEngine`` (once),
-- ONE ``AmuleApiClient`` + ``SearchWorker`` on the one amuled the core drives, whose
-  session the status watcher, download tracking and source tracking share.
+- ONE ``AmuleApiClient`` on the one amuled the core drives, whose session every work over it
+  shares, those works built by ``AmuleClientWorks``.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, and download and
 source tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the
@@ -22,7 +22,7 @@ import asyncio
 import ctypes
 import logging
 import sys
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from importlib.metadata import version
@@ -72,14 +72,8 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_pre_migration_copier imp
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_search_start_store import (
     SqliteSearchStartStore,
 )
-from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_point_store import (
-    SqliteSourcePointStore,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_source_reader import SqliteSourceReader
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_sql_executor import SqliteSqlExecutor
-from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
-    SqliteTrackedDownloadStore,
-)
 from p2pwatch.adapters.driven.persistence_sqlite.thread_read_connections import (
     ThreadReadConnections,
 )
@@ -100,21 +94,13 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
-from p2pwatch.application.steps.download_cycle import DownloadCycle
-from p2pwatch.application.steps.download_decider import DownloadDecider
-from p2pwatch.application.steps.download_labeler import DownloadLabeler
-from p2pwatch.application.steps.download_starter import DownloadStarter
-from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_alerter import HealthAlerter
-from p2pwatch.application.steps.keyword_search import keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
-from p2pwatch.application.steps.source_watcher import SourceWatcher
-from p2pwatch.application.steps.status_watcher import StatusWatcher
-from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, SupervisedWork, Supervisor
+from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS
+from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -125,18 +111,15 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
+from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
-from p2pwatch.domain.download.disk_space import download_tracking_component
-from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
-from p2pwatch.domain.status_reading import channel_component, client_component
-from p2pwatch.domain.work_components import source_tracking_component, status_reading_component
 
 _logger = logging.getLogger(__name__)
 
@@ -194,14 +177,6 @@ async def shutdown_bound(*, deadline_seconds: float) -> AsyncIterator[ShutdownBo
         if not timeout.expired():
             raise
         raise ShutdownDeadlineError(f"cut after {deadline_seconds:g} s") from error
-
-
-def works_in_start_order[W](
-    *, status_watcher: W, tracking: Sequence[W], searches: Sequence[W]
-) -> list[W]:
-    """The works in the order the supervisor starts them: the status reading, then download and
-    source tracking where configured, then the searches, which send their requests last."""
-    return [status_watcher, *tracking, *searches]
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
@@ -494,16 +469,6 @@ class CrawlerComposition(CrawlerRunner):
             )
             stack.push_async_callback(client.close)
             await client.open()
-            workers = [
-                SearchWorker(
-                    client_name=_AMULE_CLIENT_NAME,
-                    client=client,
-                    backoff=backoff,
-                    cataloguer=cataloguer,
-                    observability_dispatcher=observability_dispatcher,
-                    logger=StdlibLogger(SearchWorker.__module__),
-                )
-            ]
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
             node_health = NodeHealth(
@@ -518,138 +483,51 @@ class CrawlerComposition(CrawlerRunner):
                     ).send,
                 ),
             )
-            # Each channel's readings and the bugs of its searches are recorded on one part.
-            channel_components = {
-                channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
-                for channel in client.channels()
-            }
-            time_limits = AmuleWorkTimeLimits(
-                request_bound=client.request_bound,
-                search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
-                notification_timeout=timedelta(seconds=observability.notification_timeout_seconds),
-                keywords=dedupe_keywords(crawler_config.search.keywords),
-            )
-            searches = keyword_searches(
-                search_workers=workers,
+            client_works = AmuleClientWorks(
+                client_name=_AMULE_CLIENT_NAME,
+                channels=client.channels(),
                 keywords=crawler_config.search.keywords,
+                download_steps=(
+                    None
+                    if download_config is None
+                    else DownloadSteps(
+                        download_config,
+                        client_name=_AMULE_CLIENT_NAME,
+                        targets=config.targets,
+                        local_connection=local_connection,
+                        catalog_connection=catalog_connection,
+                        observation_store=observation_store,
+                        decision_store=decision_store,
+                        waker=waker,
+                        wall_clock=wall_clock,
+                        monotonic_clock=monotonic_clock,
+                        observability_dispatcher=observability_dispatcher,
+                        node_health=node_health,
+                        node_id=node_id,
+                    )
+                ),
+                backoff=backoff,
                 backoff_saver=BackoffSaver(
                     backoff=backoff,
                     backoff_state_writer=backoff_state_store,
                     logger=StdlibLogger(BackoffSaver.__module__),
                 ),
-                monotonic_clock=monotonic_clock,
-                time_limit_of=time_limits.of_search,
-                node_health=node_health,
-                channel_components=channel_components.values(),
-            )
-            tracking: tuple[SupervisedWork, ...] = ()
-            download_tracking: Component | None = None
-
-            # Download and source tracking share the catalog's stores and ``local_connection``
-            # (one writer, on the event loop), and the search session.
-            if download_config is not None:
-                tracked_download_store = SqliteTrackedDownloadStore(local_connection)
-                source_point_store = SqliteSourcePointStore(catalog_connection)
-                download_labeler = DownloadLabeler(
-                    observation_reader=observation_store,
-                    decision_reader=decision_store,
-                    tracked_download_reader=tracked_download_store,
-                    targets=config.targets,
-                )
-                download_tracker = DownloadTracker(
-                    tracked_download_writer=tracked_download_store,
-                    tracked_download_reader=tracked_download_store,
-                    download_labeler=download_labeler,
-                    lost_after=download_config.lost_after,
-                    wall_clock=wall_clock,
-                    monotonic_clock=monotonic_clock,
-                    observability_dispatcher=observability_dispatcher,
-                    node_id=node_id,
-                    logger=StdlibLogger(DownloadTracker.__module__),
-                )
-                # One part for the disk's readings, the client's networks and the cycle's bugs.
-                download_tracking = download_tracking_component(_AMULE_CLIENT_NAME)
-                download_cycle = DownloadCycle(
-                    client_name=_AMULE_CLIENT_NAME,
-                    download_client=client,
-                    download_tracker=download_tracker,
-                    download_decider=DownloadDecider(
-                        free_space_meter=ShutilFreeSpaceMeter(download_config.output_directory),
-                        min_free_bytes=download_config.min_free_bytes,
-                        decision_reader=decision_store,
-                        observation_reader=observation_store,
-                        tracked_download_writer=tracked_download_store,
-                        tracked_download_reader=tracked_download_store,
-                        targets=config.targets,
-                        download_tracker=download_tracker,
-                        wall_clock=wall_clock,
-                        observability_dispatcher=observability_dispatcher,
-                        node_health=node_health,
-                        download_tracking_component=download_tracking,
-                        logger=StdlibLogger(DownloadDecider.__module__),
-                    ),
-                    download_starter=DownloadStarter(
-                        download_client=client,
-                        tracked_download_writer=tracked_download_store,
-                        tracked_download_reader=tracked_download_store,
-                        observation_reader=observation_store,
-                        logger=StdlibLogger(DownloadStarter.__module__),
-                    ),
-                    poll_interval_seconds=download_config.poll_interval_seconds,
-                    monotonic_clock=monotonic_clock,
-                    waker=waker,
-                    logger=StdlibLogger(DownloadCycle.__module__),
-                )
-                source_watcher = SourceWatcher(
-                    client_name=_AMULE_CLIENT_NAME,
-                    download_client=client,
-                    source_client=client,
-                    tracked_download_reader=tracked_download_store,
-                    source_point_writer=source_point_store,
-                    source_point_reader=source_point_store,
-                    download_labeler=download_labeler,
-                    reappeared_after=download_config.reappeared_after,
-                    sources_interval=download_config.sources_interval,
-                    time_between_source_reads=download_config.time_between_source_reads,
-                    wall_clock=wall_clock,
-                    monotonic_clock=monotonic_clock,
-                    observability_dispatcher=observability_dispatcher,
-                    node_id=node_id,
-                    logger=StdlibLogger(SourceWatcher.__module__),
-                )
-                tracking = tuple(
-                    SupervisedWork(
-                        work=work, time_limit=time_limits.of_tracking(), components=(component,)
-                    )
-                    for work, component in (
-                        (download_cycle, download_tracking),
-                        (source_watcher, source_tracking_component(_AMULE_CLIENT_NAME)),
-                    )
-                )
-
-            # The status watcher and the two tracking works share the search session: one per node.
-            status_watcher = StatusWatcher(
-                client_name=_AMULE_CLIENT_NAME,
-                client=client,
-                wall_clock=wall_clock,
-                monotonic_clock=monotonic_clock,
-                observability_dispatcher=observability_dispatcher,
+                cataloguer=cataloguer,
                 status_reading_writer=status_reading_store,
                 node_health=node_health,
-                client_component=client_component(_AMULE_CLIENT_NAME),
-                channel_components=channel_components,
-                download_tracking_component=download_tracking,
-            )
-
-            works = works_in_start_order(
-                status_watcher=SupervisedWork(
-                    work=status_watcher,
-                    time_limit=time_limits.of_status_reading(channel_count=len(client.channels())),
-                    components=(status_reading_component(_AMULE_CLIENT_NAME),),
+                observability_dispatcher=observability_dispatcher,
+                wall_clock=wall_clock,
+                monotonic_clock=monotonic_clock,
+                time_limits=AmuleWorkTimeLimits(
+                    request_bound=client.request_bound,
+                    search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
+                    notification_timeout=timedelta(
+                        seconds=observability.notification_timeout_seconds
+                    ),
+                    keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
-                tracking=tracking,
-                searches=searches,
             )
+            works = client_works.over(client)
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
@@ -687,6 +565,6 @@ class CrawlerComposition(CrawlerRunner):
             ) as arm_shutdown_bound:
                 await crawler_lifecycle.run(arm_shutdown_bound=arm_shutdown_bound)
                 _print_progress("Workers stopped.")
-                _print_progress(f"{len(workers)} amuled session(s) closing…")
+                _print_progress("1 amuled session(s) closing…")
                 await stack.aclose()
                 _print_progress("Databases closed: exiting.")

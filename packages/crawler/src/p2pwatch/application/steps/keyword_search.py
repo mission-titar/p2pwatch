@@ -16,12 +16,16 @@ from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.status_reading import SEARCHES_FAILED
-from p2pwatch.domain.work_components import keyword_search_component
 
 
 # The time limit of the search of ``keyword`` on ``channel``.
 class SearchTimeLimitOf(Protocol):
     def __call__(self, keyword: Keyword, /, *, channel: Channel) -> timedelta: ...
+
+
+# The part the search of ``keyword`` on ``channel`` is judged on by its bugs, built once.
+class SearchComponentOf(Protocol):
+    def __call__(self, keyword: Keyword, /, *, channel: Channel) -> Component: ...
 
 
 class KeywordSearch(Work):
@@ -82,6 +86,7 @@ def keyword_searches(
     backoff_saver: BackoffSaver,
     monotonic_clock: MonotonicClock,
     time_limit_of: SearchTimeLimitOf,
+    search_component_of: SearchComponentOf,
     node_health: NodeHealth,
     channel_components: Iterable[Component],
 ) -> list[SupervisedWork]:
@@ -102,9 +107,7 @@ def keyword_searches(
             ),
             time_limit=time_limit_of(keyword, channel=channel),
             components=(
-                keyword_search_component(
-                    keyword=keyword, client_name=search_worker.client_name, channel=channel
-                ),
+                search_component_of(keyword, channel=channel),
                 channel_of[search_worker.client_name, channel],
             ),
         )
