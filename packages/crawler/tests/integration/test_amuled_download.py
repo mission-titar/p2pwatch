@@ -13,9 +13,12 @@ import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
+from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.domain.client_errors import DownloadRejectedError
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.file_key import FileKey, Network
+from p2pwatch.domain.identifiers import ClientName
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.download_integration
@@ -29,8 +32,10 @@ _SIZE = 734003200  # ~700 MiB: a real size, hence an active partfile (never "com
 
 @pytest.mark.asyncio
 async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         amuled.host,
+        client_name=ClientName("amuled"),
         port=amuled.port,
         password=amuled.password,
         timeout_seconds=30.0,
@@ -38,6 +43,9 @@ async def test_start_then_appears_in_downloads(amuled: ApiEndpoint) -> None:
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
+        wall_clock=SystemWallClock(),
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
         transport_factory=httpx.AsyncHTTPTransport,
     )
     try:

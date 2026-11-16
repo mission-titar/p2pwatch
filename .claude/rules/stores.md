@@ -6,4 +6,4 @@ paths:
 
 # Stores
 
-- **A store has no clock**: a SQLite store, or `InMemoryStatusReadingStore`, stores the instants it is given and decides no wait; its caller reads the clock right before each write (`wall_clock.now()` for a row). An adapter other than a store may hold a clock for its own I/O: a `MonotonicClock` for the amuleapi client's start pacing and search deadlines and the SQL console's query budget, a `WallClock` for the instant that names a pre-migration copy and a `Ticker` for the lines reporting its progress.
+- **A store has no clock**: a SQLite store, or `InMemoryStatusReadingStore`, stores the instants it is given and decides no wait; its caller reads the clock right before each write (`wall_clock.now()` for a row). An adapter other than a store may hold a clock for its own I/O: a `MonotonicClock` for the amuleapi client's start pacing and search deadlines and the SQL console's query budget, a `WallClock` for the amuleapi client's latest search starts and the instant that names a pre-migration copy and a `Ticker` for the lines reporting its progress.

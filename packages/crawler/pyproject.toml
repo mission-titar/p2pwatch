@@ -112,6 +112,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/fakes/adapters/driven/test_fake_observation_reader.py" = "a double of tests/fakes"
 "tests/fakes/adapters/driven/test_fake_policy_fingerprint_store.py" = "a fake of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_run_state_store.py" = "a fake of tests/fakes, against its contract"
+"tests/fakes/adapters/driven/test_fake_search_start_store.py" = "a fake of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_status_reading_store.py" = "a fake of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_ticker.py" = "a fake of tests/fakes, against its contract"
 "tests/fakes/adapters/driven/test_fake_ticking_monotonic_clock.py" = "a fake of tests/fakes, against its contract"
