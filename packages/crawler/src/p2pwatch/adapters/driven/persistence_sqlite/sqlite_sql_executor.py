@@ -28,13 +28,13 @@ already impossible, so these are the real risks, spec §11/§12):
 - **Row cap**: at most ``row_cap`` rows are returned; one extra row is fetched to detect (and flag)
   truncation.
 
-**Boundary discipline (E-D13).** Elsewhere in the codebase, in-process 100%-tested code crashes
-loudly on failure. This adapter is the deliberate exception: a console query is *arbitrary operator
+**Boundary discipline.** Elsewhere in the codebase, a bug in in-process 100%-tested code propagates,
+and fails its turn. This adapter is the deliberate exception: a console query is *arbitrary operator
 input*, so a malformed query, a write attempt, a multi-statement input, a runaway query, or any
-other ``sqlite3.Error`` is EXPECTED user error and is absorbed into a ``QueryFailure`` instead
-of crashing the request handler. This is a documented boundary absorption, NOT a silent swallow of
-an internal bug (which would still surface: a bug in this module's own logic is not a
-``sqlite3.Error`` and would propagate).
+other ``sqlite3.Error`` is EXPECTED user error and is absorbed into a ``QueryFailure`` instead of
+crashing the request handler. This is a documented boundary absorption, NOT a silent swallow of an
+internal bug (which would still surface: a bug in this module's own logic is not a ``sqlite3.Error``
+and would propagate).
 """
 
 import sqlite3

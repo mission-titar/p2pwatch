@@ -69,8 +69,8 @@ _SEARCH_TYPES = {ED2K: "global", KAD: "kad"}
 # The scope of eD2k's spacing: the whole channel, where Kad spaces each Kad word apart.
 _ED2K_SCOPE = ""
 
-# Least time between two ed2k starts, and between two Kad starts on one Kad word (spec stage 2,
-# D5): rules of the networks, not settings, since a key would invite lowering them until the ban.
+# Least time between two ed2k starts, and between two Kad starts on one Kad word: rules of the
+# networks, not settings, since a key would invite lowering them until the ban.
 START_SPACING = timedelta(seconds=60)
 
 # Kad's keyword separators (aMule `SearchManager.h:128`).
@@ -495,7 +495,7 @@ async def _send(
     params: dict[str, Any] | None = None,
 ) -> httpx.Response:
     """One HTTP roundtrip, its answer read whole within ``bound_seconds``. A transport failure or
-    the bound's expiry is an unreachable daemon, never a crash."""
+    the bound's expiry is an unreachable daemon, never a bug."""
     try:
         async with asyncio.timeout(bound_seconds):
             return await http.request(method, path, json=body, params=params)
