@@ -771,8 +771,11 @@ le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLo
 qui notifie porte son `node_id`, que sa notification reprend.
 Une notification déjà décidée part même quand son tour est coupé : le juge des fichiers, après
 l'écriture d'une décision, et le suivi des téléchargements, après celle d'une complétion, l'envoient
-par `dispatch_shielded`, dans une tâche que l'annulation du tour n'atteint pas. Elle se perd
-seulement si le processus meurt entre l'écriture et l'envoi.
+par `dispatch_shielded`, dans une tâche que l'annulation du tour n'atteint pas. À l'arrêt, le
+cycle de vie attend ces envois, chacun dans son délai de notification, avant de fermer les
+ressources. Un bug d'un tel envoi, son tour déjà coupé, s'écrit `bug in the notification of
+<événement>` avec sa trace. Une notification décidée se perd seulement si le processus meurt
+entre l'écriture et l'envoi.
 Les métriques du nœud sont un état à nous : le dispatcher les écrit par le `NodeMetricWriter`
 d'`InMemoryNodeMetricStore`, et la route `/metrics` de la webui les lit par le cas d'usage
 `ListNodeMetrics`, derrière son port pilotant `NodeMetricLister`, puis écrit elle-même le format

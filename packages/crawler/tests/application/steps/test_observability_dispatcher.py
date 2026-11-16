@@ -247,3 +247,47 @@ async def test_a_bug_in_a_shielded_dispatch_its_caller_left_is_logged_with_its_k
     assert logger.lines[-1] == LoggedLine(
         level="error", message="bug in the notification of DownloadCompleted", error=bug
     )
+
+
+@pytest.mark.asyncio
+async def test_finishing_the_shielded_dispatches_waits_for_a_send_its_caller_left() -> None:
+    notifier = FakeHeldNotifier()
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier)
+    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
+    await notifier.reached.wait()
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    finishing = asyncio.create_task(dispatcher.finish_shielded_dispatches())
+    await asyncio.sleep(0)  # noqa: TID251  # the finish starts waiting for the send
+    finished_while_held = finishing.done()
+    notifier.released.set()
+    await asyncio.wait_for(finishing, 1.0)
+
+    assert not finished_while_held
+    assert [notification for _, notification in notifier.calls] == [
+        CompletedDownload(
+            target_titles=(ev.TargetTitle(target_id=TargetId("062A"), title="t"),),
+            filename="Keroro 062.avi",
+            node_id=_NODE_ID,
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_finishing_the_shielded_dispatches_logs_a_bug_of_theirs_and_raises_it_not() -> None:
+    logger = FakeLogger()
+    bug = RuntimeError("a metrics bug")
+    dispatcher = _dispatcher(
+        FakeRaisingNodeMetricStore(bug), notifier=FakeNotifier(), logger=logger
+    )
+    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
+    await asyncio.sleep(0)  # noqa: TID251  # the caller hands the dispatch to a task, not yet run
+    caller.cancel()
+
+    await dispatcher.finish_shielded_dispatches()
+
+    assert [line for line in logger.lines if line.level == "error"] == [
+        LoggedLine(level="error", message="bug in the notification of DownloadCompleted", error=bug)
+    ]
