@@ -20,7 +20,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.keyword_search import SearchTimeLimit, keyword_searches
+from p2pwatch.application.steps.keyword_search import SearchTimeLimitOf, keyword_searches
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
@@ -90,7 +90,7 @@ class _Searches:
         client: Any,
         *,
         keywords: list[str],
-        time_limit_of: SearchTimeLimit = lambda _keyword, *, channel: _DAY,
+        time_limit_of: SearchTimeLimitOf = lambda _keyword, *, channel: _DAY,
     ) -> list[SupervisedWork]:
         """Every search the node would list for ``keywords``, over one client named ``amuled``."""
         dispatcher = ObservabilityOverFakes().dispatcher
@@ -135,7 +135,7 @@ class _Searches:
         client: Any,
         *,
         keywords: list[str],
-        time_limit_of: SearchTimeLimit = lambda _keyword, *, channel: _DAY,
+        time_limit_of: SearchTimeLimitOf = lambda _keyword, *, channel: _DAY,
     ) -> None:
         """Runs every search the node would list for ``keywords`` under the supervisor, until the
         shutdown is requested."""
@@ -155,7 +155,7 @@ class _Searches:
         *,
         client: Any,
         keywords: list[str],
-        time_limit_of: SearchTimeLimit = lambda _keyword, *, channel: _DAY,
+        time_limit_of: SearchTimeLimitOf = lambda _keyword, *, channel: _DAY,
     ) -> None:
         self.loop.call_later(seconds, self.run_state.set_shutdown_requested)
         self.loop.run_until_complete(

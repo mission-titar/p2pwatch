@@ -279,7 +279,9 @@ async def test_a_client_unavailable_reading_sources_ends_the_turn(failure: Excep
 
 
 @pytest.mark.asyncio
-async def test_a_store_failure_reading_the_tracked_downloads_leaves_the_turn_unlogged() -> None:
+async def test_a_store_failure_reading_the_tracked_downloads_raises_for_the_supervisor_to_log() -> (
+    None
+):
     source_client, logger = FakeSourceClient(), FakeLogger()
     watcher = _source_watcher(
         client=FakeDownloadClient(listed=[(status(HASH_A),)]),
