@@ -14,9 +14,13 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.supervisor import WAIT_AFTER_A_BUG, SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import SearchFailedError
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.work_components import BUGS
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -173,8 +177,24 @@ class _WorkStoppingTheNode(Work):
         self.run_state.set_shutdown_requested()
 
 
-def _supervised(*works: Work, time_limit: timedelta = _DAY) -> list[SupervisedWork]:
-    return [SupervisedWork(work=work, time_limit=time_limit) for work in works]
+def _part_of(work: Work) -> Component:
+    """A part named after ``work``, judged by its bugs alone."""
+    return Component(name=str(work), client_name=ClientName("amuled"), rules=(BUGS,))
+
+
+def _supervised(
+    *works: Work, time_limit: timedelta = _DAY, components: tuple[Component, ...] | None = None
+) -> list[SupervisedWork]:
+    """Each of ``works`` with ``time_limit``, its turns recorded on ``components``, or else on a
+    part named after it."""
+    return [
+        SupervisedWork(
+            work=work,
+            time_limit=time_limit,
+            components=(_part_of(work),) if components is None else components,
+        )
+        for work in works
+    ]
 
 
 def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
@@ -183,6 +203,7 @@ def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
     return Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeBlockingMonotonicClock(),
+        node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
         logger=FakeLogger(),
     )
 
@@ -192,20 +213,24 @@ def _supervise_until(
     *works: Work,
     seconds: float,
     logger: FakeLogger | None = None,
+    health_logger: FakeLogger | None = None,
     time_limit: timedelta = _DAY,
+    components: tuple[Component, ...] | None = None,
 ) -> None:
     """Takes the turns of ``works`` on ``loop``, each with ``time_limit``, until the shutdown
-    requested at ``seconds``."""
+    requested at ``seconds``; each change of health is logged to ``health_logger``."""
     run_state = FakeRunStateStore()
     loop.call_later(seconds, run_state.set_shutdown_requested)
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(loop),
+        node_health=NodeHealth(logger=health_logger or FakeLogger(), subscribers=()),
         logger=logger or FakeLogger(),
     )
     loop.run_until_complete(
         supervisor.supervise(
-            _supervised(*works, time_limit=time_limit), arm_shutdown_bound=lambda: None
+            _supervised(*works, time_limit=time_limit, components=components),
+            arm_shutdown_bound=lambda: None,
         )
     )
 
@@ -333,6 +358,71 @@ def test_after_a_turn_that_worked_the_work_waits_its_own_wait_alone_again(
         10.0 + _AFTER_A_BUG,
         20.0 + _AFTER_A_BUG,
         30.0 + _AFTER_A_BUG,
+    ]
+
+
+def test_a_work_meeting_a_bug_at_each_turn_fails_at_its_third_on_each_of_its_parts(
+    virtual_loop: VirtualLoop,
+) -> None:
+    health_logger = FakeLogger()
+    broken = _TimedWork(
+        "search 'keroro' amuled kad", wait_seconds=1.0, errors=itertools.repeat(KeyError("kad"))
+    )
+    search = Component(
+        name="search 'keroro' amuled kad", client_name=ClientName("amuled"), rules=(BUGS,)
+    )
+    kad = Component(name="channel amuled kad", client_name=ClientName("amuled"), rules=(BUGS,))
+
+    _supervise_until(
+        virtual_loop,
+        broken,
+        seconds=2.0 + 2 * _AFTER_A_BUG,
+        health_logger=health_logger,
+        components=(search, kad),
+    )
+
+    assert broken.turns == [1.0, 1.0 + _AFTER_A_BUG, 1.0 + 2 * _AFTER_A_BUG]
+    assert health_logger.lines == [
+        LoggedLine(level="warning", message="search 'keroro' amuled kad, bugs: unknown to failing"),
+        LoggedLine(level="warning", message="channel amuled kad, bugs: unknown to failing"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "errors",
+    [(), itertools.repeat(SearchFailedError("amuled refused the search"))],
+    ids=["turns that worked", "turns that met an expected error"],
+)
+def test_three_turns_without_a_bug_make_the_work_s_part_healthy(
+    virtual_loop: VirtualLoop, *, errors: Iterable[Exception]
+) -> None:
+    health_logger = FakeLogger()
+    search = _TimedWork("search 'keroro' amuled kad", wait_seconds=10.0, errors=errors)
+
+    _supervise_until(virtual_loop, search, seconds=35.0, health_logger=health_logger)
+
+    assert search.turns == [10.0, 20.0, 30.0]
+    assert health_logger.lines == [
+        LoggedLine(level="info", message="search 'keroro' amuled kad, bugs: unknown to healthy")
+    ]
+
+
+def test_turns_cut_at_their_time_limit_count_as_bugs(virtual_loop: VirtualLoop) -> None:
+    health_logger = FakeLogger()
+    hung = _HungWork()
+    third_cut = 3 * 30.0 + 2 * _AFTER_A_BUG
+
+    _supervise_until(
+        virtual_loop,
+        hung,
+        seconds=third_cut + 1.0,
+        health_logger=health_logger,
+        time_limit=timedelta(seconds=30),
+    )
+
+    assert hung.cut_at[:3] == [30.0, 30.0 + _AFTER_A_BUG + 30.0, third_cut]
+    assert health_logger.lines == [
+        LoggedLine(level="warning", message="hung work, bugs: unknown to failing")
     ]
 
 

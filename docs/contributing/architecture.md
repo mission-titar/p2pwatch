@@ -811,8 +811,14 @@ donné n'enregistre rien, si bien que pendant qu'aMule ne répond pas, les canau
 Le suivi des téléchargements est une partie aussi : à chaque mesure de l'espace libre, la décision
 de téléchargement enregistre si le disque est sous son plancher. Une mesure basse suffit pour
 l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
-redevenir sain, et cette alerte n'a pas de fin. `NodeHealth` journalise chaque changement d'état
-et le transmet aux alertes (`HealthAlerter`).
+redevenir sain, et cette alerte n'a pas de fin. Chaque tâche que le nœud répète est enfin jugée sur
+ses bugs (`BUGS`, `domain/work_components.py`) : après chaque tour, le `Supervisor` enregistre si le
+tour a rencontré un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status
+reading amuled`, `download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`)
+et, pour une recherche, sur celle de son canal. Un bug 3 tours d'affilée met la partie en échec,
+moins de 2 sur les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans
+alerte. Le client aMule lui-même n'a pas cette règle : aucun tour n'est le sien. `NodeHealth`
+journalise chaque changement d'état et le transmet aux alertes (`HealthAlerter`).
 
 ## 11. Invariants de conception (récapitulatif)
 
@@ -849,7 +855,7 @@ et le transmet aux alertes (`HealthAlerter`).
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, règles, transitions), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes) |
+| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

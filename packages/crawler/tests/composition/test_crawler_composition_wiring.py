@@ -423,6 +423,33 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
 
 
 @pytest.mark.asyncio
+async def test_each_work_s_turns_are_recorded_on_its_part_and_a_search_s_on_its_channel_s_too(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 0.05,
+        "min_free_bytes": 1,
+        "output_dir": str(tmp_path),
+    }
+    config = _config(tmp_path, observability={"log_level": "DEBUG"}, download=download)
+    config_path = _write(tmp_path / "crawler.yml", config=config)
+
+    with caplog.at_level(logging.DEBUG):
+        await _crawl_until_a_search_is_read(config_path, targets_path=_SHIPPED_TARGETS)
+
+    assert [message for message in caplog.messages if ": turns recorded on " in message] == [
+        "status reading amuled: turns recorded on status reading amuled",
+        "download tracking amuled: turns recorded on download tracking amuled",
+        "source tracking amuled: turns recorded on source tracking amuled",
+        "search 'keroro' amuled ed2k: turns recorded on search 'keroro' amuled ed2k, "
+        "channel amuled ed2k",
+        "search 'keroro' amuled kad: turns recorded on search 'keroro' amuled kad, "
+        "channel amuled kad",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_a_reading_of_both_channels_connected_and_connectable_records_every_rule(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

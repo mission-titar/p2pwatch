@@ -1,7 +1,7 @@
 """``KeywordSearch``: one keyword searched on one channel of one client, such as "keroro" on Kad,
 again as soon as the channel may; the client spaces its own starts, the core sets no interval."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import timedelta
 from typing import Protocol
 
@@ -10,8 +10,10 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.supervisor import SupervisedWork
 from p2pwatch.application.steps.work import Work
+from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
+from p2pwatch.domain.work_components import keyword_search_component
 
 
 # The time limit of the search of ``keyword`` on ``channel``.
@@ -62,10 +64,12 @@ def keyword_searches(
     backoff_saver: BackoffSaver,
     monotonic_clock: MonotonicClock,
     time_limit_of: SearchTimeLimitOf,
+    channel_components: Iterable[Component],
 ) -> list[SupervisedWork]:
     """One search per client, channel and keyword of the config, with its time limit, a keyword
-    listed twice searched once and an empty one never."""
+    listed twice searched once and an empty one never; its turns recorded on its channel too."""
     each_keyword_once = dedupe_keywords(keywords)
+    channel_of = {(channel.client_name, channel.channel): channel for channel in channel_components}
     return [
         SupervisedWork(
             work=KeywordSearch(
@@ -76,6 +80,12 @@ def keyword_searches(
                 monotonic_clock=monotonic_clock,
             ),
             time_limit=time_limit_of(keyword, channel=channel),
+            components=(
+                keyword_search_component(
+                    keyword=keyword, client_name=search_worker.client_name, channel=channel
+                ),
+                channel_of[search_worker.client_name, channel],
+            ),
         )
         for search_worker in search_workers
         for channel in search_worker.channels

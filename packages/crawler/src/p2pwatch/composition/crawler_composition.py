@@ -135,6 +135,7 @@ from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
+from p2pwatch.domain.work_components import source_tracking_component, status_reading_component
 
 _logger = logging.getLogger(__name__)
 
@@ -516,6 +517,11 @@ class CrawlerComposition(CrawlerRunner):
                     ).send,
                 ),
             )
+            # Each channel's readings and the bugs of its searches are recorded on one part.
+            channel_components = {
+                channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
+                for channel in client.channels()
+            }
             # The status watcher and the two tracking works share the search session: one per node.
             status_watcher = StatusWatcher(
                 client_name=_AMULE_CLIENT_NAME,
@@ -526,10 +532,7 @@ class CrawlerComposition(CrawlerRunner):
                 status_reading_writer=status_reading_store,
                 node_health=node_health,
                 client_component=client_component(_AMULE_CLIENT_NAME),
-                channel_components={
-                    channel: channel_component(client_name=_AMULE_CLIENT_NAME, channel=channel)
-                    for channel in client.channels()
-                },
+                channel_components=channel_components,
             )
             time_limits = AmuleWorkTimeLimits(
                 request_bound=client.request_bound,
@@ -547,6 +550,7 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 monotonic_clock=monotonic_clock,
                 time_limit_of=time_limits.of_search,
+                channel_components=channel_components.values(),
             )
             tracking: tuple[SupervisedWork, ...] = ()
 
@@ -572,6 +576,8 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     logger=StdlibLogger(DownloadTracker.__module__),
                 )
+                # The disk's readings and the bugs of the cycle's turns are recorded on one part.
+                download_tracking = download_tracking_component(_AMULE_CLIENT_NAME)
                 download_cycle = DownloadCycle(
                     client_name=_AMULE_CLIENT_NAME,
                     download_client=client,
@@ -588,7 +594,7 @@ class CrawlerComposition(CrawlerRunner):
                         wall_clock=wall_clock,
                         observability_dispatcher=observability_dispatcher,
                         node_health=node_health,
-                        download_tracking_component=download_tracking_component(_AMULE_CLIENT_NAME),
+                        download_tracking_component=download_tracking,
                         logger=StdlibLogger(DownloadDecider.__module__),
                     ),
                     download_starter=DownloadStarter(
@@ -621,14 +627,20 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(SourceWatcher.__module__),
                 )
                 tracking = tuple(
-                    SupervisedWork(work=work, time_limit=time_limits.of_tracking())
-                    for work in (download_cycle, source_watcher)
+                    SupervisedWork(
+                        work=work, time_limit=time_limits.of_tracking(), components=(component,)
+                    )
+                    for work, component in (
+                        (download_cycle, download_tracking),
+                        (source_watcher, source_tracking_component(_AMULE_CLIENT_NAME)),
+                    )
                 )
 
             works = works_in_start_order(
                 status_watcher=SupervisedWork(
                     work=status_watcher,
                     time_limit=time_limits.of_status_reading(channel_count=len(client.channels())),
+                    components=(status_reading_component(_AMULE_CLIENT_NAME),),
                 ),
                 tracking=tracking,
                 searches=searches,
@@ -636,6 +648,8 @@ class CrawlerComposition(CrawlerRunner):
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
+                parts = ", ".join(component.name for component in supervised.components)
+                _logger.debug("%s: turns recorded on %s", supervised.work, parts)
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
@@ -656,6 +670,7 @@ class CrawlerComposition(CrawlerRunner):
                 supervisor=Supervisor(
                     run_state_reader=run_state_store,
                     monotonic_clock=monotonic_clock,
+                    node_health=node_health,
                     logger=StdlibLogger(Supervisor.__module__),
                 ),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),

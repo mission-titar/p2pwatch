@@ -16,6 +16,7 @@ from p2pwatch.domain.status_reading import (
     client_component,
     is_reading_fresh,
 )
+from p2pwatch.domain.work_components import BUGS
 from tests.support.domain.value_bounds import NOT_WELL_FORMED_TEXTS, WELL_FORMED_TEXTS
 
 
@@ -63,3 +64,9 @@ def test_a_channel_s_component_is_named_after_it_and_holds_both_channel_rules() 
     # A rule the component lacks would raise at its first record.
     assert kad.record(rule=CHANNEL_NOT_CONNECTED, detected=True) is None
     assert kad.record(rule=CHANNEL_NOT_CONNECTABLE, detected=True) is None
+
+
+def test_a_channel_s_component_fails_at_the_third_bug_in_a_row_of_its_searches() -> None:
+    kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
+    transitions = [kad.record(rule=BUGS, detected=True) for _ in range(3)]
+    assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]

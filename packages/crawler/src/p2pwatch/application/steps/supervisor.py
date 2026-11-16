@@ -1,6 +1,6 @@
 """Runs every task the node repeats, such as the status reading, until the shutdown is requested,
 then cancels them all; a turn that raises or outlasts its time limit fails alone, the others go
-on."""
+on, and whether it met a bug is recorded on the parts it is about."""
 
 import asyncio
 from collections.abc import Sequence
@@ -11,8 +11,11 @@ from typing import NoReturn, Protocol
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.expected_error import ExpectedError
+from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.work_components import BUGS
 
 # A bug that strikes at once would otherwise rerun at full speed, one trace per turn.
 WAIT_AFTER_A_BUG = timedelta(seconds=60)
@@ -20,11 +23,12 @@ WAIT_AFTER_A_BUG = timedelta(seconds=60)
 
 @dataclass(frozen=True, kw_only=True)
 class SupervisedWork:
-    """A work and its time limit, such as a search and its 25 min: the supervisor cuts a turn
-    still running at its limit."""
+    """A work, its time limit and the parts its turns are recorded on, such as a search, its 25 min,
+    its own part and its channel's: the supervisor cuts a turn still running at its limit."""
 
     work: Work
     time_limit: timedelta
+    components: tuple[Component, ...]
 
 
 class TurnTimeoutError(Exception):
@@ -44,10 +48,12 @@ class Supervisor:
         *,
         run_state_reader: RunStateReader,
         monotonic_clock: MonotonicClock,
+        node_health: NodeHealth,
         logger: Logger,
     ) -> None:
         self._run_state_reader = run_state_reader
         self._monotonic_clock = monotonic_clock
+        self._node_health = node_health
         self._logger = logger
 
     async def supervise(
@@ -72,6 +78,8 @@ class Supervisor:
         while True:
             await self._wait(supervised.work, after_a_bug=met_a_bug)
             met_a_bug = await self._take_turn(supervised)
+            for component in supervised.components:
+                await self._node_health.record(on=component, rule=BUGS, detected=met_a_bug)
 
     async def _wait(self, work: Work, *, after_a_bug: bool) -> None:
         """The work's own wait; after a bug, the later of it and ``WAIT_AFTER_A_BUG``."""
