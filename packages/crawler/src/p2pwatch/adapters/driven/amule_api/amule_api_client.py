@@ -165,7 +165,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             )
             try:
                 await self._login(http)
-            except Exception:
+            except BaseException:  # a cancelled login too: a time limit or the shutdown cuts a turn
                 await http.aclose()
                 raise
             self._http = http

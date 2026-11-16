@@ -405,6 +405,52 @@ async def test_a_session_opened_after_a_failed_login_gets_a_transport_of_its_own
     assert len(transports) == 2
 
 
+class _ClosingTransport(httpx.MockTransport):
+    """A mock transport that keeps whether its client closed it."""
+
+    closed = False
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_a_login_cancelled_in_flight_closes_its_session() -> None:
+    api = FakeAmuleApi()
+    login_reached = asyncio.Event()
+
+    async def round_trip(request: httpx.Request) -> httpx.Response:
+        login_reached.set()
+        await asyncio.Event().wait()  # never answered
+        return api.handle(request)
+
+    transport = _ClosingTransport(round_trip)
+    search_start_store = FakeSearchStartStore()
+    client = AmuleApiClient(
+        "amuled.test",
+        client_name=ClientName("amuled"),
+        port=4711,
+        password=PASSWORD,
+        timeout_seconds=10.0,
+        request_bound_seconds=60.0,
+        page_size=_PAGE_SIZE,
+        progress_poll_interval=_PROGRESS_POLL_INTERVAL,
+        transport_factory=lambda: transport,
+        monotonic_clock=api.monotonic_clock,
+        wall_clock=FakeTime().wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
+    )
+    call = asyncio.create_task(client.status())
+    await login_reached.wait()
+
+    call.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await call
+    assert transport.closed
+
+
 @pytest.mark.asyncio
 async def test_open_lets_a_refused_password_through() -> None:
     client = _client(FakeAmuleApi(), password="wrong")
