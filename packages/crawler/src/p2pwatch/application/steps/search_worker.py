@@ -95,7 +95,7 @@ class SearchWorker:
         except SearchFailedError as error:
             delay = self._backoff.record_failure(channel_backoff_key)
             self._logger.warning(
-                "client %s channel %s failed (%s): backoff %.1fs",
+                "client %s channel %s failed (%s): backoff %g s",
                 self._client_name,
                 channel,
                 error,
@@ -108,7 +108,7 @@ class SearchWorker:
         except ClientUnreachableError as error:
             delay = self._backoff.record_failure(self._client_backoff_key)
             self._logger.warning(
-                "client %s unreachable (%s), client down, backoff %.1fs",
+                "client %s unreachable (%s), client down, backoff %g s",
                 self._client_name,
                 error,
                 delay.total_seconds(),
