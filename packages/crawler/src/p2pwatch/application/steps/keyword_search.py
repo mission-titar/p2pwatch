@@ -15,7 +15,7 @@ from p2pwatch.domain.search.keywords import dedupe_keywords
 
 
 # The time limit of the search of ``keyword`` on ``channel``.
-class SearchTimeLimit(Protocol):
+class SearchTimeLimitOf(Protocol):
     def __call__(self, keyword: Keyword, /, *, channel: Channel) -> timedelta: ...
 
 
@@ -61,7 +61,7 @@ def keyword_searches(
     keywords: Sequence[str],
     backoff_saver: BackoffSaver,
     monotonic_clock: MonotonicClock,
-    time_limit_of: SearchTimeLimit,
+    time_limit_of: SearchTimeLimitOf,
 ) -> list[SupervisedWork]:
     """One search per client, channel and keyword of the config, with its time limit, a keyword
     listed twice searched once and an empty one never."""

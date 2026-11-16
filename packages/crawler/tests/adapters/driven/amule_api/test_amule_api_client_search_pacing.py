@@ -120,7 +120,7 @@ async def _search_for(
 
 # ed2k's `keroro` runs past 60 s, so both ed2k rules take turns binding.
 _DURATIONS = {"keroro": 90.0, "keroro mission": 30.0, "titar": 30.0}
-_TARGETS = {"keroro": "keroro", "keroro mission": "keroro", "titar": "titar"}
+_KAD_WORDS = {"keroro": "keroro", "keroro mission": "keroro", "titar": "titar"}
 
 
 def _hour_of_three_keywords(loop: VirtualLoop) -> FakeAmuleApi:
@@ -169,19 +169,19 @@ def test_no_ed2k_start_falls_while_the_previous_search_runs(virtual_loop: Virtua
         assert start >= previous + _DURATIONS[query], (previous, query, start)
 
 
-def test_kad_starts_on_one_target_are_a_minute_apart_whatever_keywords_share_it(
+def test_kad_starts_on_one_kad_word_are_a_minute_apart_whatever_keywords_share_it(
     virtual_loop: VirtualLoop,
 ) -> None:
     api = _hour_of_three_keywords(virtual_loop)
 
     starts = _starts(api, search_type="kad")
-    for target in ("keroro", "titar"):
-        times = [moment for moment, query in starts if _TARGETS[query] == target]
+    for kad_word in ("keroro", "titar"):
+        times = [moment for moment, query in starts if _KAD_WORDS[query] == kad_word]
         assert len(times) > 30
-        assert min(_gaps(times)) >= 60, target
+        assert min(_gaps(times)) >= 60, kad_word
 
 
-def test_kad_targets_and_ed2k_start_together(virtual_loop: VirtualLoop) -> None:
+def test_kad_words_and_ed2k_start_together(virtual_loop: VirtualLoop) -> None:
     api = _hour_of_three_keywords(virtual_loop)
 
     assert [moment for moment, _ in _starts(api, search_type="kad")][:2] == [0, 0]
@@ -220,7 +220,7 @@ def test_an_ed2k_search_that_never_finishes_holds_the_next_start_one_budget(
     assert [moment for moment, _ in _starts(api, search_type="global")] == [0, _BUDGET]
 
 
-def test_concurrent_callers_of_one_kad_target_each_get_their_own_slot(
+def test_concurrent_callers_of_one_kad_word_each_get_their_own_slot(
     virtual_loop: VirtualLoop,
 ) -> None:
     api = _api(virtual_loop)
@@ -228,7 +228,7 @@ def test_concurrent_callers_of_one_kad_target_each_get_their_own_slot(
     async def main() -> None:
         client = await _connected(api)
         await client.search(Keyword("keroro"), channel=Channel("kad"), budget_seconds=_BUDGET)
-        # Both wait for the target's next slot: whoever wakes first must not leave it free.
+        # Both wait for the Kad word's next slot: whoever wakes first must not leave it free.
         await asyncio.gather(
             client.search(Keyword("keroro 1"), channel=Channel("kad"), budget_seconds=_BUDGET),
             client.search(Keyword("keroro 2"), channel=Channel("kad"), budget_seconds=_BUDGET),
@@ -270,7 +270,7 @@ def test_kad_keys_a_keyword_on_its_first_word_of_three_bytes(
 @pytest.mark.parametrize(
     "keyword", [Keyword("62"), Keyword("ok"), Keyword("é"), Keyword("62 ok"), Keyword("VF-62")]
 )
-def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
+def test_a_keyword_without_a_kad_word_neither_spins_nor_searches(
     *, keyword: Keyword, virtual_loop: VirtualLoop
 ) -> None:
     api = _api(virtual_loop)
@@ -292,7 +292,7 @@ def test_a_keyword_without_a_kad_target_neither_spins_nor_searches(
     assert _starts(api, search_type="kad") == []
 
 
-def test_a_keyword_without_a_kad_target_is_logged_once(
+def test_a_keyword_without_a_kad_word_is_logged_once(
     *, caplog: pytest.LogCaptureFixture, virtual_loop: VirtualLoop
 ) -> None:
     caplog.set_level(logging.INFO, logger="p2pwatch.adapters.driven.amule_api.amule_api_client")
@@ -308,7 +308,7 @@ def test_a_keyword_without_a_kad_target_is_logged_once(
     assert ["'62'" in record.getMessage() for record in caplog.records] == [True, False]
 
 
-def test_a_kad_target_held_elsewhere_is_retried_each_poll_until_it_frees(
+def test_a_kad_word_held_elsewhere_is_retried_each_poll_until_it_frees(
     virtual_loop: VirtualLoop,
 ) -> None:
     api = _api(virtual_loop, search_seconds={"keroro": 30})
@@ -327,7 +327,7 @@ def test_a_kad_target_held_elsewhere_is_retried_each_poll_until_it_frees(
     assert _polled_until(api, search_id=42) >= 30  # its budget runs from the start at 10 s
 
 
-def test_a_kad_target_held_past_one_budget_fails_the_channel_at_that_budget(
+def test_a_kad_word_held_past_one_budget_fails_the_channel_at_that_budget(
     virtual_loop: VirtualLoop,
 ) -> None:
     api = _api(virtual_loop)
