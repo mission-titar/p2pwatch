@@ -4,7 +4,7 @@ changes."""
 from collections.abc import Mapping
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW
+from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
 from p2pwatch.domain.health.component import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, NodeId
@@ -22,6 +22,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    SEARCHES_FAILED,
     UNREACHABLE_ALERT_AFTER,
 )
 from p2pwatch.domain.work_components import BUGS
@@ -31,6 +32,9 @@ _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
     CHANNEL_NOT_CONNECTED: "connected",
     CHANNEL_NOT_CONNECTABLE: "connectable",
 }
+
+# A part failing or healthy again under these rules has no alert: its log line tells it.
+_RULES_WITHOUT_AN_ALERT = frozenset({BUGS, SEARCHES_FAILED, CONNECTED_TO_NO_NETWORK})
 
 
 class HealthAlerter:
@@ -50,7 +54,7 @@ class HealthAlerter:
 
     async def send(self, transition: HealthTransition) -> None:
         alert: Event | None
-        if transition.rule == BUGS:  # a part meeting bugs has no alert: its log line tells it
+        if transition.rule in _RULES_WITHOUT_AN_ALERT:
             return
         if transition.current is HealthState.FAILING:
             alert = self._alert(transition)

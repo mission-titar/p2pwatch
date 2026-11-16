@@ -808,17 +808,25 @@ part. Chaque canal du client est aussi une partie, avec deux règles : hors de s
 d'affilée, il est en échec (« amuled kad: off its network for 5 min ») ; non joignable par les pairs
 6 lectures d'affilée, aussi (« amuled kad: not connectable for 5 min »). Un champ qu'aMule n'a pas
 donné n'enregistre rien, si bien que pendant qu'aMule ne répond pas, les canaux gardent leur état.
+Chaque canal a une troisième règle, « searches failed » : chaque recherche enregistre si le réseau
+l'a refusée (`SearchFailedError`) ; 3 refus d'affilée mettent le canal en échec, moins de 2 sur les
+10 dernières recherches le rendent sain. Un client injoignable ou un mot de passe refusé
+n'enregistre rien, si bien qu'une panne d'aMule ne guérit pas le canal.
 Le suivi des téléchargements est une partie aussi : à chaque mesure de l'espace libre, la décision
 de téléchargement enregistre si le disque est sous son plancher. Une mesure basse suffit pour
 l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
-redevenir sain, et cette alerte n'a pas de fin. Chaque tâche que le nœud répète est enfin jugée sur
-ses bugs (`BUGS`, `domain/work_components.py`) : après chaque tour, le `Supervisor` enregistre si le
-tour a rencontré un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status
-reading amuled`, `download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`)
-et, pour une recherche, sur celle de son canal. Un bug 3 tours d'affilée met la partie en échec,
-moins de 2 sur les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans
-alerte. Le client aMule lui-même n'a pas cette règle : aucun tour n'est le sien. `NodeHealth`
-journalise chaque changement d'état et le transmet aux alertes (`HealthAlerter`).
+redevenir sain, et cette alerte n'a pas de fin. La lecture d'état y enregistre aussi si aucun canal
+du client n'est connecté (« connected to no network ») : 6 lectures d'affilée mettent la partie en
+échec, moins de 2 sur les 10 dernières la rendent saine. Un nœud sans `download:` n'a pas cette
+partie. Chaque tâche que le nœud répète est enfin jugée sur ses bugs (`BUGS`,
+`domain/work_components.py`) : après chaque tour, le `Supervisor` enregistre si le tour a rencontré
+un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status reading amuled`,
+`download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`) et, pour une
+recherche, sur celle de son canal. Un bug 3 tours d'affilée met la partie en échec, moins de 2 sur
+les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
+pour « searches failed » et « connected to no network ». Le client aMule lui-même n'a pas cette
+règle : aucun tour n'est le sien. `NodeHealth` journalise chaque changement d'état et le transmet
+aux alertes (`HealthAlerter`).
 
 ## 11. Invariants de conception (récapitulatif)
 

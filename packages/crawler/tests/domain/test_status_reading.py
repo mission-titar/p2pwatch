@@ -9,6 +9,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    SEARCHES_FAILED,
     STATUS_PERIOD,
     ChannelStatus,
     ClientStatus,
@@ -70,3 +71,14 @@ def test_a_channel_s_component_fails_at_the_third_bug_in_a_row_of_its_searches()
     kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
     transitions = [kad.record(rule=BUGS, detected=True) for _ in range(3)]
     assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
+
+
+def test_a_channel_s_searches_fail_at_3_refused_in_a_row_and_heal_under_2_in_the_last_10() -> None:
+    kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
+
+    refused = [kad.record(rule=SEARCHES_FAILED, detected=True) for _ in range(3)]
+    ran = [kad.record(rule=SEARCHES_FAILED, detected=False) for _ in range(9)]
+
+    assert [t and t.current for t in refused] == [None, None, HealthState.FAILING]
+    # The ninth search that ran leaves a single refusal among the last 10.
+    assert [t and t.current for t in ran] == [*[None] * 8, HealthState.HEALTHY]

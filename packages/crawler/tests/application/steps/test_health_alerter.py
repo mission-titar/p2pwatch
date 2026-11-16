@@ -4,7 +4,11 @@ import pytest
 
 from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW, download_tracking_component
+from p2pwatch.domain.download.disk_space import (
+    CONNECTED_TO_NO_NETWORK,
+    DISK_SPACE_LOW,
+    download_tracking_component,
+)
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -14,6 +18,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    SEARCHES_FAILED,
     channel_component,
     client_component,
 )
@@ -99,9 +104,21 @@ async def test_a_rule_it_has_no_alert_for_raises(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "on",
-    [status_reading_component(ClientName("amuled")), _KAD, _DOWNLOAD_TRACKING],
-    ids=["a task's part", "a channel", "download tracking"],
+    ("rule", "on"),
+    [
+        (BUGS, status_reading_component(ClientName("amuled"))),
+        (BUGS, _KAD),
+        (BUGS, _DOWNLOAD_TRACKING),
+        (SEARCHES_FAILED, _KAD),
+        (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
+    ],
+    ids=[
+        "a task's bugs",
+        "a channel's bugs",
+        "download tracking's bugs",
+        "a channel's searches failed",
+        "download tracking connected to no network",
+    ],
 )
 @pytest.mark.parametrize(
     ("previous", "current"),
@@ -111,11 +128,11 @@ async def test_a_rule_it_has_no_alert_for_raises(
         (HealthState.FAILING, HealthState.HEALTHY),
     ],
 )
-async def test_a_part_failing_or_healthy_again_under_the_bugs_rule_sends_nothing(
-    *, on: Component, previous: HealthState, current: HealthState
+async def test_a_part_failing_or_healthy_again_under_a_rule_without_an_alert_sends_nothing(
+    *, rule: HealthRule, on: Component, previous: HealthState, current: HealthState
 ) -> None:
     # The log line of the change is all the operator gets of it.
-    assert await _sent(previous=previous, current=current, rule=BUGS, on=on) == []
+    assert await _sent(previous=previous, current=current, rule=rule, on=on) == []
 
 
 _CHANNEL_ALERTS = pytest.mark.parametrize(
