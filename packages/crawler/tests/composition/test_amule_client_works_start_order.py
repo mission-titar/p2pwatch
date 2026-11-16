@@ -2,7 +2,7 @@
 searches'."""
 
 from p2pwatch.application.steps.work import Work
-from p2pwatch.composition.crawler_composition import works_in_start_order
+from p2pwatch.composition.amule_client_works import works_in_start_order
 
 
 class _NamedWork(Work):
