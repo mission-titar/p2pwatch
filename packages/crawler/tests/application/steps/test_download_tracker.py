@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
@@ -13,6 +14,7 @@ from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import CompletedDownload
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
     FakeNoSetStateTrackedDownloadStore,
@@ -186,6 +188,32 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     await cycle.run_once()
     assert tracked_download_store.completed_at == {}
     assert observability.notifier.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_cut_between_a_completion_s_write_and_its_send_still_notifies() -> None:
+    # A completed download is never notified again, so a send lost here would be lost for good.
+    tracked_download_store = FakeTrackedDownloadStore()
+    tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
+    notifier = FakeHeldNotifier()
+    cycle = build_cycle(
+        client=FakeDownloadClient(listed=[(status(HASH_A, completed=True),)]),
+        tracked_download_store=tracked_download_store,
+        observability_dispatcher=ObservabilityOverFakes(notifier=notifier).dispatcher,
+    )
+    turn = asyncio.create_task(cycle.run_once())
+    await notifier.reached.wait()
+
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    notifier.released.set()
+    await notifier.wait_until_sent(timeout_seconds=1.0)
+
+    assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
+    assert [notification for _, notification in notifier.calls] == [
+        CompletedDownload(target_titles=(), filename=HASH_A, node_id=NODE_ID)
+    ]
 
 
 @pytest.mark.asyncio

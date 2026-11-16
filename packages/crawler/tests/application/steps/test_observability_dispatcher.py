@@ -1,5 +1,6 @@
 """The dispatch step: log + metrics always; notification by audience, failure/timeout absorbed."""
 
+import asyncio
 from typing import Literal
 
 import pytest
@@ -17,10 +18,15 @@ from p2pwatch.domain.observability.node_metric import (
     NodeGauge,
     NodeMetricSample,
 )
-from p2pwatch.domain.observability.notification import RelayedLogLine, TierRise
+from p2pwatch.domain.observability.notification import (
+    CompletedDownload,
+    RelayedLogLine,
+    TierRise,
+)
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -196,3 +202,28 @@ async def test_notification_timeout_is_absorbed() -> None:
         _COMPLETED
     )
     assert node_metric_store.read_samples()
+
+
+@pytest.mark.asyncio
+async def test_a_shielded_dispatch_whose_caller_is_cancelled_mid_send_still_sends() -> None:
+    notifier = FakeHeldNotifier()
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier)
+    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
+    await notifier.reached.wait()
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+    notifier.released.set()
+    await notifier.wait_until_sent(timeout_seconds=1.0)
+
+    assert notifier.calls == [
+        (
+            Audience.COMMUNITY,
+            CompletedDownload(
+                target_titles=(ev.TargetTitle(target_id=TargetId("062A"), title="t"),),
+                filename="Keroro 062.avi",
+                node_id=_NODE_ID,
+            ),
+        )
+    ]
