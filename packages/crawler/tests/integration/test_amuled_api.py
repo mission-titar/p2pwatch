@@ -12,8 +12,10 @@ import pytest
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
 from p2pwatch.adapters.driven.amule_api.errors import ApiAuthError
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
+from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.domain.client_errors import SearchFailedError
-from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.integration.conftest import ApiEndpoint
 
 pytestmark = pytest.mark.api_integration
@@ -21,8 +23,10 @@ pytestmark = pytest.mark.api_integration
 
 @pytest.mark.asyncio
 async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         amuled.host,
+        client_name=ClientName("amuled"),
         port=amuled.port,
         password=amuled.password,
         timeout_seconds=30.0,
@@ -30,6 +34,9 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
+        wall_clock=SystemWallClock(),
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
         transport_factory=httpx.AsyncHTTPTransport,
     )
     await client.status()  # its login accepts the admin password written by --set-admin-pass-stdin
@@ -38,8 +45,10 @@ async def test_real_login_succeeds(amuled: ApiEndpoint) -> None:
 
 @pytest.mark.asyncio
 async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None:
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         amuled.host,
+        client_name=ClientName("amuled"),
         port=amuled.port,
         password="wrong-password",
         timeout_seconds=30.0,
@@ -47,6 +56,9 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
+        wall_clock=SystemWallClock(),
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
         transport_factory=httpx.AsyncHTTPTransport,
     )
     with pytest.raises(ApiAuthError):
@@ -55,8 +67,10 @@ async def test_real_login_fails_with_wrong_password(amuled: ApiEndpoint) -> None
 
 @pytest.mark.asyncio
 async def test_real_status(amuled: ApiEndpoint) -> None:
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         amuled.host,
+        client_name=ClientName("amuled"),
         port=amuled.port,
         password=amuled.password,
         timeout_seconds=30.0,
@@ -64,6 +78,9 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
+        wall_clock=SystemWallClock(),
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
         transport_factory=httpx.AsyncHTTPTransport,
     )
     try:
@@ -75,8 +92,10 @@ async def test_real_status(amuled: ApiEndpoint) -> None:
 
 @pytest.mark.asyncio
 async def test_real_search(amuled: ApiEndpoint) -> None:
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         amuled.host,
+        client_name=ClientName("amuled"),
         port=amuled.port,
         password=amuled.password,
         timeout_seconds=30.0,
@@ -84,6 +103,9 @@ async def test_real_search(amuled: ApiEndpoint) -> None:
         page_size=500,
         progress_poll_interval=timedelta(seconds=5),
         monotonic_clock=AsyncioMonotonicClock(),
+        wall_clock=SystemWallClock(),
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
         transport_factory=httpx.AsyncHTTPTransport,
     )
     try:

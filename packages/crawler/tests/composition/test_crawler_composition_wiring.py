@@ -26,6 +26,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_search_start_store import (
+    SqliteSearchStartStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store import (
     SqliteTrackedDownloadStore,
 )
@@ -38,6 +41,7 @@ from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
+from p2pwatch.domain.search.latest_search_start import LatestSearchStart
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.fakes.fake_amule_api_server import FakeAmuleApiServer
@@ -571,6 +575,45 @@ async def test_a_backoff_the_previous_run_saved_holds_the_ed2k_search(
 
 
 @pytest.mark.asyncio
+async def test_a_search_start_the_previous_run_wrote_holds_the_ed2k_search_and_kad_s_is_written(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    with closing(open_local(tmp_path / "local.db")) as local:
+        SqliteSearchStartStore(local).set_latest_start(
+            ClientName("amuled"),
+            start=LatestSearchStart(
+                channel=Channel("ed2k"), scope="", started_at=SystemWallClock().now()
+            ),
+        )
+    config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+    api = FakeAmuleApi()
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
+        run = _crawl(server, config_path=config_path)
+        # Unheld, the ed2k start goes out with Kad's, well before Kad's search is read to its end.
+        assert await asyncio.to_thread(
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+
+    assert _search_types(api) == ["kad"]
+    with closing(open_local(tmp_path / "local.db")) as local:
+        starts = SqliteSearchStartStore(local).read_latest_starts(ClientName("amuled"))
+    assert sorted((start.channel, start.scope) for start in starts) == [
+        ("ed2k", ""),
+        ("kad", "keroro"),
+    ]
+
+
+def _forget_the_search_starts(tmp_path: Path) -> None:
+    """Each run must read a search within 10 s, where a start the run before wrote holds 60 s."""
+    with closing(open_local(tmp_path / "local.db")) as local:
+        local.execute("DELETE FROM latest_search_starts")
+
+
+@pytest.mark.asyncio
 async def test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_changed(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -580,7 +623,9 @@ async def test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_chan
 
     with caplog.at_level(logging.INFO):
         await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
+        _forget_the_search_starts(tmp_path)
         await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
+        _forget_the_search_starts(tmp_path)
         targets_path.write_text(f"{_TARGET_062A}# edited\n", encoding="utf-8")
         await _crawl_until_a_search_is_read(config_path, targets_path=targets_path)
 

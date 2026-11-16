@@ -22,10 +22,12 @@ from p2pwatch.domain.client_errors import (
 from p2pwatch.domain.download.request import DownloadRequest
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
-from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.source import ContactPoint, SourceRole
 from p2pwatch.domain.status_reading import ChannelStatus
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
+from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.fake_amule_api import PASSWORD, TOKEN, FakeAmuleApi, error
 
 _HASH = "8b54a3c20fae9e4b9f7e0c2c8c01b6b1"
@@ -43,8 +45,10 @@ def _client(
     page_size: int = _PAGE_SIZE,
     progress_poll_interval: timedelta = _PROGRESS_POLL_INTERVAL,
 ) -> AmuleApiClient:
+    search_start_store = FakeSearchStartStore()
     return AmuleApiClient(
         "amuled.test",
+        client_name=ClientName("amuled"),
         port=4711,
         password=password,
         timeout_seconds=10.0,
@@ -53,6 +57,9 @@ def _client(
         progress_poll_interval=progress_poll_interval,
         transport_factory=api.transport,
         monotonic_clock=api.monotonic_clock,
+        wall_clock=FakeTime().wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
     )
 
 
@@ -133,8 +140,10 @@ def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
         return api.handle(request)
 
     transport = httpx.MockTransport(round_trip)
+    search_start_store = FakeSearchStartStore()
     return AmuleApiClient(
         "amuled.test",
+        client_name=ClientName("amuled"),
         port=4711,
         password=PASSWORD,
         timeout_seconds=10.0,
@@ -143,6 +152,9 @@ def _yielding_client(api: FakeAmuleApi) -> AmuleApiClient:
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=lambda: transport,
         monotonic_clock=api.monotonic_clock,
+        wall_clock=FakeTime().wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
     )
 
 
@@ -247,8 +259,10 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
         return api.handle(request)
 
     transport = httpx.MockTransport(round_trip)
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         "amuled.test",
+        client_name=ClientName("amuled"),
         port=4711,
         password=PASSWORD,
         timeout_seconds=10.0,
@@ -257,6 +271,9 @@ async def test_a_close_during_a_login_revokes_the_session_it_opened() -> None:
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=lambda: transport,
         monotonic_clock=api.monotonic_clock,
+        wall_clock=FakeTime().wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
     )
     call = asyncio.create_task(client.status())
     await login_reached.wait()
@@ -285,8 +302,10 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
         return api.handle(request)
 
     transport = httpx.MockTransport(round_trip)
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         "amuled.test",
+        client_name=ClientName("amuled"),
         port=4711,
         password=PASSWORD,
         timeout_seconds=10.0,
@@ -295,6 +314,9 @@ async def test_a_401_answered_during_close_logs_in_no_more() -> None:
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=lambda: transport,
         monotonic_clock=api.monotonic_clock,
+        wall_clock=FakeTime().wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
     )
     await client.open()
     call = asyncio.create_task(client.status())
@@ -358,8 +380,10 @@ async def test_a_session_opened_after_a_failed_login_gets_a_transport_of_its_own
         transports.append(api.transport())
         return transports[-1]
 
+    search_start_store = FakeSearchStartStore()
     client = AmuleApiClient(
         "amuled.test",
+        client_name=ClientName("amuled"),
         port=4711,
         password=PASSWORD,
         timeout_seconds=10.0,
@@ -368,6 +392,9 @@ async def test_a_session_opened_after_a_failed_login_gets_a_transport_of_its_own
         progress_poll_interval=_PROGRESS_POLL_INTERVAL,
         transport_factory=transport_factory,
         monotonic_clock=api.monotonic_clock,
+        wall_clock=FakeTime().wall,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
     )
     await client.open()
     del api.overrides[("POST", "/api/v1/auth/login")]

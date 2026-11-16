@@ -249,8 +249,11 @@ depends_on = [
   "p2pwatch.application.ports.driven.download_client",
   "p2pwatch.application.ports.driven.monotonic_clock",
   "p2pwatch.application.ports.driven.search_client",
+  "p2pwatch.application.ports.driven.search_start_reader",
+  "p2pwatch.application.ports.driven.search_start_writer",
   "p2pwatch.application.ports.driven.source_client",
   "p2pwatch.application.ports.driven.status_client",
+  "p2pwatch.application.ports.driven.wall_clock",
 ]
 
 [[modules]]
@@ -289,6 +292,8 @@ depends_on = [
   "p2pwatch.application.ports.driven.observation_writer",
   "p2pwatch.application.ports.driven.policy_fingerprint_reader",
   "p2pwatch.application.ports.driven.policy_fingerprint_writer",
+  "p2pwatch.application.ports.driven.search_start_reader",
+  "p2pwatch.application.ports.driven.search_start_writer",
   "p2pwatch.application.ports.driven.source_point_reader",
   "p2pwatch.application.ports.driven.source_point_writer",
   "p2pwatch.application.ports.driven.source_reader",
@@ -645,6 +650,16 @@ depends_on = []
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.search_client"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.search_start_reader"
+layer = "ports"
+depends_on = ["p2pwatch.domain"]
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.search_start_writer"
 layer = "ports"
 depends_on = ["p2pwatch.domain"]
 

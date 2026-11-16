@@ -7,23 +7,29 @@ virtual: whenever every task waits, the loop jumps to the next timer instead of 
 import asyncio
 import json
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
 
 from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
+from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.domain.client_errors import SearchFailedError
-from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.search.answer import SearchAnswer
+from p2pwatch.domain.search.latest_search_start import LatestSearchStart
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
+from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
+from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi, error
-from tests.support.virtual_time import MONOTONIC_EPOCH, VirtualLoop
+from tests.support.virtual_time import EPOCH, MONOTONIC_EPOCH, VirtualLoop
 
 _HOUR = 3600.0
 _BUDGET = 120.0
+_CLIENT_NAME = ClientName("amuled")
+_SEARCH_TYPE_BY_CHANNEL = {Channel("ed2k"): "global", Channel("kad"): "kad"}
 _ALREADY_SEARCHING = (
     "Unexpected error while attempting Kad search: "
     "Kademlia: Search keyword is already on search list: keroro"
@@ -34,9 +40,20 @@ def _api(loop: VirtualLoop, **kwargs: Any) -> FakeAmuleApi:
     return FakeAmuleApi(monotonic_clock=FakeLoopMonotonicClock(loop), **kwargs)
 
 
-async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
+async def _connected(
+    api: FakeAmuleApi,
+    *,
+    search_start_store: FakeSearchStartStore | None = None,
+    wall_clock: WallClock | None = None,
+) -> AmuleApiClient:
+    """A client logged in, over an empty store and the running loop's wall clock unless given."""
+    if search_start_store is None:
+        search_start_store = FakeSearchStartStore()
+    if wall_clock is None:
+        wall_clock = FakeLoopWallClock(asyncio.get_running_loop())
     client = AmuleApiClient(
         "amuled.test",
+        client_name=_CLIENT_NAME,
         port=4711,
         password=PASSWORD,
         timeout_seconds=10.0,
@@ -45,6 +62,9 @@ async def _connected(api: FakeAmuleApi) -> AmuleApiClient:
         progress_poll_interval=timedelta(seconds=5),
         transport_factory=api.transport,
         monotonic_clock=api.monotonic_clock,
+        wall_clock=wall_clock,
+        search_start_writer=search_start_store,
+        search_start_reader=search_start_store,
     )
     await client.open()
     return client
@@ -122,7 +142,9 @@ async def test_a_wall_clock_step_leaves_two_starts_a_minute_apart(
     *, channel: Channel, step: timedelta
 ) -> None:
     fake_time = FakeTime()
-    client = await _connected(FakeAmuleApi(monotonic_clock=fake_time.monotonic))
+    client = await _connected(
+        FakeAmuleApi(monotonic_clock=fake_time.monotonic), wall_clock=fake_time.wall
+    )
     await client.search(Keyword("keroro"), channel=channel, budget_seconds=_BUDGET)
     fake_time.step_wall(step)
     await client.search(Keyword("keroro"), channel=channel, budget_seconds=_BUDGET)
@@ -340,3 +362,259 @@ def test_any_other_kad_refusal_fails_the_channel_at_once(virtual_loop: VirtualLo
     virtual_loop.run_until_complete(main())
 
     assert len(_starts(api, search_type="kad")) == 1
+
+
+# Both keywords share the Kad word "keroro", so Kad spaces their starts as eD2k does.
+_KEYWORDS_SHARING_A_KAD_WORD = (Keyword("keroro"), Keyword("keroro mission"))
+_SCOPE_BY_CHANNEL = {Channel("ed2k"): "", Channel("kad"): "keroro"}
+
+
+def _store_holding_a_start(
+    *,
+    channel: Channel,
+    scope: str,
+    started_at: datetime,
+    client_name: ClientName = _CLIENT_NAME,
+) -> FakeSearchStartStore:
+    store = FakeSearchStartStore()
+    start = LatestSearchStart(channel=channel, scope=scope, started_at=started_at)
+    store.set_latest_start(client_name, start=start)
+    return store
+
+
+def _starts_of_a_client_built_over(
+    virtual_loop: VirtualLoop, *, store: FakeSearchStartStore, channel: Channel
+) -> list[float]:
+    """When a client built over ``store`` at 0 s starts its searches of both keywords."""
+    api = _api(virtual_loop)
+
+    async def main() -> None:
+        client = await _connected(api, search_start_store=store)
+        await asyncio.gather(
+            *(
+                client.search(keyword, channel=channel, budget_seconds=_BUDGET)
+                for keyword in _KEYWORDS_SHARING_A_KAD_WORD
+            )
+        )
+
+    virtual_loop.run_until_complete(main())
+    return [moment for moment, _ in _starts(api, search_type=_SEARCH_TYPE_BY_CHANNEL[channel])]
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_a_start_stored_20_s_ago_holds_the_first_start_of_a_client_built_anew_40_s(
+    *, channel: Channel, virtual_loop: VirtualLoop
+) -> None:
+    store = _store_holding_a_start(
+        channel=channel,
+        scope=_SCOPE_BY_CHANNEL[channel],
+        started_at=EPOCH - timedelta(seconds=20),
+    )
+
+    starts = _starts_of_a_client_built_over(virtual_loop, store=store, channel=channel)
+
+    assert starts == [40, 100]
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_a_start_stored_70_s_ago_holds_no_start_of_a_client_built_anew(
+    *, channel: Channel, virtual_loop: VirtualLoop
+) -> None:
+    store = _store_holding_a_start(
+        channel=channel,
+        scope=_SCOPE_BY_CHANNEL[channel],
+        started_at=EPOCH - timedelta(seconds=70),
+    )
+
+    starts = _starts_of_a_client_built_over(virtual_loop, store=store, channel=channel)
+
+    assert starts == [0, 60]
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_a_start_stored_an_hour_ahead_of_the_wall_clock_holds_a_start_one_spacing_at_most(
+    *, channel: Channel, virtual_loop: VirtualLoop
+) -> None:
+    store = _store_holding_a_start(
+        channel=channel,
+        scope=_SCOPE_BY_CHANNEL[channel],
+        started_at=EPOCH + timedelta(hours=1),
+    )
+
+    starts = _starts_of_a_client_built_over(virtual_loop, store=store, channel=channel)
+
+    assert starts == [60, 120]
+
+
+@pytest.mark.parametrize(
+    ("stored_client_name", "stored_channel", "stored_scope", "channel"),
+    [
+        pytest.param("another", "ed2k", "", "ed2k", id="another client on ed2k"),
+        pytest.param("amuled", "kad", "", "ed2k", id="the ed2k scope on kad"),
+        pytest.param("another", "kad", "keroro", "kad", id="another client on kad"),
+        pytest.param("amuled", "ed2k", "keroro", "kad", id="the kad word on ed2k"),
+        pytest.param("amuled", "kad", "titar", "kad", id="another kad word"),
+    ],
+)
+def test_a_start_stored_for_another_client_channel_or_scope_holds_no_start(
+    *,
+    stored_client_name: ClientName,
+    stored_channel: Channel,
+    stored_scope: str,
+    channel: Channel,
+    virtual_loop: VirtualLoop,
+) -> None:
+    store = _store_holding_a_start(
+        channel=stored_channel,
+        scope=stored_scope,
+        started_at=EPOCH,
+        client_name=stored_client_name,
+    )
+
+    starts = _starts_of_a_client_built_over(virtual_loop, store=store, channel=channel)
+
+    assert starts == [0, 60]
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_a_client_built_20_s_after_another_on_its_store_waits_out_the_other_s_spacing(
+    *, channel: Channel, virtual_loop: VirtualLoop
+) -> None:
+    api = _api(virtual_loop)
+    store = FakeSearchStartStore()
+
+    async def main() -> None:
+        first_client = await _connected(api, search_start_store=store)
+        await first_client.search(Keyword("keroro"), channel=channel, budget_seconds=_BUDGET)
+        await asyncio.sleep(20)  # noqa: TID251
+        second_client = await _connected(api, search_start_store=store)
+        await second_client.search(
+            Keyword("keroro mission"), channel=channel, budget_seconds=_BUDGET
+        )
+
+    virtual_loop.run_until_complete(main())
+
+    assert [moment for moment, _ in _starts(api, search_type=_SEARCH_TYPE_BY_CHANNEL[channel])] == [
+        0,
+        60,
+    ]
+
+
+def test_each_start_is_written_with_its_own_instant_as_soon_as_it_is_reserved(
+    virtual_loop: VirtualLoop,
+) -> None:
+    store = FakeSearchStartStore()
+    stored_while_waiting: list[tuple[LatestSearchStart, ...]] = []
+
+    async def main() -> None:
+        client = await _connected(_api(virtual_loop), search_start_store=store)
+        searches = asyncio.gather(
+            *(
+                client.search(keyword, channel=channel, budget_seconds=_BUDGET)
+                for keyword in _KEYWORDS_SHARING_A_KAD_WORD
+                for channel in (Channel("ed2k"), Channel("kad"))
+            )
+        )
+        await asyncio.sleep(30)  # noqa: TID251
+        stored_while_waiting.append(store.read_latest_starts(_CLIENT_NAME))
+        await searches
+
+    virtual_loop.run_until_complete(main())
+
+    # At 30 s, Kad's second start is reserved for 60 s; eD2k's waits for the lock's spacing.
+    assert set(stored_while_waiting[0]) == {
+        LatestSearchStart(channel=Channel("ed2k"), scope="", started_at=EPOCH),
+        LatestSearchStart(
+            channel=Channel("kad"), scope="keroro", started_at=EPOCH + timedelta(seconds=60)
+        ),
+    }
+    assert set(store.read_latest_starts(_CLIENT_NAME)) == {
+        LatestSearchStart(
+            channel=Channel("ed2k"), scope="", started_at=EPOCH + timedelta(seconds=60)
+        ),
+        LatestSearchStart(
+            channel=Channel("kad"), scope="keroro", started_at=EPOCH + timedelta(seconds=60)
+        ),
+    }
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_a_start_the_network_refuses_is_written_still(
+    *, channel: Channel, virtual_loop: VirtualLoop
+) -> None:
+    api = _api(virtual_loop)
+    api.overrides[("POST", "/api/v1/search")] = lambda _: error(
+        400, code="amuled_rejected", message="not connected"
+    )
+    store = FakeSearchStartStore()
+
+    async def main() -> None:
+        client = await _connected(api, search_start_store=store)
+        with pytest.raises(SearchFailedError):
+            await client.search(Keyword("keroro"), channel=channel, budget_seconds=_BUDGET)
+
+    virtual_loop.run_until_complete(main())
+
+    assert store.read_latest_starts(_CLIENT_NAME) == (
+        LatestSearchStart(channel=channel, scope=_SCOPE_BY_CHANNEL[channel], started_at=EPOCH),
+    )
+
+
+def test_a_keyword_without_a_kad_word_writes_no_start_and_still_waits_a_spacing(
+    virtual_loop: VirtualLoop,
+) -> None:
+    store = FakeSearchStartStore()
+    returned_at: list[float] = []
+
+    async def main() -> None:
+        client = await _connected(_api(virtual_loop), search_start_store=store)
+        for _ in range(2):
+            await client.search(Keyword("62"), channel=Channel("kad"), budget_seconds=_BUDGET)
+            returned_at.append(asyncio.get_running_loop().time())
+
+    virtual_loop.run_until_complete(main())
+
+    assert store.read_latest_starts(_CLIENT_NAME) == ()
+    assert returned_at == [0, 60]
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_starts_that_cannot_be_read_are_logged_and_the_client_starts_without_them(
+    *, channel: Channel, caplog: pytest.LogCaptureFixture, virtual_loop: VirtualLoop
+) -> None:
+    store = _store_holding_a_start(
+        channel=channel, scope=_SCOPE_BY_CHANNEL[channel], started_at=EPOCH
+    )
+    store.reads_fail = True
+
+    starts = _starts_of_a_client_built_over(virtual_loop, store=store, channel=channel)
+
+    assert starts == [0, 60]
+    assert caplog.messages == [
+        "latest search starts not read (database is locked): the first starts not spaced"
+    ]
+
+
+@pytest.mark.parametrize("channel", ["ed2k", "kad"])
+def test_a_start_that_cannot_be_written_is_logged_and_its_search_goes_on(
+    *, channel: Channel, caplog: pytest.LogCaptureFixture, virtual_loop: VirtualLoop
+) -> None:
+    api = _api(virtual_loop)
+    store = FakeSearchStartStore()
+    store.writes_fail = True
+
+    async def main() -> None:
+        client = await _connected(api, search_start_store=store)
+        for _ in range(2):
+            await client.search(Keyword("keroro"), channel=channel, budget_seconds=_BUDGET)
+
+    virtual_loop.run_until_complete(main())
+
+    assert [moment for moment, _ in _starts(api, search_type=_SEARCH_TYPE_BY_CHANNEL[channel])] == [
+        0,
+        60,
+    ]
+    not_written = (
+        "search start not written (database is locked): a client built anew may start early"
+    )
+    assert caplog.messages == [not_written, not_written]
