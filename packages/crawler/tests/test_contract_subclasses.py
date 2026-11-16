@@ -40,6 +40,8 @@ _EXEMPTIONS: dict[str, str] = {
     "::FakeFreeSpaceMeter": "a stub: its free bytes are what its test gives it",
     "crawler/tests/fakes/adapters/driven/fake_broken_free_space_meter.py"
     "::FakeBrokenFreeSpaceMeter": "a stub: it refuses every measure",
+    "crawler/tests/fakes/adapters/driven/fake_raising_node_metric_store.py"
+    "::FakeRaisingNodeMetricStore": "a stub: it raises at every counter, by design",
     "crawler/tests/fakes/adapters/driven/fake_shutdown_requesting_ticker.py"
     "::FakeShutdownRequestingTicker": "a stub requesting the shutdown as each run starts",
 }
