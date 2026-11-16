@@ -1,7 +1,8 @@
 # Handoff: v5 lot 4b3, a bug fails its turn alone (tier Spec)
 
 Drafted by block 55's teammate from the block reports (#776, #777, #779, #780, #781, the collapsed "Block report" of
-each pull request body) and its own, for the closing block to correct. Spec:
+each pull request body) and its own. Corrected by the closing block, which also fixed the holistic review's findings
+(`.reviews/v5-lot4b3-holistic.md`, below). Spec:
 `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, lot 4b3 of its five lots (D19), decisions D8 to D13, D16, D17,
 D18.
 
@@ -9,7 +10,8 @@ D18.
 
 - **A turn ends in one of three ways** (`application/steps/supervisor.py`), told apart by the exception's type alone:
   it worked; it raised an `ExpectedError`, logged in one warning line `<work>: <error>`; or it raised anything else, a
-  bug, logged with its trace as `bug in <work>`. Either failure fails that turn alone: every other work goes on.
+  bug, logged with its trace as `bug in <work>`, the exception it was raised from kept in that trace. Either failure
+  fails that turn alone: every other work goes on.
 - **`ExpectedError`** (`domain/expected_error.py`) is the base of every error a driven port declares: `ClientError`
   (`ClientAuthError`, `ClientUnreachableError`, `SearchFailedError` among them), `StoreError`,
   `InaccessiblePathError`, `CatalogCopyError`. A test lists them by hand
@@ -27,11 +29,13 @@ D18.
   runs on. Its own alert is lot 4c's.
 - **A failed search raises** `SearchFailedError` or `ClientUnreachableError` once its backoff is set, its warning
   logged and its event dispatched; `BackoffSaver.saving()` saves in a `finally`, a cancelled search included. A
-  failed search is logged twice: by the search worker (with its backoff delay) and by the supervisor.
-- **A request to aMule lasts 60 s at most in all** (`AmuleApiClient._send`, under `asyncio.timeout`, the bound a
-  constant of the composition passed to the adapter), six times httpx's 10 s per phase; past it, a
-  `ClientUnreachableError`. The login, the one re-login a 401 allows, the retried call and the logout are each
-  bounded on their own.
+  failed search is logged twice: by the search worker (with its backoff, `backoff <seconds> s`) and by the supervisor.
+- **A request to aMule lasts 60 s at most in all** (`_send`, the adapter's module function, under `asyncio.timeout`,
+  the bound a constant of the composition passed to the adapter, which declares it as `AmuleApiClient.request_bound`),
+  six times httpx's 10 s per phase; past it, a `ClientUnreachableError`. The login, the one re-login a 401 allows, the
+  retried call and the logout are each bounded on their own.
+- **A login cancelled in flight closes its httpx client** (`_connect`, `except BaseException`): a time limit or the
+  shutdown cutting a turn in its login no longer leaves the client and its sockets open.
 - **Each client's latest search starts are kept in `local.db`**, table `latest_search_starts` (client name, channel,
   scope, instant in micros; the first three its key), schema version 16. `SearchStartWriter` / `SearchStartReader`,
   implemented by `SqliteSearchStartStore`, their contract run by it and by `FakeSearchStartStore`. The adapter writes
@@ -42,11 +46,17 @@ D18.
   `AmuleWorkTimeLimits`): the sum of the bounds on its turn's path plus `TIME_LIMIT_MARGIN`, 5 minutes. The supervisor
   races the turn against `MonotonicClock.sleep(limit)` in a `TaskGroup`, in the task that waited for the turn; a turn
   still running is cut, logged `<work>: past its time limit of <seconds> s` without a trace, and counted as a bug
-  (`TurnTimeoutError`). The yield after each turn is gone: the race always suspends at its end.
+  (`TurnTimeoutError`). The turn's own exception is kept out of the race's task group, so only the expiry's is
+  unwrapped. The yield after each turn is gone: the race always suspends at its end. The composition logs each work's
+  limit at debug level as it hands them to the lifecycle (`<work>: time limit <seconds> s`), the request bound read
+  from the client.
 - **A notification already decided is sent even when its turn is cut** (D16): the file judge, after a decision's
   write, and the download tracker, after a completion's, send through `ObservabilityDispatcher.dispatch_shielded`, a
   task of its own under `asyncio.shield`, which the dispatcher holds to its end. `shield` joins the core's asyncio
-  names (`ast-grep/rules/core-import-names.yml`).
+  names (`ast-grep/rules/core-import-names.yml`). At the shutdown, the lifecycle waits for the sends the cancelled
+  turns left (`finish_shielded_dispatches`), each within its notification timeout, inside the armed shutdown deadline,
+  before the resources close. A bug in a send whose turn was cut is logged `bug in the notification of <event>` with
+  its trace, through the dispatcher's logger.
 - **Not yet**: the bugs rule and recording the turns on the components (lot 4b4 block 10), "searches failed" and
   "connected to no network" (4b4 block 20), the restarts (4b4, 4b5).
 
@@ -56,7 +66,8 @@ The spec's section 6, those this lot reaches:
 
 - **An intermittent bug** never turns a rule failing (there is no bugs rule yet); its trace is in the log each time.
 - **No static proof of which errors are expected**: the listing test is written by hand.
-- **A notification is lost if the process dies between a decision's write and its send**, as today.
+- **A notification is lost if the process dies between a decision's write and its send**, as today; a send still in
+  flight when the shutdown deadline fires is cut with the rest.
 - **From lot 4b3 to lot 4c, a password refused while the node runs alerts nothing**: an expected error each turn, a
   line in the log.
 - **A turn that grows past its limit's 5 minutes of margin is cut as a bug**: the download works grow with the
@@ -71,8 +82,8 @@ The spec's section 6, those this lot reaches:
 | 30 | #779 | `fix/amuleapi-request-total-bound` | a request to aMule bounded at 60 s | 95, 10 |
 | 40 | #780 | `feat/search-starts-kept` | each client's latest search starts kept in `local.db` | 934, 25, accepted |
 | 50 | #781 | `feat/turn-time-limit` | each work's time limit | 459, 13 |
-| 55 | (this block) | `feat/notifications-shielded` | a decision's or a completion's notification sent even when its turn is cut | 154, 10 |
-| 90 | | `docs/lot-4b3-wrap` | the holistic review's fixes, this handoff | |
+| 55 | #782 | `feat/notifications-shielded` | a decision's or a completion's notification sent even when its turn is cut | 154, 10 |
+| 90 | | `docs/lot-4b3-wrap` | the holistic review's fixes, this handoff | 479, 25: split in two, below |
 
 - **Past a bound, accepted by the operator**: block 10 past both, the files on 2026-11-11 (the spec's row: each
   port's error re-based is one line in each of its files) and the lines on 2026-11-16 ("A": the three ways a turn
@@ -81,6 +92,10 @@ The spec's section 6, those this lot reaches:
   operator accepted past both bounds.
 - **Block 55 split out of block 50**, as the spec's row foresees: with the shield, block 50 would have been about 570
   lines and 21 files (the lead, 2026-11-16).
+- **The closing block passed the file bound** (479 lines, 25 files, 2026-11-16): its commits split after the comments'
+  rewording, 378 lines and 18 files from block 55 to it (the review's code fixes), then 101 lines and 10 files (the
+  guard of `of_search`, the names, the composition's limits read by a wiring test), this handoff and the spec's
+  corrections on top. Each part's tip passed the gate; the lead cuts the branches.
 - **Departures, per block**:
   - **10**: `ExpectedError` re-bases the errors of the **driven** ports only (the operator, 2026-11-11, "every failure
     a driven port declares"); the driving ports' errors (`MergeError`, `InvalidConfigError`, `OutOfSpaceError`,
@@ -114,6 +129,12 @@ The spec's section 6, those this lot reaches:
     `works_in_start_order` generic; the draft's "a turn ending within its limit keeps its outcome" test not kept (the
     existing end-of-turn tests hold it, shown by a mutation). The adapter publishes `ED2K`, `KAD`, `START_SPACING`,
     `kad_word_of`.
+  - **90**: the composition's limits read through a debug line it writes per work, and `AmuleWorkTimeLimits` given the
+    bound the client declares (`AmuleApiClient.request_bound`) rather than the constant beside it, so one wiring test
+    reads both: no other seam lets a test read what the composition hands the lifecycle without patching it. The two
+    doubles a test module held moved to `tests/fakes/` (`FakeRaisingNodeMetricStore`, exempted from its contract as a
+    stub, and `FakeSlowCommunityNotifier`), as `test_fake_files.py` requires. `architecture.md` §10: the sends finished
+    at the shutdown, a bug in one whose turn was cut.
   - **55**: none from the spec. From the draft (`753da98d`, #751's shield alone): the dispatcher holds its shielded
     tasks in a `set[Awaitable[None]]`, not `set[asyncio.Task[None]]`, so `shield` is the only name the core gains;
     `ObservabilityOverFakes` takes the notifier at construction (the draft assigned it after, which here would not
@@ -123,6 +144,27 @@ The spec's section 6, those this lot reaches:
     `architecture.md` §10 says a decided notification is sent even when its turn is cut.
 - **Class 1**: block 10's above; none in blocks 20 to 55.
 - **Class 2 questions**: one, block 10's line bound, answered "A" (2026-11-16).
+
+## The holistic review's findings, and their exits
+
+1 MAJOR, 13 MINOR; every one fixed in the closing block (the lead's choices, 2026-11-16).
+
+| Finding | Exit |
+|---|---|
+| MAJOR: `raise ... from None` wiped a bug's cause from its trace | fixed: the turn's exception kept out of the race's task group, re-raised after it; `test_a_bug_is_logged_with_the_exception_it_was_raised_from` |
+| a login cancelled in flight left its httpx client open | fixed: the first stack's `867df1c4` brought here, `test_a_login_cancelled_in_flight_closes_its_session` |
+| a bug in a shielded send whose caller was cancelled reached no turn | fixed: a done callback, added once the caller is cancelled, logs it `bug in the notification of <event>` through `Logger.exception`; `test_a_bug_in_a_shielded_dispatch_its_caller_left_is_logged_with_its_kind` |
+| a send in flight at the shutdown was cut once the lifecycle returned | fixed: `CrawlerLifecycle.run` awaits `finish_shielded_dispatches` after the supervisor, within the armed deadline; `test_crawler_lifecycle.py::test_a_completion_still_sending_at_the_shutdown_is_sent_before_the_run_returns` and the dispatcher's two |
+| `backoff %.1fs` | fixed: `backoff %g s`, `test_a_refused_search_warns_with_its_backoff_in_seconds`, `test_an_unreachable_client_warns_with_its_backoff_in_seconds` |
+| the words the lot made false | fixed: `sqlite_sql_executor.py` ("a bug ... propagates, and fails its turn"), `_send`'s "never a bug", `download_cycle.py`'s "a cancellation (the shutdown, the time limit)" |
+| the spec ids in comments | fixed: `START_SPACING`'s comment, the dispatcher's `(E-D13)`, the composition's `§11` and `§14`, `store_error.py`'s, each reason stated in place or dropped |
+| `_within_time_limit`'s four-line docstring | fixed: two lines |
+| `SupervisedWork.__post_init__`, `of_search`'s `ValueError` | fixed: both removed with their tests, Kad `of_search`'s `else` |
+| the composition's limits untested | fixed: `test_crawler_composition_wiring.py::test_each_work_is_handed_the_time_limit_its_path_bounds`, which also holds the request bound reaching the adapter |
+| TDD shown only on mutations | fixed: re-watched on stubs where the code can be stubbed, recorded below either way |
+| the names | fixed: `..._raises_for_the_supervisor_to_log`, the pacing tests' "Kad word", `SearchTimeLimitOf` |
+| the spec's missing `(Corrected: ...)` | fixed: D9, section 5's block 55, appendix A blocks 10 and 40 (and lot 4b4 block 40's cancelled login, brought here), appendix B's "Kad bug" and "Time limit" |
+| #776's reading guide and the handoff's words | fixed: #776's guide with every block's names and "five", by `gh pr edit`; this handoff's `_send` |
 - **`docs/migration-4x.md`**: untouched by the lot; no sentence of it became false (blocks 20, 40).
 
 ## The tests watched failing
@@ -143,7 +185,7 @@ Each behaviour test watched failing on its assertion, over a stub of its code, t
 | 10 | `test_after_a_turn_that_worked_the_work_waits_its_own_wait_alone_again` | stub B | `assert [10.0, 20.0, ....0, 60.0, ...] == [10.0, 70.0, 80.0, 90.0]` |
 | 10 | `test_a_bug_on_every_kad_search_leaves_the_ed2k_searches_going_on` | stub B | `{'kad': [0.0, 0.0, 30.0, 30.0, 60.0, 60.0, ...]} != {'kad': [0.0, 0.0, 90.0, 90.0]}` |
 | 10 | `test_a_bug_on_one_keywords_searches_leaves_the_other_keyword_searching` | stub B | `{'keroro': [0.0, 30.0, 60.0, 90.0]} != {'keroro': [0.0, 90.0]}` |
-| 10 | `test_after_a_bug_a_wait_of_its_own_longer_than_60_s_is_waited_alone` | passes on stub B, as it must; mutation: the 60 s slept, then the own wait | `assert [100.0] == [100.0, 200.0]` |
+| 10 | `test_after_a_bug_a_wait_of_its_own_longer_than_60_s_is_waited_alone` | **mutation only**: it passes on stub B, as it must, and stub A fails it on the `ExceptionGroup`; the 60 s slept, then the own wait | `assert [100.0] == [100.0, 200.0]` |
 | 10 | `test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_on` | the real supervisor, the stamp removed (stub B spins) | `Left contains 5 more items, first extra item: LoggedLine(level='error', message='bug in status reading amuled', error=IndexError('pop from empty list'))` |
 | 10 | `test_a_reading_that_raised_waits_a_full_minute_before_the_next` | no `finally` | `assert [] == [datetime.tim...a(seconds=60)]` |
 | 10 | `test_after_a_turn_that_raised_the_next_waits_the_poll_interval_too` | no `finally` | `assert [] == [datetime.tim...a(seconds=30)]` |
@@ -163,7 +205,7 @@ Each behaviour test watched failing on its assertion, over a stub of its code, t
 | 50 | `test_a_time_limit_that_is_not_positive_is_refused[0 s, -1 s]` | no check | `Failed: DID NOT RAISE ValueError` |
 | 50 | `test_work_time_limits.py`'s 7 tests | every limit the margin alone | `assert datetime.timedelta(seconds=300) == ...`; `Failed: DID NOT RAISE ValueError` (a channel aMule lacks) |
 | 50 | `test_ten_ed2k_keywords_queued_on_the_client_each_search_within_its_time_limit` | an eD2k limit counting no search ahead | `At index 6 diff: 'keroro 01' != 'keroro 07'` |
-| 50 | the race's `ExceptionGroup` unwrapped | mutation: not unwrapped | `assert [10.0] == [10.0, 20.0, 30.0]`; `error=ExceptionGroup(...) != error=KeyError('channels')` |
+| 50 | the race's `ExceptionGroup` unwrapped | **re-watched by the closing block on a stub**, the race neither unwrapping nor keeping the turn's exception out, the rest of the closing block's code | `assert [10.0] == [10.0, 20.0, 30.0]`; `error=ExceptionGroup('unhandled errors in a TaskGroup', [KeyError('channels')]) != error=KeyError('channels')`; `message='bug in hung work', error=ExceptionGroup(..., [TurnTimeoutError()]) != message='hung work: past its time limit of 30 s'` |
 | 55 | `test_observability_dispatcher.py::test_a_shielded_dispatch_whose_caller_is_cancelled_mid_send_still_sends` | `dispatch_shielded` awaiting `dispatch` directly, unshielded | `AssertionError: assert [] == [(<Audience.C...tar-node-1'))]` / `Right contains one more item: (<Audience.COMMUNITY: 'community'>, CompletedDownload(...))` |
 | 55 | `test_download_tracker.py::test_a_turn_cut_between_a_completion_s_write_and_its_send_still_notifies` | the same | `AssertionError: assert [] == [CompletedDow...node_id='n1')]` |
 | 55 | `test_file_judge.py::test_a_turn_cut_between_a_decision_s_write_and_its_send_still_notifies` | the same | `AssertionError: assert [] == [TierRise(tie...node_id='n1')]` |
@@ -172,7 +214,23 @@ Each behaviour test watched failing on its assertion, over a stub of its code, t
 - **Passing on the stubs, as they must**: block 10's `test_each_turn_comes_after_its_wait_the_first_included`, the
   starvation test, the stop and shutdown tests and `test_a_wait_that_raises_escapes_...` (behaviour `main` has);
   block 50's yield removed, held by the starvation tests already there, passing unchanged.
-- **Block 40's UTC test** first failed on an unpack (`ValueError`), then was rewritten to assert on the list.
+- **Block 40's UTC test** first failed on an unpack (`ValueError`), then was rewritten to assert on the list. The
+  closing block re-watched it on the SQLite store reading a naive instant (`.replace(tzinfo=None)`):
+  `assert [None] == [datetime.timedelta(0)]`.
+- **The guards that pass at once, by design**: block 20's refused password and block 40's 70 s and other keys, shown on
+  mutations above.
+- **The closing block's own**, each on its assertion, before its code or over a stub of it:
+
+| Test | Stub | Failure |
+|---|---|---|
+| `test_supervisor.py::test_a_bug_is_logged_with_the_exception_it_was_raised_from` | the stack's `raise ... from None` | `assert None is KeyError('channels')` / `where None = RuntimeError('a mapping bug').__cause__` |
+| `test_amule_api_client.py::test_a_login_cancelled_in_flight_closes_its_session` | `except Exception` | `assert transport.closed` / `assert False` |
+| `test_observability_dispatcher.py::test_a_bug_in_a_shielded_dispatch_its_caller_left_is_logged_with_its_kind` | no done callback | `level: 'info' != 'error'` (the dispatch's own line last, no bug line) |
+| `test_crawler_lifecycle.py::test_a_completion_still_sending_at_the_shutdown_is_sent_before_the_run_returns` | no `finish_shielded_dispatches` call | `At index 0 diff: <Audience.OPERATIONS: 'operations'> != <Audience.COMMUNITY: 'community'>` (the completion never sent) |
+| the dispatcher's two `test_finishing_the_shielded_dispatches_...` | `finish_shielded_dispatches` waiting for nothing | `assert not True`; `assert [] == [LoggedLine(l...etrics bug'))]` |
+| `test_search_worker.py`'s two `..._warns_with_its_backoff_in_seconds` | `%.1fs` | `'... failed (refused): backoff 2.0s' != '... failed (refused): backoff 2 s'`, the same for the unreachable client |
+| `test_amule_api_client.py::test_the_client_declares_the_bound_it_sets_on_each_request` | `request_bound` returning `timedelta(0)` | `assert datetime.timedelta(0) == datetime.timedelta(seconds=60)` |
+| `test_crawler_composition_wiring.py::test_each_work_is_handed_the_time_limit_its_path_bounds` | no debug line | `assert [] == ['status read... 2400 s", ...]`; then on mutations: the limits given the 10 s phase timeout (`'status reading amuled: time limit 470 s' != '... 1070 s'`), the raw keywords (`"search 'keroro mission' amuled ed2k: time limit 3240 s" != '... 2400 s'`), `of_tracking()` for the status reading (`'... 1030 s' != '... 1070 s'`), the adapter given the 10 s timeout as its bound (`'... 470 s' != '... 1070 s'`) |
 - **Block 40's `test_a_restart_re_evaluates_the_catalogue_only_once_a_policy_file_changed`** failed on `assert False`
   (its second run waited for the first's start), fixed by deleting the starts' rows between its runs.
 
@@ -197,20 +255,27 @@ no test runs that cut through the supervisor itself.
 
 | Check | Result |
 |---|---|
-| The matching decisions on the real catalog | left for the closing block |
-| `deploy/matcher.yml` and its keys | left for the closing block |
+| The matching decisions on the real catalog | **not run**: the umbrella's comparison reads the operator's `catalog.db`, outside the repository. The lot touches no matching code: `git diff --name-only origin/main...HEAD -- packages/crawler/src/p2pwatch/domain/matching packages/crawler/src/p2pwatch/adapters/driven/config` lists nothing (2026-11-16), and the gate's golden corpus passes |
+| `deploy/matcher.yml` and its keys | `git diff --stat origin/main...HEAD -- deploy/matcher.yml deploy/targets.yml` empty; `validate-config` on `deploy/`, `AMULE_API_PASSWORD` set to a placeholder: `Config valid` (2026-11-16) |
 | A healthy node's notifications, a channel's search cadence | at the release candidate |
 
 ## The lot's counts
 
-- Fix-backs, cascaded rebases, runs re-triggered: none named in the block reports; the closing block counts them.
-- Bodies the operator called unreadable: none so far.
+- Fix-backs: 0. Cascaded rebases: 0.
+- Runs re-triggered: 0 so far.
+- Bodies the operator called unreadable: 0.
+- Past a bound, the operator's acceptances: block 10's lines, "A" (2026-11-16), its files and block 40's on the spec's
+  rows.
 
 ## For lot 7 (the operator pages)
 
 - The supervisor's lines: `bug in <work>` with its trace, `<work>: <error>`, `<work>: past its time limit of
   <seconds> s`; each work's name as above.
-- A failed search is logged twice, by the search worker and by the supervisor.
+- A failed search is logged twice, by the search worker and by the supervisor; the worker's line writes
+  `backoff <seconds> s`.
+- A notification in flight at the shutdown is sent before the node stops; a bug in a notification whose turn was cut
+  is logged `bug in the notification of <event>` with its trace.
+- At debug level, each work's time limit at the start: `<work>: time limit <seconds> s`.
 - Source tracking's store failure reading its tracked downloads is logged by the supervisor, no longer by source
   tracking.
 - A password refused while the node runs no longer stops it.
@@ -234,12 +299,18 @@ no test runs that cut through the supervisor itself.
 - **Under `FakeTime`'s instant sleeps every time limit expires at once**: the lifecycle's tests moved to
   `FakeBlockingMonotonicClock` (block 50).
 - **A shielded send outlives its turn** (block 55): the dispatcher holds its task, the loop keeping only a weak
-  reference to a task; at the shutdown a send in flight goes on within its timeout while the lifecycle closes the
-  rest. Once the lifecycle returns, `asyncio.run` cancels every task left, a send still in flight included (reasoned
-  from `asyncio.run`, not tested).
-- **A bug in a shielded dispatch whose caller was already cancelled reaches no turn** (block 55): nobody awaits it, so
-  it surfaces only as asyncio's "Task exception was never retrieved". The dispatch absorbs the notifier's errors;
-  what is left (the plan, the log, the in-memory metrics) is in-process code tested at 100 %.
+  reference to a task. Once the lifecycle returns, `asyncio.run` cancels every task left, so the lifecycle finishes
+  them first (closing block).
+- **A bug in a shielded dispatch whose caller was already cancelled reaches no turn**: nobody awaits it, so on its own
+  it surfaces only as asyncio's "Task exception was never retrieved" (probed on Python 3.13.6, 2026-11-16); the done
+  callback logs it instead (closing block).
+- **`raise error from None` rewrites the error itself**: its `__cause__` set to `None`, its `__context__` hidden, so a
+  re-raise that only unwraps loses the cause from the trace. An exception raised in a `TaskGroup`'s body is wrapped in
+  its `ExceptionGroup` too; caught inside the body, it is never wrapped (closing block).
+- **`test_fake_files.py` refuses a port's implementation in a test module**, a local subclass of a fake included: a
+  double lives in `tests/fakes/`, and a stub among them is exempted in `test_contract_subclasses.py` (closing block).
+- **A done callback's argument cannot be annotated in the core**: `asyncio.Task` and `asyncio.Future` are not among the
+  core's asyncio names, so the callback is a lambda over the task's own methods (closing block).
 - **`ObservabilityOverFakes` takes its notifier at construction** (block 55): assigning `.notifier` afterwards
   replaces the attribute, not the dispatcher's notifier.
 
@@ -247,7 +318,12 @@ no test runs that cut through the supervisor itself.
 
 - Nothing ran against a real node: no turn cut, no limit measured against a real aMule's timings, no node restarted
   within a minute of a search, no amuled stalling mid-answer, no write cost of the starts on the node's disk.
-- **Integration suites**, against `p2pwatch-amule:dev` built from the tree, `-p 14711:4711`,
+- **The `orchestration_integration` suite passed** at the closing block's tip (`2f5bbf0d`, 2026-11-16):
+  `test_real_loop_runs_one_search_and_stops`, 1 passed, against `p2pwatch-amule:dev` built from the tree, `-p
+  14711:4711`, `P2PWATCH_TEST_API_HOST=127.0.0.1 P2PWATCH_TEST_API_PORT=14711`. `api_integration` and
+  `download_integration` did not run at the closing block, whose adapter changes (a property, the login's `except`)
+  their unit tests hold.
+- **Integration suites before it**, against `p2pwatch-amule:dev` built from the tree, `-p 14711:4711`,
   `P2PWATCH_TEST_API_HOST=127.0.0.1 P2PWATCH_TEST_API_PORT=14711`: block 30, `api_integration`,
   `download_integration` and `orchestration_integration`, 6 passed (2026-11-16, on `672600f1` with the block's code);
   block 40, `api_integration` and `download_integration` 5 passed, `orchestration_integration` 1 passed; block 50,
@@ -257,13 +333,12 @@ no test runs that cut through the supervisor itself.
 - The spin a refused password would cause without the restored stamps is reasoned from the code, not observed
   (block 10).
 - The matching comparison on the real catalog (What must not change).
+- No turn was cut through the supervisor itself between a decision's write and its send: the step tests cancel the
+  task running the turn, as the race does.
 
-## Left for the closing block
+## `BACKLOG.md`
 
-- The holistic review over `git diff origin/main...origin/feat/notifications-shielded`, its findings and their exits.
-- `BACKLOG.md` reconciled: the lot adds nothing; the sub-entry 4b stays open until lot 4b5.
-- The matching comparison and `validate-config` on `deploy/` (What must not change).
-- This handoff corrected: block 55's pull request number, the lot's counts, the holistic findings.
+Reconciled: the lot adds nothing, and the sub-entry 4b stays open until lot 4b5.
 
 ## Next step
 
@@ -274,5 +349,5 @@ Then lot 4b4, the restarts of the aMule client (the spec's section 5 and appendi
 recorded by the supervisor on one component per work and on each channel (block 10), "searches failed" and "connected
 to no network" (block 20), the works over the client built by one function of the composition (block 30), and
 `Restartable`, `RestartPolicy`, the client rebuilt, three times in vain at most (block 40, with #751's restart fixes
-and #752's holder). Its own stack from `main`, once lot 4b3 has merged. D16's "or its object rebuilt" rests on this
+and #752's holder; its cancelled login is already closed, by this lot's closing block). Its own stack from `main`, once lot 4b3 has merged. D16's "or its object rebuilt" rests on this
 lot's shield: a rebuild stops the works, and a send in flight finishes.
