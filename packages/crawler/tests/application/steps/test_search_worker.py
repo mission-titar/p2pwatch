@@ -328,6 +328,64 @@ async def test_transport_failure_marks_instance_down(
 
 
 @pytest.mark.asyncio
+async def test_a_refused_search_warns_with_its_backoff_in_seconds(
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+) -> None:
+    fake_time = FakeTime()
+    logger = FakeLogger()
+    worker = _worker(
+        FakeSearchClient(search_failures=[make_search_failed("refused")]),
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
+        logger=logger,
+    )
+
+    with pytest.raises(SearchFailedError):
+        await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
+
+    assert logger.lines == [
+        LoggedLine(
+            level="warning", message="client amule-1 channel ed2k failed (refused): backoff 2 s"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_client_warns_with_its_backoff_in_seconds(
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    engine: MatchingEngine,
+) -> None:
+    fake_time = FakeTime()
+    logger = FakeLogger()
+    worker = _worker(
+        FakeSearchClient(search_failures=[make_unreachable("down")]),
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        backoff=_registry(fake_time),
+        fake_time=fake_time,
+        logger=logger,
+    )
+
+    with pytest.raises(ClientUnreachableError):
+        await worker.search(Keyword("keroro"), channel=Channel("ed2k"))
+
+    assert logger.lines == [
+        LoggedLine(
+            level="warning", message="client amule-1 unreachable (down), client down, backoff 2 s"
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_a_refused_password_fails_the_search_and_backs_nothing_off(
     *,
     observation_store: SqliteObservationStore,
