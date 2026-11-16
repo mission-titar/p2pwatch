@@ -111,11 +111,10 @@ from p2pwatch.application.steps.keyword_search import keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.search_worker import SearchWorker
+from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
-from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
-from p2pwatch.application.steps.work import Work
+from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, SupervisedWork, Supervisor
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -126,12 +125,14 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
+from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.download.disk_space import download_tracking_component
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
+from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.status_reading import channel_component, client_component
 
@@ -193,9 +194,9 @@ async def shutdown_bound(*, deadline_seconds: float) -> AsyncIterator[ShutdownBo
         raise ShutdownDeadlineError(f"cut after {deadline_seconds:g} s") from error
 
 
-def works_in_start_order(
-    *, status_watcher: Work, tracking: Sequence[Work], searches: Sequence[Work]
-) -> list[Work]:
+def works_in_start_order[W](
+    *, status_watcher: W, tracking: Sequence[W], searches: Sequence[W]
+) -> list[W]:
     """The works in the order the supervisor starts them: the status reading, then download and
     source tracking where configured, then the searches, which send their requests last."""
     return [status_watcher, *tracking, *searches]
@@ -530,6 +531,12 @@ class CrawlerComposition(CrawlerRunner):
                     for channel in client.channels()
                 },
             )
+            time_limits = AmuleWorkTimeLimits(
+                request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
+                search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
+                notification_timeout=timedelta(seconds=observability.notification_timeout_seconds),
+                keywords=dedupe_keywords(crawler_config.search.keywords),
+            )
             searches = keyword_searches(
                 search_workers=workers,
                 keywords=crawler_config.search.keywords,
@@ -539,8 +546,9 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(BackoffSaver.__module__),
                 ),
                 monotonic_clock=monotonic_clock,
+                time_limit_of=time_limits.of_search,
             )
-            tracking: tuple[Work, ...] = ()
+            tracking: tuple[SupervisedWork, ...] = ()
 
             # Download and source tracking share the catalog's stores and ``local_connection``
             # (one writer, on the event loop), and the search session.
@@ -612,7 +620,10 @@ class CrawlerComposition(CrawlerRunner):
                     node_id=node_id,
                     logger=StdlibLogger(SourceWatcher.__module__),
                 )
-                tracking = (download_cycle, source_watcher)
+                tracking = tuple(
+                    SupervisedWork(work=work, time_limit=time_limits.of_tracking())
+                    for work in (download_cycle, source_watcher)
+                )
 
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
@@ -630,7 +641,14 @@ class CrawlerComposition(CrawlerRunner):
                 ),
                 backoff=backoff,
                 works=works_in_start_order(
-                    status_watcher=status_watcher, tracking=tracking, searches=searches
+                    status_watcher=SupervisedWork(
+                        work=status_watcher,
+                        time_limit=time_limits.of_status_reading(
+                            channel_count=len(client.channels())
+                        ),
+                    ),
+                    tracking=tracking,
+                    searches=searches,
                 ),
                 download_enabled=download_config is not None,
                 supervisor=Supervisor(

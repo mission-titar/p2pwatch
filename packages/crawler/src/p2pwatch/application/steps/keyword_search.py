@@ -3,13 +3,20 @@ again as soon as the channel may; the client spaces its own starts, the core set
 
 from collections.abc import Sequence
 from datetime import timedelta
+from typing import Protocol
 
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.search_worker import SearchWorker
+from p2pwatch.application.steps.supervisor import SupervisedWork
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
+
+
+# The time limit of the search of ``keyword`` on ``channel``.
+class SearchTimeLimit(Protocol):
+    def __call__(self, keyword: Keyword, /, *, channel: Channel) -> timedelta: ...
 
 
 class KeywordSearch(Work):
@@ -54,17 +61,21 @@ def keyword_searches(
     keywords: Sequence[str],
     backoff_saver: BackoffSaver,
     monotonic_clock: MonotonicClock,
-) -> list[KeywordSearch]:
-    """One search per client, channel and keyword of the config, a keyword listed twice searched
-    once and an empty one never."""
+    time_limit_of: SearchTimeLimit,
+) -> list[SupervisedWork]:
+    """One search per client, channel and keyword of the config, with its time limit, a keyword
+    listed twice searched once and an empty one never."""
     each_keyword_once = dedupe_keywords(keywords)
     return [
-        KeywordSearch(
-            keyword=keyword,
-            channel=channel,
-            search_worker=search_worker,
-            backoff_saver=backoff_saver,
-            monotonic_clock=monotonic_clock,
+        SupervisedWork(
+            work=KeywordSearch(
+                keyword=keyword,
+                channel=channel,
+                search_worker=search_worker,
+                backoff_saver=backoff_saver,
+                monotonic_clock=monotonic_clock,
+            ),
+            time_limit=time_limit_of(keyword, channel=channel),
         )
         for search_worker in search_workers
         for channel in search_worker.channels

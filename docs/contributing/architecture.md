@@ -140,7 +140,10 @@ Le port-sync n'est pas un `Work` du crawler : il tourne dans le conteneur `ed2k`
 
 Les recherches, la lecture du statut, le suivi des téléchargements et celui des sources sont des
 `Work` : une attente, puis un tour (`run_once()`), encore. Le `Supervisor` fait tourner chacun dans
-sa tâche d'un `TaskGroup` et cède la boucle d'événements après chaque tour. Un tour qui lève
+sa tâche d'un `TaskGroup`. Chaque `Work` a sa limite de temps (`SupervisedWork`) : la somme des
+bornes sur le chemin de son tour, plus 5 minutes de marge pour ce qui croît avec ce que le nœud
+suit (`composition/work_time_limits.py`). Un tour encore en cours à sa limite est coupé, écrit en
+une ligne, `<work>: past its time limit of <secondes> s`, et compte comme un bug. Un tour qui lève
 échoue seul, et les autres `Work` continuent. Une erreur attendue (`ExpectedError`, la base de
 toute erreur qu'un port piloté déclare : aMule injoignable, une recherche refusée, un mot de passe
 refusé) s'écrit en une ligne d'avertissement, `<work>: <erreur>`. Toute autre exception est un bug,
@@ -828,7 +831,7 @@ et le transmet aux alertes (`HealthAlerter`).
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`) |
+| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`) |
 | Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |

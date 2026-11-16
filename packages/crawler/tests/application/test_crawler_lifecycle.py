@@ -17,7 +17,7 @@ from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
@@ -28,6 +28,7 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
+from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
@@ -123,13 +124,17 @@ class _Crawl:
             ),
             backoff=self.backoff,
             works=[
-                _WorkWaitingForTheStop("search", on_start=self._work_started),
-                _WorkWaitingForTheStop("status", on_start=self._work_started),
+                SupervisedWork(
+                    work=_WorkWaitingForTheStop(name, on_start=self._work_started),
+                    time_limit=timedelta(days=1),
+                )
+                for name in ("search", "status")
             ],
             download_enabled=download_enabled,
             supervisor=Supervisor(
                 run_state_reader=self.run_state,
-                monotonic_clock=self.fake_time.monotonic,
+                # Its sleeps never end: with instant ones, every time limit would expire at once.
+                monotonic_clock=FakeBlockingMonotonicClock(),
                 logger=FakeLogger(),
             ),
             logger=self.logger,
