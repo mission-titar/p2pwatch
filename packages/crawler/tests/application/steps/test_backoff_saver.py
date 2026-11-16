@@ -1,10 +1,14 @@
 """The backoff every search shares is saved after each search that changed it, so a restarted
 node waits out what is left of it."""
 
+import asyncio
 from datetime import timedelta
+
+import pytest
 
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
+from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -39,6 +43,11 @@ class _Searches:
     def kad_refused(self) -> None:
         with self.saver.saving():
             self.backoff.record_failure(_KAD)
+
+    def kad_refused_then_left_by(self, error: BaseException) -> None:
+        with self.saver.saving():
+            self.backoff.record_failure(_KAD)
+            raise error
 
     def kad_answered(self) -> None:
         with self.saver.saving():
@@ -91,3 +100,19 @@ def test_a_refused_save_is_logged_and_tried_again_after_the_next_search() -> Non
         delay=timedelta(seconds=120),
     )
     assert searches.state.saved == [{_KAD: second_attempt}]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [SearchFailedError("refused"), asyncio.CancelledError()],
+    ids=["a-search-that-raised", "a-search-cancelled"],
+)
+def test_a_search_left_by_an_exception_after_changing_the_backoff_still_saves_it(
+    error: BaseException,
+) -> None:
+    searches = _Searches()
+
+    with pytest.raises(type(error)):
+        searches.kad_refused_then_left_by(error)
+
+    assert [set(saved) for saved in searches.state.saved] == [{_KAD}]

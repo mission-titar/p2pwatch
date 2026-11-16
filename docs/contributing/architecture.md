@@ -282,9 +282,11 @@ Points clés en chemin :
   les minutes, par canal (`connected`, `connectable`), et alerte sur un échec qui dure : 5 min pour un
   canal, 2 min pour l'API injoignable. La fin de l'alerte part environ neuf lectures après le
   rétablissement (§10.1).
-- **Résilience** : `BackoffSaver`, que les recherches partagent, écrit le backoff après chaque
-  recherche qui l'a changé ; une `StoreError` à l'écriture est journalisée, et l'écriture retentée
-  après la recherche suivante.
+- **Résilience** : une recherche refusée ou un client injoignable fait échouer le tour une fois le
+  backoff posé et l'événement émis, et le superviseur le journalise en une ligne (§3). `BackoffSaver`,
+  que les recherches partagent, écrit le backoff après chaque recherche qui l'a changé, échouée ou
+  annulée comprise ; une `StoreError` à l'écriture est journalisée, et l'écriture retentée après la
+  recherche suivante.
 
 ### 5.1 Une recherche, de bout en bout
 
