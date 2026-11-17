@@ -1,4 +1,4 @@
-"""Apprise notifier: each target URL a service, named by its scheme and its audience (E-D7).
+"""Apprise notifier: each target URL a service, named by its scheme and its audience.
 
 ADAPTER ring (implements ``Notifier``). A service is named by its URL's scheme and its audience,
 never by its URL, which carries a webhook's token. On a ``node_id``'s first notification to a
@@ -9,7 +9,8 @@ line is sent untitled, its severity mapped. Every message is markdown (a Discord
 every ``@`` neutralised, and each apprise object's asset names the node (spec
 discord-embed-notifications §4). Any answer but a success raises ``NotificationRefusedError``, a
 URL apprise could not load included. ``apprise_factory`` builds an apprise object:
-``apprise.Apprise`` from the composition. The timeout lives in the dispatch step (E-D13).
+``apprise.Apprise`` from the composition. The timeout lives in the dispatch step, which absorbs a
+failed send.
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this

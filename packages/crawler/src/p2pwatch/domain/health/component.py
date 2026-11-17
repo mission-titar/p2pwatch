@@ -29,7 +29,7 @@ class Component:
         rules: tuple[HealthRule, ...],
     ) -> None:
         self.name = name  # "client amuled", as the log names it
-        self.client_name = client_name  # "amuled", as the alerts name it; None for the webui
+        self.client_name = client_name  # "amuled" in the alerts; None for the webui, the services
         self.channel = channel  # "kad" for a part of one channel, as the alerts name it
         self._latest_detected: dict[HealthRule, tuple[bool, ...]] = dict.fromkeys(rules, ())
         self._states = dict.fromkeys(rules, HealthState.UNKNOWN)

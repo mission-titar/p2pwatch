@@ -107,10 +107,21 @@ def _source_alert(
 
 class TestAppriseNotifier(NotifierContract):
     def notifier(self) -> Notifier:
-        return _notifier()[0]
+        notifier, self._built = _notifier()
+        return notifier
 
     def refusing_notifier(self) -> Notifier:
         return _notifier(apprise.AppriseResultStatus.FAILURE)[0]
+
+    def configured_services(self) -> tuple[NotificationService, ...]:
+        return (_DISCORD, _NTFY, _SECOND_DISCORD)
+
+    def sent_under(self) -> list[str]:
+        return [
+            apprise_object.asset.app_id
+            for apprise_object in self._built
+            for _ in apprise_object.sent
+        ]
 
 
 def test_each_url_is_a_service_named_by_its_scheme_and_audience_a_second_alike_by_its_ordinal() -> (

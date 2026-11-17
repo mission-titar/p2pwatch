@@ -16,5 +16,5 @@ class Notifier(ABC):
 
     @abstractmethod
     async def notify(self, service: NotificationService, *, notification: Notification) -> None:
-        """Sends one notification to ``service``, titled for the node it carries; raises
+        """Sends one notification to ``service``, under the name of the node it carries; raises
         ``NotificationRefusedError`` when the service refuses it."""
