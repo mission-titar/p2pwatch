@@ -1,6 +1,11 @@
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
-from p2pwatch.domain.observability.notification_sends import SENDS_FAILED, notifier_component
+from p2pwatch.domain.observability.notification_sends import (
+    SENDS_FAILED,
+    NotificationService,
+    notifier_component,
+)
+from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.work_components import BUGS
 
 
@@ -40,3 +45,15 @@ def test_the_notifier_s_part_is_named_notifier_and_by_no_client_or_channel() -> 
     notifier = notifier_component()
 
     assert (notifier.name, notifier.client_name, notifier.channel) == ("notifier", None, None)
+
+
+def test_a_service_is_named_by_its_scheme_and_its_audience_a_second_alike_by_its_ordinal() -> None:
+    services = (
+        NotificationService(scheme="discord", audience=Audience.COMMUNITY),
+        NotificationService(scheme="discord", audience=Audience.COMMUNITY, ordinal=2),
+        NotificationService(scheme="ntfy", audience=Audience.OPERATIONS),
+    )
+
+    names = [str(service) for service in services]
+
+    assert names == ["discord community", "discord community 2", "ntfy operations"]
