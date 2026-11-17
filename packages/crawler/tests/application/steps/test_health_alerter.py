@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import replace
 
 import pytest
@@ -23,6 +24,7 @@ from p2pwatch.domain.status_reading import (
     client_component,
 )
 from p2pwatch.domain.work_components import BUGS, status_reading_component
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -225,3 +227,34 @@ async def test_the_disk_failing_on_a_node_without_a_floor_raises() -> None:
             on=_DOWNLOAD_TRACKING,
             min_free_bytes=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
+    # The rule is already failing once its alert is sent: a send lost here is never sent again.
+    notifier = FakeHeldNotifier()
+    dispatcher = ObservabilityDispatcher(
+        logger=FakeLogger(),
+        node_metric_writer=FakeNodeMetricStore(),
+        notifier=notifier,
+        notification_timeout_seconds=5.0,
+    )
+    alerter = HealthAlerter(
+        observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
+    )
+    transition = HealthTransition(
+        component=_AMULE,
+        rule=CLIENT_UNREACHABLE,
+        previous=HealthState.HEALTHY,
+        current=HealthState.FAILING,
+    )
+    turn = asyncio.create_task(alerter.send(transition))
+    await notifier.reached.wait()
+
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    notifier.released.set()
+    await notifier.wait_until_sent(timeout_seconds=1.0)
+
+    assert [notification for _, notification in notifier.calls] == [_UNREACHABLE]

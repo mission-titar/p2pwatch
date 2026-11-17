@@ -54,7 +54,7 @@ class ObservabilityDispatcher:
 
     async def dispatch_shielded(self, event: Event) -> None:
         """Dispatches ``event`` in a task of its own, which goes on when the caller is cancelled:
-        a turn cut at its time limit right after a decision's write still sends its notification."""
+        a turn cut by its time limit or a rebuild right after a decision's write still sends it."""
         dispatch = asyncio.ensure_future(self.dispatch(event))
         self._shielded_dispatches.add(dispatch)
         dispatch.add_done_callback(self._shielded_dispatches.discard)

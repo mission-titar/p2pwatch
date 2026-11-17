@@ -770,8 +770,10 @@ Une notification à la communauté y est une valeur typée (`TierRise`, `SourceA
 le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLogLine`). Un événement
 qui notifie porte son `node_id`, que sa notification reprend.
 Une notification déjà décidée part même quand son tour est coupé : le juge des fichiers, après
-l'écriture d'une décision, et le suivi des téléchargements, après celle d'une complétion, l'envoient
-par `dispatch_shielded`, dans une tâche que l'annulation du tour n'atteint pas. À l'arrêt, le
+l'écriture d'une décision, le suivi des téléchargements, après celle d'une complétion, le suivi des
+sources, après celle de ses points, et `HealthAlerter`, une fois l'état de sa règle changé, l'envoient
+par `dispatch_shielded`, dans une tâche que l'annulation du tour n'atteint pas, qu'elle vienne de
+sa limite de temps ou d'une reconstruction de son objet. À l'arrêt, le
 cycle de vie attend ces envois, chacun dans son délai de notification, avant de fermer les
 ressources. Un bug d'un tel envoi, son tour déjà coupé, s'écrit `bug in the notification of
 <événement>` avec sa trace. Une notification décidée se perd seulement si le processus meurt
