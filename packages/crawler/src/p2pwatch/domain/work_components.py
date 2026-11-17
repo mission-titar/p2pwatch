@@ -32,3 +32,8 @@ def keyword_search_component(
 def source_tracking_component(client_name: ClientName) -> Component:
     """The tracking of the downloads' sources, judged by its bugs: "source tracking amuled"."""
     return Component(name=f"source tracking {client_name}", client_name=client_name, rules=(BUGS,))
+
+
+def webui_component() -> Component:
+    """The webui, judged by the bugs its thread watch finds: "webui"."""
+    return Component(name="webui", client_name=None, rules=(BUGS,))

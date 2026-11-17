@@ -138,8 +138,8 @@ flowchart TB
 Le port-sync n'est pas un `Work` du crawler : il tourne dans le conteneur `ed2k` (§9), et
 `crawler.yml` refuse une section `port_sync:`.
 
-Les recherches, la lecture du statut, le suivi des téléchargements et celui des sources sont des
-`Work` : une attente, puis un tour (`run_once()`), encore. Le `Supervisor` fait tourner chacun dans
+Les recherches, la lecture du statut, le suivi des téléchargements, celui des sources et la
+surveillance du thread de la webui sont des `Work` : une attente, puis un tour (`run_once()`), encore. Le `Supervisor` fait tourner chacun dans
 sa tâche d'un `TaskGroup`. Chaque `Work` a sa limite de temps (`SupervisedWork`) : la somme des
 bornes sur le chemin de son tour, plus 5 minutes de marge pour ce qui croît avec ce que le nœud
 suit (`composition/work_time_limits.py`). Un tour encore en cours à sa limite est coupé, écrit en
@@ -150,14 +150,16 @@ refusé) s'écrit en une ligne d'avertissement, `<work>: <erreur>`. Toute autre 
 écrit avec sa trace, `bug in <work>`, et le tour suivant de ce `Work` attend au moins 60 s : le
 plus tardif de ces 60 s et de sa propre attente, jamais leur somme. Une attente qui lève arrête
 encore le nœud. Chaque `Work` se nomme dans ces lignes : `status reading amuled`,
-`download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`. À l'arrêt
+`download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`,
+`webui thread watch`. À l'arrêt
 demandé, il arme le délai d'arrêt, puis annule chaque `Work`. L'attente vient avant chaque tour, le premier
 compris, et chaque `Work` la calcule depuis son propre état : pour une recherche, la fin du backoff
 de son client et de son canal, si bien qu'un backoff repris au démarrage retarde aussi la première
 (§5) ; pour le statut, ce qui reste de la minute depuis la fin de la lecture précédente, rien avant
 la première ; pour les téléchargements, `download.poll_interval_seconds` ou le réveil d'une
 décision, au premier venu, rien avant le premier tour ; pour les sources, ce qui reste de
-`download.sources_interval_seconds` depuis le début du tour précédent, rien avant le premier.
+`download.sources_interval_seconds` depuis le début du tour précédent, rien avant le premier ;
+pour la surveillance de la webui, une minute, avant le premier tour compris.
 
 ## 4. Architecture interne : six hexagones (Clean / Hexagonal)
 
@@ -824,8 +826,10 @@ partie. Chaque tâche que le nœud répète est enfin jugée sur ses bugs (`BUGS
 `domain/work_components.py`) : après chaque tour, le `Supervisor` enregistre si le tour a rencontré
 un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status reading amuled`,
 `download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`) et, pour une
-recherche, sur celle de son canal. Un bug 3 tours d'affilée met la partie en échec, moins de 2 sur
-les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
+recherche, sur celle de son canal. La webui est une partie aussi (`webui`) : chaque minute,
+`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug ; tant que
+la webui ne peut être reconstruite, la politique de redémarrage ne fait rien de ses bugs. Un bug 3
+tours d'affilée met la partie en échec, moins de 2 sur les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
 pour « searches failed » et « connected to no network ». Le client aMule lui-même n'a pas cette
 règle : aucun tour n'est le sien. `NodeHealth` journalise chaque changement d'état et le transmet
 aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
@@ -881,7 +885,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois ; `amule_client_restart_policy`, la politique de redémarrage du client), `composition/restart_policy_built_later.py` (`RestartPolicyBuiltLater`, la politique telle que `NodeHealth` l'atteint) |
 | Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
-| Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
+| Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `webui_thread_watch.py` (`WebuiThreadWatch`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
 | Recherche (pure) | `domain/search/` (`keywords`, `backoff`) |

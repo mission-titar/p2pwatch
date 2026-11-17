@@ -10,6 +10,7 @@ from p2pwatch.domain.work_components import (
     keyword_search_component,
     source_tracking_component,
     status_reading_component,
+    webui_component,
 )
 
 _AMULED = ClientName("amuled")
@@ -88,3 +89,13 @@ def test_each_task_s_part_fails_at_its_third_bug_in_a_row(
     part_of: _PartOf,
 ) -> None:
     assert _changes(part_of(_AMULED), True, True, True) == [None, None, HealthState.FAILING]
+
+
+def test_the_webui_s_part_is_named_webui_and_of_no_client() -> None:
+    webui = webui_component()
+
+    assert (webui.name, webui.client_name, webui.channel) == ("webui", None, None)
+
+
+def test_the_webui_s_part_fails_at_its_third_bug_in_a_row() -> None:
+    assert _changes(webui_component(), True, True, True) == [None, None, HealthState.FAILING]

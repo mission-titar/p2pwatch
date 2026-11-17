@@ -23,13 +23,14 @@ from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.webui_thread_watch import WebuiThreadWatch
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.amule_client_works import (
     AmuleClientWorks,
     DownloadSteps,
     amule_client_restart_policy,
 )
-from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
+from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN, AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
 from p2pwatch.domain.health.component import Component, HealthTransition
@@ -37,7 +38,7 @@ from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_components import BUGS, webui_component
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -327,7 +328,11 @@ async def _rebuilt(amule_client: FakeRestartable) -> None:
 
 
 async def _rebuilds_once_failing(
-    part: Component, *, works: Sequence[SupervisedWork], node: _Node
+    part: Component,
+    *,
+    works: Sequence[SupervisedWork],
+    works_restarting_nothing: Sequence[SupervisedWork] = (),
+    node: _Node,
 ) -> int:
     """How many times the client is rebuilt once the bugs rule of ``part`` turns failing, its
     restart policy and the supervisor wired as the node wires them."""
@@ -339,7 +344,12 @@ async def _rebuilds_once_failing(
         node_health=node.node_health,
         logger=FakeLogger(),
     )
-    policy = amule_client_restart_policy(amule_client, works=works, supervisor=supervisor)
+    policy = amule_client_restart_policy(
+        amule_client,
+        works=works,
+        works_restarting_nothing=works_restarting_nothing,
+        supervisor=supervisor,
+    )
     supervision = asyncio.create_task(supervisor.supervise((), arm_shutdown_bound=lambda: None))
 
     await policy(
@@ -380,3 +390,27 @@ async def test_bugs_on_any_part_a_work_is_recorded_on_have_the_supervisor_rebuil
             "search 'titar' amuled kad",
         ]
     }
+
+
+async def test_bugs_on_the_webui_rebuild_nothing_and_leave_the_client_s_restarts_as_they_are(
+    node: _Node,
+) -> None:
+    works = node.client_works(downloading=False).over(node.client(FakeAmuleApi()))
+    webui = webui_component()
+    watch = SupervisedWork(
+        work=WebuiThreadWatch(thread_alive=lambda: False, monotonic_clock=node.time.monotonic),
+        time_limit=TIME_LIMIT_MARGIN,
+        components=(webui,),
+    )
+
+    on_the_webui = await _rebuilds_once_failing(
+        webui, works=works, works_restarting_nothing=[watch], node=node
+    )
+    on_a_search = await _rebuilds_once_failing(
+        _named(works, name="search 'titar' amuled kad").components[0],
+        works=works,
+        works_restarting_nothing=[watch],
+        node=node,
+    )
+
+    assert (on_the_webui, on_a_search) == (0, 1)
