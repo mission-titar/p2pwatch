@@ -84,7 +84,9 @@ lot 4 spec's decision numbers, which this spec does not keep.
   work's own (the backoff, the status period), outside the turn's time limit.* Lot 4b2, the webui's watch lot 4b5.
 - **D8. A turn ends in one of three ways: it worked; it met an expected error, logged in one line; or it met a bug, any
   other exception, logged with its trace. An error or a bug fails that turn alone. After a bug, the next turn waits at
-  least 60 s.** *The part that must be correct for the rest to fail safely is small (Armstrong); without the wait, a
+  least 60 s.** (Corrected: the works a rebuild hands back take their first turn as at the node's
+  start, each after its own wait alone, the closing block of lot 4b4 on 2026-11-17: they are new
+  objects, which no bug has met yet.) *The part that must be correct for the rest to fail safely is small (Armstrong); without the wait, a
   bug that strikes at once would rerun at full speed, a trace per turn.* Lot 4b3.
 - **D9. Every error a port of the core declares derives from `ExpectedError`; any other exception is a bug.**
   (Corrected: every error a driven port declares, the operator on 2026-11-11, "every failure a driven port declares";
@@ -115,7 +117,10 @@ lot 4 spec's decision numbers, which this spec does not keep.
   restarted.* Lot 4b4, the webui and the notifier lot 4b5.
 - **D15. An object is rebuilt three times at most in vain. A rebuild is in vain when a bugs rule of its components
   detects bugs to failing again before they are all healthy; the count resets once they are. A rebuild that raises
-  leaves the object's components failing and is tried again 60 s later, counted in vain.** *Three echoes OTP's bounded
+  leaves the object's components failing and is tried again 60 s later, counted in vain.**
+  (Corrected: a rebuild raising an `ExpectedError`, such as a refused password at the new login, is
+  logged in one warning line, any other exception with its trace, as D8 logs a turn; lot 4b4 block
+  40.) *Three echoes OTP's bounded
   restarts: a bug that keeps coming back costs at most three rebuilds, aMule itself untouched.* Lot 4b4, the webui and
   the notifier lot 4b5.
 - **D16. A notification already decided is sent even when its turn is cut or its object rebuilt.** *Cutting the turn
@@ -254,8 +259,8 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 |---|---|---|---|
 | 10 | `feat/health-rule-bugs` | the bugs rule, recorded by the supervisor | #736, 424 lines, 19 files |
 | 20 | `feat/health-rules-searches-and-network` | "searches failed", "connected to no network" | #737, 280 lines, 14 files |
-| 30 | `refactor/client-works-built-together` | the works over the client built by one function | #739, 315 lines, 1 file |
-| 40 | `feat/client-rebuilt` | `Restartable`, `RestartPolicy`, the client rebuilt | #738, 1 198 lines, 21 files, accepted |
+| 30 | `refactor/client-works-built-together` | the works over the client built by one function | #739, 315 lines, 1 file (Corrected: 790 lines, 7 files, the moved code counted twice, accepted by the operator on 2026-11-17, "A") |
+| 40 | `feat/client-rebuilt` | `Restartable`, `RestartPolicy`, the client rebuilt | #738, 1 198 lines, 21 files, accepted (Corrected: 1 427 lines, 30 files, `SupervisedWork`'s move, the holder, the core's two asyncio names and the tests written out) |
 | 90 | `docs/lot-4b4-wrap` | closing block | |
 
 ### Lot 4b5, the webui and the notifier
@@ -509,15 +514,26 @@ its turn, the first one included, its wait computed from its own state.
 - **Block 30** (draft #739, and #753's tests): the works over the aMule client built by one function of the
   composition, which the first build and every rebuild call; the download steps that hold no client built once;
   behaviour unchanged; the mapping of components to their objects and the works' functions tested as the node wires
-  them.
+  them. (Corrected: one class, `AmuleClientWorks`, whose `over(client)` is that function and whose constructor builds
+  the parts once, `keyword_searches` taking each search's part from it, accepted by the lead on 2026-11-17; the
+  mapping and its test came in the closing block, `amule_client_restart_policy` beside the class.)
 - **Block 40** (draft #738, and #751's restart fixes, #752's holder): the `Restartable` port, its contract and fake;
   `RestartPolicy`, a subscriber of `NodeHealth`, handing the supervisor one `RestartRequest`; `Supervisor.add` for the
-  rebuilt works. The rebuild runs in a task of the supervisor, never in the turn that triggered it: the supervisor stops
-  and awaits the object's works, the object rebuilds and hands its new works back, and only the bugs rules of its
+  rebuilt works. (Corrected: no public `Supervisor.add`: the policy hands the request to `Supervisor.restart`, which
+  queues it for the supervisor's task of restarts, and the supervisor runs the works the object hands back itself;
+  `Restartable` is generic in the works it hands back, `Restartable[W]`, since a port cannot import the steps, and
+  `SupervisedWork` moved to `work.py`, so the policy and the supervisor import each other's names without a cycle.) The rebuild runs in a task of the supervisor, never in the turn that triggered it: the supervisor stops
+  and awaits the object's works (Corrected: once, before the first attempt, not before each: a rebuild that raises
+  hands no work back), the object rebuilds and hands its new works back, and only the bugs rules of its
   components are forgotten (forgetting a reading's rule would lose an open alert's end or send it twice). The aMule
   client's `Restartable`, in its own composition module, rebuilds every object holding the client; the composition
-  names each component's object, a component without one refused at construction; the parts built before `NodeHealth`
-  and the supervisor reach them through one holder, refusing a read before they are set. Rebuilds in vain counted, none
+  names each component's object, a component without one refused at construction (Corrected: the refusal is the
+  policy's, built over the map and the works: a part of two objects, a work recorded on no part or on a part of no
+  object, brought back by the closing block; the map is derived from the works the client's first build hands
+  back); the parts built before `NodeHealth` and the supervisor reach them through one holder, refusing a read before
+  they are set (Corrected: the holder holds the restart policy alone, `RestartPolicyBuiltLater`: the policy is built
+  after the works whose parts it maps, which record on `NodeHealth`; nothing reaches the supervisor before it is
+  built, the works being handed back rather than added). Rebuilds in vain counted, none
   past three, the count reset when every bugs rule of the object's components is healthy again; a rebuild that raises
   records detected on each bugs rule of the object's components and is tried again after 60 s; a login cancelled
   during a rebuild closes its httpx client (Corrected: brought into lot 4b3's closing block, the time limit cancelling a
