@@ -6,8 +6,8 @@ import pytest
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.restart_policy import RestartPolicy, RestartRequest
 from p2pwatch.composition.restart_policy_built_later import (
-    PartNotBuiltYetError,
     RestartPolicyBuiltLater,
+    RestartPolicyNotSetError,
 )
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.work_components import BUGS, status_reading_component
@@ -23,7 +23,7 @@ async def test_a_change_of_health_passed_on_before_the_policy_is_set_raises() ->
     part = status_reading_component(ClientName("amuled"))
 
     with pytest.raises(
-        PartNotBuiltYetError, match="^the restart policy, reached before it is set$"
+        RestartPolicyNotSetError, match="^the restart policy, reached before it is set$"
     ):
         for _ in range(3):
             await node_health.record(on=part, rule=BUGS, detected=True)
@@ -36,7 +36,9 @@ async def test_once_set_the_policy_takes_each_change_of_health() -> None:
     requests: list[RestartRequest] = []
     client = FakeRestartable()
     later.set(
-        RestartPolicy(components_of={client: [part]}, restart=requests.append, logger=FakeLogger())
+        RestartPolicy(
+            components_of={client: [part]}, works=(), restart=requests.append, logger=FakeLogger()
+        )
     )
 
     for _ in range(3):

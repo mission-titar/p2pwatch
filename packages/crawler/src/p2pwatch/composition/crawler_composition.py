@@ -100,7 +100,6 @@ from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.application.use_cases.describe_file import DescribeFile
@@ -114,7 +113,11 @@ from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
-from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
+from p2pwatch.composition.amule_client_works import (
+    AmuleClientWorks,
+    DownloadSteps,
+    amule_client_restart_policy,
+)
 from p2pwatch.composition.restart_policy_built_later import RestartPolicyBuiltLater
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
@@ -558,16 +561,8 @@ class CrawlerComposition(CrawlerRunner):
                 node_health=node_health,
                 logger=StdlibLogger(Supervisor.__module__),
             )
-            # Every part a work over the client is recorded on is the client's: its rebuild
-            # repairs them all, and none lacks its object.
             restart_policy.set(
-                RestartPolicy(
-                    components_of={
-                        amule_client: [c for supervised in works for c in supervised.components]
-                    },
-                    restart=supervisor.restart,
-                    logger=StdlibLogger(RestartPolicy.__module__),
-                )
+                amule_client_restart_policy(amule_client, works=works, supervisor=supervisor)
             )
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
@@ -596,6 +591,6 @@ class CrawlerComposition(CrawlerRunner):
             ) as arm_shutdown_bound:
                 await crawler_lifecycle.run(arm_shutdown_bound=arm_shutdown_bound)
                 _print_progress("Workers stopped.")
-                _print_progress("1 amuled session(s) closing…")
+                _print_progress("amuled session closing…")
                 await stack.aclose()
                 _print_progress("Databases closed: exiting.")

@@ -538,6 +538,7 @@ class _RebuiltNode:
             components_of={
                 self.amule_client: [self._status_reading_part, *self._channel_parts.values()]
             },
+            works=self._works,
             restart=self._supervisor.restart,
             logger=FakeLogger(),
         )

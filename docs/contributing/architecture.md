@@ -848,8 +848,11 @@ après trois reconstructions qui ont levé, rien ne tourne plus sur lui jusqu'au
 conteneur. Un réseau en panne n'est jamais réparé par un redémarrage : seule la règle des bugs
 redémarre. `AmuleClientRestartable` (`composition/amule_client_restartable.py`) déconnecte
 l'ancienne session, connecte un client neuf et rend ses `Work` par `AmuleClientWorks.over` ; la
-composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent leurs tours, si
-bien qu'aucune n'est sans objet.
+composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent leurs tours
+(`amule_client_restart_policy`). La politique refuse, à sa construction, une partie de deux objets
+et un `Work` qu'aucun redémarrage n'arrêterait : sans partie, ou sur une partie d'aucun objet. Les
+`Work` rendus prennent leur premier tour comme au démarrage du nœud, sans les 60 s qui suivent un
+bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 
 ## 11. Invariants de conception (récapitulatif)
 
@@ -875,8 +878,8 @@ bien qu'aucune n'est sans objet.
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`) |
-| Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`) |
+| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois ; `amule_client_restart_policy`, la politique de redémarrage du client), `composition/restart_policy_built_later.py` (`RestartPolicyBuiltLater`, la politique telle que `NodeHealth` l'atteint) |
+| Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
