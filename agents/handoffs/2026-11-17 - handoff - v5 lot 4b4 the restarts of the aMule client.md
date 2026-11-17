@@ -1,8 +1,8 @@
 # Handoff: v5 lot 4b4, the restarts of the aMule client (tier Spec)
 
 Drafted by block 40's teammate from the block reports (#785, #786, #788, the collapsed "Block report" of
-each pull request body) and its own, for the closing block to correct, the holistic review's findings
-included. Spec: `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, lot 4b4 of its five lots (D19),
+each pull request body) and its own. Corrected by the closing block, which also fixed the holistic
+review's findings (`.reviews/v5-lot4b4-holistic.md`, below). Spec: `agents/specs/2026-11-15-v5-lot-4b-health-model.md`, lot 4b4 of its five lots (D19),
 decisions D14, D15, D17, D18.
 
 ## Current state
@@ -29,10 +29,12 @@ decisions D14, D15, D17, D18.
 - **`RestartPolicy`** (`application/steps/restart_policy.py`), subscribed to `NodeHealth` after
   `HealthAlerter`, takes only the bugs rule's changes. When one turns failing on a part, it hands the
   supervisor a `RestartRequest` for the object that part is of (`Supervisor.restart`, through the
-  `Restarter` callback). Its phases per object: running, restarting (a request out, another part failing
+  `RestartRunner` callback). Its phases per object: running, restarting (a request out, another part failing
   meanwhile requests nothing), rebuilt (a bugs rule failing again counts that rebuild in vain and requests
   again), given up (after three in vain). Every bugs rule of the object's parts healthy again resets the
   count and the phase. A rebuild that raised counts in vain through `RestartRequest.rebuild_raised()`.
+  At its construction the policy refuses a part of two objects, and a work no restart would stop: one
+  recorded on no part, or on a part of no object.
 - **The supervisor runs each restart in a task of its own** (`Supervisor._restart`, under a task group of
   the restarts, itself a task of the supervision): it cancels and awaits every work recorded on one of the
   object's parts, has the object rebuilt, then `RestartRequest.rebuilt()` forgets the bugs rule of each
@@ -46,11 +48,18 @@ decisions D14, D15, D17, D18.
   session out, builds a client (held before its login, so the shutdown closes it even when the login is
   cut), logs it in, its first searches spaced from the latest starts it reads, and returns
   `AmuleClientWorks.over(new client)`. The resource stack closes the client held then (`close()`).
-- **The composition** maps every part the first works are recorded on to the client's `Restartable`, so
-  no part a turn is recorded on lacks its object; the policy indexes its parts directly. `NodeHealth` is
-  built before the works, which record on it, and the policy after them, so `NodeHealth` reaches the policy
-  through `RestartPolicyBuiltLater` (`composition/restart_policy_built_later.py`), which raises
-  `PartNotBuiltYetError` on a change passed on before it is set.
+- **The composition** builds the policy with `amule_client_restart_policy`, beside `AmuleClientWorks`:
+  every part the first works are recorded on is the client's, and the supervisor's `restart` runs each
+  request. `NodeHealth` is built before the works, which record on it, and the policy after them, so
+  `NodeHealth` reaches the policy through `RestartPolicyBuiltLater`
+  (`composition/restart_policy_built_later.py`), which raises `RestartPolicyNotSetError` on a change
+  passed on before it is set.
+- **An alert is sent even when a rebuild cuts its turn**: `HealthAlerter` and source tracking's alerts
+  (`SourceFirstUseful`, `SourceReappeared`) go through `dispatch_shielded`, as the decisions' and the
+  completions' notifications since lot 4b3. The rule is already failing when its alert is sent, and a
+  source's points are already written: a send lost there would never be decided again.
+- **The works a rebuild hands back take their first turn as at the node's start**, each after its own
+  wait, without the 60 s that follow a bug: they are new objects.
 - **`Component.state(rule)`** reads a rule's state; **`Component.forget(rule)`** forgets its latest checks,
   the rule unknown again with no change of health to pass on.
 - **`SupervisedWork`** moved beside `Work` (`application/steps/work.py`).
@@ -76,8 +85,8 @@ The spec's section 6, those this lot reaches:
 | 10 | #785 | `feat/health-rule-bugs` | the bugs rule, recorded by the supervisor | 425, 19 |
 | 20 | #786 | `feat/health-rules-searches-and-network` | "searches failed", "connected to no network" | 312, 13 |
 | 30 | #788 | `refactor/client-works-built-together` | the works over the client built by one class, the parts built once | 790, 7, accepted |
-| 40 | | `feat/client-rebuilt` | `Restartable`, `RestartPolicy`, the client rebuilt | 1427, 30, accepted |
-| 90 | | `docs/lot-4b4-wrap` | closing block | |
+| 40 | #789 | `feat/client-rebuilt` | `Restartable`, `RestartPolicy`, the client rebuilt | 1427, 30, accepted |
+| 90 | | `docs/lot-4b4-wrap` | the holistic review's fixes: the alerts shielded, the client's policy built beside its works, the refusal at construction, the names; this handoff, the spec's corrections | 341, 17 |
 
 - **Past a bound, accepted by the operator**: block 30 past the line bound ("A", 2026-11-17: the moved
   code counts twice, about 185 lines out of `run_crawler` and 277 into the new module, and its own tests
@@ -111,16 +120,17 @@ The spec's section 6, those this lot reaches:
     - No public `Supervisor.add` (the spec's "`Supervisor.add` for the rebuilt works", #785's reading
       guide): the object hands its works back to the supervisor, which runs them itself (`_add`). The one
       public method is `Supervisor.restart(request)`, which the policy calls through its `Restarter`
-      callback; the request waits in the supervisor's `asyncio.Queue` until the restarts' task takes it.
+      callback (`RestartRunner` since the closing block); the request waits in the supervisor's `asyncio.Queue` until the restarts' task takes it.
     - The holder holds the restart policy, not `NodeHealth` and the supervisor (the spec's row, #752): the
       policy is built after the works, whose parts it maps, and the works record on `NodeHealth`, which
       takes the policy as a subscriber. Nothing reaches the supervisor before it is built, since the works
       are handed back rather than added by the object. `RestartPolicyBuiltLater`,
-      `PartNotBuiltYetError`.
+      `PartNotBuiltYetError` (`RestartPolicyNotSetError` since the closing block).
     - "A component without one refused at construction" is held by construction instead: the composition
       maps every part the works are recorded on to the client's `Restartable`, so none lacks an object; the
       policy indexes its parts directly and checks nothing at construction (the draft's refusal of a part
-      without a bugs rule not taken, every work's part carrying it).
+      without a bugs rule not taken, every work's part carrying it). The closing block brought the
+      refusal back, in the policy.
     - A rebuild that raises an `ExpectedError` is one warning line (`rebuild of client amuled: <error>`), a
       bug a trace (`bug in the rebuild of client amuled`); both count in vain and record detected on the
       bugs rules, as D15 says of any rebuild that raises.
@@ -133,15 +143,41 @@ The spec's section 6, those this lot reaches:
       `Component.forget`, `Component.state`, "in vain", `client amuled` and `FakeRestartable`; the
       policy's parts deduplicated (a channel's part is recorded on by each of its searches).
     - Glossary: `restartable`, `restart policy`, `rebuild in vain`; `supervisor` updated.
-      `architecture.md` §10.2 and the code table.
-- **Class 1**: block 20's above; none in blocks 10, 30, 40.
-- **Class 2 questions**: block 30's line bound, answered "A" (2026-11-17). Block 40: one raised at its
-  report, the status reading's alert cut by a rebuild (Pitfalls), its answer for the closing block to
-  record.
+      `architecture.md` §10.2.
+  - **90**:
+    - The policy also refuses a work recorded on no part (the review's fifth finding asked it of
+      `SupervisedWork`): in the policy, beside the two refusals the spec's row asks, so the lifecycle's
+      tests keep their works without parts.
+    - The restart wiring is tested through `amule_client_restart_policy`, a real `Supervisor` and a
+      `FakeRestartable`, not through `CrawlerComposition`: no answer of `FakeAmuleApi` makes the real
+      assembly meet a bug (the adapter reads every malformed answer as an expected error), and three
+      bugs in a row take 120 s of real time. The composition calls the function, and a map left empty
+      there is refused at construction: that mutation fails 17 tests of the composition.
+    - The map is derived from the first works, as block 40 did, moved out of `run_crawler`.
+- **Class 1**: block 20's above; none in blocks 10, 30, 40, 90.
+- **Class 2 questions**: two. Block 30's line bound, answered "A" (2026-11-17). Block 40's, raised at
+  its report: an alert being sent inside a turn that a rebuild cuts is lost, its rule already failing.
+  Answered "A" by the operator (2026-11-17): `HealthAlerter` and the source alerts send through
+  `dispatch_shielded`, with one cut-mid-send test each; fixed in the closing block.
 
 ## The holistic review's findings, and their exits
 
-For the closing block.
+3 MAJOR, 8 MINOR; every one fixed in the closing block (the lead's choices, the first the operator's,
+2026-11-17).
+
+| Finding | Exit |
+|---|---|
+| MAJOR: an alert or a source alert cut mid-send by a rebuild, never sent again | fixed: `HealthAlerter.send` and `SourceWatcher._alert_sources` through `dispatch_shielded` (the operator's "A"); `test_health_alerter.py::test_an_alert_whose_turn_is_cut_mid_send_is_still_sent`, `test_source_watcher.py::test_a_turn_cut_mid_send_of_a_source_alert_still_sends_it`; `architecture.md` §10 |
+| MAJOR: the composition's map of parts to the client, and the restart wiring, tested by nothing | fixed: `amule_client_restart_policy` in `composition/amule_client_works.py`, which the composition calls; `test_amule_client_works.py::test_bugs_on_any_part_a_work_is_recorded_on_have_the_supervisor_rebuild_the_client`, in both download modes |
+| MAJOR: the bugs recorded on each part when a rebuild raises, tested by nothing | fixed: `test_supervisor_restarts.py::test_a_rebuild_that_raises_records_a_bug_on_each_part_of_its_object`, a second part healthy before the raises, failing after the third |
+| the refusal at construction dropped | fixed: `RestartPolicy` refuses a part of two objects, a work recorded on a part of no object, and one recorded on no part; three tests in `test_restart_policy.py` |
+| the rebuilt works' first turn at once, unstated | kept, stated: a `(Corrected: ...)` beside D8, a sentence in `architecture.md` §10.2 |
+| `PartNotBuiltYetError`, `Restarter` against D18 and the glossary | fixed: `RestartPolicyNotSetError`, `RestartRunner`; the glossary's `supervisor` and `restart policy` lines |
+| no test of the latest search starts across a rebuild | fixed: `test_amule_client_restartable.py::test_a_client_built_anew_spaces_its_first_ed2k_search_from_the_old_client_s_latest`, its clients sharing one store and one timeline, as the composition's `build_client` does |
+| `architecture.md`'s code table | fixed: `amule_client_works.py` and `restart_policy_built_later.py` under "Câblage", `SupervisedWork` beside `Work` |
+| the handoff's contradiction | fixed: "Not validated" keeps the composition's rebuild alone |
+| hygiene: the progress line's constant count, two two-line comments | fixed: `amuled session closing…`; the phase comment on one line, the composition's dropped with the map |
+| the spec's missing `(Corrected: ...)` and #785's reading guide | fixed: D8, D15, section 5's blocks 30 and 40, appendix A's blocks 30 and 40; #785's guide by `gh pr edit` |
 
 ## The tests watched failing
 
@@ -185,6 +221,13 @@ raises is named as such.
 | 40 | `test_status_watcher.py::test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing` | a guard; mutation: an unreachable reading raised as a bug | `assert [120.0, 240.0, 360.0] == []` |
 | 40 | `test_status_watcher.py::test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_ends_it` | a guard; mutation: a rebuild forgetting every rule of its parts | `Left contains one more item: RelayedLogLine(message='amuled kad: off its network for 5 min', ...)` |
 
+| 90 | `test_health_alerter.py::test_an_alert_whose_turn_is_cut_mid_send_is_still_sent` | the alerter as block 40 left it, through `dispatch` | `Right contains one more item: RelayedLogLine(message='amuled unreachable for 2 min', ...)` |
+| 90 | `test_source_watcher.py::test_a_turn_cut_mid_send_of_a_source_alert_still_sends_it` | the watcher as block 40 left it, through `dispatch` | `assert [] == [SourceAlert(...node_id='n1')]` |
+| 90 | `test_restart_policy.py`: a part of two objects, a work on a part of no object, a work on no part | the policy taking the works and checking nothing | `Failed: DID NOT RAISE ValueError` (3) |
+| 90 | `test_amule_client_works.py::test_bugs_on_any_part_a_work_is_recorded_on_have_the_supervisor_rebuild_the_client` (2 cases) | `amule_client_restart_policy` restarting nothing; then a mutation mapping no part | `{"search 'titar' amuled ed2k": 0} != {"search 'titar' amuled ed2k": 1}`, every part; `ValueError: status reading amuled: recorded on status reading amuled, a part of no object` |
+| 90 | `test_supervisor_restarts.py::test_a_rebuild_that_raises_records_a_bug_on_each_part_of_its_object` | passes on the code; mutation: no record on a raise | `At index 2 diff: [<HealthState.HEALTHY: 'healthy'>] != [<HealthState.FAILING: 'failing'>]` |
+| 90 | `test_amule_client_restartable.py::test_a_client_built_anew_spaces_its_first_ed2k_search_from_the_old_client_s_latest` | each client its own store, as the test's builder had | `assert (MonotonicInstant(nanoseconds=20000000000) - MonotonicInstant(nanoseconds=0)) == datetime.timedelta(seconds=60)` |
+
 - **The guards that pass at once, by design**: block 20's refused password or bug; block 40's
   `test_another_rule_turning_failing_restarts_nothing` (passes on every stub), the unreachable and the
   open-alert tests, shown on mutations above.
@@ -203,20 +246,29 @@ raises is named as such.
 | aMule refusing every search on a channel | `test_keyword_search.py::test_three_refused_searches_in_a_row_fail_the_channel_and_nine_that_ran_heal_it`, `::test_an_unreachable_client_after_three_refused_searches_leaves_the_channel_failing` |
 | aMule connected to no network | `test_status_watcher.py::test_six_readings_on_no_network_fail_download_tracking_and_nine_on_one_heal_it`; through the parts the composition builds, `test_amule_client_works.py::test_the_status_reading_records_no_network_on_the_part_of_download_tracking` |
 
+| A rebuild that raises records a bug on each part | `test_supervisor_restarts.py::test_a_rebuild_that_raises_records_a_bug_on_each_part_of_its_object` |
+| The node's map and restart wiring | `test_amule_client_works.py::test_bugs_on_any_part_a_work_is_recorded_on_have_the_supervisor_rebuild_the_client` |
+
 No test runs a rebuild through `CrawlerComposition` itself: its wiring tests run the composition with the
-policy set, and the parts the policy maps are those of the first works by construction.
+policy set, which refuses at construction a work over no object.
 
 ## What must not change
 
-For the closing block: the matching comparison, `deploy/matcher.yml`'s diff and `validate-config`.
+| Check | Result |
+|---|---|
+| The matching decisions on the real catalog | **not run**: the umbrella's comparison reads the operator's `catalog.db`, outside the repository. The lot touches no matching code: `git diff --name-only origin/main...HEAD -- packages/crawler/src/p2pwatch/domain/matching packages/crawler/src/p2pwatch/adapters/driven/config` lists nothing (2026-11-17), and the gate's golden corpus passes |
+| `deploy/matcher.yml` and its keys | `git diff --stat origin/main...HEAD -- deploy/matcher.yml deploy/targets.yml` empty; `validate-config` on `deploy/`, `AMULE_API_PASSWORD` set to a placeholder: `Config valid` (2026-11-17) |
+| A healthy node's notifications, a channel's search cadence | at the release candidate |
 
 ## The lot's counts
 
-- Fix-backs: 0 so far. Cascaded rebases: 0 so far.
-- Runs re-triggered: 0 so far.
-- Bodies the operator called unreadable: 0 so far.
+- Fix-backs: 0. Cascaded rebases: 0.
+- Runs re-triggered: 0: one run per pull request, #785 to #789 (`gh run list`, 2026-11-17).
+- Bodies the operator called unreadable: 0.
 - Past a bound, the operator's acceptances: block 30's lines, "A" (2026-11-17); block 40's both, on the
   spec's row.
+- Class 2 questions: block 30's line bound and block 40's alert cut by a rebuild, both answered "A"
+  (2026-11-17).
 
 ## For lot 7 (the operator pages)
 
@@ -249,10 +301,14 @@ For the closing block: the matching comparison, `deploy/matcher.yml`'s diff and 
   is not (block 40).
 - **A fake's test module under `tests/fakes/` tests no module of `src`**: list it under
   `[tool.coverage_checks] tests_without_unit` in the package's `pyproject.toml` (block 40).
-- **A rebuild stops every work over the client, the status reading included**: an alert being sent inside
-  the status reading's turn (`HealthAlerter` through `ObservabilityDispatcher.dispatch`, unshielded) is
-  cut by a rebuild triggered elsewhere, and its rule, already failing, never sends it again. Reasoned from
-  the code, not observed; raised as a class 2 question in block 40's report (block 40).
+- **A rebuild stops every work over the client, the status reading included**: a send inside any of
+  their turns is cut wherever it stands. A send decided from state already written (a rule's new state,
+  a source's points, a decision, a completion) goes through `dispatch_shielded`, or it is lost (block 40,
+  fixed in the closing block).
+- **No fault of `FakeAmuleApi` makes the real assembly meet a bug**: the adapter reads every malformed
+  answer as an expected error, so a rebuild cannot be driven through `CrawlerComposition` in a wiring
+  test; the restart wiring is tested one level down, through `amule_client_restart_policy` (closing
+  block).
 - **A mutation leaves a stale `.pyc`**: delete the module's `__pycache__` after each (every block).
 
 ## Not validated
@@ -267,24 +323,15 @@ For the closing block: the matching comparison, `deploy/matcher.yml`'s diff and 
   `test_real_loop_runs_one_search_and_stops`) on a fresh daemon, then 5 passed again on the same one.
   Block 30, `orchestration_integration` 1 passed at `a384706b`. Blocks 10 and 20 ran none: no adapter
   changed. `download_integration` did not run in the lot.
-- No wiring test shows the composition handing the status reading download tracking's part (block 20), nor
-  a rebuild through `CrawlerComposition` (block 40).
+- **The closing block**, `orchestration_integration` 1 passed (`test_real_loop_runs_one_search_and_stops`)
+  at `f198f9a5` (2026-11-17), the same image and variables.
+- No rebuild through `CrawlerComposition` (block 40): the restart wiring is tested through
+  `amule_client_restart_policy` (Pitfalls).
 - The matching comparison on the real catalog (What must not change).
-
-## What is left for the closing block
-
-- The holistic review's findings and their exits.
-- The answer to block 40's class 2 question (the alert cut by a rebuild), and its fix where it lands.
-- #785's reading guide names `Supervisor.add` for block 40: correct it to `Supervisor.restart`,
-  `RestartRequest`, `RestartPolicyBuiltLater`, `Component.state`, `Component.forget`.
-- The spec's `(Corrected: ...)` beside each claim block 40 departs from (the holder, `Supervisor.add`, the
-  refusal at construction), if the lead keeps them.
-- `BACKLOG.md` reconciled; the matching comparison; `deploy/matcher.yml`'s diff and `validate-config`; the
-  lot's counts.
 
 ## `BACKLOG.md`
 
-For the closing block; the sub-entry 4b stays open until lot 4b5.
+Reconciled: the lot adds nothing, and the sub-entry 4b stays open until lot 4b5.
 
 ## Next step
 
@@ -295,5 +342,6 @@ Then lot 4b5, the webui and the notifier (the spec's section 5 and appendix A, "
 thread watched every minute (block 10), the webui's `Restartable` (block 20), each send recorded on the
 notifier (block 30), the notifier's `Restartable` (block 40), one part and one rule per notification
 service (block 50). Its own stack from `main`, once lot 4b4 has merged. Each `Restartable` there is mapped
-in the composition beside the client's; the notifier's parts are recorded by the dispatcher, not by works,
-so they are mapped by hand, which this lot's derivation from the works does not cover.
+in the composition beside the client's, and the policy refuses a part of two objects; the notifier's parts
+are recorded by the dispatcher, not by works, so they are mapped by hand, which this lot's derivation from
+the works does not cover.
