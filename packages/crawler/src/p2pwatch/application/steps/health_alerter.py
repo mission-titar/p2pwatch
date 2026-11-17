@@ -35,7 +35,7 @@ _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
 }
 
 # A part failing or healthy again under these rules has no alert: its log line tells it. An alert
-# about the notifier would be sent through the notifier, whose send it records on the notifier.
+# on a notification service's rule would be sent through that service.
 _RULES_WITHOUT_AN_ALERT = frozenset({BUGS, SEARCHES_FAILED, CONNECTED_TO_NO_NETWORK, SENDS_FAILED})
 
 
