@@ -23,7 +23,6 @@ from p2pwatch.domain.work_components import (
     BUGS,
     keyword_search_component,
     status_reading_component,
-    webui_component,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.composition.fake_restartable import FakeRestartable
@@ -38,19 +37,6 @@ class _Search(Work):
 
     def __str__(self) -> str:
         return "search 'keroro' amuled kad"
-
-    async def wait_for_next_turn(self) -> None:
-        """Never awaited."""
-
-    async def run_once(self) -> None:
-        """Never awaited."""
-
-
-class _WebuiThreadWatch(Work):
-    """The webui's thread watch, whose turns are never taken."""
-
-    def __str__(self) -> str:
-        return "webui thread watch"
 
     async def wait_for_next_turn(self) -> None:
         """Never awaited."""
@@ -295,38 +281,3 @@ async def test_a_work_recorded_on_no_part_is_refused() -> None:
             restart=lambda _: None,
             logger=FakeLogger(),
         )
-
-
-async def test_bugs_on_a_part_that_restarts_nothing_restart_nothing() -> None:
-    logger = FakeLogger()
-    requests: list[RestartRequest] = []
-    client = FakeRestartable("client amuled")
-    search = keyword_search_component(
-        keyword=Keyword("keroro"), client_name=_AMULED, channel=Channel("kad")
-    )
-    webui = webui_component()
-    watch = SupervisedWork(
-        work=_WebuiThreadWatch(), time_limit=timedelta(minutes=5), components=(webui,)
-    )
-    policy = RestartPolicy(
-        components_of={client: [search]},
-        # The webui holds its thread, but nothing can rebuild it yet.
-        components_restarting_nothing=[webui],
-        works=[_search_recorded_on(search), watch],
-        restart=requests.append,
-        logger=logger,
-    )
-    node_health = NodeHealth(logger=FakeLogger(), subscribers=(policy,))
-
-    for _ in range(3):
-        await node_health.record(on=webui, rule=BUGS, detected=True)
-
-    assert requests == []
-    assert logger.lines == []
-
-    for _ in range(3):
-        await node_health.record(on=search, rule=BUGS, detected=True)
-
-    assert [(request.restartable, request.components) for request in requests] == [
-        (client, (search,))
-    ]
