@@ -85,3 +85,47 @@ def test_after_failing_it_turns_healthy_at_the_ninth_check_not_detected() -> Non
         (3, HealthState.FAILING),
         (12, HealthState.HEALTHY),
     ]
+
+
+def test_its_state_under_a_rule_is_unknown_until_enough_checks_then_what_they_say() -> None:
+    amule = _amule()
+    amule.record(rule=_UNREACHABLE, detected=True)
+    amule.record(rule=_UNREACHABLE, detected=True)
+    assert amule.state(_UNREACHABLE) is HealthState.UNKNOWN
+
+    amule.record(rule=_UNREACHABLE, detected=True)
+
+    assert amule.state(_UNREACHABLE) is HealthState.FAILING
+    assert amule.state(_NOT_CONNECTED) is HealthState.UNKNOWN
+
+
+def test_a_forgotten_rule_is_unknown_again_until_it_has_enough_checks_again() -> None:
+    amule = _amule()
+    for _ in range(3):
+        amule.record(rule=_UNREACHABLE, detected=True)
+
+    amule.forget(_UNREACHABLE)
+
+    assert amule.state(_UNREACHABLE) is HealthState.UNKNOWN
+    # Its earlier detections are gone: two more leave it unknown, the third fails it anew.
+    assert amule.record(rule=_UNREACHABLE, detected=True) is None
+    assert amule.record(rule=_UNREACHABLE, detected=True) is None
+    assert amule.record(rule=_UNREACHABLE, detected=True) == HealthTransition(
+        component=amule,
+        rule=_UNREACHABLE,
+        previous=HealthState.UNKNOWN,
+        current=HealthState.FAILING,
+    )
+
+
+def test_forgetting_a_rule_keeps_the_checks_of_the_others() -> None:
+    amule = _amule()
+    for _ in range(3):
+        amule.record(rule=_UNREACHABLE, detected=True)
+        amule.record(rule=_NOT_CONNECTED, detected=True)
+
+    amule.forget(_UNREACHABLE)
+
+    assert amule.state(_NOT_CONNECTED) is HealthState.FAILING
+    # Still failing: 2 detections among its latest 10 keep it so.
+    assert amule.record(rule=_NOT_CONNECTED, detected=False) is None

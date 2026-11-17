@@ -15,8 +15,8 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.application.steps.supervisor import WAIT_AFTER_A_BUG, SupervisedWork, Supervisor
-from p2pwatch.application.steps.work import Work
+from p2pwatch.application.steps.supervisor import WAIT_AFTER_A_BUG, Supervisor
+from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import ClientName

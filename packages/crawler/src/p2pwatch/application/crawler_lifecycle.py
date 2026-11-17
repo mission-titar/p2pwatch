@@ -6,7 +6,8 @@ from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, SupervisedWork, Supervisor
+from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
+from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import CrawlerStarted
 

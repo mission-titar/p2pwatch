@@ -826,7 +826,28 @@ recherche, sur celle de son canal. Un bug 3 tours d'affilée met la partie en é
 les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
 pour « searches failed » et « connected to no network ». Le client aMule lui-même n'a pas cette
 règle : aucun tour n'est le sien. `NodeHealth` journalise chaque changement d'état et le transmet
-aux alertes (`HealthAlerter`).
+aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
+
+### 10.2 Les redémarrages du client aMule
+
+Un objet qui tient un état en mémoire, comme le client aMule (sa session, son verrou eD2k, ses
+créneaux Kad), est un `Restartable` : il se reconstruit et rend les `Work` qui tournent dessus.
+Quand la règle des bugs d'une de ses parties passe en échec, la `RestartPolicy` demande son
+redémarrage au `Supervisor` (une `RestartRequest`), qui le fait dans une tâche à lui, jamais dans
+le tour qui l'a déclenché : il arrête les `Work` dont les tours s'enregistrent sur ces parties et
+les attend, fait reconstruire l'objet, oublie la règle des bugs de ses parties (les autres règles
+gardent leurs vérifications, si bien qu'une alerte ouverte ne repart pas et ne finit pas), puis
+lance les `Work` rendus. Une reconstruction qui lève enregistre un bug sur chacune de ces parties
+et se retente 60 s plus tard. Une reconstruction est vaine quand une règle des bugs repasse en
+échec avant qu'elles soient toutes saines, ou quand elle a levé ; après trois, l'objet n'est plus
+redémarré. Ses `Work` tournent alors encore si la dernière reconstruction a réussi, seuls leurs
+tours fautifs échouant, et le compte repart de zéro une fois toutes les règles des bugs saines ;
+après trois reconstructions qui ont levé, rien ne tourne plus sur lui jusqu'au redémarrage du
+conteneur. Un réseau en panne n'est jamais réparé par un redémarrage : seule la règle des bugs
+redémarre. `AmuleClientRestartable` (`composition/amule_client_restartable.py`) déconnecte
+l'ancienne session, connecte un client neuf et rend ses `Work` par `AmuleClientWorks.over` ; la
+composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent leurs tours, si
+bien qu'aucune n'est sans objet.
 
 ## 11. Invariants de conception (récapitulatif)
 
@@ -863,7 +884,7 @@ aux alertes (`HealthAlerter`).
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes) |
+| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

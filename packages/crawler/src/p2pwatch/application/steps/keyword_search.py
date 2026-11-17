@@ -9,8 +9,7 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SearchWorker
-from p2pwatch.application.steps.supervisor import SupervisedWork
-from p2pwatch.application.steps.work import Work
+from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component
 from p2pwatch.domain.identifiers import Channel, Keyword
