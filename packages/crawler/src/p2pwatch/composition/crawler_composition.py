@@ -11,9 +11,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartable`` rebuilds
   the client and its works when the ``RestartPolicy`` asks.
 
-Works: one search per channel and keyword (``KeywordSearch``), the status watcher, and download and
-source tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the
-webui requests the shutdown.
+Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
+source tracking when configured, and the webui's thread watch, which ``CrawlerLifecycle`` runs
+until ``PosixProcess`` or the webui requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the works (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
@@ -102,6 +102,8 @@ from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
+from p2pwatch.application.steps.webui_thread_watch import WebuiThreadWatch
+from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.application.use_cases.describe_file import DescribeFile
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
@@ -119,7 +121,7 @@ from p2pwatch.composition.amule_client_works import (
     amule_client_restart_policy,
 )
 from p2pwatch.composition.restart_policy_built_later import RestartPolicyBuiltLater
-from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
+from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN, AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
@@ -127,6 +129,7 @@ from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
+from p2pwatch.domain.work_components import webui_component
 
 _logger = logging.getLogger(__name__)
 
@@ -253,7 +256,7 @@ class CrawlerComposition(CrawlerRunner):
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         database_opener: SqliteDatabaseOpener,
-    ) -> None:
+    ) -> UvicornServerThread:
         """Start the read-only webui on its OWN thread + loop (spec §5). It shares with the crawler
         the parsed config (immutable), the engine and the clocks (no state after their
         construction), the status reading and node metric stores (whole snapshots swapped, never
@@ -334,6 +337,7 @@ class CrawlerComposition(CrawlerRunner):
         )
         stack.push_async_callback(server_thread.stop)
         await server_thread.start()
+        return server_thread
 
     async def run_crawler(
         self, *, config_path: PurePath, targets_path: PurePath, matcher_path: PurePath
@@ -426,7 +430,7 @@ class CrawlerComposition(CrawlerRunner):
             # synchronous work. A crash degrades (spec §17.1). Its graceful stop is on ``stack`` →
             # runs at the normal shutdown unwind (after the database connections are pushed, so it
             # stops the thread before those close in LIFO teardown).
-            await self._start_webui(
+            webui_thread = await self._start_webui(
                 config=config,
                 stack=stack,
                 status_reading_store=status_reading_store,
@@ -549,7 +553,15 @@ class CrawlerComposition(CrawlerRunner):
             # The client held then, not this first one, which a rebuild replaces.
             stack.push_async_callback(amule_client.close)
             await client.open()
-            works = client_works.over(client)
+            first_client_works = client_works.over(client)
+            webui_thread_watch = SupervisedWork(
+                work=WebuiThreadWatch(
+                    thread_alive=webui_thread.is_alive, monotonic_clock=monotonic_clock
+                ),
+                time_limit=TIME_LIMIT_MARGIN,  # its turn awaits nothing: the margin alone
+                components=(webui_component(),),
+            )
+            works = [*first_client_works, webui_thread_watch]
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
@@ -562,7 +574,13 @@ class CrawlerComposition(CrawlerRunner):
                 logger=StdlibLogger(Supervisor.__module__),
             )
             restart_policy.set(
-                amule_client_restart_policy(amule_client, works=works, supervisor=supervisor)
+                amule_client_restart_policy(
+                    amule_client,
+                    works=first_client_works,
+                    # Until the webui can be rebuilt, its bugs are only logged.
+                    works_restarting_nothing=[webui_thread_watch],
+                    supervisor=supervisor,
+                )
             )
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,

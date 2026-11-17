@@ -52,6 +52,23 @@ async def test_start_serves_the_app_on_the_port_bound_and_stop_ends_the_thread(
 
 
 @pytest.mark.asyncio
+async def test_its_thread_is_alive_while_it_serves_and_no_more_once_stopped() -> None:
+    server_thread = UvicornServerThread(
+        Starlette(routes=[Route("/", _ok)]),
+        address=("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        join_timeout_seconds=5.0,
+        serving_resources=(),
+    )
+    await server_thread.start()
+    alive_while_serving = server_thread.is_alive()
+
+    await server_thread.stop()
+
+    assert (alive_while_serving, server_thread.is_alive()) == (True, False)
+
+
+@pytest.mark.asyncio
 async def test_the_access_log_leaves_out_the_metrics_scrapes(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

@@ -23,7 +23,7 @@ from p2pwatch.domain.status_reading import (
     channel_component,
     client_component,
 )
-from p2pwatch.domain.work_components import BUGS, status_reading_component
+from p2pwatch.domain.work_components import BUGS, status_reading_component, webui_component
 from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
@@ -111,6 +111,7 @@ async def test_a_rule_it_has_no_alert_for_raises(
         (BUGS, status_reading_component(ClientName("amuled"))),
         (BUGS, _KAD),
         (BUGS, _DOWNLOAD_TRACKING),
+        (BUGS, webui_component()),
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
     ],
@@ -118,6 +119,7 @@ async def test_a_rule_it_has_no_alert_for_raises(
         "a task's bugs",
         "a channel's bugs",
         "download tracking's bugs",
+        "the webui's bugs",
         "a channel's searches failed",
         "download tracking connected to no network",
     ],
@@ -189,6 +191,17 @@ async def test_a_channel_s_rule_on_a_component_with_no_channel_raises() -> None:
         await _sent(
             previous=HealthState.HEALTHY, current=HealthState.FAILING, rule=CHANNEL_NOT_CONNECTED
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "current", [HealthState.FAILING, HealthState.HEALTHY], ids=["its alert", "its end"]
+)
+async def test_a_client_s_rule_on_a_part_of_no_client_raises(current: HealthState) -> None:
+    previous = HealthState.HEALTHY if current is HealthState.FAILING else HealthState.FAILING
+
+    with pytest.raises(ValueError, match="^webui: no client to name in its alert$"):
+        await _sent(previous=previous, current=current, on=webui_component())
 
 
 @pytest.mark.asyncio

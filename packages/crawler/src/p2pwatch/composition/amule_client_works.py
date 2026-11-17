@@ -284,13 +284,18 @@ def amule_client_restart_policy(
     amule_client: Restartable[SupervisedWork],
     *,
     works: Sequence[SupervisedWork],
+    works_restarting_nothing: Sequence[SupervisedWork],
     supervisor: Supervisor,
 ) -> RestartPolicy:
-    """Has ``supervisor`` rebuild the aMule client when a bugs rule of a part its works are recorded
-    on turns failing: its rebuild builds every work over it anew, so each part is the client's."""
+    """Has ``supervisor`` rebuild the aMule client when a bugs rule of a part its ``works`` are
+    recorded on turns failing, never for ``works_restarting_nothing``, such as the webui's watch."""
     return RestartPolicy(
+        # A rebuild builds every work over the client anew: each of their parts is the client's.
         components_of={amule_client: [c for supervised in works for c in supervised.components]},
-        works=works,
+        components_restarting_nothing=[
+            c for supervised in works_restarting_nothing for c in supervised.components
+        ],
+        works=[*works, *works_restarting_nothing],
         restart=supervisor.restart,
         logger=StdlibLogger(RestartPolicy.__module__),
     )
