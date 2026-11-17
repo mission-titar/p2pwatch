@@ -1,6 +1,7 @@
 """Source tracking: the sources of each of our downloads the client lists, read every
 ``sources_interval`` from one turn's start to the next one's, recorded and alerted on."""
 
+import asyncio
 import sqlite3
 from collections.abc import Iterator
 from datetime import timedelta
@@ -32,6 +33,7 @@ from p2pwatch.domain.source import (
 from p2pwatch.domain.store_error import StoreError
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_source_client import FakeSourceClient
@@ -465,6 +467,32 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
         )
     ]
     assert observability.notifier.node_ids == [NODE_ID]
+
+
+@pytest.mark.asyncio
+async def test_a_turn_cut_mid_send_of_a_source_alert_still_sends_it() -> None:
+    # The points are written before the send: the next round reads them as earlier ones, no alert.
+    source_client = FakeSourceClient(readings={HASH_A: (_read(_PEER, source_name="AnimuseeFMR"),)})
+    notifier = FakeHeldNotifier()
+    observability = ObservabilityOverFakes(notifier=notifier)
+    watcher = _source_watcher(
+        client=FakeDownloadClient(listed=[(status(HASH_A),)]),
+        source_client=source_client,
+        tracked_download_store=_tracking(HASH_A),
+        observability_dispatcher=observability.dispatcher,
+    )
+    turn = asyncio.create_task(watcher.run_once())
+    await notifier.reached.wait()
+
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    notifier.released.set()
+    await notifier.wait_until_sent(timeout_seconds=1.0)
+
+    assert _alerts(observability) == [
+        _alert(_PEER, source_name="AnimuseeFMR", absent_for=None, filename=HASH_A, target_titles=())
+    ]
 
 
 @pytest.mark.asyncio

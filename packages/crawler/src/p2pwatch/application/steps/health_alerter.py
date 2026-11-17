@@ -63,7 +63,7 @@ class HealthAlerter:
         else:
             return
         if alert is not None:
-            await self._observability_dispatcher.dispatch(alert)
+            await self._observability_dispatcher.dispatch_shielded(alert)
 
     def _alert(self, transition: HealthTransition) -> Event:
         component, node_id = transition.component, self._node_id
