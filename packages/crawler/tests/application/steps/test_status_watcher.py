@@ -1,6 +1,7 @@
 """The status watcher: a reading every minute feeds the channel gauges and the health of the
 client and of each channel, whose rules send today's alerts, boot included."""
 
+import asyncio
 from collections.abc import Sequence
 from datetime import timedelta
 
@@ -9,17 +10,21 @@ import pytest
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.steps.health_alerter import HealthAlerter
-from p2pwatch.application.steps.node_health import NodeHealth
+from p2pwatch.application.steps.node_health import HealthSubscriber, NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.status_watcher import StatusWatcher
-from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
+from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
 from p2pwatch.domain.download.disk_space import download_tracking_component
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
+    CLIENT_UNREACHABLE,
     ChannelStatus,
     ClientStatus,
     PublishedReading,
@@ -38,6 +43,7 @@ from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
+from tests.fakes.composition.fake_restartable import FakeRestartable
 from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
@@ -49,12 +55,14 @@ _NODE_ID = NodeId("titar-node-1")
 _AMULED = ClientName("amuled")
 _CHANNELS = (Channel("ed2k"), Channel("kad"))
 _NOTIFICATION_TIMEOUT_SECONDS = 5.0
+_HOUR = timedelta(hours=1)
 
 
 class _Observability:
-    """The dispatch step over fakes, each notification timed: an alert is one."""
+    """The dispatch step over fakes, each notification timed: an alert is one; each change of
+    health also passed on to ``also``, after the alerts."""
 
-    def __init__(self, fake_time: FakeTime) -> None:
+    def __init__(self, fake_time: FakeTime, *, also: Sequence[HealthSubscriber] = ()) -> None:
         self.logger = FakeLogger()
         self.notifier = FakeTimedNotifier(fake_time)
         self.dispatcher = ObservabilityDispatcher(
@@ -67,7 +75,7 @@ class _Observability:
             observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None
         )
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send,))
+        self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send, *also))
 
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
@@ -482,3 +490,107 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
 
 def test_the_status_reading_is_named_after_its_client() -> None:
     assert str(_watcher_over(FakeTime())) == "status reading amuled"
+
+
+class _KadSearchBug(Work):
+    """A Kad search meeting a bug at every turn, its turns 200 s apart."""
+
+    def __str__(self) -> str:
+        return "search 'keroro' amuled kad"
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.sleep(200.0)  # noqa: TID251
+
+    async def run_once(self) -> None:
+        raise KeyError("results")
+
+
+class _RebuiltNode:
+    """The status reading under the supervisor, beside a Kad search meeting a bug at each turn if
+    ``kad_search_bug``; their parts are the aMule client's, whose rebuild hands back the status
+    reading alone, over the same parts."""
+
+    def __init__(self, loop: VirtualLoop, *readings: _Reading, kad_search_bug: bool) -> None:
+        self._loop = loop
+        self._client = FakeStatusClient(list(readings))
+        self._monotonic_clock = FakeLoopMonotonicClock(loop)
+        self.client_part = client_component(_AMULED)
+        self._channel_parts = {
+            channel: channel_component(client_name=_AMULED, channel=channel)
+            for channel in _CHANNELS
+        }
+        self._status_reading_part = status_reading_component(_AMULED)
+        self.observability = _Observability(FakeTime(), also=(self._to_policy,))
+        self.amule_client = FakeRestartable(works_over=lambda _state: [self._status_reading()])
+        self._works = [self._status_reading()]
+        if kad_search_bug:
+            kad_part = self._channel_parts[Channel("kad")]
+            bug = SupervisedWork(work=_KadSearchBug(), time_limit=_HOUR, components=(kad_part,))
+            self._works.append(bug)
+        self._run_state = FakeRunStateStore()
+        self._supervisor = Supervisor(
+            run_state_reader=self._run_state,
+            monotonic_clock=self._monotonic_clock,
+            node_health=self.observability.node_health,
+            logger=FakeLogger(),
+        )
+        self._policy = RestartPolicy(
+            components_of={
+                self.amule_client: [self._status_reading_part, *self._channel_parts.values()]
+            },
+            restart=self._supervisor.restart,
+            logger=FakeLogger(),
+        )
+
+    async def _to_policy(self, transition: HealthTransition) -> None:
+        await self._policy(transition)
+
+    def _status_reading(self) -> SupervisedWork:
+        watcher = StatusWatcher(
+            client_name=_AMULED,
+            client=self._client,
+            wall_clock=FakeLoopWallClock(self._loop),
+            monotonic_clock=self._monotonic_clock,
+            observability_dispatcher=self.observability.dispatcher,
+            status_reading_writer=FakeStatusReadingStore((_AMULED,)),
+            node_health=self.observability.node_health,
+            client_component=self.client_part,
+            channel_components=self._channel_parts,
+            download_tracking_component=None,
+        )
+        return SupervisedWork(
+            work=watcher, time_limit=_HOUR, components=(self._status_reading_part,)
+        )
+
+    def run_for(self, seconds: float) -> None:
+        self._loop.call_later(seconds, self._run_state.set_shutdown_requested)
+        self._loop.run_until_complete(
+            self._supervisor.supervise(self._works, arm_shutdown_bound=lambda: None)
+        )
+
+
+def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(
+    virtual_loop: VirtualLoop,
+) -> None:
+    node = _RebuiltNode(virtual_loop, *[_DOWN] * 20, kad_search_bug=False)
+
+    node.run_for(19 * 60.0 + 1.0)
+
+    assert node.amule_client.rebuilt_at == []
+    assert node.client_part.state(CLIENT_UNREACHABLE) is HealthState.FAILING
+
+
+def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_ends_it(
+    virtual_loop: VirtualLoop,
+) -> None:
+    kad_off = _status(kad=(False, None))
+    # The alert opens at the sixth reading, 300 s; the search's third bug rebuilds at 600 s.
+    node = _RebuiltNode(virtual_loop, *[kad_off] * 30, kad_search_bug=True)
+
+    node.run_for(600.0 + 7 * 60.0 + 1.0)  # eight readings after the rebuild, all off
+
+    assert node.amule_client.rebuilt_at == [600.0]
+    notifications = node.observability.notifier.notifications
+    assert [notification for _, notification in notifications] == [
+        _warning("amuled kad: off its network for 5 min")
+    ]

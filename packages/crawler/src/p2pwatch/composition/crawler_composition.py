@@ -7,8 +7,9 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (each built once), connections opened by the ``SqliteDatabaseOpener``
   (migrations applied at startup, a failed one stopping the start).
 - the ``MatchingEngine`` (once),
-- ONE ``AmuleApiClient`` on the one amuled the core drives, whose session every work over it
-  shares, those works built by ``AmuleClientWorks``.
+- ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
+  over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartable`` rebuilds
+  the client and its works when the ``RestartPolicy`` asks.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, and download and
 source tracking when configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the
@@ -99,6 +100,7 @@ from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.application.use_cases.describe_file import DescribeFile
@@ -111,7 +113,9 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
+from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
+from p2pwatch.composition.restart_policy_built_later import RestartPolicyBuiltLater
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
@@ -461,16 +465,21 @@ class CrawlerComposition(CrawlerRunner):
                 node_id=node_id,
                 logger=StdlibLogger(Cataloguer.__module__),
             )
-            client = self._amule_api_client(
-                crawler_config,
-                monotonic_clock=monotonic_clock,
-                wall_clock=wall_clock,
-                search_start_store=SqliteSearchStartStore(local_connection),
-            )
-            stack.push_async_callback(client.close)
-            await client.open()
+            search_start_store = SqliteSearchStartStore(local_connection)
+
+            def build_client() -> AmuleApiClient:
+                return self._amule_api_client(
+                    crawler_config,
+                    monotonic_clock=monotonic_clock,
+                    wall_clock=wall_clock,
+                    search_start_store=search_start_store,
+                )
+
+            client = build_client()
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
+            # Set once the works are built: they record on the node's health, the policy maps them.
+            restart_policy = RestartPolicyBuiltLater()
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__),
                 subscribers=(
@@ -481,6 +490,7 @@ class CrawlerComposition(CrawlerRunner):
                             None if download_config is None else download_config.min_free_bytes
                         ),
                     ).send,
+                    restart_policy,
                 ),
             )
             client_works = AmuleClientWorks(
@@ -527,12 +537,38 @@ class CrawlerComposition(CrawlerRunner):
                     keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
             )
+            amule_client = AmuleClientRestartable(
+                client,
+                client_name=_AMULE_CLIENT_NAME,
+                build_client=build_client,
+                works_over=client_works.over,
+            )
+            # The client held then, not this first one, which a rebuild replaces.
+            stack.push_async_callback(amule_client.close)
+            await client.open()
             works = client_works.over(client)
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
                 parts = ", ".join(component.name for component in supervised.components)
                 _logger.debug("%s: turns recorded on %s", supervised.work, parts)
+            supervisor = Supervisor(
+                run_state_reader=run_state_store,
+                monotonic_clock=monotonic_clock,
+                node_health=node_health,
+                logger=StdlibLogger(Supervisor.__module__),
+            )
+            # Every part a work over the client is recorded on is the client's: its rebuild
+            # repairs them all, and none lacks its object.
+            restart_policy.set(
+                RestartPolicy(
+                    components_of={
+                        amule_client: [c for supervised in works for c in supervised.components]
+                    },
+                    restart=supervisor.restart,
+                    logger=StdlibLogger(RestartPolicy.__module__),
+                )
+            )
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
@@ -550,12 +586,7 @@ class CrawlerComposition(CrawlerRunner):
                 backoff=backoff,
                 works=works,
                 download_enabled=download_config is not None,
-                supervisor=Supervisor(
-                    run_state_reader=run_state_store,
-                    monotonic_clock=monotonic_clock,
-                    node_health=node_health,
-                    logger=StdlibLogger(Supervisor.__module__),
-                ),
+                supervisor=supervisor,
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the

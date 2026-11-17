@@ -36,7 +36,7 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
-from p2pwatch.application.steps.supervisor import SupervisedWork
+from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.download.disk_space import download_tracking_component

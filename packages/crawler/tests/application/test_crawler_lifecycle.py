@@ -19,8 +19,8 @@ from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
-from p2pwatch.application.steps.work import Work
+from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine

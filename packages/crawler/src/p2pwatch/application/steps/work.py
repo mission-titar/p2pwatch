@@ -1,6 +1,11 @@
-"""``Work``: a task the node repeats, such as reading aMule's status every minute."""
+"""``Work``: a task the node repeats, such as reading aMule's status every minute, with its time
+limit and the parts its turns are recorded on."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import timedelta
+
+from p2pwatch.domain.health.component import Component
 
 
 class Work(ABC):
@@ -18,3 +23,13 @@ class Work(ABC):
     @abstractmethod
     async def run_once(self) -> None:
         """Takes one turn, such as one reading of aMule's status."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SupervisedWork:
+    """A work, its time limit and the parts its turns are recorded on, such as a search, its 25 min,
+    its own part and its channel's: the supervisor cuts a turn still running at its limit."""
+
+    work: Work
+    time_limit: timedelta
+    components: tuple[Component, ...]

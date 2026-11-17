@@ -23,7 +23,8 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.keyword_search import SearchTimeLimitOf, keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
-from p2pwatch.application.steps.supervisor import SupervisedWork, Supervisor
+from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.client_errors import ClientAuthError, SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId

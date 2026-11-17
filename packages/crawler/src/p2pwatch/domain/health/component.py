@@ -34,6 +34,15 @@ class Component:
         self._latest_detected: dict[HealthRule, tuple[bool, ...]] = dict.fromkeys(rules, ())
         self._states = dict.fromkeys(rules, HealthState.UNKNOWN)
 
+    def state(self, rule: HealthRule) -> HealthState:
+        """Its state under ``rule``, such as failing once aMule did not answer 3 times in a row."""
+        return self._states[rule]
+
+    def forget(self, rule: HealthRule) -> None:
+        """Forgets the latest checks of ``rule``, which is unknown again until it has enough, with
+        no change of health to pass on: a part built anew starts afresh."""
+        self._latest_detected[rule], self._states[rule] = (), HealthState.UNKNOWN
+
     def record(self, *, rule: HealthRule, detected: bool) -> HealthTransition | None:
         """Counts one check of ``rule``, ``detected`` whether it saw its case; returns the change of
         state it caused, if any."""
