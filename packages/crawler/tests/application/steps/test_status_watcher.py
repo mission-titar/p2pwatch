@@ -22,7 +22,7 @@ from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.notification_sends import notifier_component
+from p2pwatch.domain.observability.notification_sends import notification_service_components
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     CLIENT_UNREACHABLE,
@@ -72,7 +72,7 @@ class _Observability:
             current_notifier=lambda: self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-            notifier_component=notifier_component(),
+            service_components=notification_service_components(self.notifier.services()),
         )
         alerter = HealthAlerter(
             observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None

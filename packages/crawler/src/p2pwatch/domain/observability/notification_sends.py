@@ -1,6 +1,7 @@
 """The sends of the notifications: the services the notifier sends to, the error a refused send
-raises, and the notifier's part, judged on its sends that failed and on its bugs."""
+raises, and each service's part, judged on its sends that failed and on its bugs."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from p2pwatch.domain.expected_error import ExpectedError
@@ -36,6 +37,12 @@ SENDS_FAILED = HealthRule(
 )
 
 
-def notifier_component() -> Component:
-    """The notifier, judged on its sends that failed and on its bugs: "notifier"."""
-    return Component(name="notifier", client_name=None, rules=(BUGS, SENDS_FAILED))
+def notification_service_components(
+    services: Iterable[NotificationService],
+) -> dict[NotificationService, Component]:
+    """A part per service, judged on its sends that failed and on its bugs: "notifier discord
+    community"."""
+    return {
+        service: Component(name=f"notifier {service}", client_name=None, rules=(BUGS, SENDS_FAILED))
+        for service in services
+    }

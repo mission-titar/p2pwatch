@@ -828,16 +828,16 @@ partie. Chaque tâche que le nœud répète est enfin jugée sur ses bugs (`BUGS
 un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status reading amuled`,
 `download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`) et, pour une
 recherche, sur celle de son canal. La webui est une partie aussi (`webui`) : chaque minute,
-`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug. Le
-notifieur est une partie aussi (`notifier`). Chaque service de notification, une URL configurée,
-est nommé par le schéma de son URL et son audience, jamais par l'URL, qui porte le jeton d'un
-webhook (`discord community`, `discord community 2` pour un second pareil) : le dispatcher envoie
-une notification à tous les services de son audience ensemble, si bien qu'elle prend au plus un
-délai de notification, puis, une fois tous les envois terminés, enregistre pour chacun sur la
-partie du notifieur si l'envoi a rencontré un bug et, sinon, s'il a échoué (« sends failed » :
-refusé par le service, `NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`).
-Une URL qu'apprise ne sait pas charger est un refus, écrit à chaque envoi. Aucune alerte ne nomme
-ces règles : elle passerait par le notifieur lui-même. Un bug 3
+`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug. Chaque
+service de notification, une URL configurée, est une partie aussi, nommée par le schéma de son URL
+et son audience, jamais par l'URL, qui porte le jeton d'un webhook (`notifier discord community`,
+`notifier discord community 2` pour un second pareil) : le dispatcher envoie une notification à
+tous les services de son audience ensemble, si bien qu'elle prend au plus un délai de
+notification, puis, une fois tous les envois terminés, enregistre sur la partie de chacun si son
+envoi a rencontré un bug et, sinon, s'il a échoué (« sends failed » : refusé par le service,
+`NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`). Une URL qu'apprise ne
+sait pas charger est un refus, écrit à chaque envoi. Aucune alerte ne nomme ces règles : elle
+passerait par le notifieur lui-même. Un bug 3
 tours d'affilée met la partie en échec, moins de 2 sur les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
 pour « searches failed » et « connected to no network ». Le client aMule lui-même n'a pas cette
 règle : aucun tour n'est le sien. `NodeHealth` journalise chaque changement d'état et le transmet
@@ -869,8 +869,10 @@ sa surveillance le retrouve terminé, et après trois reconstructions vaines la 
 redémarrée. Le notifieur est le troisième (`composition/notifier_restartable.py`) : aucun `Work`
 ne tourne dessus, et `NotifierRestartable` construit un notifieur neuf sans rendre de `Work`. Le
 dispatcher lui demande le notifieur à chaque envoi, si bien qu'un envoi en cours finit sur
-l'ancien. La composition donne sa partie à la politique à part (`parts_without_works`), puisque
-c'est le dispatcher qui l'enregistre. La politique refuse, à sa construction, une partie de deux objets
+l'ancien. La composition donne les parties de ses services à la politique à part
+(`parts_without_works`), puisque c'est le dispatcher qui les enregistre ; elle les construit une
+fois, sur les services du premier notifieur, qu'un notifieur reconstruit sur la même configuration
+liste à l'identique. La politique refuse, à sa construction, une partie de deux objets
 et un `Work` qu'aucun redémarrage n'arrêterait : sans partie, ou sur une partie d'aucun objet. Les
 `Work` rendus prennent leur premier tour comme au démarrage du nœud, sans les 60 s qui suivent un
 bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
@@ -910,7 +912,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie du notifieur, sa règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit) |
+| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

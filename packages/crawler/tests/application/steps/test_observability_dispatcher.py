@@ -1,5 +1,5 @@
 """The dispatch step: log + metrics always; a notification sent to each service of its audience
-together, each send recorded on the notifier's part once every send has ended: a refusal or a
+together, each send recorded on its service's part once every send has ended: a refusal or a
 timeout a failed send, any other error a bug."""
 
 import asyncio
@@ -33,7 +33,7 @@ from p2pwatch.domain.observability.notification_sends import (
     SENDS_FAILED,
     NotificationRefusedError,
     NotificationService,
-    notifier_component,
+    notification_service_components,
 )
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -42,7 +42,7 @@ from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifie
 from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
-from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_node_metric_store import FakeRaisingNodeMetricStore
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.support.virtual_time import VirtualLoop
@@ -73,7 +73,9 @@ class _Checks:
         self.recorded.append(_Check(component=on, rule=rule, detected=detected))
 
 
-_NOTIFIER = notifier_component()
+_PARTS = notification_service_components(ONE_SERVICE_PER_AUDIENCE)
+# The part of the fakes' one service for the community, which ``_COMPLETED`` is sent to.
+_COMMUNITY_PART = _PARTS[ONE_SERVICE_PER_AUDIENCE[0]]
 
 _DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY)
 _NTFY = NotificationService(scheme="ntfy", audience=Audience.OPERATIONS)
@@ -87,6 +89,7 @@ def _dispatcher(
     logger: FakeLogger | None = None,
     timeout: float = 5.0,
     checks: _Checks | None = None,
+    parts: dict[NotificationService, Component] = _PARTS,
 ) -> ObservabilityDispatcher:
     return ObservabilityDispatcher(
         logger=logger or FakeLogger(),
@@ -94,7 +97,7 @@ def _dispatcher(
         current_notifier=lambda: notifier,
         notification_timeout_seconds=timeout,
         record_check=checks or _Checks(),
-        notifier_component=_NOTIFIER,
+        service_components=parts,
     )
 
 
@@ -237,24 +240,25 @@ async def test_a_send_that_worked_records_not_detected_on_both_rules_once_it_has
 
     assert recorded_while_held == []
     assert checks.recorded == [
-        _Check(component=_NOTIFIER, rule=BUGS, detected=False),
-        _Check(component=_NOTIFIER, rule=SENDS_FAILED, detected=False),
+        _Check(component=_COMMUNITY_PART, rule=BUGS, detected=False),
+        _Check(component=_COMMUNITY_PART, rule=SENDS_FAILED, detected=False),
     ]
 
 
 @pytest.mark.asyncio
-async def test_a_notification_goes_to_each_service_of_its_audience_each_send_recorded() -> None:
+async def test_a_notification_goes_to_each_service_of_its_audience_recorded_on_its_part() -> None:
     notifier, checks = FakeNotifier((_DISCORD, _NTFY, _SECOND_DISCORD)), _Checks()
-    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, checks=checks)
+    parts = notification_service_components(notifier.services())
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, checks=checks, parts=parts)
 
     await dispatcher.dispatch(_COMPLETED)
 
     assert [audience for audience, _ in notifier.calls] == [Audience.COMMUNITY] * 2
     assert checks.recorded == [
-        _Check(component=_NOTIFIER, rule=BUGS, detected=False),
-        _Check(component=_NOTIFIER, rule=SENDS_FAILED, detected=False),
-        _Check(component=_NOTIFIER, rule=BUGS, detected=False),
-        _Check(component=_NOTIFIER, rule=SENDS_FAILED, detected=False),
+        _Check(component=parts[_DISCORD], rule=BUGS, detected=False),
+        _Check(component=parts[_DISCORD], rule=SENDS_FAILED, detected=False),
+        _Check(component=parts[_SECOND_DISCORD], rule=BUGS, detected=False),
+        _Check(component=parts[_SECOND_DISCORD], rule=SENDS_FAILED, detected=False),
     ]
 
 
@@ -263,7 +267,8 @@ def test_the_services_of_an_audience_are_sent_to_together_within_one_timeout(
 ) -> None:
     # The time limit of a turn that notifies counts one notification timeout per notification.
     notifier = FakeHangingNotifier((_DISCORD, _SECOND_DISCORD))
-    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier)
+    parts = notification_service_components(notifier.services())
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, parts=parts)
 
     virtual_loop.run_until_complete(dispatcher.dispatch(_COMPLETED))
 
@@ -274,7 +279,8 @@ def test_the_services_of_an_audience_are_sent_to_together_within_one_timeout(
 async def test_no_send_is_recorded_before_every_send_of_the_notification_has_ended() -> None:
     notifier = FakeHeldNotifier((_DISCORD, _SECOND_DISCORD), held=[_SECOND_DISCORD])
     checks = _Checks()
-    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, checks=checks)
+    parts = notification_service_components(notifier.services())
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, checks=checks, parts=parts)
     sending = asyncio.create_task(dispatcher.dispatch(_COMPLETED))
     for _ in range(5):  # the two sends start, and the one not held ends
         await asyncio.sleep(0)  # noqa: TID251
@@ -285,13 +291,19 @@ async def test_no_send_is_recorded_before_every_send_of_the_notification_has_end
     await sending
 
     assert (held, sent, recorded_while_held) == (True, 1, [])
-    assert len(checks.recorded) == 4
+    assert [check.component for check in checks.recorded] == [
+        parts[_DISCORD],
+        parts[_DISCORD],
+        parts[_SECOND_DISCORD],
+        parts[_SECOND_DISCORD],
+    ]
 
 
 @pytest.mark.asyncio
 async def test_a_notification_whose_audience_has_no_service_sends_and_records_nothing() -> None:
     notifier, checks = FakeNotifier((_NTFY,)), _Checks()
-    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, checks=checks)
+    parts = notification_service_components(notifier.services())
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=notifier, checks=checks, parts=parts)
 
     await dispatcher.dispatch(_COMPLETED)
 
@@ -325,8 +337,8 @@ async def test_a_refused_send_is_a_failed_send_logged_in_one_line_and_no_bug() -
         message="notifier fake community: notification not sent: the service refused it (FAILURE)",
     )
     assert checks.recorded == [
-        _Check(component=_NOTIFIER, rule=BUGS, detected=False),
-        _Check(component=_NOTIFIER, rule=SENDS_FAILED, detected=True),
+        _Check(component=_COMMUNITY_PART, rule=BUGS, detected=False),
+        _Check(component=_COMMUNITY_PART, rule=SENDS_FAILED, detected=True),
     ]
 
 
@@ -349,8 +361,8 @@ async def test_a_send_past_its_timeout_is_a_failed_send_logged_in_one_line_and_n
         message="notifier fake community: notification not sent: past its timeout of 0.01 s",
     )
     assert checks.recorded == [
-        _Check(component=_NOTIFIER, rule=BUGS, detected=False),
-        _Check(component=_NOTIFIER, rule=SENDS_FAILED, detected=True),
+        _Check(component=_COMMUNITY_PART, rule=BUGS, detected=False),
+        _Check(component=_COMMUNITY_PART, rule=SENDS_FAILED, detected=True),
     ]
 
 
@@ -368,7 +380,7 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_logged_with_its_trac
         level="error", message="bug in notifier fake community, sending a notification", error=bug
     )
     # A bug tells nothing of whether the services take the sends.
-    assert checks.recorded == [_Check(component=_NOTIFIER, rule=BUGS, detected=True)]
+    assert checks.recorded == [_Check(component=_COMMUNITY_PART, rule=BUGS, detected=True)]
 
 
 @pytest.mark.asyncio
@@ -380,30 +392,55 @@ async def test_a_timeout_error_the_notifier_raises_itself_is_a_bug_not_a_timeout
 
     await dispatcher.dispatch(_COMPLETED)
 
-    assert checks.recorded == [_Check(component=_NOTIFIER, rule=BUGS, detected=True)]
+    assert checks.recorded == [_Check(component=_COMMUNITY_PART, rule=BUGS, detected=True)]
 
 
 @pytest.mark.asyncio
 async def test_refused_sends_and_sends_past_their_timeout_fail_the_notifier_s_sends() -> None:
     refusing = FakeRaisingNotifier(NotificationRefusedError("the service refused it (FAILURE)"))
     notifiers: list[Notifier] = [refusing, FakeHangingNotifier(), refusing]
-    notifier = notifier_component()
+    parts = notification_service_components(refusing.services())
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
         node_metric_writer=FakeNodeMetricStore(),
         current_notifier=lambda: notifiers.pop(0),
         notification_timeout_seconds=0.01,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        notifier_component=notifier,
+        service_components=parts,
     )
 
     for _ in range(3):
         await dispatcher.dispatch(_COMPLETED)
 
-    assert (notifier.state(SENDS_FAILED), notifier.state(BUGS)) == (
+    community = parts[ONE_SERVICE_PER_AUDIENCE[0]]
+    assert (community.state(SENDS_FAILED), community.state(BUGS)) == (
         HealthState.FAILING,
         HealthState.HEALTHY,
     )
+
+
+@pytest.mark.asyncio
+async def test_one_service_refusing_and_another_timing_out_fail_each_service_s_sends() -> None:
+    # Never released, the second service's sends all pass the timeout.
+    notifier = FakeHeldNotifier((_DISCORD, _SECOND_DISCORD), held=[_SECOND_DISCORD], refusing=True)
+    parts, health_logger = notification_service_components(notifier.services()), FakeLogger()
+    dispatcher = ObservabilityDispatcher(
+        logger=FakeLogger(),
+        node_metric_writer=FakeNodeMetricStore(),
+        current_notifier=lambda: notifier,
+        notification_timeout_seconds=0.01,
+        record_check=NodeHealth(logger=health_logger, subscribers=()).record,
+        service_components=parts,
+    )
+
+    for _ in range(3):
+        await dispatcher.dispatch(_COMPLETED)
+
+    assert [part.state(SENDS_FAILED) for part in parts.values()] == [HealthState.FAILING] * 2
+    assert [line for line in health_logger.lines if "sends failed" in line.message] == [
+        LoggedLine(level="warning", message=f"{part.name}, sends failed: unknown to failing")
+        for part in parts.values()
+    ]
 
 
 @pytest.mark.asyncio
@@ -416,7 +453,7 @@ async def test_each_send_goes_to_the_notifier_current_when_it_starts() -> None:
         current_notifier=lambda: current,
         notification_timeout_seconds=5.0,
         record_check=_Checks(),
-        notifier_component=_NOTIFIER,
+        service_components=_PARTS,
     )
     in_flight = asyncio.create_task(dispatcher.dispatch(_COMPLETED))
     await old.reached.wait()

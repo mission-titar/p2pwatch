@@ -1,7 +1,10 @@
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification import Notification
-from p2pwatch.domain.observability.notification_sends import NotificationService
+from p2pwatch.domain.observability.notification_sends import (
+    NotificationRefusedError,
+    NotificationService,
+)
 from p2pwatch.domain.observability.policy import Audience
 
 ONE_SERVICE_PER_AUDIENCE = tuple(
@@ -10,12 +13,17 @@ ONE_SERVICE_PER_AUDIENCE = tuple(
 
 
 class FakeNotifier(Notifier):
-    """Keeps each notification with the audience of the service it was sent to."""
+    """Keeps each notification with the audience of the service it was sent to; ``refusing``,
+    refuses every send instead."""
 
     def __init__(
-        self, services: tuple[NotificationService, ...] = ONE_SERVICE_PER_AUDIENCE
+        self,
+        services: tuple[NotificationService, ...] = ONE_SERVICE_PER_AUDIENCE,
+        *,
+        refusing: bool = False,
     ) -> None:
         self._services = services
+        self._refusing = refusing
         self.calls: list[tuple[Audience, Notification]] = []
 
     @property
@@ -26,4 +34,6 @@ class FakeNotifier(Notifier):
         return self._services
 
     async def notify(self, service: NotificationService, *, notification: Notification) -> None:
+        if self._refusing:
+            raise NotificationRefusedError("the service refused it (FAILURE)")
         self.calls.append((service.audience, notification))

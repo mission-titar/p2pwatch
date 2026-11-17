@@ -1,6 +1,6 @@
 """The node's restart policy: each object is rebuilt when a bugs rule of one of its parts turns
-failing, the other objects left as they are: a part its works are recorded on, or the notifier's,
-which the dispatcher records each send on."""
+failing, the other objects left as they are: a part its works are recorded on, or one of the
+notifier's, one per notification service, which the dispatcher records each send on."""
 
 import asyncio
 from collections.abc import Coroutine
@@ -17,10 +17,14 @@ from p2pwatch.composition.node_restart_policy import node_restart_policy
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability import events as ev
-from p2pwatch.domain.observability.notification_sends import notifier_component
+from p2pwatch.domain.observability.notification_sends import (
+    NotificationService,
+    notification_service_components,
+)
 from p2pwatch.domain.work_components import BUGS, status_reading_component, webui_component
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -59,7 +63,8 @@ async def _restarts_run() -> None:
 
 class _Node:
     """The aMule client and the webui, each with one work on a part of its own, the notifier with
-    its part and no work, the restart policy and the supervisor wired as the node wires them."""
+    a part per service and no work, the restart policy and the supervisor wired as the node wires
+    them."""
 
     def __init__(self) -> None:
         self.client = FakeRestartable("client amuled")
@@ -67,7 +72,7 @@ class _Node:
         self.notifier = FakeRestartable("notifier")
         self.status_reading_part = status_reading_component(ClientName("amuled"))
         self.webui_part = webui_component()
-        self.notifier_part = notifier_component()
+        self.service_parts = notification_service_components(ONE_SERVICE_PER_AUDIENCE)
         self._run_state = FakeRunStateStore()
         self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(self._to_policy,))
         self._supervisor = Supervisor(
@@ -81,7 +86,7 @@ class _Node:
                 self.client: [_recorded_on(self.status_reading_part)],
                 self.webui: [_recorded_on(self.webui_part)],
             },
-            parts_without_works={self.notifier: [self.notifier_part]},
+            parts_without_works={self.notifier: list(self.service_parts.values())},
             supervisor=self._supervisor,
         )
 
@@ -128,10 +133,13 @@ async def test_bugs_on_a_part_of_the_client_s_works_rebuild_the_client_alone() -
     assert node.rebuilds() == (1, 0, 0)
 
 
-async def test_bugs_on_the_notifier_s_part_rebuild_the_notifier_alone() -> None:
+@pytest.mark.parametrize("service", ONE_SERVICE_PER_AUDIENCE, ids=str)
+async def test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alone(
+    *, service: NotificationService
+) -> None:
     node = _Node()
 
-    await node.supervising(node.three_bugs_on(node.notifier_part))
+    await node.supervising(node.three_bugs_on(node.service_parts[service]))
 
     assert node.rebuilds() == (0, 0, 1)
 
@@ -145,7 +153,7 @@ async def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_the
         current_notifier=lambda: raising,  # each rebuild in vain: the notifier still raises
         notification_timeout_seconds=5.0,
         record_check=node.node_health.record,
-        notifier_component=node.notifier_part,
+        service_components=node.service_parts,
     )
 
     async def twenty_sends() -> None:
