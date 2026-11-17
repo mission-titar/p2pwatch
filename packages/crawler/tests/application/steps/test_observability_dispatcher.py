@@ -101,6 +101,12 @@ def _dispatcher(
     )
 
 
+def test_it_names_the_part_of_each_service_it_records_its_sends_on() -> None:
+    dispatcher = _dispatcher(FakeNodeMetricStore(), notifier=FakeNotifier())
+
+    assert dispatcher.service_components() == tuple(_PARTS.values())
+
+
 @pytest.mark.asyncio
 async def test_logs_and_writes_node_metrics_no_audience() -> None:
     node_metric_store, notifier = FakeNodeMetricStore(), FakeNotifier()
@@ -398,18 +404,19 @@ async def test_a_timeout_error_the_notifier_raises_itself_is_a_bug_not_a_timeout
 @pytest.mark.asyncio
 async def test_refused_sends_and_sends_past_their_timeout_fail_the_notifier_s_sends() -> None:
     refusing = FakeRaisingNotifier(NotificationRefusedError("the service refused it (FAILURE)"))
-    notifiers: list[Notifier] = [refusing, FakeHangingNotifier(), refusing]
+    current: Notifier = refusing
     parts = notification_service_components(refusing.services())
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
         node_metric_writer=FakeNodeMetricStore(),
-        current_notifier=lambda: notifiers.pop(0),
+        current_notifier=lambda: current,
         notification_timeout_seconds=0.01,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
         service_components=parts,
     )
 
-    for _ in range(3):
+    for notifier in (refusing, FakeHangingNotifier(), refusing):
+        current = notifier
         await dispatcher.dispatch(_COMPLETED)
 
     community = parts[ONE_SERVICE_PER_AUDIENCE[0]]
@@ -465,6 +472,30 @@ async def test_each_send_goes_to_the_notifier_current_when_it_starts() -> None:
 
     # The send in flight finishes on the old notifier, the next goes to the new one.
     assert (len(old.calls), len(rebuilt.calls)) == (1, 1)
+
+
+@pytest.mark.asyncio
+async def test_a_send_that_ends_on_a_notifier_rebuilt_meanwhile_is_recorded_on_no_part() -> None:
+    old = FakeHeldNotifier(refusing=True)
+    current: Notifier = old
+    checks = _Checks()
+    dispatcher = ObservabilityDispatcher(
+        logger=FakeLogger(),
+        node_metric_writer=FakeNodeMetricStore(),
+        current_notifier=lambda: current,
+        notification_timeout_seconds=5.0,
+        record_check=checks,
+        service_components=_PARTS,
+    )
+    in_flight = asyncio.create_task(dispatcher.dispatch(_COMPLETED))
+    await old.reached.wait()
+
+    current = FakeNotifier()
+    old.released.set()
+    await in_flight
+
+    # The old notifier's refusal tells nothing of the notifier the service is sent through now.
+    assert checks.recorded == []
 
 
 @pytest.mark.asyncio

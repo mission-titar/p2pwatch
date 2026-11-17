@@ -87,7 +87,10 @@ class UvicornServerThread:
             _logger.info("webui serving on %s:%d (own thread)", *self.bound_address)
 
     async def stop(self) -> None:
-        """Asks uvicorn to exit, then joins off the event loop so a shutdown deadline can cancel."""
+        """Asks uvicorn to exit, then joins off the event loop so a shutdown deadline can cancel;
+        a thread never started, such as one whose start raised, has nothing to stop."""
+        if self._thread.ident is None:
+            return
         self._server.should_exit = True
         await asyncio.to_thread(self._thread.join, self._join_timeout_seconds)
 

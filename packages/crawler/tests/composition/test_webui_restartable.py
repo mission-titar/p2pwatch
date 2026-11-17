@@ -35,7 +35,7 @@ class _Over(Work):
         self.thread = thread
 
     def __str__(self) -> str:
-        return "webui thread watch"
+        return "webui"
 
     async def wait_for_next_turn(self) -> None:
         """Never awaited."""
@@ -190,6 +190,6 @@ async def test_the_watch_handed_back_looks_at_the_thread_built_anew(threads: _Th
     [watch] = await webui.rebuild()
 
     await watch.work.run_once()  # the old thread has ended, the new one serves
-    assert (str(watch.work), watch.components) == ("webui thread watch", (webui_part,))
+    assert (str(watch.work), watch.components) == ("webui", (webui_part,))
     # Its turn awaits nothing: its time limit is the margin alone.
     assert watch.time_limit == timedelta(minutes=5)

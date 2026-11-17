@@ -119,9 +119,9 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
+from p2pwatch.composition.health_subscriber_built_later import HealthSubscriberBuiltLater
 from p2pwatch.composition.node_restart_policy import node_restart_policy
 from p2pwatch.composition.notifier_restartable import NotifierRestartable
-from p2pwatch.composition.restart_policy_built_later import RestartPolicyBuiltLater
 from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
@@ -408,37 +408,32 @@ class CrawlerComposition(CrawlerRunner):
                     apprise_factory=apprise.Apprise,
                 )
             )
-            # Built once: a notifier rebuilt on the same configuration lists the same services.
-            service_parts = notification_service_components(notifier.notifier().services())
-            # Each send is recorded on the node's health, which sends its alerts through this
-            # dispatcher: built right below it.
-            node_health: NodeHealth
+            # Set once the dispatcher is built: it records each send on the node's health.
+            alerts = HealthSubscriberBuiltLater("the alerts")
+            # Set once the works are built: they record on the node's health, the policy maps them.
+            restart_policy = HealthSubscriberBuiltLater("the restart policy")
+            node_health = NodeHealth(
+                logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
+            )
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
                 current_notifier=notifier.notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
-                record_check=lambda *, on, rule, detected: node_health.record(
-                    on=on, rule=rule, detected=detected
-                ),
-                service_components=service_parts,
+                record_check=node_health.record,
+                # Built once: a notifier rebuilt on the same configuration lists the same services.
+                service_components=notification_service_components(notifier.notifier().services()),
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
-            # Set once the works are built: they record on the node's health, the policy maps them.
-            restart_policy = RestartPolicyBuiltLater()
-            node_health = NodeHealth(
-                logger=StdlibLogger(NodeHealth.__module__),
-                subscribers=(
-                    HealthAlerter(
-                        observability_dispatcher=observability_dispatcher,
-                        node_id=node_id,
-                        min_free_bytes=(
-                            None if download_config is None else download_config.min_free_bytes
-                        ),
-                    ).send,
-                    restart_policy,
-                ),
+            alerts.set(
+                HealthAlerter(
+                    observability_dispatcher=observability_dispatcher,
+                    node_id=node_id,
+                    min_free_bytes=(
+                        None if download_config is None else download_config.min_free_bytes
+                    ),
+                ).send
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
@@ -452,7 +447,7 @@ class CrawlerComposition(CrawlerRunner):
             status_reading_store = InMemoryStatusReadingStore((_AMULE_CLIENT_NAME,))
             # In-process webui (spec §5): own thread + loop, started EARLY (before the daemon client
             # + startup re-evaluation) so it is up promptly and stays isolated from the crawler's
-            # synchronous work. A crash degrades (spec §17.1), and its watch has it rebuilt.
+            # synchronous work. A crash degrades the webui alone, and its watch has it rebuilt.
 
             def build_webui_thread() -> UvicornServerThread:
                 return self._webui_thread(
@@ -593,7 +588,8 @@ class CrawlerComposition(CrawlerRunner):
             restart_policy.set(
                 node_restart_policy(
                     works_of,
-                    parts_without_works={notifier: list(service_parts.values())},
+                    notifier=notifier,
+                    observability_dispatcher=observability_dispatcher,
                     supervisor=supervisor,
                 )
             )

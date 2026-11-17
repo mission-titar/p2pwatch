@@ -76,8 +76,8 @@ async def test_each_turn_waits_a_minute_the_first_included() -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_log_names_it_the_webui_thread_watch() -> None:
-    assert str(_watch(_WebuiThread())) == "webui thread watch"
+async def test_the_log_names_it_as_its_part_the_webui() -> None:
+    assert str(_watch(_WebuiThread())) == "webui"
 
 
 class _Webui:
@@ -130,7 +130,7 @@ class _Webui:
         )
 
     def bug_lines(self) -> int:
-        return sum(1 for line in self.logger.lines if line.message == "bug in webui thread watch")
+        return sum(1 for line in self.logger.lines if line.message == "bug in webui")
 
 
 def test_a_thread_ended_has_the_webui_rebuilt_at_the_third_watch_after(

@@ -53,7 +53,7 @@ class WebuiRestartable(Restartable[SupervisedWork]):
         """Stops the old thread, serves the webui on a thread built anew and returns the works
         over it; a port held elsewhere leaves the new thread ended, which its watch finds."""
         await self._thread.stop()
-        # Held before its start, so the shutdown stops it even when the start is cut.
+        # Held before its start: cut while it binds, the thread runs and the shutdown stops it.
         self._thread = self._build_thread()
         await self._thread.start()
         return self._works_over(self._thread)
