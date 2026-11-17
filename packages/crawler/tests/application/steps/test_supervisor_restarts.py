@@ -123,6 +123,7 @@ class _Node:
                 self.client: [c for work in self._first_works for c in work.components],
                 self.webui: [self.webui_part],
             },
+            works=self._first_works,
             restart=self._supervisor.restart,
             logger=FakeLogger(),
         )
@@ -237,6 +238,31 @@ def test_a_rebuild_that_raises_is_tried_again_60_s_later_its_parts_failing_meanw
         LoggedLine(level="error", message="bug in the rebuild of client amuled", error=errors[1]),
         LoggedLine(level="info", message="client amuled rebuilt"),
     ]
+
+
+def test_a_rebuild_that_raises_records_a_bug_on_each_part_of_its_object(
+    virtual_loop: VirtualLoop,
+) -> None:
+    search, tracking = _part("search"), _part("download tracking")
+
+    def works(rebuild: int) -> Sequence[SupervisedWork]:
+        tracking_work = _Searching(rebuild=rebuild, turns=_Turns(), buggy=False)
+        return [
+            *_one_search(_Turns(), part=search)(rebuild),
+            SupervisedWork(work=tracking_work, time_limit=_DAY, components=(tracking,)),
+        ]
+
+    errors = [RuntimeError("no session")] * 3
+    node = _Node(virtual_loop, client_works=works, rebuild_errors=errors)
+    tracking_bugs = [
+        node.at(seconds=seconds, read=lambda: tracking.state(BUGS)) for seconds in (120, 210, 300)
+    ]
+
+    node.run_for(400.0)
+
+    # Its own turns worked; each of the three raises at 121, 181 and 241 s is a bug of it too.
+    assert node.client.rebuilt_at == [121.0, 181.0, 241.0]
+    assert tracking_bugs == [[HealthState.HEALTHY], [HealthState.HEALTHY], [HealthState.FAILING]]
 
 
 def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running(

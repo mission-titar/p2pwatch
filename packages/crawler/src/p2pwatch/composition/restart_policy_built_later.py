@@ -5,8 +5,9 @@ from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.domain.health.component import HealthTransition
 
 
-class PartNotBuiltYetError(RuntimeError):
-    """A part reached before the composition set it: a bug of the order the node is built in."""
+class RestartPolicyNotSetError(RuntimeError):
+    """The restart policy reached before the composition set it: a bug of the order the node is
+    built in."""
 
 
 class RestartPolicyBuiltLater:
@@ -21,5 +22,5 @@ class RestartPolicyBuiltLater:
     async def __call__(self, transition: HealthTransition) -> None:
         """Hands ``transition`` to the policy, raising if it is not set yet."""
         if self._restart_policy is None:
-            raise PartNotBuiltYetError("the restart policy, reached before it is set")
+            raise RestartPolicyNotSetError("the restart policy, reached before it is set")
         await self._restart_policy(transition)

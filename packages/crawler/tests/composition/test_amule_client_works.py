@@ -1,8 +1,10 @@
 """The works over the node's aMule client as the node builds them, at its start and over each
 client built anew: their turns sent to that client, recorded on the parts built once."""
 
+import asyncio
+import contextlib
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import timedelta
 from pathlib import Path
 
@@ -20,22 +22,30 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.node_health import NodeHealth
+from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
-from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
+from p2pwatch.composition.amule_client_works import (
+    AmuleClientWorks,
+    DownloadSteps,
+    amule_client_restart_policy,
+)
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
-from p2pwatch.domain.health.component import HealthTransition
-from p2pwatch.domain.health.health_rule import HealthRule
+from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED
+from p2pwatch.domain.work_components import BUGS
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.composition.fake_restartable import FakeRestartable
 from tests.fakes.fake_amule_api import FakeAmuleApi
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
@@ -309,3 +319,64 @@ async def test_download_tracking_records_the_disk_on_the_part_its_turns_are_reco
 
     [disk_low] = node.changes_under(DISK_SPACE_LOW)
     assert disk_low.component is download_tracking.components[0]
+
+
+async def _rebuilt(amule_client: FakeRestartable) -> None:
+    while not amule_client.rebuilt_at:
+        await asyncio.sleep(0)  # noqa: TID251
+
+
+async def _rebuilds_once_failing(
+    part: Component, *, works: Sequence[SupervisedWork], node: _Node
+) -> int:
+    """How many times the client is rebuilt once the bugs rule of ``part`` turns failing, its
+    restart policy and the supervisor wired as the node wires them."""
+    amule_client = FakeRestartable("client amuled")
+    run_state = FakeRunStateStore()
+    supervisor = Supervisor(
+        run_state_reader=run_state,
+        monotonic_clock=node.time.monotonic,
+        node_health=node.node_health,
+        logger=FakeLogger(),
+    )
+    policy = amule_client_restart_policy(amule_client, works=works, supervisor=supervisor)
+    supervision = asyncio.create_task(supervisor.supervise((), arm_shutdown_bound=lambda: None))
+
+    await policy(
+        HealthTransition(
+            component=part, rule=BUGS, previous=HealthState.UNKNOWN, current=HealthState.FAILING
+        )
+    )
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(_rebuilt(amule_client), timeout=1.0)
+
+    run_state.set_shutdown_requested()
+    await supervision
+    return len(amule_client.rebuilt_at)
+
+
+@pytest.mark.parametrize("downloading", [True, False], ids=["downloading", "not-downloading"])
+async def test_bugs_on_any_part_a_work_is_recorded_on_have_the_supervisor_rebuild_the_client(
+    node: _Node, *, downloading: bool
+) -> None:
+    works = node.client_works(downloading=downloading).over(node.client(FakeAmuleApi()))
+    parts = dict.fromkeys(part for supervised in works for part in supervised.components)
+
+    rebuilds = {
+        part.name: await _rebuilds_once_failing(part, works=works, node=node) for part in parts
+    }
+
+    tracking = _TRACKING if downloading else []
+    assert rebuilds == {
+        name: 1
+        for name in [
+            "status reading amuled",
+            *tracking,
+            "search 'keroro' amuled ed2k",
+            "channel amuled ed2k",
+            "search 'titar' amuled ed2k",
+            "search 'keroro' amuled kad",
+            "channel amuled kad",
+            "search 'titar' amuled kad",
+        ]
+    }

@@ -11,7 +11,7 @@ from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
 from p2pwatch.domain.client_errors import ClientAuthError
-from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
 from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -37,15 +37,18 @@ class _Over(Work):
 
 
 class _Clients:
-    """Builds clients of one fake aMule, keeping each, as the composition builds them."""
+    """Builds clients of one fake aMule on one timeline, keeping each, as the composition builds
+    them."""
 
     def __init__(self) -> None:
-        self.api = FakeAmuleApi()
+        self.time = FakeTime()
+        self.api = FakeAmuleApi(monotonic_clock=self.time.monotonic)
         self.password = PASSWORD
         self.built: list[AmuleApiClient] = []
+        # One store for every client, as the composition's ``build_client`` closes over one.
+        self.search_start_store = FakeSearchStartStore()
 
     def build(self) -> AmuleApiClient:
-        search_start_store = FakeSearchStartStore()
         self.built.append(
             AmuleApiClient(
                 "amuled.test",
@@ -58,9 +61,9 @@ class _Clients:
                 progress_poll_interval=timedelta(seconds=5),
                 transport_factory=self.api.transport,
                 monotonic_clock=self.api.monotonic_clock,
-                wall_clock=FakeTime().wall,
-                search_start_writer=search_start_store,
-                search_start_reader=search_start_store,
+                wall_clock=self.time.wall,
+                search_start_writer=self.search_start_store,
+                search_start_reader=self.search_start_store,
             )
         )
         return self.built[-1]
@@ -135,3 +138,20 @@ async def test_a_refused_login_raises_and_the_next_rebuild_builds_a_client_anew(
     assert len(clients.built) == 3
     assert _client_under(works) is clients.built[2]
     assert clients.api.logins == 1
+
+
+@pytest.mark.asyncio
+async def test_a_client_built_anew_spaces_its_first_ed2k_search_from_the_old_client_s_latest() -> (
+    None
+):
+    clients = _Clients()
+    restartable = clients.restartable()
+    ed2k = Channel("ed2k")
+    await clients.built[0].search(Keyword("keroro"), channel=ed2k, budget_seconds=120.0)
+    clients.time.advance(timedelta(seconds=20))
+
+    await restartable.rebuild()
+    await clients.built[1].search(Keyword("titar"), channel=ed2k, budget_seconds=120.0)
+
+    [before, after] = [started_at for started_at, _ in clients.api.searches.values()]
+    assert after - before == timedelta(seconds=60)
