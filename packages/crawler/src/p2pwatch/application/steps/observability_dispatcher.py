@@ -1,9 +1,9 @@
 """The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies each service
 of its audience. A send that fails never breaks the crawl: it is logged, and recorded on the
-notifier's part."""
+service's part."""
 
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from contextlib import suppress
 from typing import Literal, Protocol, assert_never
 
@@ -50,14 +50,14 @@ class ObservabilityDispatcher:
         current_notifier: CurrentNotifier,
         notification_timeout_seconds: float,
         record_check: CheckRecorder,
-        notifier_component: Component,
+        service_components: Mapping[NotificationService, Component],
     ) -> None:
         self._logger = logger
         self._node_metric_writer = node_metric_writer
         self._current_notifier = current_notifier
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_check = record_check
-        self._notifier_component = notifier_component
+        self._service_components = service_components
         # Held to their end: the loop keeps only a weak reference to a task (see asyncio.shield).
         self._shielded_dispatches: set[Awaitable[None]] = set()
 
@@ -74,9 +74,9 @@ class ObservabilityDispatcher:
 
     async def _send(self, notification: Notification) -> None:
         """Sends ``notification`` to each service of its audience together, so that it takes one
-        notification timeout at most, then records how each send ended on the notifier's part."""
+        notification timeout at most, then records how each send ended on its service's part."""
         notifier, audience = self._current_notifier(), audience_of(notification)
-        services = [service for service in notifier.services() if service.audience is audience]
+        services = [service for service in self._service_components if service.audience is audience]
         async with asyncio.TaskGroup() as sends:
             ends = [
                 sends.create_task(
@@ -85,15 +85,15 @@ class ObservabilityDispatcher:
                 for service in services
             ]
         # Recorded once every send has ended: a check whose recording raises cuts no other send.
-        for end in ends:
-            await self._record(end.result())
+        for service, end in zip(services, ends, strict=True):
+            await self._record(end.result(), on=self._service_components[service])
 
     async def _send_to(
         self, service: NotificationService, *, notification: Notification, notifier: Notifier
     ) -> _SendEnd:
         """Sends ``notification`` to ``service`` within the notification timeout, a failed send
         such as a refusal logged in one line, a bug with its trace."""
-        part = f"{self._notifier_component.name} {service}"
+        part = self._service_components[service].name
         try:
             raised = await asyncio.wait_for(
                 self._raised_by(notifier, service=service, notification=notification),
@@ -124,13 +124,12 @@ class ObservabilityDispatcher:
             return error
         return None
 
-    async def _record(self, end: _SendEnd) -> None:
-        """Records how one send ended on the notifier's part; a bug tells nothing of whether the
+    async def _record(self, end: _SendEnd, *, on: Component) -> None:
+        """Records how one send ended on its service's part; a bug tells nothing of whether the
         service takes the sends, so it records nothing on the sends that failed."""
-        notifier = self._notifier_component
-        await self._record_check(on=notifier, rule=BUGS, detected=end == "bug")
+        await self._record_check(on=on, rule=BUGS, detected=end == "bug")
         if end != "bug":
-            await self._record_check(on=notifier, rule=SENDS_FAILED, detected=end == "failed")
+            await self._record_check(on=on, rule=SENDS_FAILED, detected=end == "failed")
 
     async def dispatch_shielded(self, event: Event) -> None:
         """Dispatches ``event`` in a task of its own, which goes on when the caller is cancelled:

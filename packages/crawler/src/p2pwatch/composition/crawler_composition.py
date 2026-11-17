@@ -129,7 +129,7 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
-from p2pwatch.domain.observability.notification_sends import notifier_component
+from p2pwatch.domain.observability.notification_sends import notification_service_components
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.work_components import webui_component
@@ -408,7 +408,8 @@ class CrawlerComposition(CrawlerRunner):
                     apprise_factory=apprise.Apprise,
                 )
             )
-            notifier_part = notifier_component()
+            # Built once: a notifier rebuilt on the same configuration lists the same services.
+            service_parts = notification_service_components(notifier.notifier().services())
             # Each send is recorded on the node's health, which sends its alerts through this
             # dispatcher: built right below it.
             node_health: NodeHealth
@@ -420,7 +421,7 @@ class CrawlerComposition(CrawlerRunner):
                 record_check=lambda *, on, rule, detected: node_health.record(
                     on=on, rule=rule, detected=detected
                 ),
-                notifier_component=notifier_part,
+                service_components=service_parts,
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
@@ -591,7 +592,9 @@ class CrawlerComposition(CrawlerRunner):
             )
             restart_policy.set(
                 node_restart_policy(
-                    works_of, parts_without_works={notifier: [notifier_part]}, supervisor=supervisor
+                    works_of,
+                    parts_without_works={notifier: list(service_parts.values())},
+                    supervisor=supervisor,
                 )
             )
             crawler_lifecycle = CrawlerLifecycle(

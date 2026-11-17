@@ -11,6 +11,7 @@ import pytest
 from apprise.plugins.discord import USER_ROLE_DETECTION_RE
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
+from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.decision_tier import DecisionTier
@@ -31,6 +32,7 @@ from p2pwatch.domain.observability.notification_sends import (
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
+from tests.contracts.application.ports.driven.notifier_contract import NotifierContract
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
 _NODE_ID = NodeId("titar-node-1")
@@ -101,6 +103,14 @@ def _source_alert(
         filename=filename,
         node_id=_NODE_ID,
     )
+
+
+class TestAppriseNotifier(NotifierContract):
+    def notifier(self) -> Notifier:
+        return _notifier()[0]
+
+    def refusing_notifier(self) -> Notifier:
+        return _notifier(apprise.AppriseResultStatus.FAILURE)[0]
 
 
 def test_each_url_is_a_service_named_by_its_scheme_and_audience_a_second_alike_by_its_ordinal() -> (

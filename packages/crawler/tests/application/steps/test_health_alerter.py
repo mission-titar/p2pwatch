@@ -15,7 +15,10 @@ from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.notification_sends import SENDS_FAILED, notifier_component
+from p2pwatch.domain.observability.notification_sends import (
+    SENDS_FAILED,
+    notification_service_components,
+)
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
@@ -29,7 +32,7 @@ from p2pwatch.domain.work_components import BUGS, status_reading_component, webu
 from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
-from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 
 _NODE_ID = NodeId("titar-node-1")
 _UNREACHABLE = RelayedLogLine(
@@ -44,6 +47,9 @@ _AMULE = client_component(ClientName("amuled"))
 _KAD = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
 _DOWNLOAD_TRACKING = download_tracking_component(ClientName("amuled"))
 _TEN_GIB = 10 * 2**30
+_NOTIFICATION_SERVICE_PART = notification_service_components(ONE_SERVICE_PER_AUDIENCE)[
+    ONE_SERVICE_PER_AUDIENCE[0]
+]
 
 
 async def _sent(
@@ -62,7 +68,7 @@ async def _sent(
         current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        notifier_component=notifier_component(),
+        service_components=notification_service_components(notifier.services()),
     )
     alerter = HealthAlerter(
         observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=min_free_bytes
@@ -119,8 +125,8 @@ async def test_a_rule_it_has_no_alert_for_raises(
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
         # An alert about the notifier would be sent through the notifier itself.
-        (BUGS, notifier_component()),
-        (SENDS_FAILED, notifier_component()),
+        (BUGS, _NOTIFICATION_SERVICE_PART),
+        (SENDS_FAILED, _NOTIFICATION_SERVICE_PART),
     ],
     ids=[
         "a task's bugs",
@@ -129,8 +135,8 @@ async def test_a_rule_it_has_no_alert_for_raises(
         "the webui's bugs",
         "a channel's searches failed",
         "download tracking connected to no network",
-        "the notifier's bugs",
-        "the notifier's sends failed",
+        "a notification service's bugs",
+        "a notification service's sends failed",
     ],
 )
 @pytest.mark.parametrize(
@@ -261,7 +267,7 @@ async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
         current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        notifier_component=notifier_component(),
+        service_components=notification_service_components(notifier.services()),
     )
     alerter = HealthAlerter(
         observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
