@@ -1,6 +1,7 @@
-"""Apprise notifier: groups built per node_id on its first notification, add(url, tag) into
-them, node_id in the title, routes by tag, writes each kind's Markdown and notify type,
-mentions neutralised, a relayed log line sent untitled, a service refusing it a refusal."""
+"""Apprise notifier: each target URL a service named by its scheme and its audience, sent to
+through an apprise object of its own per node, the node in the title of the services that ask
+for it, each kind's Markdown and notify type, mentions neutralised, a relayed log line sent
+untitled, any answer but a success a refusal."""
 
 import socket
 from datetime import timedelta
@@ -23,7 +24,10 @@ from p2pwatch.domain.observability.notification import (
     SourceAlertKind,
     TierRise,
 )
-from p2pwatch.domain.observability.notification_sends import NotificationRefusedError
+from p2pwatch.domain.observability.notification_sends import (
+    NotificationRefusedError,
+    NotificationService,
+)
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
@@ -36,28 +40,36 @@ _062A = TargetTitle(target_id=TargetId("062A"), title="Les demoiselles cambriole
 _062B = TargetTitle(target_id=TargetId("062B"), title="Le grand combat sous-marin")
 _LINE = RelayedLogLine(message="online", severity=Severity.INFO, node_id=_NODE_ID)
 
+# The services of ``_notifier``'s three URLs, in the order configured.
+_DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY)
+_NTFY = NotificationService(scheme="ntfy", audience=Audience.OPERATIONS)
+_SECOND_DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY, ordinal=2)
 
-def _notifier() -> tuple[AppriseNotifier, list[FakeApprise]]:
-    """The notifier and every apprise group it builds, in order."""
+
+def _notifier(
+    status: apprise.AppriseResultStatus = apprise.AppriseResultStatus.SUCCESS,
+) -> tuple[AppriseNotifier, list[FakeApprise]]:
+    """The notifier and every apprise object it builds, in order, each answering ``status``; the
+    third URL's titles go without the node's prefix."""
     targets = (
         ("discord://x", Audience.COMMUNITY, True),
-        ("discord://y", Audience.OPERATIONS, True),
+        ("ntfy://y", Audience.OPERATIONS, True),
         ("discord://z", Audience.COMMUNITY, False),
     )
-    groups: list[FakeApprise] = []
+    built: list[FakeApprise] = []
 
     def factory(*, asset: apprise.AppriseAsset) -> FakeApprise:
-        groups.append(FakeApprise(asset=asset))
-        return groups[-1]
+        built.append(FakeApprise(asset=asset, status=status))
+        return built[-1]
 
-    return AppriseNotifier(targets, apprise_factory=factory), groups
+    return AppriseNotifier(targets, apprise_factory=factory), built
 
 
-async def _sent_to_the_bare_group(notification: Notification) -> dict[str, object]:
-    """What the bare group, whose title has no node prefix, sends for ``notification``."""
-    notifier, groups = _notifier()
-    await notifier.notify(Audience.COMMUNITY, notification=notification)
-    [call] = groups[1].sent
+async def _sent_without_the_node_prefix(notification: Notification) -> dict[str, object]:
+    """What the service whose title has no node prefix is sent for ``notification``."""
+    notifier, built = _notifier()
+    await notifier.notify(_SECOND_DISCORD, notification=notification)
+    [call] = built[0].sent
     return call
 
 
@@ -91,21 +103,49 @@ def _source_alert(
     )
 
 
-@pytest.mark.asyncio
-async def test_targets_are_added_with_tags_to_the_prefixed_or_the_bare_group() -> None:
-    notifier, groups = _notifier()
-    assert groups == []  # nothing built before a notification names its node
-    await notifier.notify(Audience.COMMUNITY, notification=_LINE)
-    prefixed, bare = groups
-    assert prefixed.added == [("discord://x", "community"), ("discord://y", "operations")]
-    assert bare.added == [("discord://z", "community")]
+def test_each_url_is_a_service_named_by_its_scheme_and_audience_a_second_alike_by_its_ordinal() -> (
+    None
+):
+    notifier, _ = _notifier()
+
+    assert notifier.services() == (_DISCORD, _NTFY, _SECOND_DISCORD)
+
+
+def test_a_scheme_is_read_in_lower_case_and_a_url_without_one_is_of_the_unknown_scheme() -> None:
+    targets = (("Discord://x", Audience.COMMUNITY, True), ("a-token", Audience.OPERATIONS, True))
+
+    services = AppriseNotifier(targets, apprise_factory=apprise.Apprise).services()
+
+    assert [str(service) for service in services] == ["discord community", "unknown operations"]
+
+
+def test_a_notifier_without_a_url_has_no_service() -> None:
+    assert AppriseNotifier((), apprise_factory=apprise.Apprise).services() == ()
 
 
 @pytest.mark.asyncio
-async def test_both_groups_name_the_node_and_send_no_image() -> None:
-    notifier, groups = _notifier()
-    await notifier.notify(Audience.COMMUNITY, notification=_LINE)
-    for asset in (group.asset for group in groups):
+async def test_each_service_is_sent_to_through_an_apprise_object_holding_its_url_alone() -> None:
+    notifier, built = _notifier()
+    built_before_a_notification = list(built)
+
+    await notifier.notify(_SECOND_DISCORD, notification=_LINE)
+    await notifier.notify(_DISCORD, notification=_LINE)
+
+    assert built_before_a_notification == []
+    assert [(apprise_object.added, len(apprise_object.sent)) for apprise_object in built] == [
+        (["discord://z"], 1),
+        (["discord://x"], 1),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_each_apprise_object_names_the_node_and_sends_no_image() -> None:
+    notifier, built = _notifier()
+
+    await notifier.notify(_DISCORD, notification=_LINE)
+    await notifier.notify(_NTFY, notification=_LINE)
+
+    for asset in (apprise_object.asset for apprise_object in built):
         assert asset.app_id == "p2pwatch - titar-node-1"
         assert asset.app_url == "https://github.com/mission-titar/p2pwatch"
         assert asset.image_url(apprise.NotifyType.INFO) is None
@@ -113,69 +153,74 @@ async def test_both_groups_name_the_node_and_send_no_image() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_node_keeps_its_groups_and_another_node_gets_its_own() -> None:
-    notifier, groups = _notifier()
-    await notifier.notify(Audience.COMMUNITY, notification=_LINE)
-    await notifier.notify(Audience.COMMUNITY, notification=_LINE)
-    await notifier.notify(
-        Audience.COMMUNITY,
-        notification=CompletedDownload(
-            target_titles=(_062A,), filename="Keroro 062.avi", node_id=NodeId("titar-node-2")
-        ),
+async def test_a_node_keeps_its_apprise_object_per_service_and_another_node_gets_its_own() -> None:
+    notifier, built = _notifier()
+    other_node = CompletedDownload(
+        target_titles=(_062A,), filename="Keroro 062.avi", node_id=NodeId("titar-node-2")
     )
-    assert [group.asset.app_id for group in groups] == [
-        "p2pwatch - titar-node-1",
-        "p2pwatch - titar-node-1",
-        "p2pwatch - titar-node-2",
-        "p2pwatch - titar-node-2",
+
+    await notifier.notify(_DISCORD, notification=_LINE)
+    await notifier.notify(_DISCORD, notification=_LINE)
+    await notifier.notify(_DISCORD, notification=other_node)
+
+    assert [(o.asset.app_id, len(o.sent)) for o in built] == [
+        ("p2pwatch - titar-node-1", 2),
+        ("p2pwatch - titar-node-2", 1),
     ]
-    assert [len(group.sent) for group in groups] == [2, 2, 1, 1]
-    assert [call["title"] for call in groups[2].sent] == ["[titar-node-2] ✅ Downloaded"]
+    assert [call["title"] for call in built[1].sent] == ["[titar-node-2] ✅ Downloaded"]
 
 
 @pytest.mark.asyncio
-async def test_the_node_prefix_goes_into_the_title_of_the_prefixed_group_only() -> None:
-    notifier, groups = _notifier()
-    await notifier.notify(Audience.COMMUNITY, notification=_rise(DecisionTier.DOWNLOAD))
-    await notifier.notify(Audience.COMMUNITY, notification=_LINE)
-    prefixed, bare = groups
-    assert [(c["tag"], c["title"]) for c in prefixed.sent + bare.sent] == [
-        ("community", "[titar-node-1] 📥 Download"),
-        ("community", "[titar-node-1]"),
-        ("community", "📥 Download"),
-        ("community", ""),
+async def test_the_node_prefix_goes_into_the_title_of_the_services_that_ask_for_it() -> None:
+    notifier, built = _notifier()
+
+    await notifier.notify(_DISCORD, notification=_rise(DecisionTier.DOWNLOAD))
+    await notifier.notify(_DISCORD, notification=_LINE)
+    await notifier.notify(_SECOND_DISCORD, notification=_rise(DecisionTier.DOWNLOAD))
+    await notifier.notify(_SECOND_DISCORD, notification=_LINE)
+
+    prefixed, bare = built
+    assert [call["title"] for call in prefixed.sent + bare.sent] == [
+        "[titar-node-1] 📥 Download",
+        "[titar-node-1]",
+        "📥 Download",
+        "",
     ]
-    assert [c["body"] for c in prefixed.sent] == [c["body"] for c in bare.sent]
+    assert [call["body"] for call in prefixed.sent] == [call["body"] for call in bare.sent]
     assert bare.sent[1]["body"] == "online"
 
 
 @pytest.mark.asyncio
 async def test_every_message_is_sent_as_markdown() -> None:
-    notifier, groups = _notifier()
+    notifier, built = _notifier()
+
     await notifier.notify(
-        Audience.OPERATIONS,
+        _NTFY,
         notification=RelayedLogLine(message="x", severity=Severity.WARNING, node_id=_NODE_ID),
     )
-    calls = [call for group in groups for call in group.sent]
-    assert [c["body_format"] for c in calls] == [apprise.NotifyFormat.MARKDOWN] * 2
+
+    [call] = built[0].sent
+    assert call["body_format"] == apprise.NotifyFormat.MARKDOWN
 
 
 @pytest.mark.asyncio
 async def test_no_mention_reaches_apprise() -> None:
     hostile = "@everyone @here <@123> <@&456>"
-    notifier, groups = _notifier()
+    notifier, built = _notifier()
     alert = _source_alert(
         hostile,
         absent_for=None,
         target_titles=(TargetTitle(target_id=TargetId("062A"), title=hostile),),
         filename=hostile,
     )
-    await notifier.notify(Audience.COMMUNITY, notification=alert)
+
+    await notifier.notify(_DISCORD, notification=alert)
     await notifier.notify(
-        Audience.OPERATIONS,
+        _NTFY,
         notification=RelayedLogLine(message=hostile, severity=Severity.WARNING, node_id=_NODE_ID),
     )
-    for call in (call for group in groups for call in group.sent):
+
+    for call in (call for apprise_object in built for call in apprise_object.sent):
         for text in (call["title"], call["body"]):
             assert isinstance(text, str)
             assert USER_ROLE_DETECTION_RE.search(text) is None, text
@@ -193,12 +238,13 @@ async def test_no_mention_reaches_apprise() -> None:
 async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
     *, severity: Severity, notify_type: apprise.NotifyType
 ) -> None:
-    notifier, groups = _notifier()
+    notifier, built = _notifier()
+
     await notifier.notify(
-        Audience.OPERATIONS,
-        notification=RelayedLogLine(message="x", severity=severity, node_id=_NODE_ID),
+        _NTFY, notification=RelayedLogLine(message="x", severity=severity, node_id=_NODE_ID)
     )
-    assert groups[0].sent[-1]["notify_type"] == notify_type
+
+    assert built[0].sent[-1]["notify_type"] == notify_type
 
 
 @pytest.mark.asyncio
@@ -217,12 +263,12 @@ async def test_a_relayed_log_lines_severity_maps_to_a_notify_type(
 async def test_each_community_kind_has_its_notify_type(
     *, notification: Notification, notify_type: apprise.NotifyType
 ) -> None:
-    assert (await _sent_to_the_bare_group(notification))["notify_type"] == notify_type
+    assert (await _sent_without_the_node_prefix(notification))["notify_type"] == notify_type
 
 
 @pytest.mark.asyncio
 async def test_a_rise_names_its_tier_its_targets_its_file_and_its_link() -> None:
-    call = await _sent_to_the_bare_group(_rise(DecisionTier.DOWNLOAD))
+    call = await _sent_without_the_node_prefix(_rise(DecisionTier.DOWNLOAD))
     assert call["title"] == "📥 Download"
     assert call["body"] == (
         "**Targets**\n"
@@ -239,13 +285,15 @@ async def test_a_rise_names_its_tier_its_targets_its_file_and_its_link() -> None
 
 @pytest.mark.asyncio
 async def test_a_rise_to_notify_is_titled_notify() -> None:
-    assert (await _sent_to_the_bare_group(_rise(DecisionTier.NOTIFY)))["title"] == "🔎 Notify"
+    assert (await _sent_without_the_node_prefix(_rise(DecisionTier.NOTIFY)))["title"] == "🔎 Notify"
 
 
 @pytest.mark.asyncio
 async def test_a_backtick_in_the_name_cannot_close_its_code_span() -> None:
     # Discord pings a mention outside code: a name must not escape its span.
-    call = await _sent_to_the_bare_group(_rise(DecisionTier.DOWNLOAD, filename="a`@everyone`b.avi"))
+    call = await _sent_without_the_node_prefix(
+        _rise(DecisionTier.DOWNLOAD, filename="a`@everyone`b.avi")
+    )
     body = call["body"]
     assert isinstance(body, str)
     assert "\n350.2 MiB - `a'@everyone'b.avi`\n".replace("@", "@\u200b") in body
@@ -256,7 +304,7 @@ async def test_a_completed_download_names_its_targets_and_file() -> None:
     completed = CompletedDownload(
         target_titles=(_062A, _062B), filename="Keroro `062`.avi", node_id=_NODE_ID
     )
-    call = await _sent_to_the_bare_group(completed)
+    call = await _sent_without_the_node_prefix(completed)
     assert (call["title"], call["body"]) == (
         "✅ Downloaded",
         "**Targets**\n"
@@ -270,7 +318,7 @@ async def test_a_completed_download_names_its_targets_and_file() -> None:
 
 @pytest.mark.asyncio
 async def test_a_completed_download_without_a_target_names_none() -> None:
-    call = await _sent_to_the_bare_group(
+    call = await _sent_without_the_node_prefix(
         CompletedDownload(target_titles=(), filename="Keroro 062.avi", node_id=_NODE_ID)
     )
     assert call["body"] == "**Targets**\nunknown\n\n**File**\n`Keroro 062.avi`"
@@ -278,7 +326,7 @@ async def test_a_completed_download_without_a_target_names_none() -> None:
 
 @pytest.mark.asyncio
 async def test_a_first_useful_source_names_itself_its_targets_and_its_file() -> None:
-    call = await _sent_to_the_bare_group(_source_alert("AnimuseeFMR", absent_for=None))
+    call = await _sent_without_the_node_prefix(_source_alert("AnimuseeFMR", absent_for=None))
     assert (call["title"], call["body"]) == (
         "📥 Source useful for the first time",
         "**Source**\n`AnimuseeFMR` 1f2e3d4c…, useful for the first time\n\n"
@@ -289,7 +337,7 @@ async def test_a_first_useful_source_names_itself_its_targets_and_its_file() -> 
 
 @pytest.mark.asyncio
 async def test_a_reappeared_source_says_how_long_it_was_absent() -> None:
-    call = await _sent_to_the_bare_group(
+    call = await _sent_without_the_node_prefix(
         _source_alert("AnimuseeFMR", absent_for=timedelta(hours=26))
     )
     assert (call["title"], call["body"]) == (
@@ -302,7 +350,9 @@ async def test_a_reappeared_source_says_how_long_it_was_absent() -> None:
 
 @pytest.mark.asyncio
 async def test_a_source_without_a_name_or_a_target_names_its_hash_and_its_file() -> None:
-    call = await _sent_to_the_bare_group(_source_alert(None, absent_for=None, target_titles=()))
+    call = await _sent_without_the_node_prefix(
+        _source_alert(None, absent_for=None, target_titles=())
+    )
     assert call["body"] == (
         "**Source**\n1f2e3d4c…, useful for the first time\n\n**File**\n`Keroro 062.avi`"
     )
@@ -316,7 +366,7 @@ async def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
         target_titles=(),
         filename="x.avi",
     )
-    body = (await _sent_to_the_bare_group(alert))["body"]
+    body = (await _sent_without_the_node_prefix(alert))["body"]
     assert isinstance(body, str)
     assert body.startswith(
         "**Source**\n`a'@everyone'b` 1f2e3d4c…, reappeared after 12 h\n".replace("@", "@\u200b")
@@ -324,9 +374,11 @@ async def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_real_apprise_with_no_url_notifies_nothing() -> None:
-    notifier = AppriseNotifier((), apprise_factory=apprise.Apprise)
-    await notifier.notify(Audience.COMMUNITY, notification=_LINE)  # does not raise
+async def test_a_send_its_service_does_not_take_is_refused_with_apprise_s_answer() -> None:
+    notifier, _ = _notifier(apprise.AppriseResultStatus.FAILURE)
+
+    with pytest.raises(NotificationRefusedError, match=r"^the service refused it \(FAILURE\)$"):
+        await notifier.notify(_DISCORD, notification=_LINE)
 
 
 @pytest.mark.asyncio
@@ -338,6 +390,20 @@ async def test_a_real_apprise_whose_service_refuses_the_send_raises_a_refusal() 
         ((f"json://127.0.0.1:{port}/", Audience.COMMUNITY, False),),
         apprise_factory=apprise.Apprise,
     )
+    [service] = notifier.services()
 
-    with pytest.raises(NotificationRefusedError, match=r"^a service refused it \(FAILURE\)$"):
-        await notifier.notify(Audience.COMMUNITY, notification=_LINE)
+    with pytest.raises(NotificationRefusedError, match=r"^the service refused it \(FAILURE\)$"):
+        await notifier.notify(service, notification=_LINE)
+
+
+@pytest.mark.asyncio
+async def test_a_url_a_real_apprise_cannot_load_is_refused_at_each_send() -> None:
+    # A Discord URL needs a webhook's id and token: apprise loads no service from this one.
+    notifier = AppriseNotifier(
+        (("discord://x", Audience.COMMUNITY, False),), apprise_factory=apprise.Apprise
+    )
+    [service] = notifier.services()
+
+    for _ in range(2):
+        with pytest.raises(NotificationRefusedError, match=r"^apprise could not load its URL$"):
+            await notifier.notify(service, notification=_LINE)

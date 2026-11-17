@@ -1,10 +1,11 @@
-"""The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies its audience.
-A send that fails never breaks the crawl: it is logged, and recorded on the notifier's part."""
+"""The dispatch step: plans an ``Event``, logs it, writes its node metrics, notifies each service
+of its audience. A send that fails never breaks the crawl: it is logged, and recorded on the
+notifier's part."""
 
 import asyncio
 from collections.abc import Awaitable
 from contextlib import suppress
-from typing import Protocol, assert_never
+from typing import Literal, Protocol, assert_never
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
@@ -17,6 +18,7 @@ from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.notification_sends import (
     SENDS_FAILED,
     NotificationRefusedError,
+    NotificationService,
 )
 from p2pwatch.domain.observability.policy import audience_of, plan_observability
 from p2pwatch.domain.observability.severity import Severity
@@ -31,6 +33,10 @@ class CurrentNotifier(Protocol):
 # Records one check of a rule on a part, such as ``NodeHealth.record``.
 class CheckRecorder(Protocol):
     async def __call__(self, *, on: Component, rule: HealthRule, detected: bool) -> None: ...
+
+
+# How one send to one service ended: failed is refused by its service, or past the timeout.
+type _SendEnd = Literal["sent", "failed", "bug"]
 
 
 class ObservabilityDispatcher:
@@ -67,47 +73,64 @@ class ObservabilityDispatcher:
             await self._send(plan.notification)
 
     async def _send(self, notification: Notification) -> None:
-        """Sends ``notification`` within the notification timeout, then records how the send
-        ended on the notifier's part, such as a refusal on its sends that failed."""
-        audience, notifier = audience_of(notification).value, self._notifier_component
+        """Sends ``notification`` to each service of its audience together, so that it takes one
+        notification timeout at most, then records how each send ended on the notifier's part."""
+        notifier, audience = self._current_notifier(), audience_of(notification)
+        services = [service for service in notifier.services() if service.audience is audience]
+        async with asyncio.TaskGroup() as sends:
+            ends = [
+                sends.create_task(
+                    self._send_to(service, notification=notification, notifier=notifier)
+                )
+                for service in services
+            ]
+        # Recorded once every send has ended: a check whose recording raises cuts no other send.
+        for end in ends:
+            await self._record(end.result())
+
+    async def _send_to(
+        self, service: NotificationService, *, notification: Notification, notifier: Notifier
+    ) -> _SendEnd:
+        """Sends ``notification`` to ``service`` within the notification timeout, a failed send
+        such as a refusal logged in one line, a bug with its trace."""
+        part = f"{self._notifier_component.name} {service}"
         try:
             raised = await asyncio.wait_for(
-                self._raised_by_notifier(notification),
+                self._raised_by(notifier, service=service, notification=notification),
                 timeout=self._notification_timeout_seconds,
             )
         except TimeoutError:
             seconds = self._notification_timeout_seconds
-            message = "%s: %s notification not sent: past its timeout of %g s"
-            self._logger.warning(message, notifier.name, audience, seconds)
-            await self._record_no_bug(failed=True)
-            return
+            message = "%s: notification not sent: past its timeout of %g s"
+            self._logger.warning(message, part, seconds)
+            return "failed"
         if raised is None:
-            await self._record_no_bug(failed=False)
-        elif isinstance(raised, NotificationRefusedError):
-            message = "%s: %s notification not sent: %s"
-            self._logger.warning(message, notifier.name, audience, raised)
-            await self._record_no_bug(failed=True)
-        else:
-            message = "bug in %s, sending a %s notification"
-            self._logger.exception(message, notifier.name, audience, error=raised)
-            await self._record_check(on=notifier, rule=BUGS, detected=True)
+            return "sent"
+        if isinstance(raised, NotificationRefusedError):
+            self._logger.warning("%s: notification not sent: %s", part, raised)
+            return "failed"
+        self._logger.exception("bug in %s, sending a notification", part, error=raised)
+        return "bug"
 
-    async def _raised_by_notifier(self, notification: Notification) -> Exception | None:
+    @staticmethod
+    async def _raised_by(
+        notifier: Notifier, *, service: NotificationService, notification: Notification
+    ) -> Exception | None:
         """What the notifier raised, if anything: returned, so that a ``TimeoutError`` of its own
         is never read as the send past its timeout."""
         try:
-            await self._current_notifier().notify(
-                audience_of(notification), notification=notification
-            )
+            await notifier.notify(service, notification=notification)
         except Exception as error:  # the boundary of a send, by design
             return error
         return None
 
-    async def _record_no_bug(self, *, failed: bool) -> None:
-        """Records a send that met no bug, and whether it failed, such as a refusal."""
+    async def _record(self, end: _SendEnd) -> None:
+        """Records how one send ended on the notifier's part; a bug tells nothing of whether the
+        service takes the sends, so it records nothing on the sends that failed."""
         notifier = self._notifier_component
-        await self._record_check(on=notifier, rule=BUGS, detected=False)
-        await self._record_check(on=notifier, rule=SENDS_FAILED, detected=failed)
+        await self._record_check(on=notifier, rule=BUGS, detected=end == "bug")
+        if end != "bug":
+            await self._record_check(on=notifier, rule=SENDS_FAILED, detected=end == "failed")
 
     async def dispatch_shielded(self, event: Event) -> None:
         """Dispatches ``event`` in a task of its own, which goes on when the caller is cancelled:

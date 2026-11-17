@@ -3,13 +3,18 @@
 from abc import ABC, abstractmethod
 
 from p2pwatch.domain.observability.notification import Notification
-from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.notification_sends import NotificationService
 
 
 class Notifier(ABC):
-    """Notifies an audience of an event."""
+    """Sends notifications to the services it lists, such as a Discord webhook for the community."""
 
     @abstractmethod
-    async def notify(self, audience: Audience, *, notification: Notification) -> None:
-        """Sends one notification, titled for the node it carries; raises
-        ``NotificationRefusedError`` when a service refuses it."""
+    def services(self) -> tuple[NotificationService, ...]:
+        """Its services, in the order configured: equal from a notifier built anew on the same
+        configuration, so a rebuilt notifier sends to the services the node judges."""
+
+    @abstractmethod
+    async def notify(self, service: NotificationService, *, notification: Notification) -> None:
+        """Sends one notification to ``service``, titled for the node it carries; raises
+        ``NotificationRefusedError`` when the service refuses it."""
