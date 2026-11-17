@@ -272,6 +272,7 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 | 30 | `feat/notification-sends-recorded` | each send recorded on the notifier | #744, 364 lines, 16 files (Corrected: merged with block 40, 658 lines, 21 files, "reco ok, b"; past the file bound at 20 files, then at 21 with `parts_without_works` kept required, each accepted by the operator on 2026-11-17, "A") |
 | 40 | `feat/notifier-rebuilt` | the notifier rebuilt | #745, 242 lines, 15 files (Corrected: merged into block 30) |
 | 50 | `feat/notification-services-rules` | one component and one rule per service | #746, 497 lines, 19 files, and #754's contract (Corrected: written as one block, 604 lines and 21 files without the contract, it was cut into 50, the notifier listing its services and sending to one, 487 lines, 16 files, and 53, `feat/notification-service-parts`, one part per service and the contract, 292 lines, 18 files, accepted by the operator on 2026-11-17, "reco ok") |
+| 80 | `fix/lot-4b5-review-fixes` | the holistic review's fixes in the code (Corrected: split out of block 90, which came to 382 lines and 27 files, the lead on 2026-11-17) | |
 | 90 | `docs/lot-4b5-wrap` | closing block | |
 
 ## 6. Limits and scope

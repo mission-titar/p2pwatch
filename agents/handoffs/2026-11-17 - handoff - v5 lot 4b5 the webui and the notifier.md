@@ -81,7 +81,8 @@ The spec's section 6, those this lot reaches, and one the operator added:
 | 30 | #792 | `feat/notification-sends-recorded` | each send recorded on the notifier's part, the notifier rebuilt (the spec's blocks 30 and 40) | 658, 21, accepted |
 | 50 | #794 | `feat/notification-services-rules` | the notifier lists its services and sends to each of its audience | 487, 16 |
 | 53 | #795 | `feat/notification-service-parts` | one part per service, and `NotifierContract` | 292, 18 |
-| 90 | | `docs/lot-4b5-wrap` | the holistic review's fixes: the notifier's parts read from the dispatcher, one debug line per object, `NodeHealth` built first, the old notifier's sends recorded on no part, a thread never started not stopped, the webui named as its part, the node's cycle tested, the contract's two promises; this handoff, the spec's corrections | 382, 27: `524b28c4` 321, 18; the two commits above it 61, 9 (below) |
+| 80 | | `fix/lot-4b5-review-fixes` | the holistic review's fixes in the code: the notifier's parts read from the dispatcher, one debug line per object, `NodeHealth` built first, the old notifier's sends recorded on no part, a thread never started not stopped, the webui named as its part, the node's cycle tested | 321, 18 |
+| 90 | | `docs/lot-4b5-wrap` | closing block: the contract's two promises, the comments; this handoff, the spec's corrections, `BACKLOG.md` | 61, 9 |
 
 - **Past a bound, accepted by the operator**: blocks 10 and 20 merged, and 30 and 40, rather than carry code from one
   block to the next ("reco ok, b", 2026-11-17); block 30 at 20 files ("A", 2026-11-17), then at 21 with
@@ -114,11 +115,10 @@ The spec's section 6, those this lot reaches, and one the operator added:
     `NotifierContract` in this block, five doubles exempted (`FakeRaisingNotifier`, `FakeHangingNotifier`,
     `FakeHeldNotifier`, `FakeSlowCommunityNotifier`, `FakeTimedNotifier`); `FakeNotifier` gains `refusing`. Glossary
     `component`, `bugs rule`, `sends failed`, `notification service`; `architecture.md` §10.1, §10.2, the code table.
-  - **90**:
-    - Past the file bound in one block (27 files), so in commits the lead cuts: `524b28c4`, the fixes in the code,
-      their tests, `architecture.md` and the glossary (321 lines, 18 files); `8a300772`, the contract's two promises
-      and the comments; then this handoff, the spec's corrections and `BACKLOG.md` (61 lines, 9 files with `8a300772`).
-      Each commit passes the gate.
+  - **80 and 90**:
+    - The closing block came to 382 lines and 27 files, past the file bound, so its commits were cut into two blocks
+      by the lead: block 80, the fixes in the code, their tests, `architecture.md` and the glossary; block 90, the
+      contract's two promises, the comments, this handoff, the spec's corrections and `BACKLOG.md`.
     - The MAJOR held by reading the parts from the dispatcher rather than by one function handing them to both:
       `node_restart_policy` takes the notifier and the dispatcher, so no argument of the composition can give the
       policy other parts. `parts_without_works` is gone; `test_amule_client_works.py` passes the dispatcher of its
@@ -134,7 +134,7 @@ The spec's section 6, those this lot reaches, and one the operator added:
     - `architecture.md`: §3 names the webui's work `webui`; §10's E-D13 id dropped; §10.1's thresholds back after the
       works' sentence, reflowed; §10.2's restartables "un autre", "en est un aussi", the parts read from the
       dispatcher, the debug line; the code table's "Santé" row lists the three restartables.
-- **Class 1**: block 10's unread `run_state_store` parameter of `_start_webui` dropped. None in blocks 30, 50, 53, 90.
+- **Class 1**: block 10's unread `run_state_store` parameter of `_start_webui` dropped. None in blocks 30, 50, 53, 80, 90.
 - **Class 2 questions**: block 10, the transitional list or the merge of blocks 10 and 20: "reco ok, b". Block 30, the
   file bound twice: "A", "A". Block 50, the bound past 20 files without the contract: the cut into 50 and 53, "reco
   ok"; and the count of rebuilds in vain with one bugs rule per service: "A" (Accepted limits). All 2026-11-17.
@@ -152,7 +152,7 @@ The spec's section 6, those this lot reaches, and one the operator added:
 | a send in flight on the old notifier recorded as the new notifier's check | fixed: the dispatcher records a notification's sends only when the notifier they went through is still the current one; `test_observability_dispatcher.py::test_a_send_that_ends_on_a_notifier_rebuilt_meanwhile_is_recorded_on_no_part` |
 | `UvicornServerThread.stop` joining a thread never started | fixed: a no-op on a thread never started; `test_uvicorn_server_thread.py::test_stopping_a_thread_never_started_does_nothing`; the rebuild's comment states the real reason |
 | the webui's two names in the log | fixed: the work named `webui`, as its part; the glossary's `webui thread watch` row, `architecture.md` §3 |
-| the TDD gaps of block 10 and block 53 | re-watched where the code can be stubbed (The tests watched failing, rows 90); the lists completed |
+| the TDD gaps of block 10 and block 53 | re-watched where the code can be stubbed (The tests watched failing, rows 80); the lists completed |
 | the node's real cycle run by no test | fixed: `test_node_restart_policy.py::test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more`, `HealthAlerter`, the dispatcher, the services' parts and the policy on one `NodeHealth`; `_Node` wires the alerts for every test of the module |
 | the spec's stale corrections of lot 4b4 and lot 4b5's own | fixed: `(Corrected: ...)` beside section 5's lot 4b5 rows, appendix A's lot 4b4 blocks 30 and 40 and lot 4b5 blocks 10 to 50, and the limit added to section 6 |
 | the glossary's five rows | fixed: `service` allowed within the notifier's own API; `part` the plain word of `component`; the apprise aside dropped from `audience`; `node health` passes each change to the restarts too; `time limit` says the webui's watch takes the margin alone |
@@ -202,16 +202,16 @@ named as such. Blocks 10 and 30 in full in their reports (#791, #792); one line 
 | 53 | `::test_one_service_refusing_and_another_timing_out_fail_each_service_s_sends` | written after the code; mutation: every send on the first part | `At index 1 diff: <HealthState.UNKNOWN: 'unknown'> != <HealthState.FAILING: 'failing'>` |
 | 53 | `TestFakeNotifier::test_a_send_its_service_refuses_raises_notification_refused` | `refusing` taken and ignored | `Failed: DID NOT RAISE NotificationRefusedError` |
 | 53 | `TestAppriseNotifier`, the contract's three | pass on the adapter; mutations: the ordinals counted across notifiers; a success read as a refusal | `At index 0 diff: NotificationService(... ordinal=4) != NotificationService(... ordinal=1)`; `NotificationRefusedError: the service refused it (SUCCESS)` and `Failed: DID NOT RAISE NotificationRefusedError` |
-| 90 | block 10's `test_node_restart_policy.py::test_bugs_on_a_part_of_the_client_s_works_rebuild_the_client_alone`, re-watched | mutation: every part mapped to the notifier | `assert (0, 0, 1) == (1, 0, 0)` |
-| 90 | block 53's `::test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alone`, re-watched | mutation: the services' parts mapped to the client | `assert (1, 0, 0) == (0, 0, 1)` |
-| 90 | block 10's `test_webui_restartable.py::test_the_watch_handed_back_looks_at_the_thread_built_anew`, re-watched | the watch handed back recorded on no part | `assert ('webui', ()) == ('webui', (<...Component ...>,))` |
-| 90 | `test_crawler_composition_wiring.py::test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each_service_s` | no debug line | `assert [] == ['client amul...d operations']` |
-| 90 | `test_observability_dispatcher.py::test_it_names_the_part_of_each_service_it_records_its_sends_on` | `service_components()` returning `()` | `assert () == (<...Component ...>, <...Component ...>)` |
-| 90 | `::test_a_send_that_ends_on_a_notifier_rebuilt_meanwhile_is_recorded_on_no_part` | the dispatcher as block 53 left it | `assert [_Check(compo...etected=True)] == []` |
-| 90 | `test_health_subscriber_built_later.py`, the refusal naming its subscriber | the name taken and ignored | `- the restart policy, reached before it is set` against `the alerts, ...` |
-| 90 | `test_node_restart_policy.py::test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more` | passes on the code; mutation: the dispatcher recording no send | `assert [] == [LoggedLine(l..., error=None)]` |
-| 90 | `test_webui_thread_watch.py`, `test_webui_restartable.py`: the work named `webui`, its bug line (3) | the watch as block 10 left it | `assert 'webui thread watch' == 'webui'`; `assert 0 == 3`; `At index 0 diff: 'webui thread watch' != 'webui'` |
-| 90 | `test_uvicorn_server_thread.py::test_stopping_a_thread_never_started_does_nothing` | the stop as block 10 left it | `RuntimeError: cannot join thread before it is started`, the defect itself, not an assertion |
+| 80 | block 10's `test_node_restart_policy.py::test_bugs_on_a_part_of_the_client_s_works_rebuild_the_client_alone`, re-watched | mutation: every part mapped to the notifier | `assert (0, 0, 1) == (1, 0, 0)` |
+| 80 | block 53's `::test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alone`, re-watched | mutation: the services' parts mapped to the client | `assert (1, 0, 0) == (0, 0, 1)` |
+| 80 | block 10's `test_webui_restartable.py::test_the_watch_handed_back_looks_at_the_thread_built_anew`, re-watched | the watch handed back recorded on no part | `assert ('webui', ()) == ('webui', (<...Component ...>,))` |
+| 80 | `test_crawler_composition_wiring.py::test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each_service_s` | no debug line | `assert [] == ['client amul...d operations']` |
+| 80 | `test_observability_dispatcher.py::test_it_names_the_part_of_each_service_it_records_its_sends_on` | `service_components()` returning `()` | `assert () == (<...Component ...>, <...Component ...>)` |
+| 80 | `::test_a_send_that_ends_on_a_notifier_rebuilt_meanwhile_is_recorded_on_no_part` | the dispatcher as block 53 left it | `assert [_Check(compo...etected=True)] == []` |
+| 80 | `test_health_subscriber_built_later.py`, the refusal naming its subscriber | the name taken and ignored | `- the restart policy, reached before it is set` against `the alerts, ...` |
+| 80 | `test_node_restart_policy.py::test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more` | passes on the code; mutation: the dispatcher recording no send | `assert [] == [LoggedLine(l..., error=None)]` |
+| 80 | `test_webui_thread_watch.py`, `test_webui_restartable.py`: the work named `webui`, its bug line (3) | the watch as block 10 left it | `assert 'webui thread watch' == 'webui'`; `assert 0 == 3`; `At index 0 diff: 'webui thread watch' != 'webui'` |
+| 80 | `test_uvicorn_server_thread.py::test_stopping_a_thread_never_started_does_nothing` | the stop as block 10 left it | `RuntimeError: cannot join thread before it is started`, the defect itself, not an assertion |
 | 90 | `TestAppriseNotifier`: the services in the order configured, each send under its node's name | pass on the adapter; mutations: the services reversed, the asset's name without the node | `At index 0 diff: NotificationService(... ordinal=2) != NotificationService(... ordinal=1)`; `assert (False, False) == (True, True)` |
 
 - **The guards that pass at once, by design**: block 10's running thread raising nothing and the webui's bugs sending
