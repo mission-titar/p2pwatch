@@ -40,7 +40,8 @@ type _SendEnd = Literal["sent", "failed", "bug"]
 
 
 class ObservabilityDispatcher:
-    """One dispatch point, three outputs: the log line, the node metrics, the notifications."""
+    """One dispatch point, four outputs: the log line, the node metrics, the notifications, and
+    how each send ended, on its service's part."""
 
     def __init__(
         self,
@@ -61,6 +62,11 @@ class ObservabilityDispatcher:
         # Held to their end: the loop keeps only a weak reference to a task (see asyncio.shield).
         self._shielded_dispatches: set[Awaitable[None]] = set()
 
+    def service_components(self) -> tuple[Component, ...]:
+        """The part of each notification service it records each send on, such as ``notifier
+        discord community``."""
+        return tuple(self._service_components.values())
+
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
         self._log_at_severity(plan.severity, message=plan.message)
@@ -74,7 +80,8 @@ class ObservabilityDispatcher:
 
     async def _send(self, notification: Notification) -> None:
         """Sends ``notification`` to each service of its audience together, so that it takes one
-        notification timeout at most, then records how each send ended on its service's part."""
+        notification timeout at most, then records how each send ended on its service's part,
+        unless the notifier was rebuilt meanwhile."""
         notifier, audience = self._current_notifier(), audience_of(notification)
         services = [service for service in self._service_components if service.audience is audience]
         async with asyncio.TaskGroup() as sends:
@@ -84,6 +91,8 @@ class ObservabilityDispatcher:
                 )
                 for service in services
             ]
+        if self._current_notifier() is not notifier:
+            return  # rebuilt meanwhile: the old notifier's sends tell nothing of the new one
         # Recorded once every send has ended: a check whose recording raises cuts no other send.
         for service, end in zip(services, ends, strict=True):
             await self._record(end.result(), on=self._service_components[service])
@@ -93,7 +102,7 @@ class ObservabilityDispatcher:
     ) -> _SendEnd:
         """Sends ``notification`` to ``service`` within the notification timeout, a failed send
         such as a refusal logged in one line, a bug with its trace."""
-        part = self._service_components[service].name
+        part_name = self._service_components[service].name
         try:
             raised = await asyncio.wait_for(
                 self._raised_by(notifier, service=service, notification=notification),
@@ -102,14 +111,14 @@ class ObservabilityDispatcher:
         except TimeoutError:
             seconds = self._notification_timeout_seconds
             message = "%s: notification not sent: past its timeout of %g s"
-            self._logger.warning(message, part, seconds)
+            self._logger.warning(message, part_name, seconds)
             return "failed"
         if raised is None:
             return "sent"
         if isinstance(raised, NotificationRefusedError):
-            self._logger.warning("%s: notification not sent: %s", part, raised)
+            self._logger.warning("%s: notification not sent: %s", part_name, raised)
             return "failed"
-        self._logger.exception("bug in %s, sending a notification", part, error=raised)
+        self._logger.exception("bug in %s, sending a notification", part_name, error=raised)
         return "bug"
 
     @staticmethod

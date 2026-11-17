@@ -28,7 +28,7 @@ class WebuiThreadWatch(Work):
         self._monotonic_clock = monotonic_clock
 
     def __str__(self) -> str:
-        return "webui thread watch"
+        return "webui"  # its part's name, as every work is named in the log
 
     async def wait_for_next_turn(self) -> None:
         await self._monotonic_clock.sleep(_WATCH_PERIOD)

@@ -148,6 +148,21 @@ async def test_a_server_that_does_not_start_in_time_degrades_the_webui(
 
 
 @pytest.mark.asyncio
+async def test_stopping_a_thread_never_started_does_nothing() -> None:
+    server_thread = UvicornServerThread(
+        Starlette(routes=[Route("/", _ok)]),
+        address=("127.0.0.1", 0),
+        start_timeout_seconds=5.0,
+        join_timeout_seconds=5.0,
+        serving_resources=(),
+    )
+
+    await server_thread.stop()
+
+    assert (server_thread.is_alive(), _webui_threads()) == (False, [])
+
+
+@pytest.mark.asyncio
 async def test_stop_gives_up_on_a_server_that_does_not_end_within_its_join_timeout() -> None:
     released = threading.Event()
 

@@ -420,7 +420,7 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
         "search 'keroro mission' amuled ed2k: time limit 2400 s",
         "search 'keroro' amuled kad: time limit 2100 s",
         "search 'keroro mission' amuled kad: time limit 2100 s",
-        "webui thread watch: time limit 300 s",
+        "webui: time limit 300 s",
     ]
 
 
@@ -448,7 +448,38 @@ async def test_each_work_s_turns_are_recorded_on_its_part_and_a_search_s_on_its_
         "channel amuled ed2k",
         "search 'keroro' amuled kad: turns recorded on search 'keroro' amuled kad, "
         "channel amuled kad",
-        "webui thread watch: turns recorded on webui",
+        "webui: turns recorded on webui",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each_service_s(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    download = {
+        "enabled": True,
+        "poll_interval_seconds": 0.05,
+        "min_free_bytes": 1,
+        "output_dir": str(tmp_path),
+    }
+    # URLs apprise cannot load: each send is refused, and nothing leaves the machine.
+    notifications = [
+        {"url": "discord://x", "audience": "community"},
+        {"url": "discord://y", "audience": "operations"},
+    ]
+    observability = {"log_level": "DEBUG", "notifications": notifications}
+    config = _config(tmp_path, observability=observability, download=download)
+    config_path = _write(tmp_path / "crawler.yml", config=config)
+
+    with caplog.at_level(logging.DEBUG):
+        await _crawl_until_a_search_is_read(config_path, targets_path=_SHIPPED_TARGETS)
+
+    assert [message for message in caplog.messages if ": rebuilt for bugs in " in message] == [
+        "client amuled: rebuilt for bugs in status reading amuled, download tracking amuled, "
+        "source tracking amuled, search 'keroro' amuled ed2k, channel amuled ed2k, "
+        "search 'keroro' amuled kad, channel amuled kad",
+        "webui: rebuilt for bugs in webui",
+        "notifier: rebuilt for bugs in notifier discord community, notifier discord operations",
     ]
 
 

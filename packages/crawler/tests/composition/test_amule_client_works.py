@@ -337,7 +337,10 @@ async def _rebuilds_once_failing(
         logger=FakeLogger(),
     )
     policy = node_restart_policy(
-        {amule_client: works}, parts_without_works={}, supervisor=supervisor
+        {amule_client: works},
+        notifier=FakeRestartable("notifier"),
+        observability_dispatcher=node.observability.dispatcher,
+        supervisor=supervisor,
     )
     supervision = asyncio.create_task(supervisor.supervise((), arm_shutdown_bound=lambda: None))
 

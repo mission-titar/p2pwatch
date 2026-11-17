@@ -1,6 +1,7 @@
 """The node's restart policy: each object is rebuilt when a bugs rule of one of its parts turns
 failing, the other objects left as they are: a part its works are recorded on, or one of the
-notifier's, one per notification service, which the dispatcher records each send on."""
+notifier's, one per notification service, which the dispatcher records each send on, an alert's
+send included."""
 
 import asyncio
 from collections.abc import Coroutine
@@ -8,6 +9,8 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.restart_policy import RestartPolicy
@@ -18,13 +21,15 @@ from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.notification_sends import (
+    NotificationRefusedError,
     NotificationService,
     notification_service_components,
 )
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_component
 from p2pwatch.domain.work_components import BUGS, status_reading_component, webui_component
-from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
-from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -63,8 +68,8 @@ async def _restarts_run() -> None:
 
 class _Node:
     """The aMule client and the webui, each with one work on a part of its own, the notifier with
-    a part per service and no work, the restart policy and the supervisor wired as the node wires
-    them."""
+    a part per service and no work, the dispatcher, the alerts, the restart policy and the
+    supervisor wired as the node wires them."""
 
     def __init__(self) -> None:
         self.client = FakeRestartable("client amuled")
@@ -74,7 +79,22 @@ class _Node:
         self.webui_part = webui_component()
         self.service_parts = notification_service_components(ONE_SERVICE_PER_AUDIENCE)
         self._run_state = FakeRunStateStore()
-        self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(self._to_policy,))
+        self.health_logger = FakeLogger()
+        self.node_health = NodeHealth(
+            logger=self.health_logger, subscribers=(self._to_alerts, self._to_policy)
+        )
+        self.current_notifier: Notifier = FakeNotifier()
+        self.dispatcher = ObservabilityDispatcher(
+            logger=FakeLogger(),
+            node_metric_writer=FakeNodeMetricStore(),
+            current_notifier=lambda: self.current_notifier,
+            notification_timeout_seconds=5.0,
+            record_check=self.node_health.record,
+            service_components=self.service_parts,
+        )
+        self._alerter = HealthAlerter(
+            observability_dispatcher=self.dispatcher, node_id=NodeId("n1"), min_free_bytes=None
+        )
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeTime().monotonic,
@@ -86,9 +106,13 @@ class _Node:
                 self.client: [_recorded_on(self.status_reading_part)],
                 self.webui: [_recorded_on(self.webui_part)],
             },
-            parts_without_works={self.notifier: list(self.service_parts.values())},
+            notifier=self.notifier,
+            observability_dispatcher=self.dispatcher,
             supervisor=self._supervisor,
         )
+
+    async def _to_alerts(self, transition: HealthTransition) -> None:
+        await self._alerter.send(transition)
 
     async def _to_policy(self, transition: HealthTransition) -> None:
         await self._policy(transition)
@@ -147,18 +171,11 @@ async def test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alon
 async def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_then_never() -> None:
     node = _Node()
     raising = FakeRaisingNotifier(RuntimeError("an embed apprise cannot build"))
-    dispatcher = ObservabilityDispatcher(
-        logger=FakeLogger(),
-        node_metric_writer=FakeNodeMetricStore(),
-        current_notifier=lambda: raising,  # each rebuild in vain: the notifier still raises
-        notification_timeout_seconds=5.0,
-        record_check=node.node_health.record,
-        service_components=node.service_parts,
-    )
+    node.current_notifier = raising  # each rebuild in vain: the notifier still raises
 
     async def twenty_sends() -> None:
         for _ in range(20):
-            await dispatcher.dispatch(
+            await node.dispatcher.dispatch(
                 ev.CrawlerStarted(download_enabled=True, node_id=NodeId("n1"))
             )
             await _restarts_run()
@@ -167,3 +184,26 @@ async def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_the
 
     assert raising.sends == 20
     assert node.rebuilds() == (0, 0, 3)
+
+
+async def test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more() -> None:
+    node = _Node()
+    refusing = FakeRaisingNotifier(NotificationRefusedError("the service refused it (FAILURE)"))
+    node.current_notifier = refusing
+    client = client_component(ClientName("amuled"))
+
+    async def unreachable_answering_then_unreachable() -> None:
+        for detected in [True] * 3 + [False] * 9 + [True] * 3:
+            await node.node_health.record(on=client, rule=CLIENT_UNREACHABLE, detected=detected)
+
+    await node.supervising(unreachable_answering_then_unreachable())
+
+    # The alert, its end, the alert again: each send recorded inside the record that alerted.
+    assert refusing.sends == 3
+    assert [line for line in node.health_logger.lines if "notifier" in line.message] == [
+        LoggedLine(level="info", message="notifier fake operations, bugs: unknown to healthy"),
+        LoggedLine(
+            level="warning", message="notifier fake operations, sends failed: unknown to failing"
+        ),
+    ]
+    assert node.rebuilds() == (0, 0, 0)
