@@ -1,7 +1,8 @@
 # Handoff: v5 lot 4b5, the webui and the notifier (tier Spec)
 
-Drafted by block 53's teammate from the block reports (#791, #792, the collapsed "Block report" of each pull
-request body) and its own, for the closing block to correct. Spec: `agents/specs/2026-11-15-v5-lot-4b-health-model.md`,
+Drafted by block 53's teammate from the block reports (#791, #792, #794, the collapsed "Block report" of each
+pull request body) and its own. Corrected by the closing block, which also fixed the holistic review's findings
+(`.reviews/v5-lot4b5-holistic.md`, below). Spec: `agents/specs/2026-11-15-v5-lot-4b-health-model.md`,
 lot 4b5 of its five lots (D19), decisions D14, D15, D17, D18. The last lot of lot 4b: once it has merged, the health
 model and the restarts are whole.
 
@@ -10,15 +11,19 @@ model and the restarts are whole.
 - **The webui is a part of the node** (`webui`, `webui_component` in `domain/work_components.py`), judged on its bugs
   alone. `WebuiThreadWatch` (`application/steps/webui_thread_watch.py`) is a work that looks every minute, the first
   look included, whether the webui's thread still runs, through `UvicornServerThread.is_alive`, which the composition
-  passes as a callback; a thread that has ended raises `WebuiThreadEndedError`, a bug. Its time limit is the 5 minutes
-  of margin alone. `Component.client_name` may be `None` now; the alerter refuses a client's alert for such a part.
+  passes as a callback; a thread that has ended raises `WebuiThreadEndedError`, a bug. The log names the work as its
+  part, `webui`. Its time limit is the 5 minutes of margin alone. `Component.client_name` may be `None` now; the
+  alerter refuses a client's alert for such a part.
 - **`WebuiRestartable`** (`composition/webui_restartable.py`) stops the old thread, serves the webui on a thread built
   anew (a new app and new read connections) and hands back the watch over it (`webui_thread_watch_over`). A port held
   elsewhere does not make the rebuild raise: the new thread ends, its watch finds it ended, and after three rebuilds in
-  vain the webui is not restarted again.
+  vain the webui is not restarted again. `UvicornServerThread.stop` does nothing on a thread never started, such as
+  one whose start raised, so the next rebuild builds anew.
 - **`node_restart_policy`** (`composition/node_restart_policy.py`, which replaces `amule_client_restart_policy`)
-  maps each object to the parts its first works are recorded on, and takes `parts_without_works` (required) for the
-  parts no work is recorded on: the notification services' parts, which the dispatcher records each send on.
+  maps the client and the webui to the parts their first works are recorded on, and the notifier to the parts the
+  dispatcher records each send on, which it reads from the dispatcher (`service_components()`): the policy cannot be
+  given other parts than those the dispatcher records on. It writes one debug line per object,
+  `notifier: rebuilt for bugs in notifier discord community, ...`, which a wiring test reads.
 - **Each notification URL is a service** (`NotificationService`, `domain/observability/notification_sends.py`), named
   by its URL's scheme and its audience, never by its URL, which carries a webhook's token: `discord community`, a
   second alike `discord community 2`, a URL without `://` of the scheme `unknown`. The `Notifier` port lists its
@@ -34,15 +39,21 @@ model and the restarts are whole.
   on "bugs" and on "sends failed"; a refusal or a send past the timeout, detected on "sends failed", not on "bugs"; any
   other exception, detected on "bugs", nothing on "sends failed". A `TimeoutError` the notifier raises itself is a bug.
   The dispatcher reaches the notifier through `CurrentNotifier`, at each notification, so a send in flight during a
-  rebuild finishes on the old one.
+  rebuild finishes on the old one; once it has ended, a notifier rebuilt meanwhile has the dispatcher record that
+  notification's sends on no part: the old notifier's sends tell nothing of the new one.
 - **`NotifierRestartable`** (`composition/notifier_restartable.py`) holds the apprise notifier built latest; a rebuild
   builds it anew and hands back no work. The composition builds the services' parts once, on the first notifier's
-  services, and gives them all to the policy as the notifier's.
+  services, into the dispatcher.
+- **The composition builds `NodeHealth` first**, its two subscribers through one holder each,
+  `HealthSubscriberBuiltLater` (`composition/health_subscriber_built_later.py`, `RestartPolicyBuiltLater` made
+  generic): the alerts, set once the dispatcher that records each send on `NodeHealth` is built, and the restart
+  policy, set once the works are built. A change reaching a holder before it is set raises
+  `HealthSubscriberNotSetError`, naming the subscriber. No name is read before it is assigned any more.
 - **`NotifierContract`** (`tests/contracts/application/ports/driven/notifier_contract.py`): two notifiers built on one
-  configuration list the same services, a send its service takes raises nothing, a refused one
-  `NotificationRefusedError`. `AppriseNotifier` and `FakeNotifier` run it; five other doubles are exempted, each with
+  configuration list the same services, in the order configured; a send its service takes raises nothing, a refused
+  one `NotificationRefusedError`; each notification goes under the name of the node it carries. `AppriseNotifier` and `FakeNotifier` run it; five other doubles are exempted, each with
   its reason.
-- **No alert names the webui's or the services' rules**: an alert about the notifier would go through the notifier.
+- **No alert names the webui's or the services' rules**: an alert on a service's rule would go through that service.
   Their changes are log lines.
 
 ## Accepted limits
@@ -51,9 +62,9 @@ The spec's section 6, those this lot reaches, and one the operator added:
 
 - **A timeout counts toward a service's "sends failed" as a refusal does** (the operator, 2026-11-12).
 - **After a rebuild of the notifier, its count of rebuilds in vain resets only once every service has had 3 sends
-  without a bug** (each service's bugs rule healthy again, D15). A community service a lost-media node seldom notifies
-  can take weeks, so later, unrelated bug episodes count in vain, and after three the notifier is not rebuilt again; it
-  still sends. The operator, 2026-11-17: "A", one bugs rule per service as appendix A says, rather than one bugs rule
+  since the rebuild** (its bugs rule healthy again, D15: healthy at the third send unless all three met a bug). A
+  community service a lost-media node seldom notifies can take weeks, so later, unrelated bug episodes count in vain,
+  and after three the notifier is not rebuilt again until then; it still sends. The operator, 2026-11-17: "A", one bugs rule per service as appendix A says, rather than one bugs rule
   on a single notifier part. Raised by block 50's teammate as a class 2 question.
 - **A bug on one service rebuilds every service's apprise objects**: the notifier is one object.
 - **Two URLs of the same scheme and audience swapped in the configuration swap their names** (`... 2`).
@@ -68,9 +79,9 @@ The spec's section 6, those this lot reaches, and one the operator added:
 |---|---|---|---|---|
 | 10 | #791 | `feat/webui-thread-watch` | the webui's thread watched every minute, the webui rebuilt (the spec's blocks 10 and 20) | 761, 19, accepted |
 | 30 | #792 | `feat/notification-sends-recorded` | each send recorded on the notifier's part, the notifier rebuilt (the spec's blocks 30 and 40) | 658, 21, accepted |
-| 50 | | `feat/notification-services-rules` | the notifier lists its services and sends to each of its audience | 487, 16 |
-| 53 | | (the lead cuts it) | one part per service, and `NotifierContract` | 292, 18 |
-| 90 | | `docs/lot-4b5-wrap` | closing block | |
+| 50 | #794 | `feat/notification-services-rules` | the notifier lists its services and sends to each of its audience | 487, 16 |
+| 53 | #795 | `feat/notification-service-parts` | one part per service, and `NotifierContract` | 292, 18 |
+| 90 | | `docs/lot-4b5-wrap` | the holistic review's fixes: the notifier's parts read from the dispatcher, one debug line per object, `NodeHealth` built first, the old notifier's sends recorded on no part, a thread never started not stopped, the webui named as its part, the node's cycle tested, the contract's two promises; this handoff, the spec's corrections | 382, 27: `524b28c4` 321, 18; the two commits above it 61, 9 (below) |
 
 - **Past a bound, accepted by the operator**: blocks 10 and 20 merged, and 30 and 40, rather than carry code from one
   block to the next ("reco ok, b", 2026-11-17); block 30 at 20 files ("A", 2026-11-17), then at 21 with
@@ -103,14 +114,52 @@ The spec's section 6, those this lot reaches, and one the operator added:
     `NotifierContract` in this block, five doubles exempted (`FakeRaisingNotifier`, `FakeHangingNotifier`,
     `FakeHeldNotifier`, `FakeSlowCommunityNotifier`, `FakeTimedNotifier`); `FakeNotifier` gains `refusing`. Glossary
     `component`, `bugs rule`, `sends failed`, `notification service`; `architecture.md` §10.1, §10.2, the code table.
-- **Class 1**: block 10's unread `run_state_store` parameter of `_start_webui` dropped. None in blocks 30, 50, 53.
+  - **90**:
+    - Past the file bound in one block (27 files), so in commits the lead cuts: `524b28c4`, the fixes in the code,
+      their tests, `architecture.md` and the glossary (321 lines, 18 files); `8a300772`, the contract's two promises
+      and the comments; then this handoff, the spec's corrections and `BACKLOG.md` (61 lines, 9 files with `8a300772`).
+      Each commit passes the gate.
+    - The MAJOR held by reading the parts from the dispatcher rather than by one function handing them to both:
+      `node_restart_policy` takes the notifier and the dispatcher, so no argument of the composition can give the
+      policy other parts. `parts_without_works` is gone; `test_amule_client_works.py` passes the dispatcher of its
+      fakes and a `FakeRestartable` notifier.
+    - The late-bound `node_health`: no order needs none (the dispatcher records on `NodeHealth`, whose alerts send
+      through the dispatcher), so the holder: `RestartPolicyBuiltLater` became `HealthSubscriberBuiltLater`, which
+      takes the subscriber's name for its refusal, and holds the alerts as well as the restart policy.
+    - The port's "titled for the node it carries" became "under the name of the node it carries": a service without
+      `node_prefix` carries the node in its sender's name alone (apprise's asset), never in its title.
+    - `test_refused_sends_and_sends_past_their_timeout_fail_the_notifier_s_sends` popped a list at each read of the
+      current notifier; the dispatcher reads it twice per notification now, so the test sets it before each send.
+    - #791's pitfall line corrected in its body (`gh pr edit`): 180 s, the third look.
+    - `architecture.md`: §3 names the webui's work `webui`; §10's E-D13 id dropped; §10.1's thresholds back after the
+      works' sentence, reflowed; §10.2's restartables "un autre", "en est un aussi", the parts read from the
+      dispatcher, the debug line; the code table's "Santé" row lists the three restartables.
+- **Class 1**: block 10's unread `run_state_store` parameter of `_start_webui` dropped. None in blocks 30, 50, 53, 90.
 - **Class 2 questions**: block 10, the transitional list or the merge of blocks 10 and 20: "reco ok, b". Block 30, the
   file bound twice: "A", "A". Block 50, the bound past 20 files without the contract: the cut into 50 and 53, "reco
   ok"; and the count of rebuilds in vain with one bugs rule per service: "A" (Accepted limits). All 2026-11-17.
 
 ## The holistic review's findings, and their exits
 
-For the closing block: the review runs once block 53's pull request is open.
+1 MAJOR, 13 MINOR; every one fixed in the closing block (the lead's choices, 2026-11-17).
+
+| Finding | Exit |
+|---|---|
+| MAJOR: the node's map of objects to parts read by no test; `parts_without_works={}` type-checks | fixed: `node_restart_policy` reads the notifier's parts from the dispatcher (`ObservabilityDispatcher.service_components()`), and writes one debug line per object; `test_crawler_composition_wiring.py::test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each_service_s`, two notification URLs, fails if any of the three objects loses a part |
+| `node_health` read by a lambda before it is assigned | fixed: the holder, no order allowing none: `NodeHealth` built first, the alerts and the policy through `HealthSubscriberBuiltLater`; `test_health_subscriber_built_later.py` |
+| the handoff's 60 s, #791's pitfall | fixed: 180 s, the third look (For lot 7; #791's body) |
+| the accepted limit's two slips | fixed as the review says (Accepted limits; the spec's section 6) |
+| a send in flight on the old notifier recorded as the new notifier's check | fixed: the dispatcher records a notification's sends only when the notifier they went through is still the current one; `test_observability_dispatcher.py::test_a_send_that_ends_on_a_notifier_rebuilt_meanwhile_is_recorded_on_no_part` |
+| `UvicornServerThread.stop` joining a thread never started | fixed: a no-op on a thread never started; `test_uvicorn_server_thread.py::test_stopping_a_thread_never_started_does_nothing`; the rebuild's comment states the real reason |
+| the webui's two names in the log | fixed: the work named `webui`, as its part; the glossary's `webui thread watch` row, `architecture.md` §3 |
+| the TDD gaps of block 10 and block 53 | re-watched where the code can be stubbed (The tests watched failing, rows 90); the lists completed |
+| the node's real cycle run by no test | fixed: `test_node_restart_policy.py::test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more`, `HealthAlerter`, the dispatcher, the services' parts and the policy on one `NodeHealth`; `_Node` wires the alerts for every test of the module |
+| the spec's stale corrections of lot 4b4 and lot 4b5's own | fixed: `(Corrected: ...)` beside section 5's lot 4b5 rows, appendix A's lot 4b4 blocks 30 and 40 and lot 4b5 blocks 10 to 50, and the limit added to section 6 |
+| the glossary's five rows | fixed: `service` allowed within the notifier's own API; `part` the plain word of `component`; the apprise aside dropped from `audience`; `node health` passes each change to the restarts too; `time limit` says the webui's watch takes the margin alone |
+| the D17 comments | fixed as the review says: the alerter's comment, `client_name`'s, the dispatcher's "four outputs", `part_name`, a sentence on sends in `domain/health/__init__.py` |
+| the spec references in rewritten lines | fixed: "(E-D7)", "(E-D13)" and "spec §17.1" dropped, the reason said in place; `architecture.md` §10's "(E-D13)" |
+| `architecture.md` §10.1's order and reflow, §10.2, the code table | fixed as the review says |
+| `NotifierContract` short of its port's promises | fixed: `test_its_services_come_in_the_order_configured`, `test_each_notification_is_sent_under_the_name_of_the_node_it_carries`, run by `AppriseNotifier` and `FakeNotifier` |
 
 ## The tests watched failing
 
@@ -153,13 +202,31 @@ named as such. Blocks 10 and 30 in full in their reports (#791, #792); one line 
 | 53 | `::test_one_service_refusing_and_another_timing_out_fail_each_service_s_sends` | written after the code; mutation: every send on the first part | `At index 1 diff: <HealthState.UNKNOWN: 'unknown'> != <HealthState.FAILING: 'failing'>` |
 | 53 | `TestFakeNotifier::test_a_send_its_service_refuses_raises_notification_refused` | `refusing` taken and ignored | `Failed: DID NOT RAISE NotificationRefusedError` |
 | 53 | `TestAppriseNotifier`, the contract's three | pass on the adapter; mutations: the ordinals counted across notifiers; a success read as a refusal | `At index 0 diff: NotificationService(... ordinal=4) != NotificationService(... ordinal=1)`; `NotificationRefusedError: the service refused it (SUCCESS)` and `Failed: DID NOT RAISE NotificationRefusedError` |
+| 90 | block 10's `test_node_restart_policy.py::test_bugs_on_a_part_of_the_client_s_works_rebuild_the_client_alone`, re-watched | mutation: every part mapped to the notifier | `assert (0, 0, 1) == (1, 0, 0)` |
+| 90 | block 53's `::test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alone`, re-watched | mutation: the services' parts mapped to the client | `assert (1, 0, 0) == (0, 0, 1)` |
+| 90 | block 10's `test_webui_restartable.py::test_the_watch_handed_back_looks_at_the_thread_built_anew`, re-watched | the watch handed back recorded on no part | `assert ('webui', ()) == ('webui', (<...Component ...>,))` |
+| 90 | `test_crawler_composition_wiring.py::test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each_service_s` | no debug line | `assert [] == ['client amul...d operations']` |
+| 90 | `test_observability_dispatcher.py::test_it_names_the_part_of_each_service_it_records_its_sends_on` | `service_components()` returning `()` | `assert () == (<...Component ...>, <...Component ...>)` |
+| 90 | `::test_a_send_that_ends_on_a_notifier_rebuilt_meanwhile_is_recorded_on_no_part` | the dispatcher as block 53 left it | `assert [_Check(compo...etected=True)] == []` |
+| 90 | `test_health_subscriber_built_later.py`, the refusal naming its subscriber | the name taken and ignored | `- the restart policy, reached before it is set` against `the alerts, ...` |
+| 90 | `test_node_restart_policy.py::test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more` | passes on the code; mutation: the dispatcher recording no send | `assert [] == [LoggedLine(l..., error=None)]` |
+| 90 | `test_webui_thread_watch.py`, `test_webui_restartable.py`: the work named `webui`, its bug line (3) | the watch as block 10 left it | `assert 'webui thread watch' == 'webui'`; `assert 0 == 3`; `At index 0 diff: 'webui thread watch' != 'webui'` |
+| 90 | `test_uvicorn_server_thread.py::test_stopping_a_thread_never_started_does_nothing` | the stop as block 10 left it | `RuntimeError: cannot join thread before it is started`, the defect itself, not an assertion |
+| 90 | `TestAppriseNotifier`: the services in the order configured, each send under its node's name | pass on the adapter; mutations: the services reversed, the asset's name without the node | `At index 0 diff: NotificationService(... ordinal=2) != NotificationService(... ordinal=1)`; `assert (False, False) == (True, True)` |
 
 - **The guards that pass at once, by design**: block 10's running thread raising nothing and the webui's bugs sending
-  no alert; block 30's notifier failing at its third bug, an event without a notification recording nothing, the
-  notifier's bugs sending no alert, `NotifierRestartable`'s name; block 53's
-  `test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alone`, block 30's test reshaped, never watched
-  failing.
-- **Not assertions, as the reports say**: block 10's `KeyError`, block 30's `ValueError` and `IndexError`.
+  no alert, and `test_bugs_on_a_part_of_the_client_s_works_rebuild_the_client_alone`, which passed on its stub (shown
+  failing on a mutation by the closing block); block 30's notifier failing at its third bug, an event without a
+  notification recording nothing, the notifier's bugs sending no alert, `NotifierRestartable`'s name; block 53's
+  `test_bugs_on_any_notification_service_s_part_rebuild_the_notifier_alone`, block 30's test reshaped (shown failing
+  on a mutation by the closing block).
+- **Written after the code**: block 53's section 4 test,
+  `test_one_service_refusing_and_another_timing_out_fail_each_service_s_sends`, proven by a mutation alone: a
+  departure from strict TDD.
+- **Not assertions, as the reports say**: block 10's `KeyError` (`test_the_webui_s_part_fails_at_its_third_bug_in_a_row`,
+  re-watched in vain: the part shares the one `BUGS` rule, so a stub either holds it, and passes, or lacks it, and
+  raises `KeyError`) and its `WebuiThreadEndedError` (`test_the_watch_handed_back_looks_at_the_thread_built_anew`,
+  re-watched on an assertion above); block 30's `ValueError` and `IndexError`; the closing block's `RuntimeError`.
 
 ## Section 4's rows, where each is held
 
@@ -168,25 +235,40 @@ named as such. Blocks 10 and 30 in full in their reports (#791, #792); one line 
 | The webui's thread dying | `test_webui_restartable.py::test_a_webui_whose_thread_ended_serves_again_once_rebuilt`, on a real uvicorn thread; the chain from the watch to the rebuild, `test_webui_thread_watch.py::test_a_thread_ended_has_the_webui_rebuilt_at_the_third_watch_after` (virtual time, `FakeRestartable`) |
 | The notifier raising a bug at every send | `test_node_restart_policy.py::test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_then_never` (20 sends, a real dispatcher, `NodeHealth`, `node_restart_policy` and `Supervisor`: rebuilt 3 times, then never) |
 | One notification service refusing, another timing out, every send | `test_observability_dispatcher.py::test_one_service_refusing_and_another_timing_out_fail_each_service_s_sends` (each service's "sends failed" failing at the third send, each change one log line) |
+| An alert sent through a refusing service, as the node wires it | `test_node_restart_policy.py::test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_nothing_more` (three sends, the service's two changes logged, nothing rebuilt) |
+| The node's map of objects to parts | `test_crawler_composition_wiring.py::test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each_service_s` |
 
 No test runs a rebuild through `CrawlerComposition`: no fault of the fakes drives the real assembly to a webui's or a
-notifier's bug.
+notifier's bug; its wiring tests read the map the policy is built over.
 
 ## What must not change
 
-For the closing block: the matching comparison, `deploy/matcher.yml` and `validate-config`, as lot 4b4's handoff ran
-them; the healthy node's notifications and a channel's search cadence at the release candidate.
+| Check | Result |
+|---|---|
+| The matching decisions on the real catalog | **not run**: the umbrella's comparison reads the operator's `catalog.db`, outside the repository. The lot touches no matching code: `git diff --name-only origin/main...HEAD -- packages/crawler/src/p2pwatch/domain/matching packages/crawler/src/p2pwatch/adapters/driven/config` lists nothing (2026-11-17), and the gate's golden corpus passes |
+| `deploy/matcher.yml` and its keys | `git diff --stat origin/main...HEAD -- deploy/matcher.yml deploy/targets.yml` empty; `validate-config` on `deploy/`, `AMULE_API_PASSWORD` set to a placeholder: `Config valid` (2026-11-17) |
+| A healthy node's notifications, a channel's search cadence | at the release candidate |
 
 ## The lot's counts
 
-For the closing block: fix-backs, cascaded rebases, runs re-triggered, bodies called unreadable. Known when drafted: the
-blocks re-cut once before any push (block 50 into 50 and 53, the lead's rewrite).
+- Fix-backs: 0. Cascaded rebases: 0.
+- Runs: 5 for 4 pull requests (`gh run list`, 2026-11-17): #791 twice, at `538a5f11` then `415d7488`, block 20's
+  commit pushed onto it once the operator took the merge ("reco ok, b"); #792, #794, #795 once each. Runs
+  re-triggered by a fix-back or a rebase: 0.
+- Bodies the operator called unreadable: none in the lead's brief to the closing block.
+- The blocks re-cut once before any push: block 50 into 50 and 53 (the lead's rewrite).
+- The operator's choices, all 2026-11-17: blocks 10 and 20 merged, 30 and 40, "reco ok, b"; block 30 at 20 files,
+  then at 21, "A" twice; block 50 cut into 50 and 53, the contract in 53, "reco ok"; one bugs rule per service and
+  its limit, "A". The closing block's exits are the lead's choices.
 
 ## For lot 7 (the operator pages)
 
-- The webui's lines: `bug in webui thread watch` each minute while its thread has ended (error, with its trace);
+- The webui's lines: `bug in webui` each minute while its thread has ended (error, with its trace);
   `webui, bugs: <from> to <to>`; `restarting webui: bugs in webui`; `webui rebuilt`; `webui not restarted again: 3
-  rebuilds in vain`. The first look writes `webui, bugs: unknown to healthy` at 60 s.
+  rebuilds in vain`. The third look writes `webui, bugs: unknown to healthy`, at 180 s: a rule is unknown until it
+  holds 3 checks.
+- At debug level, at the start: `webui: time limit 300 s`, `webui: turns recorded on webui`, and one line per object,
+  `<object>: rebuilt for bugs in <parts>` (`notifier: rebuilt for bugs in notifier discord community, ...`).
 - The notifications' lines, per service, `notification <audience> failed (<error>)` gone: `notifier discord community:
   notification not sent: the service refused it (FAILURE)`, `...: apprise could not load its URL`, `...: past its
   timeout of 5 s` (warnings); `bug in notifier discord community, sending a notification` (error, with its trace);
@@ -200,15 +282,21 @@ blocks re-cut once before any push (block 50 into 50 and 53, the lead's rewrite)
 
 - **Right after a failed bind, `is_alive()` can still read true for an instant**: the thread sets its event in its
   `finally`. A test waits for the thread with `close()` before the watch runs (block 10).
-- **Stopping a thread never started raises** (`Thread.join`): the composition starts the first webui thread before any
-  rebuild can come (block 10).
+- **Stopping a thread never started raises** (`Thread.join`): `UvicornServerThread.stop` returns at once on a
+  thread whose `ident` is `None` (block 10, fixed in the closing block).
 - **Recording nests**: an alert's send records on a service's part inside `NodeHealth.record`, so that change reaches
   every subscriber before the outer one reaches the subscribers after `HealthAlerter`. No alert names the services'
   rules, which bounds it; lot 4c's alerts on these parts must not be sent through the notifier (block 30).
 - **The restart policy indexes its parts directly**: a test wiring a policy beside a dispatcher recording on the same
   `NodeHealth` must map every service's part, or the first change under a bugs rule raises a `KeyError` (block 30).
-- **`node_health` is read by the composition's callback before it is assigned**: `NodeHealth` is built on the next
-  statement, and nothing dispatches in between (block 30).
+- **The dispatcher and `NodeHealth` need each other**: the dispatcher records each send on `NodeHealth`, whose alerts
+  send through the dispatcher. `NodeHealth` is built first, its alerts reached through `HealthSubscriberBuiltLater`
+  (block 30's late-bound name, replaced in the closing block).
+- **The dispatcher reads the current notifier twice per notification**, before the sends and after them: a test
+  double answering a different notifier at each read makes it record nothing (closing block).
+- **Serena's first rename after its start wrote at shifted offsets** in `crawler_composition.py` (an import line and
+  a comment mangled, the uses left): as `.claude/rules/serena.md` warns, check each rename's diff, then `git grep -w`
+  the old name (closing block).
 - **A service's sends are recorded once every send of the notification has ended**: a recording that raises inside the
   `TaskGroup` would cancel the other services' sends (blocks 50, 53).
 - **The services' parts are built from the first notifier's services**: a rebuilt notifier must list equal services,
@@ -233,27 +321,22 @@ blocks re-cut once before any push (block 50 into 50 and 53, the lead's rewrite)
   fresh daemon each run, `-p 14711:4711`, `P2PWATCH_TEST_API_HOST=127.0.0.1 P2PWATCH_TEST_API_PORT=14711
   P2PWATCH_TEST_API_PASSWORD=indexer-api-test`: `orchestration_integration` 1 passed
   (`test_real_loop_runs_one_search_and_stops`) at block 10's `538a5f11` and `415d7488`, block 30's `1f4406b4`, and at
-  block 53's tip (2026-11-17). `api_integration` and `download_integration` did not run: no adapter of aMule changed.
+  block 53's tip (2026-11-17); at the closing block's `8a300772`, on a fresh daemon, 1 passed (2026-11-17).
+  `api_integration` and `download_integration` did not run: no adapter of aMule changed.
 - The matching comparison on the real catalog (What must not change).
 
 ## `BACKLOG.md`
 
-The closing block deletes the sub-entry 4b of "v5 release readiness" (the spec's section 6): lot 4b is whole once this
-lot merges. The lot adds nothing.
-
-## Left for the closing block
-
-- The holistic review's findings fixed, each with its exit here.
-- `BACKLOG.md`'s sub-entry 4b deleted.
-- The first stack, #718 to #754, closed unmerged (the spec's preamble), and its branches.
-- This handoff corrected: the counts, What must not change, the holistic table, the blocks' pull request numbers.
-- The spec's `(Corrected: ...)` beside what the lot changed after its approval: section 5's rows 10 to 50 (the merges,
-  the cut into 50 and 53, the contract in 53), appendix A's lot 4b5 rows.
+Reconciled: the sub-entry 4b of "v5 release readiness" deleted (the spec's section 6), lot 4b being whole once this
+lot merges; the sub-entry 4c stays. The lot adds nothing.
 
 ## Next step
 
-The operator reads and merges the stack, rebased onto `main` if it moved. No release: v5 ships after lots 4c to 7 and
-their release candidates.
+The operator reads and merges the stack, rebased onto `main` if it moved. The closing block's commits are cut into
+blocks by the lead. No release: v5 ships after lots 4c to 7 and their release candidates.
+
+Once this stack has merged, the lead closes the first stack, #718 to #754, unmerged (the spec's preamble), with its
+branches.
 
 Then lot 4c, what the operator reads of health (the graph of parts, one alert per root cause, the health endpoints, the
 metrics, the Node page): its spec, drafted in `agents/specs/2026-11-09-v5-fault-isolation.md`, is to be rewritten on

@@ -267,11 +267,11 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 
 | Block | Branch | Content | Draft, its size |
 |---|---|---|---|
-| 10 | `feat/webui-thread-watch` | the webui's thread watched every minute | #742, 222 lines, 14 files |
-| 20 | `feat/webui-rebuilt` | the webui rebuilt | #743, 297 lines, 6 files |
-| 30 | `feat/notification-sends-recorded` | each send recorded on the notifier | #744, 364 lines, 16 files |
-| 40 | `feat/notifier-rebuilt` | the notifier rebuilt | #745, 242 lines, 15 files |
-| 50 | `feat/notification-services-rules` | one component and one rule per service | #746, 497 lines, 19 files, and #754's contract |
+| 10 | `feat/webui-thread-watch` | the webui's thread watched every minute | #742, 222 lines, 14 files (Corrected: merged with block 20, 761 lines, 19 files, rather than carry code from one block to its user in the next, accepted by the operator on 2026-11-17, "reco ok, b") |
+| 20 | `feat/webui-rebuilt` | the webui rebuilt | #743, 297 lines, 6 files (Corrected: merged into block 10) |
+| 30 | `feat/notification-sends-recorded` | each send recorded on the notifier | #744, 364 lines, 16 files (Corrected: merged with block 40, 658 lines, 21 files, "reco ok, b"; past the file bound at 20 files, then at 21 with `parts_without_works` kept required, each accepted by the operator on 2026-11-17, "A") |
+| 40 | `feat/notifier-rebuilt` | the notifier rebuilt | #745, 242 lines, 15 files (Corrected: merged into block 30) |
+| 50 | `feat/notification-services-rules` | one component and one rule per service | #746, 497 lines, 19 files, and #754's contract (Corrected: written as one block, 604 lines and 21 files without the contract, it was cut into 50, the notifier listing its services and sending to one, 487 lines, 16 files, and 53, `feat/notification-service-parts`, one part per service and the contract, 292 lines, 18 files, accepted by the operator on 2026-11-17, "reco ok") |
 | 90 | `docs/lot-4b5-wrap` | closing block | |
 
 ## 6. Limits and scope
@@ -301,6 +301,10 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
   count resets once every bugs rule of its components is healthy again; after three rebuilds that raised, nothing of
   the object runs until the container restarts (the operator, 2026-11-12).
 - **A timeout counts toward a notification service's rule as a refusal does** (the operator, 2026-11-12).
+- **After a rebuild of the notifier, its count of rebuilds in vain resets only once every service has had 3 sends
+  since the rebuild**, its bugs rule healthy again: a community service a lost-media node seldom notifies holds the
+  count open, so later, unrelated bug episodes count in vain, and after three the notifier is not rebuilt again
+  until then; it still sends. (Corrected: added by lot 4b5, the operator on 2026-11-17, "A".)
 - **Source tracking's failed read waits a full `sources_interval`**, a fixed cadence (the operator, 2026-11-12).
 - **During lot 4b2, a bug still stops the node, as today**, until lot 4b3; the supervisor's turn loop starts inside
   `Work` and moves into the supervisor at block 60.
@@ -517,6 +521,8 @@ its turn, the first one included, its wait computed from its own state.
   them. (Corrected: one class, `AmuleClientWorks`, whose `over(client)` is that function and whose constructor builds
   the parts once, `keyword_searches` taking each search's part from it, accepted by the lead on 2026-11-17; the
   mapping and its test came in the closing block, `amule_client_restart_policy` beside the class.)
+  (Corrected: lot 4b5 block 10 replaced `amule_client_restart_policy` with
+  `composition/node_restart_policy.py`, over the client, the webui and the notifier.)
 - **Block 40** (draft #738, and #751's restart fixes, #752's holder): the `Restartable` port, its contract and fake;
   `RestartPolicy`, a subscriber of `NodeHealth`, handing the supervisor one `RestartRequest`; `Supervisor.add` for the
   rebuilt works. (Corrected: no public `Supervisor.add`: the policy hands the request to `Supervisor.restart`, which
@@ -530,10 +536,13 @@ its turn, the first one included, its wait computed from its own state.
   names each component's object, a component without one refused at construction (Corrected: the refusal is the
   policy's, built over the map and the works: a part of two objects, a work recorded on no part or on a part of no
   object, brought back by the closing block; the map is derived from the works the client's first build hands
-  back); the parts built before `NodeHealth` and the supervisor reach them through one holder, refusing a read before
+  back) (Corrected: since lot 4b5, from the first works of the client and the webui, and for the notifier from
+  the parts the dispatcher records each send on, read from the dispatcher by `node_restart_policy`); the parts built before `NodeHealth` and the supervisor reach them through one holder, refusing a read before
   they are set (Corrected: the holder holds the restart policy alone, `RestartPolicyBuiltLater`: the policy is built
   after the works whose parts it maps, which record on `NodeHealth`; nothing reaches the supervisor before it is
-  built, the works being handed back rather than added). Rebuilds in vain counted, none
+  built, the works being handed back rather than added) (Corrected: since lot 4b5's closing block,
+  one holder, `HealthSubscriberBuiltLater`, holds each subscriber built after `NodeHealth`: the alerts,
+  whose dispatcher records each send on `NodeHealth`, and the restart policy). Rebuilds in vain counted, none
   past three, the count reset when every bugs rule of the object's components is healthy again; a rebuild that raises
   records detected on each bugs rule of the object's components and is tried again after 60 s; a login cancelled
   during a rebuild closes its httpx client (Corrected: brought into lot 4b3's closing block, the time limit cancelling a
@@ -545,19 +554,28 @@ its turn, the first one included, its wait computed from its own state.
 
 - **Block 10** (draft #742): `WebuiThreadWatch`, a turn every minute over what the webui thread exposes (a callback
   the composition passes, the webui adapter depending on driving ports and the domain only); a dead thread is a bug of
-  the webui's component.
+  the webui's component. (Corrected: merged with block 20, "reco ok, b"; `composition/node_restart_policy.py`
+  replaces `amule_client_restart_policy`, mapping each object to the parts its first works are recorded on, the
+  notifier to the parts of its services through `parts_without_works`, which the closing block replaced by reading
+  them from the dispatcher, with one debug line per object; the work named `webui` in the log, as its part, since
+  the closing block.)
 - **Block 20** (draft #743): the webui's `Restartable`, rebuilt by the composition; a rebuild whose port is held
-  elsewhere does not raise, the watch fails it again, three rebuilds in vain.
+  elsewhere does not raise, the watch fails it again, three rebuilds in vain. (Corrected: merged into block 10.)
 - **Block 30** (draft #744): the dispatcher records each send on the notifier's component, after every send of the
   notification has ended: a send that worked records not detected on both rules; a `NotificationRefusedError` or a
   send past `N` seconds records detected on "sends failed" and not detected on bugs; any other exception records
-  detected on bugs and nothing on "sends failed".
+  detected on bugs and nothing on "sends failed". (Corrected: merged with block 40, "reco ok, b"; each send on its
+  service's part since block 53; a send whose notifier was rebuilt meanwhile is recorded on no part, since the
+  closing block.)
 - **Block 40** (draft #745): the notifier's `Restartable`, the dispatcher holding the rebuilt notifier through one
-  indirection; a send in flight finishes on the old one.
+  indirection; a send in flight finishes on the old one. (Corrected: merged into block 30.)
 - **Block 50** (draft #746, and #754's contract): the notifier lists its services and sends to one; one apprise object
   per URL; one component per service, named by its scheme and audience, never its URL, which carries a webhook's
   token; a URL apprise cannot load is a refusal logged at each send; `NotifierContract`, run by the apprise notifier
-  and its fake. If the block passes a bound, the contract splits out as block 55.
+  and its fake. If the block passes a bound, the contract splits out as block 55. (Corrected: cut into 50, the
+  services listed and sent to one by one, and 53, one part per service and the contract, "reco ok"; one bugs rule
+  per service kept rather than one on a single notifier part, accepted by the operator on 2026-11-17, "A", with its
+  limit in section 6.)
 - **Block 90**: the handoff, `BACKLOG.md`'s sub-entry 4b deleted, the holistic review's fixes, the matching
   comparison.
 
