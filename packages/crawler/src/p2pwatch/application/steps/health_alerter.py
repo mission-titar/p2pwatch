@@ -17,6 +17,7 @@ from p2pwatch.domain.observability.events import (
     DiskSpaceLow,
     Event,
 )
+from p2pwatch.domain.observability.notification_sends import SENDS_FAILED
 from p2pwatch.domain.status_reading import (
     CHANNEL_ALERT_AFTER,
     CHANNEL_NOT_CONNECTABLE,
@@ -33,8 +34,9 @@ _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
     CHANNEL_NOT_CONNECTABLE: "connectable",
 }
 
-# A part failing or healthy again under these rules has no alert: its log line tells it.
-_RULES_WITHOUT_AN_ALERT = frozenset({BUGS, SEARCHES_FAILED, CONNECTED_TO_NO_NETWORK})
+# A part failing or healthy again under these rules has no alert: its log line tells it. An alert
+# about the notifier would be sent through the notifier, whose send it records on the notifier.
+_RULES_WITHOUT_AN_ALERT = frozenset({BUGS, SEARCHES_FAILED, CONNECTED_TO_NO_NETWORK, SENDS_FAILED})
 
 
 class HealthAlerter:

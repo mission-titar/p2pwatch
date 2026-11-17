@@ -12,6 +12,8 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   the client and its works when the ``RestartPolicy`` asks.
 - ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartable`` rebuilds it and
   the watch over it when the ``RestartPolicy`` asks.
+- ONE ``AppriseNotifier`` at a time, which ``NotifierRestartable`` rebuilds when the
+  ``RestartPolicy`` asks; the dispatcher asks it for the notifier at each send.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
 source tracking when configured, and the webui's thread watch, which ``CrawlerLifecycle`` runs
@@ -118,6 +120,7 @@ from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.node_restart_policy import node_restart_policy
+from p2pwatch.composition.notifier_restartable import NotifierRestartable
 from p2pwatch.composition.restart_policy_built_later import RestartPolicyBuiltLater
 from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
@@ -126,6 +129,7 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
+from p2pwatch.domain.observability.notification_sends import notifier_component
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.work_components import webui_component
@@ -398,15 +402,42 @@ class CrawlerComposition(CrawlerRunner):
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             node_metric_store = InMemoryNodeMetricStore()
-            notifier = AppriseNotifier(
-                tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
-                apprise_factory=apprise.Apprise,
+            notifier = NotifierRestartable(
+                build_notifier=lambda: AppriseNotifier(
+                    tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
+                    apprise_factory=apprise.Apprise,
+                )
             )
+            notifier_part = notifier_component()
+            # Each send is recorded on the node's health, which sends its alerts through this
+            # dispatcher: built right below it.
+            node_health: NodeHealth
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
-                notifier=notifier,
+                current_notifier=notifier.notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
+                record_check=lambda *, on, rule, detected: node_health.record(
+                    on=on, rule=rule, detected=detected
+                ),
+                notifier_component=notifier_part,
+            )
+            # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
+            download_config = crawler_config.download
+            # Set once the works are built: they record on the node's health, the policy maps them.
+            restart_policy = RestartPolicyBuiltLater()
+            node_health = NodeHealth(
+                logger=StdlibLogger(NodeHealth.__module__),
+                subscribers=(
+                    HealthAlerter(
+                        observability_dispatcher=observability_dispatcher,
+                        node_id=node_id,
+                        min_free_bytes=(
+                            None if download_config is None else download_config.min_free_bytes
+                        ),
+                    ).send,
+                    restart_policy,
+                ),
             )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
@@ -489,23 +520,6 @@ class CrawlerComposition(CrawlerRunner):
                 )
 
             client = build_client()
-            # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
-            download_config = crawler_config.download
-            # Set once the works are built: they record on the node's health, the policy maps them.
-            restart_policy = RestartPolicyBuiltLater()
-            node_health = NodeHealth(
-                logger=StdlibLogger(NodeHealth.__module__),
-                subscribers=(
-                    HealthAlerter(
-                        observability_dispatcher=observability_dispatcher,
-                        node_id=node_id,
-                        min_free_bytes=(
-                            None if download_config is None else download_config.min_free_bytes
-                        ),
-                    ).send,
-                    restart_policy,
-                ),
-            )
             client_works = AmuleClientWorks(
                 client_name=_AMULE_CLIENT_NAME,
                 channels=client.channels(),
@@ -575,7 +589,11 @@ class CrawlerComposition(CrawlerRunner):
                 node_health=node_health,
                 logger=StdlibLogger(Supervisor.__module__),
             )
-            restart_policy.set(node_restart_policy(works_of, supervisor=supervisor))
+            restart_policy.set(
+                node_restart_policy(
+                    works_of, parts_without_works={notifier: [notifier_part]}, supervisor=supervisor
+                )
+            )
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,

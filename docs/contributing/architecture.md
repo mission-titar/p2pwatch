@@ -791,9 +791,10 @@ de la métrique lèvent une erreur à la construction. Chaque classe écrit ses 
 que le store garde telles quelles pour l'exposition. Rien ne scrape `/metrics`
 par défaut : pointez-y votre propre Prometheus si vous voulez des tableaux de bord.
 
-**Discipline de frontière (E-D13)** : les échecs de notifieur (apprise) et les échecs d'appel au
-démon sont
-**absorbés** (dégradation) ; un échec dans un composant in-process testé à 100 % (par exemple
+**Discipline de frontière (E-D13)** : les échecs d'appel au démon, et les envois que refuse un
+service de notification ou qui dépassent `notification_timeout_seconds`, sont **absorbés**
+(dégradation), écrits en une ligne ; toute autre exception du notifieur est un bug, écrit avec sa
+trace (§10.1) ; un échec dans un composant in-process testé à 100 % (par exemple
 `InMemoryNodeMetricStore`) est un bug, pas un transitoire : il fait échouer son tour, écrit avec sa
 trace, et le tour suivant de son `Work` attend au moins 60 s (§3).
 
@@ -827,13 +828,17 @@ partie. Chaque tâche que le nœud répète est enfin jugée sur ses bugs (`BUGS
 un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status reading amuled`,
 `download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`) et, pour une
 recherche, sur celle de son canal. La webui est une partie aussi (`webui`) : chaque minute,
-`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug. Un bug 3
+`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug. Le
+notifieur est une partie aussi (`notifier`) : une fois chaque envoi terminé, le dispatcher y
+enregistre s'il a rencontré un bug et, sinon, s'il a échoué (« sends failed » : refusé par un
+service, `NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`). Aucune alerte
+ne nomme ses règles : elle passerait par le notifieur lui-même. Un bug 3
 tours d'affilée met la partie en échec, moins de 2 sur les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
 pour « searches failed » et « connected to no network ». Le client aMule lui-même n'a pas cette
 règle : aucun tour n'est le sien. `NodeHealth` journalise chaque changement d'état et le transmet
 aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
 
-### 10.2 Les redémarrages du client aMule et de la webui
+### 10.2 Les redémarrages du client aMule, de la webui et du notifieur
 
 Un objet qui tient un état en mémoire, comme le client aMule (sa session, son verrou eD2k, ses
 créneaux Kad), est un `Restartable` : il se reconstruit et rend les `Work` qui tournent dessus.
@@ -856,7 +861,11 @@ composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent 
 `WebuiRestartable` arrête l'ancien thread, sert la webui sur un thread neuf et rend la surveillance
 de ce thread. Un port pris ailleurs ne fait pas lever la reconstruction : le thread neuf se termine,
 sa surveillance le retrouve terminé, et après trois reconstructions vaines la webui n'est plus
-redémarrée. La politique refuse, à sa construction, une partie de deux objets
+redémarrée. Le notifieur est le troisième (`composition/notifier_restartable.py`) : aucun `Work`
+ne tourne dessus, et `NotifierRestartable` construit un notifieur neuf sans rendre de `Work`. Le
+dispatcher lui demande le notifieur à chaque envoi, si bien qu'un envoi en cours finit sur
+l'ancien. La composition donne sa partie à la politique à part (`parts_without_works`), puisque
+c'est le dispatcher qui l'enregistre. La politique refuse, à sa construction, une partie de deux objets
 et un `Work` qu'aucun redémarrage n'arrêterait : sans partie, ou sur une partie d'aucun objet. Les
 `Work` rendus prennent leur premier tour comme au démarrage du nœud, sans les 60 s qui suivent un
 bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
@@ -885,7 +894,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/node_restart_policy.py` (`node_restart_policy`, la politique de redémarrage du nœud), `composition/webui_restartable.py` (`WebuiRestartable`, la webui telle que le nœud la reconstruit), `composition/restart_policy_built_later.py` (`RestartPolicyBuiltLater`, la politique telle que `NodeHealth` l'atteint) |
+| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/node_restart_policy.py` (`node_restart_policy`, la politique de redémarrage du nœud), `composition/webui_restartable.py` (`WebuiRestartable`, la webui telle que le nœud la reconstruit), `composition/notifier_restartable.py` (`NotifierRestartable`, le notifieur tel que le nœud le reconstruit), `composition/restart_policy_built_later.py` (`RestartPolicyBuiltLater`, la politique telle que `NodeHealth` l'atteint) |
 | Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `webui_thread_watch.py` (`WebuiThreadWatch`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
@@ -896,7 +905,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit) |
+| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (la partie du notifieur, sa règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
