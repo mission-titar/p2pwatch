@@ -827,14 +827,13 @@ partie. Chaque tâche que le nœud répète est enfin jugée sur ses bugs (`BUGS
 un bug, une erreur attendue n'en étant pas un, sur la partie de son `Work` (`status reading amuled`,
 `download tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`) et, pour une
 recherche, sur celle de son canal. La webui est une partie aussi (`webui`) : chaque minute,
-`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug ; tant que
-la webui ne peut être reconstruite, la politique de redémarrage ne fait rien de ses bugs. Un bug 3
+`WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug. Un bug 3
 tours d'affilée met la partie en échec, moins de 2 sur les 10 derniers tours la rend saine ; ce changement s'écrit dans le journal seul, sans alerte, comme
 pour « searches failed » et « connected to no network ». Le client aMule lui-même n'a pas cette
 règle : aucun tour n'est le sien. `NodeHealth` journalise chaque changement d'état et le transmet
 aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
 
-### 10.2 Les redémarrages du client aMule
+### 10.2 Les redémarrages du client aMule et de la webui
 
 Un objet qui tient un état en mémoire, comme le client aMule (sa session, son verrou eD2k, ses
 créneaux Kad), est un `Restartable` : il se reconstruit et rend les `Work` qui tournent dessus.
@@ -853,7 +852,11 @@ conteneur. Un réseau en panne n'est jamais réparé par un redémarrage : seule
 redémarre. `AmuleClientRestartable` (`composition/amule_client_restartable.py`) déconnecte
 l'ancienne session, connecte un client neuf et rend ses `Work` par `AmuleClientWorks.over` ; la
 composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent leurs tours
-(`amule_client_restart_policy`). La politique refuse, à sa construction, une partie de deux objets
+(`node_restart_policy`). La webui est l'autre `Restartable` (`composition/webui_restartable.py`) :
+`WebuiRestartable` arrête l'ancien thread, sert la webui sur un thread neuf et rend la surveillance
+de ce thread. Un port pris ailleurs ne fait pas lever la reconstruction : le thread neuf se termine,
+sa surveillance le retrouve terminé, et après trois reconstructions vaines la webui n'est plus
+redémarrée. La politique refuse, à sa construction, une partie de deux objets
 et un `Work` qu'aucun redémarrage n'arrêterait : sans partie, ou sur une partie d'aucun objet. Les
 `Work` rendus prennent leur premier tour comme au démarrage du nœud, sans les 60 s qui suivent un
 bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
@@ -882,7 +885,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois ; `amule_client_restart_policy`, la politique de redémarrage du client), `composition/restart_policy_built_later.py` (`RestartPolicyBuiltLater`, la politique telle que `NodeHealth` l'atteint) |
+| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/node_restart_policy.py` (`node_restart_policy`, la politique de redémarrage du nœud), `composition/webui_restartable.py` (`WebuiRestartable`, la webui telle que le nœud la reconstruit), `composition/restart_policy_built_later.py` (`RestartPolicyBuiltLater`, la politique telle que `NodeHealth` l'atteint) |
 | Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `webui_thread_watch.py` (`WebuiThreadWatch`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |

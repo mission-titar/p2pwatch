@@ -19,7 +19,6 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_tracked_download_store i
 from p2pwatch.adapters.driven.shutil_free_space_meter import ShutilFreeSpaceMeter
 from p2pwatch.adapters.driven.stdlib_logger import StdlibLogger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
-from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
 from p2pwatch.application.ports.driven.waker import Waker
 from p2pwatch.application.ports.driven.wall_clock import WallClock
@@ -34,11 +33,9 @@ from p2pwatch.application.steps.download_tracker import DownloadTracker
 from p2pwatch.application.steps.keyword_search import keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
-from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
@@ -278,24 +275,3 @@ class AmuleClientWorks:
                 channel_components=self._channel_components.values(),
             ),
         )
-
-
-def amule_client_restart_policy(
-    amule_client: Restartable[SupervisedWork],
-    *,
-    works: Sequence[SupervisedWork],
-    works_restarting_nothing: Sequence[SupervisedWork],
-    supervisor: Supervisor,
-) -> RestartPolicy:
-    """Has ``supervisor`` rebuild the aMule client when a bugs rule of a part its ``works`` are
-    recorded on turns failing, never for ``works_restarting_nothing``, such as the webui's watch."""
-    return RestartPolicy(
-        # A rebuild builds every work over the client anew: each of their parts is the client's.
-        components_of={amule_client: [c for supervised in works for c in supervised.components]},
-        components_restarting_nothing=[
-            c for supervised in works_restarting_nothing for c in supervised.components
-        ],
-        works=[*works, *works_restarting_nothing],
-        restart=supervisor.restart,
-        logger=StdlibLogger(RestartPolicy.__module__),
-    )

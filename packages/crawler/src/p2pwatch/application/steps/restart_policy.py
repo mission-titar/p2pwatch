@@ -79,7 +79,6 @@ class RestartPolicy:
         self,
         *,
         components_of: Mapping[Restartable[SupervisedWork], Sequence[Component]],
-        components_restarting_nothing: Sequence[Component] = (),
         works: Sequence[SupervisedWork],
         restart: RestartRunner,
         logger: Logger,
@@ -94,8 +93,6 @@ class RestartPolicy:
                     of_both = f"{other.restartable} and of {restartable}"
                     raise ValueError(f"{component.name}: a part of {of_both}")
                 self._restarts_of[component] = restarts
-        # Parts nothing can rebuild yet, such as the webui's: their bugs are only logged.
-        self._restarting_nothing = frozenset(components_restarting_nothing)
         for supervised in works:
             self._refuse_unless_over_an_object(supervised)
         self._restart = restart
@@ -107,15 +104,15 @@ class RestartPolicy:
         if not supervised.components:
             raise ValueError(f"{supervised.work}: recorded on no part, so over no object")
         for component in supervised.components:
-            if component not in self._restarts_of and component not in self._restarting_nothing:
+            if component not in self._restarts_of:
                 of_no_object = f"{component.name}, a part of no object"
                 raise ValueError(f"{supervised.work}: recorded on {of_no_object}")
 
     async def __call__(self, transition: HealthTransition) -> None:
         """Takes one change of health, such as a search's bugs turning failing."""
-        if transition.rule is not BUGS or transition.component in self._restarting_nothing:
+        if transition.rule is not BUGS:
             return
-        # Every other part a turn is recorded on is an object's: refused at construction otherwise.
+        # Every part a turn is recorded on is an object's: refused at construction otherwise.
         restarts = self._restarts_of[transition.component]
         if transition.current is HealthState.FAILING:
             self._on_failing(transition.component, restarts=restarts)
