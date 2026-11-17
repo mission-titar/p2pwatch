@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from p2pwatch.application.steps.health_alerter import HealthAlerter
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.disk_space import (
     CONNECTED_TO_NO_NETWORK,
@@ -14,6 +15,7 @@ from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
+from p2pwatch.domain.observability.notification_sends import SENDS_FAILED, notifier_component
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
@@ -57,8 +59,10 @@ async def _sent(
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
         node_metric_writer=FakeNodeMetricStore(),
-        notifier=notifier,
+        current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
+        record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+        notifier_component=notifier_component(),
     )
     alerter = HealthAlerter(
         observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=min_free_bytes
@@ -114,6 +118,9 @@ async def test_a_rule_it_has_no_alert_for_raises(
         (BUGS, webui_component()),
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
+        # An alert about the notifier would be sent through the notifier itself.
+        (BUGS, notifier_component()),
+        (SENDS_FAILED, notifier_component()),
     ],
     ids=[
         "a task's bugs",
@@ -122,6 +129,8 @@ async def test_a_rule_it_has_no_alert_for_raises(
         "the webui's bugs",
         "a channel's searches failed",
         "download tracking connected to no network",
+        "the notifier's bugs",
+        "the notifier's sends failed",
     ],
 )
 @pytest.mark.parametrize(
@@ -249,8 +258,10 @@ async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
         node_metric_writer=FakeNodeMetricStore(),
-        notifier=notifier,
+        current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
+        record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+        notifier_component=notifier_component(),
     )
     alerter = HealthAlerter(
         observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB

@@ -1,7 +1,8 @@
 """Apprise notifier: groups built per node_id on its first notification, add(url, tag) into
 them, node_id in the title, routes by tag, writes each kind's Markdown and notify type,
-mentions neutralised, a relayed log line sent untitled."""
+mentions neutralised, a relayed log line sent untitled, a service refusing it a refusal."""
 
+import socket
 from datetime import timedelta
 
 import apprise
@@ -22,6 +23,7 @@ from p2pwatch.domain.observability.notification import (
     SourceAlertKind,
     TierRise,
 )
+from p2pwatch.domain.observability.notification_sends import NotificationRefusedError
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
@@ -325,3 +327,17 @@ async def test_a_backtick_in_a_source_name_cannot_close_its_code_span() -> None:
 async def test_a_real_apprise_with_no_url_notifies_nothing() -> None:
     notifier = AppriseNotifier((), apprise_factory=apprise.Apprise)
     await notifier.notify(Audience.COMMUNITY, notification=_LINE)  # does not raise
+
+
+@pytest.mark.asyncio
+async def test_a_real_apprise_whose_service_refuses_the_send_raises_a_refusal() -> None:
+    with socket.socket() as probe:  # once closed, nothing listens on its port
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    notifier = AppriseNotifier(
+        ((f"json://127.0.0.1:{port}/", Audience.COMMUNITY, False),),
+        apprise_factory=apprise.Apprise,
+    )
+
+    with pytest.raises(NotificationRefusedError, match=r"^a service refused it \(FAILURE\)$"):
+        await notifier.notify(Audience.COMMUNITY, notification=_LINE)
