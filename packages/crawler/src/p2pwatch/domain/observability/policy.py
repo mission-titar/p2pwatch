@@ -33,6 +33,8 @@ from p2pwatch.domain.observability.events import (
     DownloadQueued,
     Event,
     FreeSpaceSampled,
+    NotificationsNotSaved,
+    NotificationsSavedAgain,
     ObservationRecorded,
     SearchExecuted,
     SearchFailed,
@@ -353,6 +355,16 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 message=f"download disk low: under the {event.min_free_bytes / 2**30:.1f} GiB "
                 "floor (no new download)",
                 node_id=event.node_id,
+            )
+        case NotificationsNotSaved():
+            return _relayed(
+                Severity.WARNING,
+                message="notifications not saved in local.db: lost at the next restart",
+                node_id=event.node_id,
+            )
+        case NotificationsSavedAgain():
+            return _relayed(
+                Severity.INFO, message="notifications saved again", node_id=event.node_id
             )
         case SourceFirstUseful():
             return _plan_source(

@@ -857,7 +857,11 @@ travail enregistre sur la partie de son service s'il a échoué (« sends failed
 service, `NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`), aux mêmes
 seuils. Une URL
 qu'apprise ne sait pas charger est un refus, écrit à chaque envoi. Aucune alerte ne nomme les
-règles d'un service : elle passerait par ce service. `NodeHealth` journalise chaque changement
+règles d'un service : elle passerait par ce service. La base locale est une partie aussi
+(`local database`) : à chaque tour, le travail du notifieur y enregistre si la dernière sauvegarde
+de la boîte d'envoi a échoué (« saves failed »), aux mêmes seuils. En échec, « notifications not
+saved in local.db: lost at the next restart » part, depuis la mémoire comme toute notification, et
+« notifications saved again » à son retour. `NodeHealth` journalise chaque changement
 d'état et le transmet aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
 
 ### 10.2 Les redémarrages du client aMule, de la webui et du notifieur
@@ -930,7 +934,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `application/steps/notification_outbox.py`, `application/steps/notification_sender.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (dépendances externes, règles, transitions), `domain/work_dependencies.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit), `composition/webui_restartable.py` (la webui reconstruite), `composition/notifier_restartable.py` (le notifieur reconstruit) |
+| Santé | `domain/health/` (dépendances externes, règles, transitions), `domain/work_dependencies.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`, la partie de la base locale et sa règle « saves failed »), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit), `composition/webui_restartable.py` (la webui reconstruite), `composition/notifier_restartable.py` (le notifieur reconstruit) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

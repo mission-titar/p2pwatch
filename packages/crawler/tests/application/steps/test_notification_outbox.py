@@ -19,6 +19,7 @@ from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
     PendingNotification,
+    local_database_dependency,
     notification_service_dependencies,
 )
 from p2pwatch.domain.observability.policy import Audience
@@ -156,6 +157,20 @@ async def test_a_save_its_store_refuses_is_logged_in_one_line_its_entries_kept_i
     assert _taken(outbox) == [PendingNotification(notification=_ONLINE, service=_DISCORD)]
 
 
+async def test_it_keeps_whether_its_latest_save_failed() -> None:
+    store = FakeNotificationOutboxStore()
+    outbox = _outbox(store=store)
+    before_any_save = outbox.latest_save_failed
+
+    store.writes_fail = True
+    outbox.leave(_ONLINE, services=[_DISCORD])
+    once_refused = outbox.latest_save_failed
+    store.writes_fail = False
+    outbox.leave(_OFFLINE, services=[_DISCORD])
+
+    assert (before_any_save, once_refused, outbox.latest_save_failed) == (False, True, False)
+
+
 async def test_it_reads_back_the_entries_an_earlier_one_saved_the_oldest_first() -> None:
     store = FakeNotificationOutboxStore()
     earlier = _outbox(store=store)
@@ -203,6 +218,7 @@ async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_pat
             notification_timeout_seconds=5.0,
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
             service_dependencies=notification_service_dependencies(services),
+            local_database=local_database_dependency(),
             logger=FakeLogger(),
         ).run_once()
 

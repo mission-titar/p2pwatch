@@ -136,7 +136,10 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
-from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
+from p2pwatch.domain.observability.notification_sends import (
+    local_database_dependency,
+    notification_service_dependencies,
+)
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from p2pwatch.domain.work_dependencies import webui_dependency
@@ -426,6 +429,7 @@ class CrawlerComposition(CrawlerRunner):
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
             )
+            local_database = local_database_dependency()
             outbox_store = SqliteNotificationOutboxStore(local_connection)
             outbox = NotificationOutbox(
                 writer=outbox_store,
@@ -442,6 +446,7 @@ class CrawlerComposition(CrawlerRunner):
                     notification_timeout_seconds=observability.notification_timeout_seconds,
                     record_check=node_health.record,
                     service_dependencies=service_parts,
+                    local_database=local_database,
                     logger=StdlibLogger(NotificationSender.__module__),
                 )
 

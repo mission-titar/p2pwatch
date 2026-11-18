@@ -21,6 +21,7 @@ from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
+    local_database_dependency,
     notification_service_dependencies,
 )
 from p2pwatch.domain.observability.severity import Severity
@@ -113,6 +114,7 @@ class _Node:
             notification_timeout_seconds=5.0,
             record_check=self.node_health.record,
             service_dependencies=self.service_parts,
+            local_database=local_database_dependency(),
             logger=FakeLogger(),
         )
         parts = tuple(self.service_parts.values())

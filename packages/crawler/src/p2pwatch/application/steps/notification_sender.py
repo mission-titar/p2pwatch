@@ -1,5 +1,5 @@
 """The notifier's work: sends each notification left in the outbox, the oldest first, such as a
-tier rise to the community's Discord webhook, and records on its service whether the send failed."""
+tier rise to the community's Discord webhook, and records whether its send and its save failed."""
 
 import asyncio
 from collections.abc import Mapping
@@ -12,6 +12,7 @@ from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.observability.notification_sends import (
+    SAVES_FAILED,
     SENDS_FAILED,
     NotificationRefusedError,
     NotificationService,
@@ -42,6 +43,7 @@ class NotificationSender(Work):
         notification_timeout_seconds: float,
         record_check: CheckRecorder,
         service_dependencies: Mapping[NotificationService, ExternalDependency],
+        local_database: ExternalDependency,
         logger: Logger,
     ) -> None:
         self._outbox = outbox
@@ -49,6 +51,7 @@ class NotificationSender(Work):
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_check = record_check
         self._service_dependencies = service_dependencies
+        self._local_database = local_database
         self._logger = logger
 
     def __str__(self) -> str:
@@ -59,13 +62,15 @@ class NotificationSender(Work):
         await self._outbox.wait_for_an_entry()
 
     async def run_once(self) -> None:
-        """Sends the oldest notification left within the notification timeout, then removes it, a
-        refusal or a timeout recorded on its service's sends, a bug raised."""
+        """Sends the oldest notification left within the notification timeout, then removes it: a
+        failed save recorded on the local database, a refusal on its service, a bug raised."""
         entry = self._outbox.oldest()
         if entry is None:
             return
         end = await self._end_of_send(entry)  # a cancellation keeps the entry for the next turn
         self._outbox.remove(entry)
+        saves_failed = self._outbox.latest_save_failed
+        await self._record_check(on=self._local_database, rule=SAVES_FAILED, detected=saves_failed)
         if isinstance(end, Exception):
             raise end
         part = self._service_dependencies[entry.service]

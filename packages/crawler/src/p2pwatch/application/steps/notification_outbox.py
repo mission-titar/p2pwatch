@@ -35,6 +35,7 @@ class NotificationOutbox:
         self._writer = writer
         self._waker = waker
         self._logger = logger
+        self._latest_save_failed = False
         saved = reader.read_pending_notifications()
         self._entries = [entry for entry in saved if entry.service in services]
         if dropped := [entry.service for entry in saved if entry.service not in services]:
@@ -51,6 +52,11 @@ class NotificationOutbox:
         )
         self._save()
         self._waker.wake(WakeSubject.NOTIFICATION)
+
+    @property
+    def latest_save_failed(self) -> bool:
+        """Whether its latest save failed, such as on a full disk; ``False`` before the first."""
+        return self._latest_save_failed
 
     def oldest(self) -> PendingNotification | None:
         """The entry left first, ``None`` when it holds none."""
@@ -73,3 +79,6 @@ class NotificationOutbox:
             self._logger.warning(
                 "notification outbox not saved (%s): saved again at its next change", error
             )
+            self._latest_save_failed = True
+        else:
+            self._latest_save_failed = False
