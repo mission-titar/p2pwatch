@@ -95,6 +95,7 @@ exclude_also = ["if TYPE_CHECKING:"]
 "tests/adapters/driven/persistence_sqlite/test_migration_directives.py" = "the migration scripts' copy-before directives, against their statements"
 "tests/adapters/driven/persistence_sqlite/test_migration_drop_verification.py" = "SQL migrations of both databases"
 "tests/adapters/driven/persistence_sqlite/test_migration_last_seen_at.py" = "a SQL migration of local.db"
+"tests/application/test_health_alerts.py" = "every health alert, from the readings to its log line and notification"
 "tests/composition/test_prod_targets.py" = "deploy/targets.yml"
 "tests/domain/matching/test_golden_corpus.py" = "deploy/matcher.yml, against the golden corpus"
 "tests/fakes/adapters/driven/test_fake_backoff_state_store.py" = "a fake of tests/fakes, against its contract"
