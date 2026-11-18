@@ -20,13 +20,22 @@ model and the restarts are whole.
   composition sets the alerts from it once those parts exist. A rule that has an alert, on a part the alerter was
   not given for it, raises a wiring `ValueError`. Lot 4b1's accepted limit, the floor held as `int | None` and its
   `ValueError`, is gone. `keyword_searches` takes each channel's part by its client and channel.
-- **`WebuiRestartable`** (`composition/webui_restartable.py`) stops the old thread, serves the webui on a thread built
-  anew (a new app and new read connections) and hands back the watch over it (`webui_thread_watch_over`). A port held
-  elsewhere does not make the rebuild raise: the new thread ends, its watch finds it ended, and after three rebuilds in
-  vain the webui is not restarted again. `UvicornServerThread.stop` does nothing on a thread never started, such as
-  one whose start raised, so the next rebuild builds anew.
+- **Each object the node restarts is built whole** (block 98, on the operator's comment on #791): a `Restartable`
+  (`application/ports/driven/restartable.py`) never changes, hands back the works over its state and closes itself;
+  its `RestartableBuilder` (`restartable_builder.py`) builds a new one at each call, the first included. The
+  supervisor builds the first (`Supervisor.build_first`) and holds the latest of each, a `HeldRestartable`; a
+  rebuild closes it, then has the builder build the next; a build that raises leaves the closed one held, closed
+  again at the next attempt (a second close does nothing more, `RestartableBuilderContract` states it). The
+  composition pushes `Supervisor.close` on its resource stack: the latest of each closed at the unwind, the latest
+  built first, one that raises letting the others close.
+- **`WebuiRestartableBuilder`** (`composition/webui_restartable.py`) serves the webui on a thread built anew (a new app
+  and new read connections), a `WebuiRestartable` with the watch over it (`webui_thread_watch_over`), whose close
+  stops the thread; a build cut while its thread binds stops that thread. A port held elsewhere does not make the
+  build raise: the new thread ends, its watch finds it ended, and after three rebuilds in vain the webui is not
+  restarted again. `UvicornServerThread.stop` does nothing on a thread never started, such as one whose start raised.
 - **`node_restart_policy`** (`composition/node_restart_policy.py`, which replaces `amule_client_restart_policy`)
-  maps the client and the webui to the parts their first works are recorded on, and the notifier to the parts the
+  maps the client and the webui, as the supervisor holds them, to the parts their first works are recorded on, and
+  the notifier to the parts the
   dispatcher records each send on, which it reads from the dispatcher (`service_components()`): the policy cannot be
   given other parts than those the dispatcher records on. It writes one debug line per object,
   `notifier: rebuilt for bugs in notifier discord community, ...`, which a wiring test reads.
@@ -44,13 +53,16 @@ model and the restarts are whole.
   has ended, it records each on its service's part (`notifier discord community`): a send that worked, not detected
   on "bugs" and on "sends failed"; a refusal or a send past the timeout, detected on "sends failed", not on "bugs"; any
   other exception, detected on "bugs", nothing on "sends failed". A `TimeoutError` the notifier raises itself is a bug.
-  The dispatcher reaches the notifier through `CurrentNotifier`, at each notification, so a send in flight during a
+  The dispatcher reaches the notifier through `CurrentNotifier`, at each notification, which the composition answers
+  from the supervisor's `HeldRestartable` (block 98), so a send in flight during a
   rebuild finishes on the old one; once it has ended, a notifier rebuilt meanwhile has the dispatcher record that
   notification's sends on no part: the old notifier's sends tell nothing of the new one.
-- **`NotifierRestartable`** (`composition/notifier_restartable.py`) holds the apprise notifier built latest; a rebuild
-  builds it anew and hands back no work. The composition builds the services' parts once, on the first notifier's
+- **`NotifierRestartableBuilder`** (`composition/notifier_restartable.py`) builds a `NotifierRestartable` at each call,
+  an apprise notifier built anew, no work over it, its close releasing nothing; a rebuild that raises leaves the one
+  before held, which the sends go on to. The composition builds the services' parts once, on the first notifier's
   services, into the dispatcher.
-- **The composition builds `NodeHealth` first**, its two subscribers through one holder each,
+- **The composition builds `NodeHealth` first**, then the supervisor, which builds the notifier, its two subscribers
+  through one holder each,
   `HealthSubscriberBuiltLater` (`composition/health_subscriber_built_later.py`, `RestartPolicyBuiltLater` made
   generic): the alerts, set once the dispatcher that records each send on `NodeHealth` is built, and the restart
   policy, set once the works are built. A change reaching a holder before it is set raises
