@@ -101,7 +101,7 @@ async def _alerts(
     alerts: list[_Alert] = []
     for number, take_reading in enumerate(readings, start=1):
         lines_before = len(observability.logger.lines)
-        sent_before = len(observability.notifier.calls)
+        sent_before = len(observability.notifications)
         await take_reading()
         lines = observability.logger.lines[lines_before:]
         alerts += [
@@ -110,7 +110,7 @@ async def _alerts(
                 lines=tuple(line for line in lines if line.message == _text_of(notification)),
                 sent=(audience, notification),
             )
-            for audience, notification in observability.notifier.calls[sent_before:]
+            for audience, notification in observability.notifications[sent_before:]
         ]
     return alerts
 

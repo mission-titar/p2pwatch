@@ -331,16 +331,16 @@ async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_spa
     # Two dips of two low readings, one reading exactly at the floor between them.
     for free in (5 * _GIB, 4 * _GIB, 10 * _GIB, 10 * _GIB - 1, 3 * _GIB):
         free_space_meter.free = free
-        before = len(observability.notifier.calls)
+        before = len(observability.notifications)
         await cycle.run_once()
-        alerts_per_cycle.append(len(observability.notifier.calls) - before)
+        alerts_per_cycle.append(len(observability.notifications) - before)
     assert alerts_per_cycle == [1, 0, 0, 1, 0]
     low = "download disk low: under the 10.0 GiB floor (no new download)"
     relayed = (
         Audience.OPERATIONS,
         RelayedLogLine(message=low, severity=Severity.WARNING, node_id=NODE_ID),
     )
-    assert observability.notifier.calls == [relayed, relayed]
+    assert observability.notifications == [relayed, relayed]
     changes = ("unknown to failing", "failing to healthy", "healthy to failing")
     assert health_logger.lines == [
         LoggedLine(
