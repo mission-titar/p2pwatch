@@ -11,7 +11,7 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.status_reading import SEARCHES_FAILED
@@ -23,8 +23,8 @@ class SearchTimeLimitOf(Protocol):
 
 
 # The part the search of ``keyword`` on ``channel`` is judged on by its bugs, built once.
-class SearchComponentOf(Protocol):
-    def __call__(self, keyword: Keyword, /, *, channel: Channel) -> Component: ...
+class SearchDependencyOf(Protocol):
+    def __call__(self, keyword: Keyword, /, *, channel: Channel) -> ExternalDependency: ...
 
 
 class KeywordSearch(Work):
@@ -40,7 +40,7 @@ class KeywordSearch(Work):
         backoff_saver: BackoffSaver,
         monotonic_clock: MonotonicClock,
         node_health: NodeHealth,
-        channel_component: Component,
+        channel_dependency: ExternalDependency,
     ) -> None:
         self._keyword = keyword
         self._channel = channel
@@ -48,7 +48,7 @@ class KeywordSearch(Work):
         self._backoff_saver = backoff_saver
         self._monotonic_clock = monotonic_clock
         self._node_health = node_health
-        self._channel_component = channel_component
+        self._channel_dependency = channel_dependency
 
     def __str__(self) -> str:
         return f"search '{self._keyword}' {self._search_worker.client_name} {self._channel}"
@@ -74,7 +74,7 @@ class KeywordSearch(Work):
 
     async def _record_searches_failed(self, *, detected: bool) -> None:
         await self._node_health.record(
-            on=self._channel_component, rule=SEARCHES_FAILED, detected=detected
+            on=self._channel_dependency, rule=SEARCHES_FAILED, detected=detected
         )
 
 
@@ -85,14 +85,16 @@ def keyword_searches(
     backoff_saver: BackoffSaver,
     monotonic_clock: MonotonicClock,
     time_limit_of: SearchTimeLimitOf,
-    search_component_of: SearchComponentOf,
+    search_dependency_of: SearchDependencyOf,
     node_health: NodeHealth,
-    channel_components: Iterable[Component],
+    channel_dependencies: Iterable[ExternalDependency],
 ) -> list[SupervisedWork]:
     """One search per client, channel and keyword of the config, with its time limit, a keyword
     listed twice searched once and an empty one never; its turns recorded on its channel too."""
     each_keyword_once = dedupe_keywords(keywords)
-    channel_of = {(channel.client_name, channel.channel): channel for channel in channel_components}
+    channel_of = {
+        (channel.client_name, channel.channel): channel for channel in channel_dependencies
+    }
     return [
         SupervisedWork(
             work=KeywordSearch(
@@ -102,11 +104,11 @@ def keyword_searches(
                 backoff_saver=backoff_saver,
                 monotonic_clock=monotonic_clock,
                 node_health=node_health,
-                channel_component=channel_of[search_worker.client_name, channel],
+                channel_dependency=channel_of[search_worker.client_name, channel],
             ),
             time_limit=time_limit_of(keyword, channel=channel),
-            components=(
-                search_component_of(keyword, channel=channel),
+            dependencies=(
+                search_dependency_of(keyword, channel=channel),
                 channel_of[search_worker.client_name, channel],
             ),
         )

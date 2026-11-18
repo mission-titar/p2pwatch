@@ -1,4 +1,4 @@
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
 from p2pwatch.domain.identifiers import ClientName
 
@@ -15,8 +15,8 @@ _UNREACHABLE = _rule("unreachable")
 _NOT_CONNECTED = _rule("not connected")
 
 
-def _amule() -> Component:
-    return Component(
+def _amule() -> ExternalDependency:
+    return ExternalDependency(
         name="client amuled",
         client_name=ClientName("amuled"),
         rules=(_UNREACHABLE, _NOT_CONNECTED),
@@ -28,7 +28,7 @@ def test_the_third_detection_in_a_row_returns_the_change_to_failing() -> None:
     assert amule.record(rule=_UNREACHABLE, detected=True) is None
     assert amule.record(rule=_UNREACHABLE, detected=True) is None
     assert amule.record(rule=_UNREACHABLE, detected=True) == HealthTransition(
-        component=amule,
+        dependency=amule,
         rule=_UNREACHABLE,
         previous=HealthState.UNKNOWN,
         current=HealthState.FAILING,
@@ -47,7 +47,7 @@ def test_3_checks_not_detected_return_the_change_to_healthy() -> None:
     amule.record(rule=_UNREACHABLE, detected=False)
     amule.record(rule=_UNREACHABLE, detected=False)
     assert amule.record(rule=_UNREACHABLE, detected=False) == HealthTransition(
-        component=amule,
+        dependency=amule,
         rule=_UNREACHABLE,
         previous=HealthState.UNKNOWN,
         current=HealthState.HEALTHY,
@@ -111,7 +111,7 @@ def test_a_forgotten_rule_is_unknown_again_until_it_has_enough_checks_again() ->
     assert amule.record(rule=_UNREACHABLE, detected=True) is None
     assert amule.record(rule=_UNREACHABLE, detected=True) is None
     assert amule.record(rule=_UNREACHABLE, detected=True) == HealthTransition(
-        component=amule,
+        dependency=amule,
         rule=_UNREACHABLE,
         previous=HealthState.UNKNOWN,
         current=HealthState.FAILING,

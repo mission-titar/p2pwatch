@@ -19,7 +19,7 @@ from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.steps.webui_thread_watch import WebuiThreadEndedError
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
-from p2pwatch.domain.work_components import webui_component
+from p2pwatch.domain.work_dependencies import webui_dependency
 from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
@@ -45,7 +45,7 @@ class _Over(Work):
 
 
 def _works_over(thread: UvicornServerThread, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(thread), time_limit=timedelta(minutes=5), components=())]
+    return [SupervisedWork(work=_Over(thread), time_limit=timedelta(minutes=5), dependencies=())]
 
 
 class _Threads:
@@ -154,7 +154,7 @@ async def test_a_close_stops_the_thread_held_then(webui: WebuiRestartable) -> No
 async def test_a_rebuild_on_a_port_held_elsewhere_raises_nothing_and_its_watch_finds_it_ended() -> (
     None
 ):
-    webui_part = webui_component()
+    webui_part = webui_dependency()
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         holder.listen()
@@ -163,7 +163,7 @@ async def test_a_rebuild_on_a_port_held_elsewhere_raises_nothing_and_its_watch_f
             threads.build(),
             build_thread=threads.build,
             works_over=lambda thread: webui_thread_watch_over(
-                thread, component=webui_part, monotonic_clock=FakeTime().monotonic
+                thread, dependency=webui_part, monotonic_clock=FakeTime().monotonic
             ),
         )
         await threads.built[0].start()
@@ -177,12 +177,12 @@ async def test_a_rebuild_on_a_port_held_elsewhere_raises_nothing_and_its_watch_f
 
 @pytest.mark.asyncio
 async def test_the_watch_handed_back_looks_at_the_thread_built_anew(threads: _Threads) -> None:
-    webui_part = webui_component()
+    webui_part = webui_dependency()
     webui = WebuiRestartable(
         threads.build(),
         build_thread=threads.build,
         works_over=lambda thread: webui_thread_watch_over(
-            thread, component=webui_part, monotonic_clock=FakeTime().monotonic
+            thread, dependency=webui_part, monotonic_clock=FakeTime().monotonic
         ),
     )
     await threads.built[0].start()
@@ -190,6 +190,6 @@ async def test_the_watch_handed_back_looks_at_the_thread_built_anew(threads: _Th
     [watch] = await webui.rebuild()
 
     await watch.work.run_once()  # the old thread has ended, the new one serves
-    assert (str(watch.work), watch.components) == ("webui", (webui_part,))
+    assert (str(watch.work), watch.dependencies) == ("webui", (webui_part,))
     # Its turn awaits nothing: its time limit is the margin alone.
     assert watch.time_limit == timedelta(minutes=5)

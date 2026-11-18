@@ -1,6 +1,7 @@
 """Health: whether each part of the node works.
 
-The node tracks the health of each of its parts, such as the aMule client (a ``Component``).
+The node tracks the health of each of its parts, its external dependencies, such as the aMule client
+(an ``ExternalDependency``).
 Each part has rules (a ``HealthRule``), such as "aMule does not answer".
 At each check, the code records in ``NodeHealth`` whether the rule detected its case.
 From its latest checks, the rule says whether the part is healthy or failing (a ``HealthState``).

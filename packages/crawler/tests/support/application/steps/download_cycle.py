@@ -18,7 +18,7 @@ from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
-from p2pwatch.domain.download.disk_space import download_tracking_component
+from p2pwatch.domain.download.disk_space import download_tracking_dependency
 from p2pwatch.domain.download.states import FailureReason, WaitingReason
 from p2pwatch.domain.download.status import DownloadStatus
 from p2pwatch.domain.file_key import FileKey, Network
@@ -164,7 +164,7 @@ def build_cycle(
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
             node_health=node_health,
-            download_tracking_component=download_tracking_component(ClientName("amuled")),
+            download_tracking_dependency=download_tracking_dependency(ClientName("amuled")),
             logger=logger,
         ),
         download_starter=DownloadStarter(

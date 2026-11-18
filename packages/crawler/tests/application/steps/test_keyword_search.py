@@ -30,8 +30,8 @@ from p2pwatch.domain.client_errors import ClientAuthError, SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
-from p2pwatch.domain.status_reading import channel_component
-from p2pwatch.domain.work_components import keyword_search_component
+from p2pwatch.domain.status_reading import channel_dependency
+from p2pwatch.domain.work_dependencies import keyword_search_dependency
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -134,12 +134,12 @@ class _Searches:
             ),
             monotonic_clock=self.monotonic_clock,
             time_limit_of=time_limit_of,
-            search_component_of=lambda keyword, *, channel: keyword_search_component(
+            search_dependency_of=lambda keyword, *, channel: keyword_search_dependency(
                 keyword=keyword, client_name=worker.client_name, channel=channel
             ),
             node_health=self.node_health,
-            channel_components=[
-                channel_component(client_name=worker.client_name, channel=channel)
+            channel_dependencies=[
+                channel_dependency(client_name=worker.client_name, channel=channel)
                 for channel in worker.channels
             ],
         )

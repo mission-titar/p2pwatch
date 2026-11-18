@@ -10,7 +10,7 @@ from p2pwatch.composition.health_subscriber_built_later import (
     HealthSubscriberNotSetError,
 )
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_components import BUGS, status_reading_component
+from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.composition.fake_restartable import FakeRestartable
 
@@ -23,7 +23,7 @@ async def test_a_change_of_health_passed_on_before_the_subscriber_is_set_raises_
 ) -> None:
     later = HealthSubscriberBuiltLater(subscriber)
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
-    part = status_reading_component(ClientName("amuled"))
+    part = status_reading_dependency(ClientName("amuled"))
 
     with pytest.raises(
         HealthSubscriberNotSetError, match=f"^{subscriber}, reached before it is set$"
@@ -35,12 +35,12 @@ async def test_a_change_of_health_passed_on_before_the_subscriber_is_set_raises_
 async def test_once_set_the_subscriber_takes_each_change_of_health() -> None:
     later = HealthSubscriberBuiltLater("the restart policy")
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
-    part = status_reading_component(ClientName("amuled"))
+    part = status_reading_dependency(ClientName("amuled"))
     requests: list[RestartRequest] = []
     client = FakeRestartable()
     later.set(
         RestartPolicy(
-            components_of={client: [part]}, works=(), restart=requests.append, logger=FakeLogger()
+            dependencies_of={client: [part]}, works=(), restart=requests.append, logger=FakeLogger()
         )
     )
 

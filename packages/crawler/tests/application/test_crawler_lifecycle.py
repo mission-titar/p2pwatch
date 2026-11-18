@@ -157,7 +157,7 @@ class _Crawl:
             ),
             backoff=self.backoff,
             works=[
-                SupervisedWork(work=work, time_limit=timedelta(days=1), components=())
+                SupervisedWork(work=work, time_limit=timedelta(days=1), dependencies=())
                 for work in (
                     _WorkSendingACompletion(
                         "search",

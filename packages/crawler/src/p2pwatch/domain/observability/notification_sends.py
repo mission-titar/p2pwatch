@@ -5,10 +5,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from p2pwatch.domain.expected_error import ExpectedError
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.observability.policy import Audience
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 
 
 class NotificationRefusedError(ExpectedError):
@@ -37,12 +37,14 @@ SENDS_FAILED = HealthRule(
 )
 
 
-def notification_service_components(
+def notification_service_dependencies(
     services: Iterable[NotificationService],
-) -> dict[NotificationService, Component]:
+) -> dict[NotificationService, ExternalDependency]:
     """A part per service, judged on its sends that failed and on its bugs: "notifier discord
     community"."""
     return {
-        service: Component(name=f"notifier {service}", client_name=None, rules=(BUGS, SENDS_FAILED))
+        service: ExternalDependency(
+            name=f"notifier {service}", client_name=None, rules=(BUGS, SENDS_FAILED)
+        )
         for service in services
     }

@@ -17,16 +17,16 @@ from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.composition.node_restart_policy import node_restart_policy
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability import events as ev
 from p2pwatch.domain.observability.notification_sends import (
     NotificationRefusedError,
     NotificationService,
-    notification_service_components,
+    notification_service_dependencies,
 )
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_component
-from p2pwatch.domain.work_components import BUGS, status_reading_component, webui_component
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_dependency
+from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency, webui_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
@@ -54,9 +54,9 @@ class _Never(Work):
         """Never awaited."""
 
 
-def _recorded_on(part: Component) -> SupervisedWork:
+def _recorded_on(part: ExternalDependency) -> SupervisedWork:
     return SupervisedWork(
-        work=_Never(part.name), time_limit=timedelta(minutes=5), components=(part,)
+        work=_Never(part.name), time_limit=timedelta(minutes=5), dependencies=(part,)
     )
 
 
@@ -75,9 +75,9 @@ class _Node:
         self.client = FakeRestartable("client amuled")
         self.webui = FakeRestartable("webui")
         self.notifier = FakeRestartable("notifier")
-        self.status_reading_part = status_reading_component(ClientName("amuled"))
-        self.webui_part = webui_component()
-        self.service_parts = notification_service_components(ONE_SERVICE_PER_AUDIENCE)
+        self.status_reading_part = status_reading_dependency(ClientName("amuled"))
+        self.webui_part = webui_dependency()
+        self.service_parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE)
         self._run_state = FakeRunStateStore()
         self.health_logger = FakeLogger()
         self.node_health = NodeHealth(
@@ -90,7 +90,7 @@ class _Node:
             current_notifier=lambda: self.current_notifier,
             notification_timeout_seconds=5.0,
             record_check=self.node_health.record,
-            service_components=self.service_parts,
+            service_dependencies=self.service_parts,
         )
         self._alerter = HealthAlerter(
             observability_dispatcher=self.dispatcher, node_id=NodeId("n1"), min_free_bytes=None
@@ -135,7 +135,7 @@ class _Node:
         self._run_state.set_shutdown_requested()
         await supervision
 
-    async def three_bugs_on(self, part: Component) -> None:
+    async def three_bugs_on(self, part: ExternalDependency) -> None:
         """Three turns in a row meeting a bug on ``part``, then the rebuild they ask for."""
         for _ in range(3):
             await self.node_health.record(on=part, rule=BUGS, detected=True)
@@ -190,7 +190,7 @@ async def test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_not
     node = _Node()
     refusing = FakeRaisingNotifier(NotificationRefusedError("the service refused it (FAILURE)"))
     node.current_notifier = refusing
-    client = client_component(ClientName("amuled"))
+    client = client_dependency(ClientName("amuled"))
 
     async def unreachable_answering_then_unreachable() -> None:
         for detected in [True] * 3 + [False] * 9 + [True] * 3:

@@ -17,12 +17,12 @@ from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.download.disk_space import download_tracking_component
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.download.disk_space import download_tracking_dependency
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.notification_sends import notification_service_components
+from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     CLIENT_UNREACHABLE,
@@ -30,10 +30,10 @@ from p2pwatch.domain.status_reading import (
     ClientStatus,
     PublishedReading,
     StatusReading,
-    channel_component,
-    client_component,
+    channel_dependency,
+    client_dependency,
 )
-from p2pwatch.domain.work_components import status_reading_component
+from p2pwatch.domain.work_dependencies import status_reading_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
@@ -72,7 +72,7 @@ class _Observability:
             current_notifier=lambda: self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-            service_components=notification_service_components(self.notifier.services()),
+            service_dependencies=notification_service_dependencies(self.notifier.services()),
         )
         alerter = HealthAlerter(
             observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None
@@ -99,7 +99,7 @@ def _status_watcher(
     observability: _Observability,
     status_reading_writer: StatusReadingWriter | None = None,
     channels: Sequence[Channel] = _CHANNELS,
-    download_tracking: Component | None = None,
+    download_tracking: ExternalDependency | None = None,
 ) -> StatusWatcher:
     return StatusWatcher(
         client_name=client_name,
@@ -109,12 +109,12 @@ def _status_watcher(
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_health=observability.node_health,
-        client_component=client_component(client_name),
-        channel_components={
-            channel: channel_component(client_name=client_name, channel=channel)
+        client_dependency=client_dependency(client_name),
+        channel_dependencies={
+            channel: channel_dependency(client_name=client_name, channel=channel)
             for channel in channels
         },
-        download_tracking_component=download_tracking,
+        download_tracking_dependency=download_tracking,
     )
 
 
@@ -128,7 +128,7 @@ async def _run(
     *readings: _Reading,
     client: ClientName = _AMULED,
     channels: Sequence[Channel] = _CHANNELS,
-    download_tracking: Component | None = None,
+    download_tracking: ExternalDependency | None = None,
 ) -> _Observability:
     fake_time = FakeTime()
     observability = _Observability(fake_time)
@@ -295,7 +295,7 @@ async def test_six_readings_on_no_network_fail_download_tracking_and_nine_on_one
     observability = await _run(
         *[_NO_NETWORK] * 6,
         *[on_ed2k_alone] * 9,
-        download_tracking=download_tracking_component(_AMULED),
+        download_tracking=download_tracking_dependency(_AMULED),
     )
     assert _no_network_lines(observability) == [
         LoggedLine(
@@ -312,13 +312,13 @@ async def test_six_readings_on_no_network_fail_download_tracking_and_nine_on_one
 @pytest.mark.asyncio
 async def test_an_unreachable_reading_tells_nothing_of_the_client_s_networks() -> None:
     held = await _run(
-        *[_NO_NETWORK] * 5, _DOWN, download_tracking=download_tracking_component(_AMULED)
+        *[_NO_NETWORK] * 5, _DOWN, download_tracking=download_tracking_dependency(_AMULED)
     )
     failed = await _run(
         *[_NO_NETWORK] * 5,
         _DOWN,
         _NO_NETWORK,
-        download_tracking=download_tracking_component(_AMULED),
+        download_tracking=download_tracking_dependency(_AMULED),
     )
 
     # The sixth reading on no network is the seventh reading: aMule unreachable records nothing.
@@ -456,9 +456,9 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=FakeStatusReadingStore((_AMULED,)),
         node_health=observability.node_health,
-        client_component=client_component(_AMULED),
-        channel_components={},
-        download_tracking_component=None,
+        client_dependency=client_dependency(_AMULED),
+        channel_dependencies={},
+        download_tracking_dependency=None,
     )
     run_state, logger = FakeRunStateStore(), FakeLogger()
     virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)
@@ -476,7 +476,7 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
                 SupervisedWork(
                     work=watcher,
                     time_limit=timedelta(hours=1),
-                    components=(status_reading_component(_AMULED),),
+                    dependencies=(status_reading_dependency(_AMULED),),
                 )
             ],
             arm_shutdown_bound=lambda: None,
@@ -517,18 +517,18 @@ class _RebuiltNode:
         self._loop = loop
         self._client = FakeStatusClient(list(readings))
         self._monotonic_clock = FakeLoopMonotonicClock(loop)
-        self.client_part = client_component(_AMULED)
+        self.client_part = client_dependency(_AMULED)
         self._channel_parts = {
-            channel: channel_component(client_name=_AMULED, channel=channel)
+            channel: channel_dependency(client_name=_AMULED, channel=channel)
             for channel in _CHANNELS
         }
-        self._status_reading_part = status_reading_component(_AMULED)
+        self._status_reading_part = status_reading_dependency(_AMULED)
         self.observability = _Observability(FakeTime(), also=(self._to_policy,))
         self.amule_client = FakeRestartable(works_over=lambda _state: [self._status_reading()])
         self._works = [self._status_reading()]
         if kad_search_bug:
             kad_part = self._channel_parts[Channel("kad")]
-            bug = SupervisedWork(work=_KadSearchBug(), time_limit=_HOUR, components=(kad_part,))
+            bug = SupervisedWork(work=_KadSearchBug(), time_limit=_HOUR, dependencies=(kad_part,))
             self._works.append(bug)
         self._run_state = FakeRunStateStore()
         self._supervisor = Supervisor(
@@ -538,7 +538,7 @@ class _RebuiltNode:
             logger=FakeLogger(),
         )
         self._policy = RestartPolicy(
-            components_of={
+            dependencies_of={
                 self.amule_client: [self._status_reading_part, *self._channel_parts.values()]
             },
             works=self._works,
@@ -558,12 +558,12 @@ class _RebuiltNode:
             observability_dispatcher=self.observability.dispatcher,
             status_reading_writer=FakeStatusReadingStore((_AMULED,)),
             node_health=self.observability.node_health,
-            client_component=self.client_part,
-            channel_components=self._channel_parts,
-            download_tracking_component=None,
+            client_dependency=self.client_part,
+            channel_dependencies=self._channel_parts,
+            download_tracking_dependency=None,
         )
         return SupervisedWork(
-            work=watcher, time_limit=_HOUR, components=(self._status_reading_part,)
+            work=watcher, time_limit=_HOUR, dependencies=(self._status_reading_part,)
         )
 
     def run_for(self, seconds: float) -> None:

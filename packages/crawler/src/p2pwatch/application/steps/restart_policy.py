@@ -7,9 +7,9 @@ from typing import Literal, Protocol
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.steps.work import SupervisedWork
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 
 # Past three, a rebuild is taken to repair nothing, as an OTP supervisor bounds its restarts.
 REBUILDS_IN_VAIN_AT_MOST = 3
@@ -25,11 +25,11 @@ class _Restarts:
         self,
         restartable: Restartable[SupervisedWork],
         *,
-        components: tuple[Component, ...],
+        dependencies: tuple[ExternalDependency, ...],
         logger: Logger,
     ) -> None:
         self.restartable = restartable
-        self.components = components
+        self.dependencies = dependencies
         self.phase: _Phase = "running"
         self.in_vain = 0
         self._logger = logger
@@ -51,14 +51,14 @@ class RestartRequest:
 
     def __init__(self, restarts: _Restarts) -> None:
         self.restartable = restarts.restartable
-        self.components = restarts.components  # its parts, every work over it recorded on some
+        self.dependencies = restarts.dependencies  # its parts, every work over it recorded on some
         self._restarts = restarts
 
     def rebuilt(self) -> None:
         """Forgets the bugs of its parts, their other rules kept, so an open alert stays open; a
         bugs rule failing again counts this rebuild in vain."""
-        for component in self.components:
-            component.forget(BUGS)
+        for dependency in self.dependencies:
+            dependency.forget(BUGS)
         self._restarts.phase = "rebuilt"
 
     def rebuild_raised(self) -> bool:
@@ -78,21 +78,21 @@ class RestartPolicy:
     def __init__(
         self,
         *,
-        components_of: Mapping[Restartable[SupervisedWork], Sequence[Component]],
+        dependencies_of: Mapping[Restartable[SupervisedWork], Sequence[ExternalDependency]],
         works: Sequence[SupervisedWork],
         restart: RestartRunner,
         logger: Logger,
     ) -> None:
-        self._restarts_of: dict[Component, _Restarts] = {}
-        for restartable, components in components_of.items():
+        self._restarts_of: dict[ExternalDependency, _Restarts] = {}
+        for restartable, dependencies in dependencies_of.items():
             # A channel's part is recorded on by each of its searches: named once.
-            each_once = tuple(dict.fromkeys(components))
-            restarts = _Restarts(restartable, components=each_once, logger=logger)
-            for component in each_once:
-                if (other := self._restarts_of.get(component)) is not None:
+            each_once = tuple(dict.fromkeys(dependencies))
+            restarts = _Restarts(restartable, dependencies=each_once, logger=logger)
+            for dependency in each_once:
+                if (other := self._restarts_of.get(dependency)) is not None:
                     of_both = f"{other.restartable} and of {restartable}"
-                    raise ValueError(f"{component.name}: a part of {of_both}")
-                self._restarts_of[component] = restarts
+                    raise ValueError(f"{dependency.name}: a part of {of_both}")
+                self._restarts_of[dependency] = restarts
         for supervised in works:
             self._refuse_unless_over_an_object(supervised)
         self._restart = restart
@@ -101,11 +101,11 @@ class RestartPolicy:
     def _refuse_unless_over_an_object(self, supervised: SupervisedWork) -> None:
         """Refuses a work no restart would stop: one whose turns are recorded on no part, or on a
         part of no object."""
-        if not supervised.components:
+        if not supervised.dependencies:
             raise ValueError(f"{supervised.work}: recorded on no part, so over no object")
-        for component in supervised.components:
-            if component not in self._restarts_of:
-                of_no_object = f"{component.name}, a part of no object"
+        for dependency in supervised.dependencies:
+            if dependency not in self._restarts_of:
+                of_no_object = f"{dependency.name}, a part of no object"
                 raise ValueError(f"{supervised.work}: recorded on {of_no_object}")
 
     async def __call__(self, transition: HealthTransition) -> None:
@@ -113,14 +113,14 @@ class RestartPolicy:
         if transition.rule is not BUGS:
             return
         # Every part a turn is recorded on is an object's: refused at construction otherwise.
-        restarts = self._restarts_of[transition.component]
+        restarts = self._restarts_of[transition.dependency]
         if transition.current is HealthState.FAILING:
-            self._on_failing(transition.component, restarts=restarts)
-        elif all(part.state(BUGS) is HealthState.HEALTHY for part in restarts.components):
+            self._on_failing(transition.dependency, restarts=restarts)
+        elif all(part.state(BUGS) is HealthState.HEALTHY for part in restarts.dependencies):
             restarts.phase, restarts.in_vain = "running", 0
 
-    def _on_failing(self, component: Component, *, restarts: _Restarts) -> None:
-        bugs_in = f"bugs in {component.name}"
+    def _on_failing(self, dependency: ExternalDependency, *, restarts: _Restarts) -> None:
+        bugs_in = f"bugs in {dependency.name}"
         if restarts.phase == "rebuilt":
             if not restarts.count_in_vain():
                 return

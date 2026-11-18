@@ -26,7 +26,7 @@ class _Over(Work):
 
 
 def _works_over(state: object, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(state), time_limit=timedelta(minutes=1), components=())]
+    return [SupervisedWork(work=_Over(state), time_limit=timedelta(minutes=1), dependencies=())]
 
 
 class TestFakeRestartable(RestartableContract):

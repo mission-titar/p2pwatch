@@ -15,8 +15,8 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.restart_policy import RestartRequest
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.expected_error import ExpectedError
-from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.health.external_dependency import ExternalDependency
+from p2pwatch.domain.work_dependencies import BUGS
 
 # A bug that strikes at once would otherwise rerun at full speed, one trace per turn.
 WAIT_AFTER_A_BUG = timedelta(seconds=60)
@@ -89,17 +89,17 @@ class Supervisor:
     async def _restart(self, request: RestartRequest, *, group: asyncio.TaskGroup) -> None:
         """Stops the works over the request's object, then has it rebuilt; a rebuild that raises
         is tried again 60 s later, as long as the policy allows."""
-        await self._stop_works_recorded_on(request.components)
+        await self._stop_works_recorded_on(request.dependencies)
         while not await self._rebuilt(request, group=group):
             if not request.rebuild_raised():
                 return
             await self._monotonic_clock.sleep(WAIT_AFTER_A_BUG)
 
-    async def _stop_works_recorded_on(self, components: Sequence[Component]) -> None:
+    async def _stop_works_recorded_on(self, dependencies: Sequence[ExternalDependency]) -> None:
         stopping = [
             task
             for task, supervised in self._running.items()
-            if not set(supervised.components).isdisjoint(components)
+            if not set(supervised.dependencies).isdisjoint(dependencies)
         ]
         for task in stopping:
             task.cancel()
@@ -122,8 +122,8 @@ class Supervisor:
             for supervised in works:
                 self._add(supervised, group=group)
             return True
-        for component in request.components:
-            await self._node_health.record(on=component, rule=BUGS, detected=True)
+        for dependency in request.dependencies:
+            await self._node_health.record(on=dependency, rule=BUGS, detected=True)
         return False
 
     async def _take_turns(self, supervised: SupervisedWork) -> None:
@@ -131,8 +131,8 @@ class Supervisor:
         while True:
             await self._wait(supervised.work, after_a_bug=met_a_bug)
             met_a_bug = await self._take_turn(supervised)
-            for component in supervised.components:
-                await self._node_health.record(on=component, rule=BUGS, detected=met_a_bug)
+            for dependency in supervised.dependencies:
+                await self._node_health.record(on=dependency, rule=BUGS, detected=met_a_bug)
 
     async def _wait(self, work: Work, *, after_a_bug: bool) -> None:
         """The work's own wait; after a bug, the later of it and ``WAIT_AFTER_A_BUG``."""

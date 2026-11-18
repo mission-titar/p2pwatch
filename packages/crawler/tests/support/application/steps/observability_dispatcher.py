@@ -2,7 +2,7 @@
 
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.domain.observability.notification_sends import notification_service_components
+from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -24,5 +24,5 @@ class ObservabilityOverFakes:
             current_notifier=lambda: self.notifier,
             notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-            service_components=notification_service_components(self.notifier.services()),
+            service_dependencies=notification_service_dependencies(self.notifier.services()),
         )
