@@ -13,7 +13,10 @@ from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.composition.notifier_restartable import NotifierRestartable, notification_sending
-from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
+from p2pwatch.domain.observability.notification_sends import (
+    local_database_dependency,
+    notification_service_dependencies,
+)
 from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -90,6 +93,7 @@ def _sender() -> NotificationSender:
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
         service_dependencies=notification_service_dependencies(notifier.services()),
+        local_database=local_database_dependency(),
         logger=FakeLogger(),
     )
 
