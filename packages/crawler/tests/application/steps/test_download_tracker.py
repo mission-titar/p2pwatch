@@ -14,7 +14,6 @@ from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import CompletedDownload
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
-from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_no_set_state_tracked_download_store import (
     FakeNoSetStateTrackedDownloadStore,
@@ -191,27 +190,27 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_turn_cut_between_a_completion_s_write_and_its_send_still_notifies() -> None:
-    # A completed download is never notified again, so a send lost here would be lost for good.
+async def test_a_turn_cut_between_a_completion_s_write_and_its_notification_still_leaves_it() -> (
+    None
+):
+    # A completed download is never notified again, so a notification lost here is lost for good.
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
-    notifier = FakeHeldNotifier()
+    observability = ObservabilityOverFakes()
     cycle = build_cycle(
         client=FakeDownloadClient(listed=[(status(HASH_A, completed=True),)]),
         tracked_download_store=tracked_download_store,
-        observability_dispatcher=ObservabilityOverFakes(notifier=notifier).dispatcher,
+        observability_dispatcher=observability.dispatcher,
     )
     turn = asyncio.create_task(cycle.run_once())
-    await notifier.reached.wait()
+    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
 
     turn.cancel()
     with pytest.raises(asyncio.CancelledError):
         await turn
-    notifier.released.set()
-    await notifier.wait_until_sent(timeout_seconds=1.0)
 
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
-    assert [notification for _, notification in notifier.calls] == [
+    assert [notification for _, notification in observability.notifications] == [
         CompletedDownload(target_titles=(), filename=HASH_A, node_id=NODE_ID)
     ]
 

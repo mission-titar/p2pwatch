@@ -12,12 +12,14 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   the client and its works when the ``RestartPolicy`` asks.
 - ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartable`` rebuilds it and
   the watch over it when the ``RestartPolicy`` asks.
-- ONE ``AppriseNotifier`` at a time, which ``NotifierRestartable`` rebuilds when the
-  ``RestartPolicy`` asks; the dispatcher asks it for the notifier at each send.
+- ONE ``AppriseNotifier`` at a time for the works, which ``NotifierRestartable`` rebuilds with the
+  work sending the outbox's notifications through it when the ``RestartPolicy`` asks, and one for
+  the lifecycle's last sends at the shutdown.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
-source tracking when configured, and the webui's thread watch, which ``CrawlerLifecycle`` runs
-until ``PosixProcess`` or the webui requests the shutdown.
+source tracking when configured, the webui's thread watch, and the notifications' sending when a
+service is configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui
+requests the shutdown.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the works (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
@@ -103,6 +105,8 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
+from p2pwatch.application.steps.notification_outbox import NotificationOutbox
+from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
@@ -121,7 +125,7 @@ from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.health_subscriber_built_later import HealthSubscriberBuiltLater
 from p2pwatch.composition.node_restart_policy import node_restart_policy
-from p2pwatch.composition.notifier_restartable import NotifierRestartable
+from p2pwatch.composition.notifier_restartable import NotifierRestartable, notification_sending
 from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
@@ -402,29 +406,47 @@ class CrawlerComposition(CrawlerRunner):
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             node_metric_store = InMemoryNodeMetricStore()
-            notifier = NotifierRestartable(
-                build_notifier=lambda: AppriseNotifier(
+
+            def build_notifier() -> AppriseNotifier:
+                return AppriseNotifier(
                     tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
                     apprise_factory=apprise.Apprise,
                 )
-            )
-            # Set once the dispatcher is built: it records each send on the node's health.
+
+            notifier = build_notifier()
+            # Built once: a notifier rebuilt on the same configuration lists the same services.
+            service_parts = notification_service_dependencies(notifier.services())
+            # Set once the dispatcher is built.
             alerts = HealthSubscriberBuiltLater("the alerts")
             # Set once the works are built: they record on the node's health, the policy maps them.
             restart_policy = HealthSubscriberBuiltLater("the restart policy")
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
             )
+            outbox = NotificationOutbox(waker=waker)
+
+            def notification_sender_over(built: AppriseNotifier) -> NotificationSender:
+                return NotificationSender(
+                    outbox=outbox,
+                    notifier=built,
+                    notification_timeout_seconds=observability.notification_timeout_seconds,
+                    record_check=node_health.record,
+                    service_dependencies=service_parts,
+                    logger=StdlibLogger(NotificationSender.__module__),
+                )
+
+            def notifier_works_over(built: AppriseNotifier) -> Sequence[SupervisedWork]:
+                return notification_sending(
+                    notification_sender_over(built),
+                    notification_timeout_seconds=observability.notification_timeout_seconds,
+                    dependencies=tuple(service_parts.values()),
+                )
+
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
-                current_notifier=notifier.notifier,
-                notification_timeout_seconds=observability.notification_timeout_seconds,
-                record_check=node_health.record,
-                # Built once: a notifier rebuilt on the same configuration lists the same services.
-                service_dependencies=notification_service_dependencies(
-                    notifier.notifier().services()
-                ),
+                leave_notification=outbox.leave,
+                services=tuple(service_parts),
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
@@ -574,6 +596,9 @@ class CrawlerComposition(CrawlerRunner):
             works_of = {
                 amule_client: client_works.over(client),
                 webui: webui_works_over(webui_thread),
+                NotifierRestartable(
+                    build_notifier=build_notifier, works_over=notifier_works_over
+                ): notifier_works_over(notifier),
             }
             works = [supervised for works in works_of.values() for supervised in works]
             for supervised in works:
@@ -587,14 +612,7 @@ class CrawlerComposition(CrawlerRunner):
                 node_health=node_health,
                 logger=StdlibLogger(Supervisor.__module__),
             )
-            restart_policy.set(
-                node_restart_policy(
-                    works_of,
-                    notifier=notifier,
-                    observability_dispatcher=observability_dispatcher,
-                    supervisor=supervisor,
-                )
-            )
+            restart_policy.set(node_restart_policy(works_of, supervisor=supervisor))
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,
@@ -613,6 +631,8 @@ class CrawlerComposition(CrawlerRunner):
                 works=works,
                 download_enabled=download_config is not None,
                 supervisor=supervisor,
+                # A notifier of its own: every work, the latest notifier's included, has stopped.
+                notification_sender=notification_sender_over(build_notifier()),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the

@@ -1,34 +1,55 @@
-"""The notifier as the node rebuilds it: no work runs over it, the dispatcher asks it for the
-notifier at each send."""
+"""The notifier as the node rebuilds it: built anew with the work sending the outbox's
+notifications through it."""
 
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Protocol
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.application.ports.driven.restartable import Restartable
+from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork
+from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 
 
 class AppriseNotifierBuilder(Protocol):
     def __call__(self) -> AppriseNotifier: ...
 
 
-class NotifierRestartable(Restartable[SupervisedWork]):
-    """The notifier the sends go to now, with the apprise objects it built: a rebuild builds it
-    anew, and a send already under way finishes on the old one."""
+# Every work over ``notifier``, such as the sending of the outbox's notifications through it.
+class WorksOverNotifier(Protocol):
+    def __call__(self, notifier: AppriseNotifier, /) -> Sequence[SupervisedWork]: ...
 
-    def __init__(self, *, build_notifier: AppriseNotifierBuilder) -> None:
+
+def notification_sending(
+    sender: NotificationSender,
+    *,
+    notification_timeout_seconds: float,
+    dependencies: tuple[ExternalDependency, ...],
+) -> Sequence[SupervisedWork]:
+    """``sender``'s turns, each recorded on the part of every service, such as ``notifier discord
+    community``; none without a service, since nothing is then left to send."""
+    if not dependencies:
+        return ()  # the restart policy refuses a work recorded on no part
+    # One send per turn: its timeout, then the margin.
+    time_limit = timedelta(seconds=notification_timeout_seconds) + TIME_LIMIT_MARGIN
+    return [SupervisedWork(work=sender, time_limit=time_limit, dependencies=dependencies)]
+
+
+class NotifierRestartable(Restartable[SupervisedWork]):
+    """The notifier the outbox's notifications go through, rebuilt with the work sending them: a
+    send under way at the rebuild keeps its entry for the new one."""
+
+    def __init__(
+        self, *, build_notifier: AppriseNotifierBuilder, works_over: WorksOverNotifier
+    ) -> None:
         self._build_notifier = build_notifier
-        self._notifier = build_notifier()
+        self._works_over = works_over
 
     def __str__(self) -> str:
         return "notifier"
 
-    def notifier(self) -> AppriseNotifier:
-        """The notifier built latest, which the next send goes to."""
-        return self._notifier
-
     async def rebuild(self) -> Sequence[SupervisedWork]:
-        """Builds the notifier anew; no work runs over it, so none is handed back."""
-        self._notifier = self._build_notifier()
-        return ()
+        """Builds the notifier anew and returns the work over it."""
+        return self._works_over(self._build_notifier())

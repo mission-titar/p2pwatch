@@ -29,7 +29,6 @@ from p2pwatch.domain.observability.notification import TierRise
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
-from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_ticking_wall_clock import FakeTickingWallClock
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -762,7 +761,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
 
 
 @pytest.mark.asyncio
-async def test_a_turn_cut_between_a_decision_s_write_and_its_send_still_notifies(
+async def test_a_turn_cut_between_a_decision_s_write_and_its_notification_still_leaves_it(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -770,8 +769,8 @@ async def test_a_turn_cut_between_a_decision_s_write_and_its_send_still_notifies
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    # The next judgement sees no change, so a send lost here would be lost for good.
-    notifier = FakeHeldNotifier()
+    # The next judgement sees no change, so a notification lost here is lost for good.
+    observability = ObservabilityOverFakes()
     turn = asyncio.create_task(
         _record(
             _HASH_DL,
@@ -780,20 +779,18 @@ async def test_a_turn_cut_between_a_decision_s_write_and_its_send_still_notifies
             decision_store=decision_store,
             engine=engine,
             waker=FakeWaker(),
-            observability=ObservabilityOverFakes(notifier=notifier),
+            observability=observability,
             wall_clock=wall_clock,
         )
     )
-    await notifier.reached.wait()
+    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
 
     turn.cancel()
     with pytest.raises(asyncio.CancelledError):
         await turn
-    notifier.released.set()
-    await notifier.wait_until_sent(timeout_seconds=1.0)
 
     assert count_decisions(catalog_connection) == 1
-    assert [notification for _, notification in notifier.calls] == [
+    assert [notification for _, notification in observability.notifications] == [
         TierRise(
             tier=DecisionTier.DOWNLOAD,
             target_titles=(TargetTitle(target_id=TargetId("062A"), title=_TITLE_A),),
