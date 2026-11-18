@@ -154,7 +154,7 @@ Commands and the output that fails each row: appendix B.
 | Check | Observed by |
 |---|---|
 | The lot 4b spec's "What must not change" table | each of its rows, as that spec observes it |
-| Today's alerts | a test written at the head of block 10, against `main`: each alert's planned log line, severity and notification, and the reading it starts and ends at, the same at the lot's end |
+| Today's alerts | a test written in block 5, against `main`: each alert's planned log line, severity and notification, and the reading it starts and ends at, the same at the lot's end |
 | aMule unreachable | nothing rebuilt, the unreachable alert |
 
 ## 5. Blocks
@@ -163,7 +163,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 
 | Block | Branch | Content | Estimated size |
 |---|---|---|---|
-| 10 | `refactor/external-dependencies` | today's alerts held by a test; the component renamed an external dependency | ~250 lines, ~30 files, past the file bound |
+| 5 | `test/todays-alerts-held` | today's alerts held by a test | 221 lines, 3 files (Corrected: cut out of block 10, which came to 663 lines, the lead on 2026-11-18) |
+| 10 | `refactor/external-dependencies` | the component renamed an external dependency | ~250 lines, ~30 files, past the file bound (Corrected: 448 lines, 51 files, its parameters, attributes and locals uncounted by the estimate) |
 | 15 | `refactor/notifications-through-the-outbox` | the outbox in memory, the notifier's work sending from it | ~700 lines, ~13 files, past the line bound |
 | 20 | `refactor/shielded-sends-removed` | the shielded sends and the notification timeout in the turns' limits removed | ~350 lines, ~14 files |
 | 25 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound |
@@ -178,8 +179,7 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | |
 | 90 | `docs/lot-4b6-wrap` | closing block | |
 
-A block past a bound carries one piece with its first reader: 10 a rename, with the test that holds the alerts across
-the lot; 15 the outbox with its writer, the dispatcher, and its reader, the notifier's work; 25 the store with its
+A block past a bound carries one piece with its first reader: 10 a rename; 15 the outbox with its writer, the dispatcher, and its reader, the notifier's work; 25 the store with its
 reader, the outbox at the start; 30 the port, its contract and its fakes with the first object built through them; 40
 is mostly removals, the restart policy and its tests, which nothing reads once the supervisor counts.
 
@@ -259,10 +259,13 @@ await node_health.record(on=kad, rule=CHANNEL_NOT_CONNECTED, detected=not status
 self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild after 1, 2, then 4 min
 ```
 
+### Block 5, today's alerts held
+
+- A test holding today's alerts against `main`: each alert's planned log line, severity and notification, the reading
+  each starts and ends at; it stays unchanged to the lot's end.
+
 ### Block 10, external dependencies
 
-- First, a test holding today's alerts against `main`: each alert's planned log line, severity and notification, the
-  reading each starts and ends at; it stays unchanged to the lot's end.
 - `Component` renamed `ExternalDependency` through Serena, the class and its `component` names; the glossary's
   `component` line becomes `external dependency`, `outage` added.
 
