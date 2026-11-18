@@ -26,6 +26,7 @@ from p2pwatch.domain.observability.notification_sends import (
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency, webui_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
@@ -78,7 +79,14 @@ class _Node:
         self.status_reading_part = status_reading_dependency(ClientName("amuled"))
         self.webui_part = webui_dependency()
         self.service_parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE)
-        self.outbox = NotificationOutbox(waker=FakeWaker())
+        outbox_store = FakeNotificationOutboxStore()
+        self.outbox = NotificationOutbox(
+            writer=outbox_store,
+            reader=outbox_store,
+            services=ONE_SERVICE_PER_AUDIENCE,
+            waker=FakeWaker(),
+            logger=FakeLogger(),
+        )
         self._sending_notifier = notifier or FakeNotifier()  # a rebuild's sends go to it again
         self._run_state = FakeRunStateStore()
         self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(self._to_policy,))

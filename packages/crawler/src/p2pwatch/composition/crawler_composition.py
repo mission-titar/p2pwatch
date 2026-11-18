@@ -2,8 +2,8 @@
 
 COMPOSITION ring (the only one allowed to import adapters AND application). Builds:
 - ONE ``SqliteObservationStore`` + ``SqliteCatalogScanReader``, ``SqliteDecisionStore``,
-  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore``, ``SqliteBackoffStateStore`` and
-  ``SqliteSearchStartStore``
+  ``SqliteNodeIdStore``, ``SqlitePolicyFingerprintStore``, ``SqliteBackoffStateStore``,
+  ``SqliteSearchStartStore`` and ``SqliteNotificationOutboxStore``
   (each built once), connections opened by the ``SqliteDatabaseOpener``
   (migrations applied at startup, a failed one stopping the start).
 - the ``MatchingEngine`` (once),
@@ -66,6 +66,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_decision_store import Sq
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_state_reader import (
     SqliteNodeStateReader,
+)
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_notification_outbox_store import (
+    SqliteNotificationOutboxStore,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import (
     SqliteObservationStore,
@@ -423,7 +426,14 @@ class CrawlerComposition(CrawlerRunner):
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
             )
-            outbox = NotificationOutbox(waker=waker)
+            outbox_store = SqliteNotificationOutboxStore(local_connection)
+            outbox = NotificationOutbox(
+                writer=outbox_store,
+                reader=outbox_store,
+                services=tuple(service_parts),
+                waker=waker,
+                logger=StdlibLogger(NotificationOutbox.__module__),
+            )
 
             def notification_sender_over(built: AppriseNotifier) -> NotificationSender:
                 return NotificationSender(
