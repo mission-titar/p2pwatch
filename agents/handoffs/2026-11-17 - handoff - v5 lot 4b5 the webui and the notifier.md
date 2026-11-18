@@ -91,6 +91,7 @@ The spec's section 6, those this lot reaches, and one the operator added:
 | 90 | | `docs/lot-4b5-wrap` | closing block: the contract's two promises, the comments; this handoff, the spec's corrections, `BACKLOG.md` | 61, 9 |
 | 93 | | `refactor/health-alerts-name-their-parts` | the alerter given the parts it alerts on, each with what its alert names, on the operator's comment on #791 | 305, 10 |
 | 96 | | `refactor/health-part-name-and-rules` | a part its name and its rules alone; the searches given each channel's part by its client and channel | 82, 17 |
+| 98 | | `refactor/rebuilt-by-construction` | each object the node restarts built whole at each restart by its `RestartableBuilder`, the supervisor holding the latest (`HeldRestartable`), closing it at a rebuild and at the shutdown, on the operator's comment on #791 | 1140, 31 |
 
 - **Past a bound, accepted by the operator**: blocks 10 and 20 merged, and 30 and 40, rather than carry code from one
   block to the next ("reco ok, b", 2026-11-17); block 30 at 20 files ("A", 2026-11-17), then at 21 with
