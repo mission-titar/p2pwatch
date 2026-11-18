@@ -7,8 +7,8 @@ other decisions stand. Lot 4c is rewritten on this spec's names once this lot ha
 Why: reading lot 4b5's stack (#791, #798, 2026-11-18), the operator found the objects around the restarts and the
 alerts hard to follow, and the model mixed two causes: a bug of our code, and an outage of something outside the
 program. Every decision below was settled with the operator in that review, on 2026-11-18. The stack's last three
-pull requests, #798, #799 and #801, which began them, were closed unmerged; #801 is read as a draft of blocks 10
-and 15.
+pull requests, #798, #799 and #801, which began them, were closed unmerged; #801 is read as a draft of blocks 30
+and 35.
 
 ## 1. In short
 
@@ -154,7 +154,7 @@ Commands and the output that fails each row: appendix B.
 | Check | Observed by |
 |---|---|
 | The lot 4b spec's "What must not change" table | each of its rows, as that spec observes it |
-| Today's alerts | a test written at the head of block 20, against `main`: each alert's planned log line, severity and notification, and the reading it starts and ends at, the same at the lot's end |
+| Today's alerts | a test written at the head of block 10, against `main`: each alert's planned log line, severity and notification, and the reading it starts and ends at, the same at the lot's end |
 | aMule unreachable | nothing rebuilt, the unreachable alert |
 
 ## 5. Blocks
@@ -163,27 +163,32 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 
 | Block | Branch | Content | Estimated size |
 |---|---|---|---|
-| 10 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor holding the latest | ~650 lines, ~14 files, past the line bound |
-| 15 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~350 lines, ~6 files |
-| 20 | `refactor/notifications-through-the-outbox` | today's alerts held by a test; the outbox in memory, the notifier's work sending from it | ~700 lines, ~13 files, past the line bound |
-| 25 | `refactor/shielded-sends-removed` | the shielded sends, the rebuilt-meanwhile check and the notification timeout in the turns' limits removed | ~350 lines, ~14 files |
-| 30 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound |
-| 35 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds |
-| 40 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files |
-| 45 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files |
-| 50 | `refactor/external-dependencies` | the component renamed an external dependency | ~150 lines, ~27 files, past the file bound |
+| 10 | `refactor/external-dependencies` | today's alerts held by a test; the component renamed an external dependency | ~250 lines, ~30 files, past the file bound |
+| 15 | `refactor/notifications-through-the-outbox` | the outbox in memory, the notifier's work sending from it | ~700 lines, ~13 files, past the line bound |
+| 20 | `refactor/shielded-sends-removed` | the shielded sends and the notification timeout in the turns' limits removed | ~350 lines, ~14 files |
+| 25 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound |
+| 30 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor keeping one record per object | ~600 lines, ~14 files, past the line bound |
+| 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files |
+| 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds |
+| 45 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files |
+| 50 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files |
 | 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files |
 | 60 | `feat/password-refused-outage` | the refused password an outage of amuled, with its alert | ~280 lines, ~6 files |
 | 65 | `feat/login-tried-again` | the login tried again after waits that double | ~300 lines, ~6 files |
 | 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | |
 | 90 | `docs/lot-4b6-wrap` | closing block | |
 
-A block past a bound carries one piece with its first reader: 10 the port, its contract and its fakes with the first
-object built through them; 20 the outbox with its writer, the dispatcher, and its reader, the notifier's work; 30 the
-store with its reader, the outbox at the start; 35 is mostly removals, the restart policy and its tests, which nothing
-reads once the supervisor counts; 50 a rename. The outbox comes first (blocks 20 to 30), so that when the supervisor
-counts the bugs (block 35), a send is already a turn of the notifier's work; the bugs leave the components (block 35)
-before the rename (block 50), which then reaches only the dependencies.
+A block past a bound carries one piece with its first reader: 10 a rename, with the test that holds the alerts across
+the lot; 15 the outbox with its writer, the dispatcher, and its reader, the notifier's work; 25 the store with its
+reader, the outbox at the start; 30 the port, its contract and its fakes with the first object built through them; 40
+is mostly removals, the restart policy and its tests, which nothing reads once the supervisor counts.
+
+The order: the rename comes first, so every later block is written in the lot's words (the operator, 2026-11-18); the
+price is that the four components holding the bugs rule alone (the webui, the status reading, each keyword search,
+source tracking) are named external dependencies until block 40 removes them. The outbox comes next (blocks 15 to
+25): with every notification sent by the notifier's work, nothing outside the supervisor reads the latest notifier, so
+the objects built whole (blocks 30 and 35) need no handle on it, and when the supervisor counts the bugs (block 40), a
+send is already a turn of that work.
 
 ## 6. Limits and scope
 
@@ -212,7 +217,7 @@ before the rename (block 50), which then reaches only the dependencies.
 
 ## Appendix A. Design
 
-Every piece sits in its ring: the outbox and the supervisor's count are steps of `application/`, with no I/O; the
+Every piece sits in its ring: the outbox and the supervisor's records are steps of `application/`, with no I/O; the
 outbox's saving is a driven port pair, `NotificationOutboxWriter` and `NotificationOutboxReader`, implemented by one
 SQLite adapter; the dependencies, their rules and their alerts are `domain/`; the composition alone wires them.
 
@@ -224,7 +229,7 @@ SQLite adapter; the dependencies, their rules and their alerts are `domain/`; th
 | `HealthAlert` | the alert a rule of a dependency sends when it turns failing, and its end when it turns healthy again, or none | Kad's "off its network for 5 min", then "back on its network" |
 | `NotificationOutbox` | the notifications left to send, in memory, one entry per notification and service | |
 | `NotificationOutboxWriter`, `NotificationOutboxReader` | the outbox's save in `local.db`: `set_pending_notifications(entries)` replaces it, `read_pending_notifications()` reads it back | |
-| `ObjectBugs` | an object's latest turns, judged by `BUGS`' thresholds: whether its bugs are failing | |
+| `SupervisedObject` | the supervisor's record of one object it rebuilds, private to it: its builder, the latest object built, whether each of its latest turns met a bug (judged by `BUGS`' thresholds), its rebuilds in vain | the aMule client's record |
 | `outage` | the glossary's word for something failing outside the program | aMule off, a refused password |
 
 Removed: `Component`, `BUGS` as a rule of a dependency, `RestartPolicy`, `RestartRequest`, `RestartRunner`,
@@ -251,39 +256,37 @@ await node_health.record(on=kad, rule=CHANNEL_NOT_CONNECTED, detected=not status
 # node_health: logs the change, dispatches its alert; the dispatcher logs it and leaves it in the outbox
 
 # application: the supervisor, once a turn has ended
-self._bugs[builder].record(met_a_bug)  # failing: rebuild after 1, 2, then 4 min
+self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild after 1, 2, then 4 min
 ```
 
-### Blocks 10 and 15, built whole
-
-- Each restartable is built whole at each rebuild: `Restartable.works()` and `close()`, `RestartableBuilder.build()`;
-  the supervisor holds the latest object of each builder and closes it at the shutdown (#801, read as a draft).
-- 10 brings the port, the builder, their contract and fakes, and the aMule client; 15 the webui and the notifier.
-- The restart policy still decides until block 35.
-
-### Block 20, the outbox in memory
+### Block 10, external dependencies
 
 - First, a test holding today's alerts against `main`: each alert's planned log line, severity and notification, the
   reading each starts and ends at; it stays unchanged to the lot's end.
+- `Component` renamed `ExternalDependency` through Serena, the class and its `component` names; the glossary's
+  `component` line becomes `external dependency`, `outage` added.
+
+### Block 15, the outbox in memory
+
 - `NotificationOutbox`, a step: `leave(notification, services)` adds one entry per service, synchronously, and wakes
   the notifier's work; `oldest()` and `remove(entry)`.
 - The dispatcher plans, logs, writes the metrics, then leaves the notification, with no await before; its `_send`,
   `_send_to`, `CurrentNotifier`, its check of a notifier rebuilt meanwhile and its `notification_timeout_seconds` go.
-- The notifier's work, over the notifier object: each turn sends the oldest entry within
+- The notifier's work, handed back by the notifier's rebuild: each turn sends the oldest entry within
   `notification_timeout_seconds`, records "sends failed" on its service in the node's health, removes the entry once
-  the send has ended (sent, refused, past its timeout, or met a bug, which is a bug of its turn, the notifier's); a
-  cancelled send keeps its entry. Its time limit: one send's timeout plus the margin. Its wait: until the outbox holds
-  an entry.
+  the send has ended (sent, refused, past its timeout, or met a bug, which is a bug of its turn, recorded on its
+  service's bugs rule until block 40); a cancelled send keeps its entry. Its time limit: one send's timeout plus the
+  margin. Its wait: until the outbox holds an entry.
 - At the shutdown, the lifecycle sends what is left within the shutdown bound, then stops.
 - The glossary gains `notification outbox` and the notifier's work.
 
-### Block 25, the shielded sends removed
+### Block 20, the shielded sends removed
 
 - `dispatch_shielded` and its four callers (`download_tracker`, `file_judge`, `source_watcher`, `health_alerter`),
   `finish_shielded_dispatches` and its call in `crawler_lifecycle`, `notification_timeout` in `AmuleWorkTimeLimits`
   and its two tests.
 
-### Block 30, the outbox saved
+### Block 25, the outbox saved
 
 - `NotificationOutboxWriter.set_pending_notifications(entries)` and `NotificationOutboxReader.read_pending_notifications()`;
   one adapter, `SqliteNotificationOutboxStore`, over a new `local.db` table, its migration and its line in
@@ -295,26 +298,32 @@ self._bugs[builder].record(met_a_bug)  # failing: rebuild after 1, 2, then 4 min
 - The notifier's work records, at each turn, whether the outbox's latest save failed on the local database.
 - The local database: a dependency, its rule "saves failed" (failing at 3 in a row, healthy again under 2 in the last
   10, as "sends failed") with its alert, `operations` audience: "notifications not saved in local.db: lost at the next
-  restart", its end "notifications saved again". The glossary gains
-  `local database` and `saves failed`.
+  restart", its end "notifications saved again". The glossary gains `local database` and `saves failed`.
 
-### Block 35, the supervisor counts the bugs
+### Blocks 30 and 35, built whole
 
-- `ObjectBugs` per builder: its latest turns, judged by `BUGS`' thresholds; forgotten at each rebuild, unknown until
-  three turns.
+- Each restartable is built whole at each rebuild: `Restartable.works()` and `close()`, `RestartableBuilder.build()`
+  (#801, read as a draft, without its handle on the latest object, which nothing reads once the outbox sends).
+- `SupervisedObject`, private to the supervisor: one per builder, its latest object, closed at the shutdown.
+- 30 brings the port, the builder, their contract and fakes, and the aMule client; 35 the webui and the notifier.
+- The restart policy still decides until block 40. The glossary gains `restartable builder`.
+
+### Block 40, the supervisor counts the bugs
+
+- Each `SupervisedObject` keeps whether each of its object's latest turns met a bug, judged by `BUGS`' thresholds
+  through `HealthRule.state_after`, forgotten at each rebuild, unknown until three turns, and its rebuilds in vain.
 - The supervisor records each turn of the object's works there, never in `NodeHealth`; it rebuilds at once when they
-  turn failing, three rebuilds in vain at most, then none until block 45, as on `main`.
+  turn failing, three rebuilds in vain at most, then none until block 50, as on `main`.
 - `RestartPolicy`, `RestartRequest`, `RestartRunner`, `node_restart_policy` and the restart policy's
-  `HealthSubscriberBuiltLater` go; `BUGS` leaves every component's rules, and the components that held it alone go.
+  `HealthSubscriberBuiltLater` go; `BUGS` leaves every dependency's rules, and the four that held it alone go.
 - A rebuild raising an `ExpectedError` counts in vain, logged in one warning line (the lot 4b spec's D15).
-- The glossary gains `object bugs` and `restartable builder`; its `bugs rule`, `restart policy`, `rebuild in vain`,
-  `restartable` and `supervisor` lines are corrected.
+- The glossary's `bugs rule`, `restart policy`, `rebuild in vain`, `restartable` and `supervisor` lines are corrected.
 
-### Block 40, the rebuild waits
+### Block 45, the rebuild waits
 
 - The rebuild waits 1, then 2, then 4 minutes, in memory.
 
-### Block 45, the crawler's restart
+### Block 50, the crawler's restart
 
 - At the third rebuild in vain: its alert dispatched, `operations` audience, "client amuled rebuilt 3 times in vain:
   the crawler restarts", then the shutdown requested with an error; the lifecycle empties the outbox, closes every
@@ -322,14 +331,14 @@ self._bugs[builder].record(met_a_bug)  # failing: rebuild after 1, 2, then 4 min
 - `deploy/compose.yml` keeps `restart: unless-stopped`, which restarts the `p2pwatch` container whatever its exit
   code; `ed2k` is untouched.
 
-### Blocks 50 and 55, external dependencies
+### Block 55, each rule carrying its alert
 
-- 50: `Component` renamed `ExternalDependency` through Serena, the class and its `component`
-  names; the glossary's `component` line becomes `external dependency`, `outage` added.
-- 55: its `rules` a mapping from each rule to its `HealthAlert` or `None`, `HealthTransition` carrying the alert of its
-  rule; `NodeHealth`, built with the dispatcher, dispatches it; the health alerter, its `_RULES_WITHOUT_AN_ALERT` and
-  the alerts' `HealthSubscriberBuiltLater` go; download tracking's dependency split, `DISK_SPACE_LOW` on the download
-  disk, `CONNECTED_TO_NO_NETWORK` on amuled, recorded whether or not the node downloads. The glossary gains `health alert`; its `health alerter` line goes.
+- An external dependency's `rules`, a mapping from each rule to its `HealthAlert` or `None`, `HealthTransition`
+  carrying the alert of its rule; `NodeHealth`, built with the dispatcher, dispatches it; the health alerter, its
+  `_RULES_WITHOUT_AN_ALERT` and the alerts' `HealthSubscriberBuiltLater` go.
+- Download tracking's dependency split: `DISK_SPACE_LOW` on the download disk, `CONNECTED_TO_NO_NETWORK` on amuled,
+  recorded whether or not the node downloads.
+- The glossary gains `health alert`; its `health alerter` line goes.
 
 ### Blocks 60 and 65, the refused password
 
@@ -348,7 +357,7 @@ self._bugs[builder].record(met_a_bug)  # failing: rebuild after 1, 2, then 4 min
 | A bug at every turn of the client's works | a supervisor test on virtual time, every work over a fake client raising | rebuilds start 1, 2, then 4 min after each in vain, the alert is dispatched and the shutdown is requested with an error after the third |
 | One keyword's search | a supervisor test, one of three works raising at each turn | no rebuild in 30 turns, each bug logged with its trace |
 | Two in vain, ten healthy, then bugs | a supervisor test | the next rebuild comes 1 min after the bugs turn failing |
-| The webui's thread dying | block 15's webui test, its thread stopped | a new thread serves |
+| The webui's thread dying | block 35's webui test, its thread stopped | a new thread serves |
 | A bug at every send of the notifier | a supervisor test, a fake notifier raising | the notifier rebuilt after 1, 2, then 4 min, then the shutdown requested with an error |
 | A bug in a Kad search | a supervisor test reading the log | no line names `channel amuled kad` with `bugs` |
 | A refused password at the start | a composition test, a fake amuleapi refusing the password | the node runs, the alert is dispatched, two logins never closer than 60 s; at the release candidate, on the node |
