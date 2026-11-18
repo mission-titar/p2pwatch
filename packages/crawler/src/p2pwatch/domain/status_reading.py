@@ -47,9 +47,7 @@ SEARCHES_FAILED = HealthRule(
 
 def client_component(client_name: ClientName) -> Component:
     """The client, judged by whether its API answers: "client amuled"."""
-    return Component(
-        name=f"client {client_name}", client_name=client_name, rules=(CLIENT_UNREACHABLE,)
-    )
+    return Component(name=f"client {client_name}", rules=(CLIENT_UNREACHABLE,))
 
 
 def channel_component(*, client_name: ClientName, channel: Channel) -> Component:
@@ -57,8 +55,6 @@ def channel_component(*, client_name: ClientName, channel: Channel) -> Component
     network refuses its searches, and by their bugs: "channel amuled kad"."""
     return Component(
         name=f"channel {client_name} {channel}",
-        client_name=client_name,
-        channel=channel,
         rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, SEARCHES_FAILED, BUGS),
     )
 

@@ -297,6 +297,9 @@ class AmuleClientWorks:
                     keyword, channel
                 ],
                 node_health=self._node_health,
-                channel_components=self._channel_components.values(),
+                channel_components={
+                    (self._client_name, channel): part
+                    for channel, part in self._channel_components.items()
+                },
             ),
         )

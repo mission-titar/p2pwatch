@@ -31,7 +31,7 @@ from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
-from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -303,7 +303,7 @@ async def test_the_status_reading_records_a_channel_on_the_part_of_its_searches(
     [kad_not_connected] = [
         transition
         for transition in node.changes_under(CHANNEL_NOT_CONNECTED)
-        if transition.component.channel == Channel("kad")
+        if transition.component.name == "channel amuled kad"
     ]
     assert kad_not_connected.component is kad_search.components[1]
 

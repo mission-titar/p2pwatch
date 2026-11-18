@@ -12,8 +12,14 @@ model and the restarts are whole.
   alone. `WebuiThreadWatch` (`application/steps/webui_thread_watch.py`) is a work that looks every minute, the first
   look included, whether the webui's thread still runs, through `UvicornServerThread.is_alive`, which the composition
   passes as a callback; a thread that has ended raises `WebuiThreadEndedError`, a bug. The log names the work as its
-  part, `webui`. Its time limit is the 5 minutes of margin alone. `Component.client_name` may be `None` now; the
-  alerter refuses a client's alert for such a part.
+  part, `webui`. Its time limit is the 5 minutes of margin alone.
+- **A part holds its name and its rules alone** (blocks 93 and 96, on the operator's comment on #791, "Pourquoi
+  None pour la webui ?"). `HealthAlerter` is given at construction the parts it alerts on, each with what its alert
+  names: `ClientAlert` (the client), `ChannelAlert` (the client and the channel), `DiskAlert` (the floor), absent on
+  a node without `download:`. `AmuleClientWorks.health_alerter` builds it over the parts it builds once, and the
+  composition sets the alerts from it once those parts exist. A rule that has an alert, on a part the alerter was
+  not given for it, raises a wiring `ValueError`. Lot 4b1's accepted limit, the floor held as `int | None` and its
+  `ValueError`, is gone. `keyword_searches` takes each channel's part by its client and channel.
 - **`WebuiRestartable`** (`composition/webui_restartable.py`) stops the old thread, serves the webui on a thread built
   anew (a new app and new read connections) and hands back the watch over it (`webui_thread_watch_over`). A port held
   elsewhere does not make the rebuild raise: the new thread ends, its watch finds it ended, and after three rebuilds in
@@ -83,6 +89,8 @@ The spec's section 6, those this lot reaches, and one the operator added:
 | 53 | #795 | `feat/notification-service-parts` | one part per service, and `NotifierContract` | 292, 18 |
 | 80 | | `fix/lot-4b5-review-fixes` | the holistic review's fixes in the code: the notifier's parts read from the dispatcher, one debug line per object, `NodeHealth` built first, the old notifier's sends recorded on no part, a thread never started not stopped, the webui named as its part, the node's cycle tested | 321, 18 |
 | 90 | | `docs/lot-4b5-wrap` | closing block: the contract's two promises, the comments; this handoff, the spec's corrections, `BACKLOG.md` | 61, 9 |
+| 93 | | `refactor/health-alerts-name-their-parts` | the alerter given the parts it alerts on, each with what its alert names, on the operator's comment on #791 | 305, 10 |
+| 96 | | `refactor/health-part-name-and-rules` | a part its name and its rules alone; the searches given each channel's part by its client and channel | 82, 17 |
 
 - **Past a bound, accepted by the operator**: blocks 10 and 20 merged, and 30 and 40, rather than carry code from one
   block to the next ("reco ok, b", 2026-11-17); block 30 at 20 files ("A", 2026-11-17), then at 21 with
@@ -134,6 +142,12 @@ The spec's section 6, those this lot reaches, and one the operator added:
     - `architecture.md`: §3 names the webui's work `webui`; §10's E-D13 id dropped; §10.1's thresholds back after the
       works' sentence, reflowed; §10.2's restartables "un autre", "en est un aussi", the parts read from the
       dispatcher, the debug line; the code table's "Santé" row lists the three restartables.
+  - **93 and 96**: written as one block, 386 lines and 23 files, cut in two by the lead (2026-11-18). The brief
+    named `HealthAlerter` the labels' only reader; `keyword_searches` read them too, to find each search's channel
+    part, and takes a map by client and channel instead (96). The names `ClientAlert`, `ChannelAlert`, `DiskAlert`
+    are the operator's. The disk's `DiskAlert` is built by `DownloadSteps`, beside the part, with the floor of its
+    config. One wiring error, `<part>, <rule>: no alert for this part under this rule`, replaces the three of
+    `_client_of`, `_channel_of` and the floor.
 - **Class 1**: block 10's unread `run_state_store` parameter of `_start_webui` dropped. None in blocks 30, 50, 53, 80, 90.
 - **Class 2 questions**: block 10, the transitional list or the merge of blocks 10 and 20: "reco ok, b". Block 30, the
   file bound twice: "A", "A". Block 50, the bound past 20 files without the contract: the cut into 50 and 53, "reco
@@ -213,6 +227,9 @@ named as such. Blocks 10 and 30 in full in their reports (#791, #792); one line 
 | 80 | `test_webui_thread_watch.py`, `test_webui_restartable.py`: the work named `webui`, its bug line (3) | the watch as block 10 left it | `assert 'webui thread watch' == 'webui'`; `assert 0 == 3`; `At index 0 diff: 'webui thread watch' != 'webui'` |
 | 80 | `test_uvicorn_server_thread.py::test_stopping_a_thread_never_started_does_nothing` | the stop as block 10 left it | `RuntimeError: cannot join thread before it is started`, the defect itself, not an assertion |
 | 90 | `TestAppriseNotifier`: the services in the order configured, each send under its node's name | pass on the adapter; mutations: the services reversed, the asset's name without the node | `At index 0 diff: NotificationService(... ordinal=2) != NotificationService(... ordinal=1)`; `assert (False, False) == (True, True)` |
+| 93 | `test_health_alerter.py`: each alert and end, ed2k's own alert, the disk (15) | the new constructor, `send` sending nothing | `assert [] == [RelayedLogLi...itar-node-1')]`, `Right contains one more item: RelayedLogLine(message='amuled unreachable for 2 min', ...)` and each alert alike |
+| 93 | `test_health_alerter.py`: a rule with an alert on a part not given for it (8), the unknown rule (2), the disk on a node that downloads nothing (2) | the same | `Failed: DID NOT RAISE ValueError` |
+| 93 | `test_amule_client_works.py::test_the_alerts_name_the_client_its_channels_and_the_download_disk` | `health_alerter` naming the client and channels `stub`, the floor 0 | `At index 0 diff: RelayedLogLine(message='stub unreachable for 2 min', ...) != RelayedLogLine(message='amuled unreachable for 2 min', ...)` |
 
 - **The guards that pass at once, by design**: block 10's running thread raising nothing and the webui's bugs sending
   no alert, and `test_bugs_on_a_part_of_the_client_s_works_rebuild_the_client_alone`, which passed on its stub (shown
@@ -227,6 +244,10 @@ named as such. Blocks 10 and 30 in full in their reports (#791, #792); one line 
   re-watched in vain: the part shares the one `BUGS` rule, so a stub either holds it, and passes, or lacks it, and
   raises `KeyError`) and its `WebuiThreadEndedError` (`test_the_watch_handed_back_looks_at_the_thread_built_anew`,
   re-watched on an assertion above); block 30's `ValueError` and `IndexError`; the closing block's `RuntimeError`.
+  Block 93's `test_an_alert_whose_turn_is_cut_mid_send_is_still_sent` hangs on its stub, waiting for a send, and was
+  left out of the red run.
+- **Block 96 changes no behaviour**: a part's two labels removed, their tests' assertions on them dropped; the
+  searches' tests and the composition's pass unchanged in what they assert.
 
 ## Section 4's rows, where each is held
 

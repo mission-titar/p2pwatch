@@ -275,6 +275,7 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 | 80 | `fix/lot-4b5-review-fixes` | the holistic review's fixes in the code (Corrected: split out of block 90, which came to 382 lines and 27 files, the lead on 2026-11-17) | |
 | 90 | `docs/lot-4b5-wrap` | closing block | |
 | 93 | `refactor/health-alerts-name-their-parts` | the alerter given the parts it alerts on, each with what its alert names (Corrected: added on the operator's comment on #791, "Pourquoi None pour la webui ?", the shape approved on 2026-11-18) | |
+| 96 | `refactor/health-part-name-and-rules` | a component its name and its rules alone (Corrected: cut out of block 93, which came to 386 lines and 23 files, the lead on 2026-11-18) | |
 
 ## 6. Limits and scope
 
@@ -369,7 +370,7 @@ CLIENT_UNREACHABLE = HealthRule(
     fails_at=Detections(times=3, among_last=3),
     recovers_under=Detections(times=2, among_last=10),
 )
-client = Component(name="client amuled", client_name=ClientName("amuled"), rules=(CLIENT_UNREACHABLE,))
+client = Component(name="client amuled", rules=(CLIENT_UNREACHABLE,))
 
 # application/steps: the status reading
 try:
@@ -408,7 +409,9 @@ for component in work.components:
 as typed fields: its client, its channel, none where it has none. (Corrected: `HealthAlerter` is given at its
 construction the parts it alerts on, each with what its alert names, `ClientAlert`, `ChannelAlert` and `DiskAlert`,
 the last absent on a node without `download:`, which `AmuleClientWorks.health_alerter` builds over the parts it
-builds once; the operator on 2026-11-18, on #791, lot 4b5 block 93.)
+builds once; the operator on 2026-11-18, on #791, lot 4b5 block 93.) (Corrected: a component holds its name and its
+rules alone since lot 4b5 block 96, the searches given each channel's part by its client and channel; the snippet
+above reads as the code does since.)
 
 ### The rules
 

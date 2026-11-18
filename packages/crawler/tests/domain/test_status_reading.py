@@ -54,14 +54,14 @@ def test_a_client_status_holds_a_valid_non_ascii_version_or_none(version: str | 
 
 def test_the_client_s_component_is_named_after_it_and_fails_at_3_unanswered_readings() -> None:
     client = client_component(ClientName("amuled"))
-    assert (client.name, client.client_name, client.channel) == ("client amuled", "amuled", None)
+    assert client.name == "client amuled"
     transitions = [client.record(rule=CLIENT_UNREACHABLE, detected=True) for _ in range(3)]
     assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
 
 
 def test_a_channel_s_component_is_named_after_it_and_holds_both_channel_rules() -> None:
     kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
-    assert (kad.name, kad.client_name, kad.channel) == ("channel amuled kad", "amuled", "kad")
+    assert kad.name == "channel amuled kad"
     # A rule the component lacks would raise at its first record.
     assert kad.record(rule=CHANNEL_NOT_CONNECTED, detected=True) is None
     assert kad.record(rule=CHANNEL_NOT_CONNECTABLE, detected=True) is None

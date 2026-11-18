@@ -43,6 +43,6 @@ def notification_service_components(
     """A part per service, judged on its sends that failed and on its bugs: "notifier discord
     community"."""
     return {
-        service: Component(name=f"notifier {service}", client_name=None, rules=(BUGS, SENDS_FAILED))
+        service: Component(name=f"notifier {service}", rules=(BUGS, SENDS_FAILED))
         for service in services
     }

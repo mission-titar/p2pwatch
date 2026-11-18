@@ -47,11 +47,7 @@ def test_a_keyword_search_s_part_is_named_as_its_search_on_its_client_s_channel(
         keyword=Keyword("keroro mission"), client_name=_AMULED, channel=Channel("kad")
     )
 
-    assert (search.name, search.client_name, search.channel) == (
-        "search 'keroro mission' amuled kad",
-        "amuled",
-        "kad",
-    )
+    assert search.name == "search 'keroro mission' amuled kad"
 
 
 # Builds the part of one task of the client named ``client_name``.
@@ -77,7 +73,7 @@ def test_a_task_of_the_client_names_its_part_after_the_task_and_the_client(
     *, part_of: _PartOf, name: str
 ) -> None:
     component = part_of(_AMULED)
-    assert (component.name, component.client_name, component.channel) == (name, "amuled", None)
+    assert component.name == name
 
 
 @pytest.mark.parametrize(
@@ -91,10 +87,8 @@ def test_each_task_s_part_fails_at_its_third_bug_in_a_row(
     assert _changes(part_of(_AMULED), True, True, True) == [None, None, HealthState.FAILING]
 
 
-def test_the_webui_s_part_is_named_webui_and_of_no_client() -> None:
-    webui = webui_component()
-
-    assert (webui.name, webui.client_name, webui.channel) == ("webui", None, None)
+def test_the_webui_s_part_is_named_webui() -> None:
+    assert webui_component().name == "webui"
 
 
 def test_the_webui_s_part_fails_at_its_third_bug_in_a_row() -> None:

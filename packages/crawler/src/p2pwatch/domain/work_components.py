@@ -14,26 +14,21 @@ BUGS = HealthRule(
 
 def status_reading_component(client_name: ClientName) -> Component:
     """The reading of the client's status, judged by its bugs: "status reading amuled"."""
-    return Component(name=f"status reading {client_name}", client_name=client_name, rules=(BUGS,))
+    return Component(name=f"status reading {client_name}", rules=(BUGS,))
 
 
 def keyword_search_component(
     *, keyword: Keyword, client_name: ClientName, channel: Channel
 ) -> Component:
     """One keyword's search on one channel, judged by its bugs: "search 'keroro' amuled kad"."""
-    return Component(
-        name=f"search '{keyword}' {client_name} {channel}",
-        client_name=client_name,
-        channel=channel,
-        rules=(BUGS,),
-    )
+    return Component(name=f"search '{keyword}' {client_name} {channel}", rules=(BUGS,))
 
 
 def source_tracking_component(client_name: ClientName) -> Component:
     """The tracking of the downloads' sources, judged by its bugs: "source tracking amuled"."""
-    return Component(name=f"source tracking {client_name}", client_name=client_name, rules=(BUGS,))
+    return Component(name=f"source tracking {client_name}", rules=(BUGS,))
 
 
 def webui_component() -> Component:
     """The webui, judged by the bugs its thread watch finds: "webui"."""
-    return Component(name="webui", client_name=None, rules=(BUGS,))
+    return Component(name="webui", rules=(BUGS,))

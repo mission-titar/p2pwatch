@@ -19,7 +19,6 @@ from p2pwatch.application.steps.supervisor import WAIT_AFTER_A_BUG, Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.work_components import BUGS
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -179,7 +178,7 @@ class _WorkStoppingTheNode(Work):
 
 def _part_of(work: Work) -> Component:
     """A part named after ``work``, judged by its bugs alone."""
-    return Component(name=str(work), client_name=ClientName("amuled"), rules=(BUGS,))
+    return Component(name=str(work), rules=(BUGS,))
 
 
 def _supervised(
@@ -368,10 +367,8 @@ def test_a_work_meeting_a_bug_at_each_turn_fails_at_its_third_on_each_of_its_par
     broken = _TimedWork(
         "search 'keroro' amuled kad", wait_seconds=1.0, errors=itertools.repeat(KeyError("kad"))
     )
-    search = Component(
-        name="search 'keroro' amuled kad", client_name=ClientName("amuled"), rules=(BUGS,)
-    )
-    kad = Component(name="channel amuled kad", client_name=ClientName("amuled"), rules=(BUGS,))
+    search = Component(name="search 'keroro' amuled kad", rules=(BUGS,))
+    kad = Component(name="channel amuled kad", rules=(BUGS,))
 
     _supervise_until(
         virtual_loop,

@@ -138,10 +138,12 @@ class _Searches:
                 keyword=keyword, client_name=worker.client_name, channel=channel
             ),
             node_health=self.node_health,
-            channel_components=[
-                channel_component(client_name=worker.client_name, channel=channel)
+            channel_components={
+                (worker.client_name, channel): channel_component(
+                    client_name=worker.client_name, channel=channel
+                )
                 for channel in worker.channels
-            ],
+            },
         )
 
     async def searching(

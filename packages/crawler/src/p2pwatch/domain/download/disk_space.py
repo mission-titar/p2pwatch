@@ -26,6 +26,5 @@ def download_tracking_component(client_name: ClientName) -> Component:
     is connected to any network, and by its bugs: "download tracking amuled"."""
     return Component(
         name=f"download tracking {client_name}",
-        client_name=client_name,
         rules=(DISK_SPACE_LOW, CONNECTED_TO_NO_NETWORK, BUGS),
     )

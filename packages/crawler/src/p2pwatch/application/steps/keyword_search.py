@@ -1,7 +1,7 @@
 """``KeywordSearch``: one keyword searched on one channel of one client, such as "keroro" on Kad,
 again as soon as the channel may; the client spaces its own starts, the core sets no interval."""
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from typing import Protocol
 
@@ -12,7 +12,7 @@ from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.component import Component
-from p2pwatch.domain.identifiers import Channel, Keyword
+from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.status_reading import SEARCHES_FAILED
 
@@ -87,12 +87,12 @@ def keyword_searches(
     time_limit_of: SearchTimeLimitOf,
     search_component_of: SearchComponentOf,
     node_health: NodeHealth,
-    channel_components: Iterable[Component],
+    channel_components: Mapping[tuple[ClientName, Channel], Component],
 ) -> list[SupervisedWork]:
     """One search per client, channel and keyword of the config, with its time limit, a keyword
-    listed twice searched once and an empty one never; its turns recorded on its channel too."""
+    listed twice searched once and an empty one never; its turns recorded on its channel's part
+    too, ``channel_components`` holding each part by its client and channel."""
     each_keyword_once = dedupe_keywords(keywords)
-    channel_of = {(channel.client_name, channel.channel): channel for channel in channel_components}
     return [
         SupervisedWork(
             work=KeywordSearch(
@@ -102,12 +102,12 @@ def keyword_searches(
                 backoff_saver=backoff_saver,
                 monotonic_clock=monotonic_clock,
                 node_health=node_health,
-                channel_component=channel_of[search_worker.client_name, channel],
+                channel_component=channel_components[search_worker.client_name, channel],
             ),
             time_limit=time_limit_of(keyword, channel=channel),
             components=(
                 search_component_of(keyword, channel=channel),
-                channel_of[search_worker.client_name, channel],
+                channel_components[search_worker.client_name, channel],
             ),
         )
         for search_worker in search_workers

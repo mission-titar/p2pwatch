@@ -841,7 +841,8 @@ envoi a rencontré un bug et, sinon, s'il a échoué (« sends failed » : refus
 qu'apprise ne sait pas charger est un refus, écrit à chaque envoi. Aucune alerte ne nomme les
 règles d'un service : elle passerait par ce service. `NodeHealth` journalise chaque changement
 d'état et le transmet aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
-`HealthAlerter` reçoit à sa construction les parties sur lesquelles il alerte, chacune avec ce que
+Une partie ne porte que son nom et ses règles : `HealthAlerter` reçoit à sa construction les
+parties sur lesquelles il alerte, chacune avec ce que
 son alerte nomme (`ClientAlert`, le client ; `ChannelAlert`, le client et le canal ; `DiskAlert`,
 le plancher, absente d'un nœud sans `download:`), que `AmuleClientWorks.health_alerter` construit
 sur les parties qu'il bâtit une fois.

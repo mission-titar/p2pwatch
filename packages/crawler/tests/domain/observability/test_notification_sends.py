@@ -30,16 +30,14 @@ def test_a_service_is_named_by_its_scheme_and_its_audience_a_second_alike_by_its
     assert names == ["discord community", "discord community 2", "ntfy operations"]
 
 
-def test_each_service_has_a_part_of_its_own_named_after_it_and_by_no_client() -> None:
+def test_each_service_has_a_part_of_its_own_named_after_it() -> None:
     parts = notification_service_components([_DISCORD, _NTFY, _SECOND_DISCORD])
 
-    named = [
-        (service, part.name, part.client_name, part.channel) for service, part in parts.items()
-    ]
+    named = [(service, part.name) for service, part in parts.items()]
     assert named == [
-        (_DISCORD, "notifier discord community", None, None),
-        (_NTFY, "notifier ntfy operations", None, None),
-        (_SECOND_DISCORD, "notifier discord community 2", None, None),
+        (_DISCORD, "notifier discord community"),
+        (_NTFY, "notifier ntfy operations"),
+        (_SECOND_DISCORD, "notifier discord community 2"),
     ]
 
 

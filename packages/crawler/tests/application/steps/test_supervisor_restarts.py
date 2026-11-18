@@ -15,7 +15,6 @@ from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
-from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.work_components import BUGS
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -87,7 +86,7 @@ class _Blocked(Work):
 
 
 def _part(name: str) -> Component:
-    return Component(name=name, client_name=ClientName("amuled"), rules=(BUGS,))
+    return Component(name=name, rules=(BUGS,))
 
 
 class _Node:

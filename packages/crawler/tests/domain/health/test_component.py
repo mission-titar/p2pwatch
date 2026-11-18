@@ -1,6 +1,5 @@
 from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
-from p2pwatch.domain.identifiers import ClientName
 
 
 def _rule(name: str) -> HealthRule:
@@ -16,11 +15,7 @@ _NOT_CONNECTED = _rule("not connected")
 
 
 def _amule() -> Component:
-    return Component(
-        name="client amuled",
-        client_name=ClientName("amuled"),
-        rules=(_UNREACHABLE, _NOT_CONNECTED),
-    )
+    return Component(name="client amuled", rules=(_UNREACHABLE, _NOT_CONNECTED))
 
 
 def test_the_third_detection_in_a_row_returns_the_change_to_failing() -> None:
