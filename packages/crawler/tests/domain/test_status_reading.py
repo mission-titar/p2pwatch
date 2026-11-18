@@ -13,11 +13,11 @@ from p2pwatch.domain.status_reading import (
     STATUS_PERIOD,
     ChannelStatus,
     ClientStatus,
-    channel_component,
-    client_component,
+    channel_dependency,
+    client_dependency,
     is_reading_fresh,
 )
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 from tests.support.domain.value_bounds import NOT_WELL_FORMED_TEXTS, WELL_FORMED_TEXTS
 
 
@@ -52,29 +52,29 @@ def test_a_client_status_holds_a_valid_non_ascii_version_or_none(version: str | 
     assert ClientStatus(version=version, channels=()).version == version
 
 
-def test_the_client_s_component_is_named_after_it_and_fails_at_3_unanswered_readings() -> None:
-    client = client_component(ClientName("amuled"))
+def test_the_client_s_dependency_is_named_after_it_and_fails_at_3_unanswered_readings() -> None:
+    client = client_dependency(ClientName("amuled"))
     assert (client.name, client.client_name, client.channel) == ("client amuled", "amuled", None)
     transitions = [client.record(rule=CLIENT_UNREACHABLE, detected=True) for _ in range(3)]
     assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
 
 
-def test_a_channel_s_component_is_named_after_it_and_holds_both_channel_rules() -> None:
-    kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
+def test_a_channel_s_dependency_is_named_after_it_and_holds_both_channel_rules() -> None:
+    kad = channel_dependency(client_name=ClientName("amuled"), channel=Channel("kad"))
     assert (kad.name, kad.client_name, kad.channel) == ("channel amuled kad", "amuled", "kad")
-    # A rule the component lacks would raise at its first record.
+    # A rule the dependency lacks would raise at its first record.
     assert kad.record(rule=CHANNEL_NOT_CONNECTED, detected=True) is None
     assert kad.record(rule=CHANNEL_NOT_CONNECTABLE, detected=True) is None
 
 
-def test_a_channel_s_component_fails_at_the_third_bug_in_a_row_of_its_searches() -> None:
-    kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
+def test_a_channel_s_dependency_fails_at_the_third_bug_in_a_row_of_its_searches() -> None:
+    kad = channel_dependency(client_name=ClientName("amuled"), channel=Channel("kad"))
     transitions = [kad.record(rule=BUGS, detected=True) for _ in range(3)]
     assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
 
 
 def test_a_channel_s_searches_fail_at_3_refused_in_a_row_and_heal_under_2_in_the_last_10() -> None:
-    kad = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
+    kad = channel_dependency(client_name=ClientName("amuled"), channel=Channel("kad"))
 
     refused = [kad.record(rule=SEARCHES_FAILED, detected=True) for _ in range(3)]
     ran = [kad.record(rule=SEARCHES_FAILED, detected=False) for _ in range(9)]

@@ -487,7 +487,7 @@ async def test_each_object_is_rebuilt_for_bugs_in_its_parts_the_notifier_in_each
 async def test_a_reading_of_both_channels_connected_and_connectable_records_every_rule(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # A rule its component lacks raises at its first record, which stops the node.
+    # A rule its dependency lacks raises at its first record, which stops the node.
     status = {
         "ec_connected": True,
         "ed2k": {"state": "connected", "high_id": True},

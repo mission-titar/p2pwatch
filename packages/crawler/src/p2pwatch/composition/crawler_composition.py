@@ -129,10 +129,10 @@ from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
-from p2pwatch.domain.observability.notification_sends import notification_service_components
+from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
-from p2pwatch.domain.work_components import webui_component
+from p2pwatch.domain.work_dependencies import webui_dependency
 
 _logger = logging.getLogger(__name__)
 
@@ -422,7 +422,9 @@ class CrawlerComposition(CrawlerRunner):
                 notification_timeout_seconds=observability.notification_timeout_seconds,
                 record_check=node_health.record,
                 # Built once: a notifier rebuilt on the same configuration lists the same services.
-                service_components=notification_service_components(notifier.notifier().services()),
+                service_dependencies=notification_service_dependencies(
+                    notifier.notifier().services()
+                ),
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
@@ -461,11 +463,11 @@ class CrawlerComposition(CrawlerRunner):
                     database_opener=database_opener,
                 )
 
-            webui_part = webui_component()
+            webui_part = webui_dependency()
 
             def webui_works_over(thread: UvicornServerThread) -> Sequence[SupervisedWork]:
                 return webui_thread_watch_over(
-                    thread, component=webui_part, monotonic_clock=monotonic_clock
+                    thread, dependency=webui_part, monotonic_clock=monotonic_clock
                 )
 
             webui_thread = build_webui_thread()
@@ -577,7 +579,7 @@ class CrawlerComposition(CrawlerRunner):
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
-                parts = ", ".join(component.name for component in supervised.components)
+                parts = ", ".join(dependency.name for dependency in supervised.dependencies)
                 _logger.debug("%s: turns recorded on %s", supervised.work, parts)
             supervisor = Supervisor(
                 run_state_reader=run_state_store,

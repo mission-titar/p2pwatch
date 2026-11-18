@@ -10,19 +10,19 @@ from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.restart_policy import RestartPolicy, RestartRequest
 from p2pwatch.application.steps.work import SupervisedWork, Work
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
-    channel_component,
-    client_component,
+    channel_dependency,
+    client_dependency,
 )
-from p2pwatch.domain.work_components import (
+from p2pwatch.domain.work_dependencies import (
     BUGS,
-    keyword_search_component,
-    status_reading_component,
+    keyword_search_dependency,
+    status_reading_dependency,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.composition.fake_restartable import FakeRestartable
@@ -45,8 +45,8 @@ class _Search(Work):
         """Never awaited."""
 
 
-def _search_recorded_on(*parts: Component) -> SupervisedWork:
-    return SupervisedWork(work=_Search(), time_limit=timedelta(minutes=25), components=parts)
+def _search_recorded_on(*parts: ExternalDependency) -> SupervisedWork:
+    return SupervisedWork(work=_Search(), time_limit=timedelta(minutes=25), dependencies=parts)
 
 
 class _Policy:
@@ -56,14 +56,14 @@ class _Policy:
     def __init__(self) -> None:
         self.logger = FakeLogger()
         self.client = FakeRestartable("client amuled")
-        self.search = keyword_search_component(
+        self.search = keyword_search_dependency(
             keyword=Keyword("keroro"), client_name=_AMULED, channel=Channel("kad")
         )
-        self.status = status_reading_component(_AMULED)
-        self.kad = channel_component(client_name=_AMULED, channel=Channel("kad"))
+        self.status = status_reading_dependency(_AMULED)
+        self.kad = channel_dependency(client_name=_AMULED, channel=Channel("kad"))
         self.requests: list[RestartRequest] = []
         policy = RestartPolicy(
-            components_of={self.client: (self.search, self.status, self.kad)},
+            dependencies_of={self.client: (self.search, self.status, self.kad)},
             works=[_search_recorded_on(self.search, self.kad)],
             restart=self.requests.append,
             logger=self.logger,
@@ -71,16 +71,16 @@ class _Policy:
         self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(policy,))
 
     async def check(
-        self, part: Component, *, rule: HealthRule = BUGS, detected: bool, times: int
+        self, part: ExternalDependency, *, rule: HealthRule = BUGS, detected: bool, times: int
     ) -> None:
         for _ in range(times):
             await self.node_health.record(on=part, rule=rule, detected=detected)
 
-    async def fail(self, part: Component) -> None:
+    async def fail(self, part: ExternalDependency) -> None:
         """Three turns in a row meeting a bug: its bugs rule turns failing."""
         await self.check(part, detected=True, times=3)
 
-    async def heal(self, *parts: Component) -> None:
+    async def heal(self, *parts: ExternalDependency) -> None:
         """Ten turns without a bug on each of ``parts``: their bugs rules turn healthy."""
         for part in parts:
             await self.check(part, detected=False, times=10)
@@ -98,7 +98,7 @@ async def test_a_bugs_rule_turning_failing_restarts_the_object_its_part_is_of() 
     await policy.check(policy.search, detected=True, times=1)
 
     assert [request.restartable for request in policy.requests] == [policy.client]
-    assert policy.requests[0].components == (policy.search, policy.status, policy.kad)
+    assert policy.requests[0].dependencies == (policy.search, policy.status, policy.kad)
     message = "restarting client amuled: bugs in search 'keroro' amuled kad"
     assert policy.logger.lines == [LoggedLine(level="warning", message=message)]
 
@@ -108,7 +108,7 @@ async def test_another_rule_turning_failing_restarts_nothing() -> None:
 
     await policy.check(policy.kad, rule=CHANNEL_NOT_CONNECTED, detected=True, times=6)
     # The client's own part is no object's: aMule down is never repaired by a rebuild.
-    await policy.check(client_component(_AMULED), rule=CLIENT_UNREACHABLE, detected=True, times=3)
+    await policy.check(client_dependency(_AMULED), rule=CLIENT_UNREACHABLE, detected=True, times=3)
 
     assert policy.requests == []
     assert policy.logger.lines == []
@@ -240,10 +240,10 @@ async def test_a_rebuild_forgets_the_bugs_of_its_parts_and_keeps_their_other_rul
 
 
 async def test_a_part_of_two_objects_is_refused() -> None:
-    search = keyword_search_component(
+    search = keyword_search_dependency(
         keyword=Keyword("keroro"), client_name=_AMULED, channel=Channel("kad")
     )
-    components_of: dict[Restartable[SupervisedWork], list[Component]] = {
+    dependencies_of: dict[Restartable[SupervisedWork], list[ExternalDependency]] = {
         FakeRestartable("client amuled"): [search],
         FakeRestartable("webui"): [search],
     }
@@ -251,20 +251,20 @@ async def test_a_part_of_two_objects_is_refused() -> None:
     message = "^search 'keroro' amuled kad: a part of client amuled and of webui$"
     with pytest.raises(ValueError, match=message):
         RestartPolicy(
-            components_of=components_of, works=(), restart=lambda _: None, logger=FakeLogger()
+            dependencies_of=dependencies_of, works=(), restart=lambda _: None, logger=FakeLogger()
         )
 
 
 async def test_a_work_recorded_on_a_part_of_no_object_is_refused() -> None:
-    search = keyword_search_component(
+    search = keyword_search_dependency(
         keyword=Keyword("keroro"), client_name=_AMULED, channel=Channel("kad")
     )
-    kad = channel_component(client_name=_AMULED, channel=Channel("kad"))
+    kad = channel_dependency(client_name=_AMULED, channel=Channel("kad"))
 
     message = "^search 'keroro' amuled kad: recorded on channel amuled kad, a part of no object$"
     with pytest.raises(ValueError, match=message):
         RestartPolicy(
-            components_of={FakeRestartable("client amuled"): [search]},
+            dependencies_of={FakeRestartable("client amuled"): [search]},
             works=[_search_recorded_on(search, kad)],
             restart=lambda _: None,
             logger=FakeLogger(),
@@ -276,7 +276,7 @@ async def test_a_work_recorded_on_no_part_is_refused() -> None:
     message = "^search 'keroro' amuled kad: recorded on no part, so over no object$"
     with pytest.raises(ValueError, match=message):
         RestartPolicy(
-            components_of={FakeRestartable("client amuled"): []},
+            dependencies_of={FakeRestartable("client amuled"): []},
             works=[_search_recorded_on()],
             restart=lambda _: None,
             logger=FakeLogger(),

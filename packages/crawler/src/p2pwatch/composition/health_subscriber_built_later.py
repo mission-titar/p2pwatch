@@ -2,7 +2,7 @@
 parts the works are recorded on, the works recording on the node's health."""
 
 from p2pwatch.application.steps.node_health import HealthSubscriber
-from p2pwatch.domain.health.component import HealthTransition
+from p2pwatch.domain.health.external_dependency import HealthTransition
 
 
 class HealthSubscriberNotSetError(RuntimeError):

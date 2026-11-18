@@ -13,10 +13,10 @@ from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
@@ -86,8 +86,8 @@ class _Blocked(Work):
             raise
 
 
-def _part(name: str) -> Component:
-    return Component(name=name, client_name=ClientName("amuled"), rules=(BUGS,))
+def _part(name: str) -> ExternalDependency:
+    return ExternalDependency(name=name, client_name=ClientName("amuled"), rules=(BUGS,))
 
 
 class _Node:
@@ -119,8 +119,8 @@ class _Node:
         )
         self._first_works = client_works(0)
         self._policy = RestartPolicy(
-            components_of={
-                self.client: [c for work in self._first_works for c in work.components],
+            dependencies_of={
+                self.client: [c for work in self._first_works for c in work.dependencies],
                 self.webui: [self.webui_part],
             },
             works=self._first_works,
@@ -146,21 +146,23 @@ class _Node:
         webui_serving = _Searching(rebuild=0, turns=self.webui_turns, buggy=False)
         works = [
             *self._first_works,
-            SupervisedWork(work=webui_serving, time_limit=_DAY, components=(self.webui_part,)),
+            SupervisedWork(work=webui_serving, time_limit=_DAY, dependencies=(self.webui_part,)),
         ]
         self.loop.run_until_complete(
             self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
         )
 
 
-def _one_search(turns: _Turns, *, part: Component, buggy_until: int | None = None) -> _ClientWorks:
+def _one_search(
+    turns: _Turns, *, part: ExternalDependency, buggy_until: int | None = None
+) -> _ClientWorks:
     """One search over each rebuild, on ``part``, meeting a bug at every turn over the rebuilds
     before ``buggy_until``, over all of them if it is ``None``."""
 
     def works(rebuild: int) -> Sequence[SupervisedWork]:
         buggy = buggy_until is None or rebuild < buggy_until
         search = _Searching(rebuild=rebuild, turns=turns, buggy=buggy)
-        return [SupervisedWork(work=search, time_limit=_DAY, components=(part,))]
+        return [SupervisedWork(work=search, time_limit=_DAY, dependencies=(part,))]
 
     return works
 
@@ -194,7 +196,7 @@ def test_a_restart_stops_and_awaits_the_works_over_its_object_before_its_rebuild
         tracking_work = _Blocked(events=events)
         return [
             *_one_search(turns, part=search, buggy_until=1)(rebuild),
-            SupervisedWork(work=tracking_work, time_limit=_DAY, components=(tracking,)),
+            SupervisedWork(work=tracking_work, time_limit=_DAY, dependencies=(tracking,)),
         ]
 
     node = _Node(virtual_loop, client_works=works)
@@ -249,7 +251,7 @@ def test_a_rebuild_that_raises_records_a_bug_on_each_part_of_its_object(
         tracking_work = _Searching(rebuild=rebuild, turns=_Turns(), buggy=False)
         return [
             *_one_search(_Turns(), part=search)(rebuild),
-            SupervisedWork(work=tracking_work, time_limit=_DAY, components=(tracking,)),
+            SupervisedWork(work=tracking_work, time_limit=_DAY, dependencies=(tracking,)),
         ]
 
     errors = [RuntimeError("no session")] * 3

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
 
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 
 
 class Work(ABC):
@@ -32,4 +32,4 @@ class SupervisedWork:
 
     work: Work
     time_limit: timedelta
-    components: tuple[Component, ...]
+    dependencies: tuple[ExternalDependency, ...]

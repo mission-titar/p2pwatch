@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 
 
@@ -21,7 +21,7 @@ class NodeHealth:
         self._logger = logger
         self._subscribers = tuple(subscribers)  # called in this order
 
-    async def record(self, *, on: Component, rule: HealthRule, detected: bool) -> None:
+    async def record(self, *, on: ExternalDependency, rule: HealthRule, detected: bool) -> None:
         """Records one check of ``rule`` on ``on``, such as a status reading aMule did not
         answer."""
         transition = on.record(rule=rule, detected=detected)

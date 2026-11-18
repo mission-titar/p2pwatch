@@ -1,10 +1,10 @@
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.domain.health.component import HealthTransition
+from p2pwatch.domain.health.external_dependency import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_component
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 
 
@@ -27,7 +27,7 @@ class _AmuleHealth:
     def __init__(self) -> None:
         self.logger = FakeLogger()
         self.subscribers = _Subscribers()
-        self.amule = client_component(ClientName("amuled"))
+        self.amule = client_dependency(ClientName("amuled"))
         self._node_health = NodeHealth(
             logger=self.logger, subscribers=(self.subscribers.first, self.subscribers.second)
         )
@@ -62,7 +62,7 @@ async def test_each_change_reaches_every_subscriber_in_order() -> None:
     amule_health = _AmuleHealth()
     await amule_health.check(detected=True, times=3)
     change = HealthTransition(
-        component=amule_health.amule,
+        dependency=amule_health.amule,
         rule=CLIENT_UNREACHABLE,
         previous=HealthState.UNKNOWN,
         current=HealthState.FAILING,

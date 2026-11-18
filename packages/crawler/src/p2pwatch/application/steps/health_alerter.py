@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
-from p2pwatch.domain.health.component import HealthTransition
+from p2pwatch.domain.health.external_dependency import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.events import (
@@ -26,7 +26,7 @@ from p2pwatch.domain.status_reading import (
     SEARCHES_FAILED,
     UNREACHABLE_ALERT_AFTER,
 )
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 
 # The field of the status reading each channel rule is about, as its alert names it.
 _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
@@ -89,7 +89,7 @@ class HealthAlerter:
 
     def _floor_of(self, transition: HealthTransition) -> int:
         if self._min_free_bytes is None:
-            raise ValueError(f"{transition.component.name}: no disk floor for its alert")
+            raise ValueError(f"{transition.dependency.name}: no disk floor for its alert")
         return self._min_free_bytes
 
     def _end(self, transition: HealthTransition) -> Event | None:
@@ -110,19 +110,19 @@ class HealthAlerter:
 
 def _no_alert_for(transition: HealthTransition) -> ValueError:
     return ValueError(
-        f"{transition.component.name}, {transition.rule.name}: no alert for this rule"
+        f"{transition.dependency.name}, {transition.rule.name}: no alert for this rule"
     )
 
 
 def _client_of(transition: HealthTransition) -> ClientName:
-    client_name = transition.component.client_name
+    client_name = transition.dependency.client_name
     if client_name is None:
-        raise ValueError(f"{transition.component.name}: no client to name in its alert")
+        raise ValueError(f"{transition.dependency.name}: no client to name in its alert")
     return client_name
 
 
 def _channel_of(transition: HealthTransition) -> Channel:
-    channel = transition.component.channel
+    channel = transition.dependency.channel
     if channel is None:
-        raise ValueError(f"{transition.component.name}: no channel to name in its alert")
+        raise ValueError(f"{transition.dependency.name}: no channel to name in its alert")
     return channel

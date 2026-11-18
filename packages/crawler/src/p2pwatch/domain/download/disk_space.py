@@ -1,9 +1,9 @@
 """Download tracking's health rules: the download disk under its floor, the client on no network."""
 
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 
 # As the disk alert always did: failing at the first reading under the floor, healthy at the first
 # reading at or above it, so each dip alerts once.
@@ -21,10 +21,10 @@ CONNECTED_TO_NO_NETWORK = HealthRule(
 )
 
 
-def download_tracking_component(client_name: ClientName) -> Component:
+def download_tracking_dependency(client_name: ClientName) -> ExternalDependency:
     """Download tracking, judged by whether the download disk is under its floor, whether the client
     is connected to any network, and by its bugs: "download tracking amuled"."""
-    return Component(
+    return ExternalDependency(
         name=f"download tracking {client_name}",
         client_name=client_name,
         rules=(DISK_SPACE_LOW, CONNECTED_TO_NO_NETWORK, BUGS),

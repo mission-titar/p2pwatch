@@ -15,9 +15,9 @@ from p2pwatch.application.steps.webui_thread_watch import (
 )
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.domain.expected_error import ExpectedError
-from p2pwatch.domain.health.component import HealthTransition
+from p2pwatch.domain.health.external_dependency import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
-from p2pwatch.domain.work_components import BUGS, webui_component
+from p2pwatch.domain.work_dependencies import BUGS, webui_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
@@ -87,7 +87,7 @@ class _Webui:
     def __init__(self, loop: VirtualLoop, *, rebuilt_threads_serve: bool) -> None:
         self.loop = loop
         self.logger = FakeLogger()
-        self.part = webui_component()
+        self.part = webui_dependency()
         self.first_thread = _WebuiThread()
         self._rebuilt_threads_serve = rebuilt_threads_serve
         self.webui = FakeRestartable("webui", works_over=self._works_over_a_new_thread)
@@ -100,7 +100,7 @@ class _Webui:
         )
         self._first_works = self._watch_over(self.first_thread)
         self._policy = RestartPolicy(
-            components_of={self.webui: [self.part]},
+            dependencies_of={self.webui: [self.part]},
             works=self._first_works,
             restart=self._supervisor.restart,
             logger=FakeLogger(),
@@ -114,7 +114,7 @@ class _Webui:
             thread_alive=thread.is_alive, monotonic_clock=FakeLoopMonotonicClock(self.loop)
         )
         return [
-            SupervisedWork(work=watch, time_limit=timedelta(minutes=5), components=(self.part,))
+            SupervisedWork(work=watch, time_limit=timedelta(minutes=5), dependencies=(self.part,))
         ]
 
     def _works_over_a_new_thread(self, _state: object, /) -> Sequence[SupervisedWork]:

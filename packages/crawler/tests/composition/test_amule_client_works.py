@@ -29,12 +29,12 @@ from p2pwatch.composition.node_restart_policy import node_restart_policy
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -267,8 +267,8 @@ async def test_the_works_over_a_client_built_anew_are_recorded_on_the_parts_buil
         *_SEARCHES,
     ]
     # A part keeps its own health, and compares equal to itself alone.
-    assert [supervised.components for supervised in built_anew] == [
-        supervised.components for supervised in first
+    assert [supervised.dependencies for supervised in built_anew] == [
+        supervised.dependencies for supervised in first
     ]
 
 
@@ -284,7 +284,7 @@ async def test_the_status_reading_records_no_network_on_the_part_of_download_tra
         await status_reading.work.run_once()
 
     [no_network] = node.changes_under(CONNECTED_TO_NO_NETWORK)
-    assert no_network.component is download_tracking.components[0]
+    assert no_network.dependency is download_tracking.dependencies[0]
 
 
 async def test_the_status_reading_records_a_channel_on_the_part_of_its_searches(
@@ -301,9 +301,9 @@ async def test_the_status_reading_records_a_channel_on_the_part_of_its_searches(
     [kad_not_connected] = [
         transition
         for transition in node.changes_under(CHANNEL_NOT_CONNECTED)
-        if transition.component.channel == Channel("kad")
+        if transition.dependency.channel == Channel("kad")
     ]
-    assert kad_not_connected.component is kad_search.components[1]
+    assert kad_not_connected.dependency is kad_search.dependencies[1]
 
 
 async def test_download_tracking_records_the_disk_on_the_part_its_turns_are_recorded_on(
@@ -315,7 +315,7 @@ async def test_download_tracking_records_the_disk_on_the_part_its_turns_are_reco
     await download_tracking.work.run_once()
 
     [disk_low] = node.changes_under(DISK_SPACE_LOW)
-    assert disk_low.component is download_tracking.components[0]
+    assert disk_low.dependency is download_tracking.dependencies[0]
 
 
 async def _rebuilt(amule_client: FakeRestartable) -> None:
@@ -324,7 +324,7 @@ async def _rebuilt(amule_client: FakeRestartable) -> None:
 
 
 async def _rebuilds_once_failing(
-    part: Component, *, works: Sequence[SupervisedWork], node: _Node
+    part: ExternalDependency, *, works: Sequence[SupervisedWork], node: _Node
 ) -> int:
     """How many times the client is rebuilt once the bugs rule of ``part`` turns failing, its
     restart policy and the supervisor wired as the node wires them."""
@@ -346,7 +346,7 @@ async def _rebuilds_once_failing(
 
     await policy(
         HealthTransition(
-            component=part, rule=BUGS, previous=HealthState.UNKNOWN, current=HealthState.FAILING
+            dependency=part, rule=BUGS, previous=HealthState.UNKNOWN, current=HealthState.FAILING
         )
     )
     with contextlib.suppress(TimeoutError):
@@ -362,7 +362,7 @@ async def test_bugs_on_any_part_a_work_is_recorded_on_have_the_supervisor_rebuil
     node: _Node, *, downloading: bool
 ) -> None:
     works = node.client_works(downloading=downloading).over(node.client(FakeAmuleApi()))
-    parts = dict.fromkeys(part for supervised in works for part in supervised.components)
+    parts = dict.fromkeys(part for supervised in works for part in supervised.dependencies)
 
     rebuilds = {
         part.name: await _rebuilds_once_failing(part, works=works, node=node) for part in parts

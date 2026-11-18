@@ -10,7 +10,7 @@ from typing import Literal, Protocol, assert_never
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.node_metric_writer import NodeMetricWriter
 from p2pwatch.application.ports.driven.notifier import Notifier
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.observability.events import Event
 from p2pwatch.domain.observability.node_metric import CounterIncrement
@@ -22,7 +22,7 @@ from p2pwatch.domain.observability.notification_sends import (
 )
 from p2pwatch.domain.observability.policy import audience_of, plan_observability
 from p2pwatch.domain.observability.severity import Severity
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 
 
 # The notifier a send goes to, such as the one the composition rebuilt latest.
@@ -32,7 +32,9 @@ class CurrentNotifier(Protocol):
 
 # Records one check of a rule on a part, such as ``NodeHealth.record``.
 class CheckRecorder(Protocol):
-    async def __call__(self, *, on: Component, rule: HealthRule, detected: bool) -> None: ...
+    async def __call__(
+        self, *, on: ExternalDependency, rule: HealthRule, detected: bool
+    ) -> None: ...
 
 
 # How one send to one service ended: failed is refused by its service, or past the timeout.
@@ -51,21 +53,21 @@ class ObservabilityDispatcher:
         current_notifier: CurrentNotifier,
         notification_timeout_seconds: float,
         record_check: CheckRecorder,
-        service_components: Mapping[NotificationService, Component],
+        service_dependencies: Mapping[NotificationService, ExternalDependency],
     ) -> None:
         self._logger = logger
         self._node_metric_writer = node_metric_writer
         self._current_notifier = current_notifier
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_check = record_check
-        self._service_components = service_components
+        self._service_dependencies = service_dependencies
         # Held to their end: the loop keeps only a weak reference to a task (see asyncio.shield).
         self._shielded_dispatches: set[Awaitable[None]] = set()
 
-    def service_components(self) -> tuple[Component, ...]:
+    def service_dependencies(self) -> tuple[ExternalDependency, ...]:
         """The part of each notification service it records each send on, such as ``notifier
         discord community``."""
-        return tuple(self._service_components.values())
+        return tuple(self._service_dependencies.values())
 
     async def dispatch(self, event: Event) -> None:
         plan = plan_observability(event)
@@ -83,7 +85,9 @@ class ObservabilityDispatcher:
         notification timeout at most, then records how each send ended on its service's part,
         unless the notifier was rebuilt meanwhile."""
         notifier, audience = self._current_notifier(), audience_of(notification)
-        services = [service for service in self._service_components if service.audience is audience]
+        services = [
+            service for service in self._service_dependencies if service.audience is audience
+        ]
         async with asyncio.TaskGroup() as sends:
             ends = [
                 sends.create_task(
@@ -95,14 +99,14 @@ class ObservabilityDispatcher:
             return  # rebuilt meanwhile: the old notifier's sends tell nothing of the new one
         # Recorded once every send has ended: a check whose recording raises cuts no other send.
         for service, end in zip(services, ends, strict=True):
-            await self._record(end.result(), on=self._service_components[service])
+            await self._record(end.result(), on=self._service_dependencies[service])
 
     async def _send_to(
         self, service: NotificationService, *, notification: Notification, notifier: Notifier
     ) -> _SendEnd:
         """Sends ``notification`` to ``service`` within the notification timeout, a failed send
         such as a refusal logged in one line, a bug with its trace."""
-        part_name = self._service_components[service].name
+        part_name = self._service_dependencies[service].name
         try:
             raised = await asyncio.wait_for(
                 self._raised_by(notifier, service=service, notification=notification),
@@ -133,7 +137,7 @@ class ObservabilityDispatcher:
             return error
         return None
 
-    async def _record(self, end: _SendEnd, *, on: Component) -> None:
+    async def _record(self, end: _SendEnd, *, on: ExternalDependency) -> None:
         """Records how one send ended on its service's part; a bug tells nothing of whether the
         service takes the sends, so it records nothing on the sends that failed."""
         await self._record_check(on=on, rule=BUGS, detected=end == "bug")
