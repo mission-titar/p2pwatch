@@ -753,32 +753,40 @@ flowchart LR
   log["logs"]
   store[("InMemoryNodeMetricStore")]
   prom["webui /metrics"]
+  outbox["NotificationOutbox"]
+  sender["NotificationSender"]
   notif["Notifications<br/>apprise URL"]
 
   uc --> desc --> disp
   disp --> log
   disp -->|NodeMetricWriter| store
   prom -->|"ListNodeMetrics · NodeMetricReader"| store
-  disp -->|best-effort| notif
+  disp -->|leave| outbox
+  outbox --> sender
+  sender -->|best-effort| notif
 ```
 
 Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observability`) les route vers des
 `ObservabilityPlan` (sévérité de log + `CounterIncrement` et `GaugeSetting` des métriques du
 nœud + notification, dont le genre donne l'audience COMMUNITY ou OPERATIONS) ;
 l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
+Il n'envoie pas la notification : il la laisse, sans rien attendre, dans la boîte d'envoi
+(`NotificationOutbox`), une entrée par service de son audience. Le travail du notifieur
+(`NotificationSender`, `notification sending` dans le journal) envoie la plus ancienne à chaque
+tour, dans `notification_timeout_seconds`, puis la retire ; un envoi annulé garde son entrée.
 Une notification à la communauté y est une valeur typée (`TierRise`, `SourceAlert`,
 `CompletedDownload`) : le domaine n'écrit que du texte brut, l'adaptateur `AppriseNotifier` en écrit
 le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLogLine`). Un événement
 qui notifie porte son `node_id`, que sa notification reprend.
 Une notification déjà décidée part même quand son tour est coupé : le juge des fichiers, après
 l'écriture d'une décision, le suivi des téléchargements, après celle d'une complétion, le suivi des
-sources, après celle de ses points, et `HealthAlerter`, une fois l'état de sa règle changé, l'envoient
+sources, après celle de ses points, et `HealthAlerter`, une fois l'état de sa règle changé, la laissent
 par `dispatch_shielded`, dans une tâche que l'annulation du tour n'atteint pas, qu'elle vienne de
-sa limite de temps ou d'une reconstruction de son objet. À l'arrêt, le
-cycle de vie attend ces envois, chacun dans son délai de notification, avant de fermer les
-ressources. Un bug d'un tel envoi, son tour déjà coupé, s'écrit `bug in the notification of
-<événement>` avec sa trace. Une notification décidée se perd seulement si le processus meurt
-entre l'écriture et l'envoi.
+sa limite de temps ou d'une reconstruction de son objet. À l'arrêt, le cycle de vie attend ces
+tâches, puis envoie ce que garde la boîte d'envoi, par un notifieur à lui, dans la borne de
+l'arrêt, avant de fermer les ressources. Un bug d'une telle tâche, son tour déjà coupé, s'écrit
+`bug in the notification of <événement>` avec sa trace. Une notification décidée se perd
+seulement si le processus meurt avant son envoi.
 Les métriques du nœud sont un état à nous : le dispatcher les écrit par le `NodeMetricWriter`
 d'`InMemoryNodeMetricStore`, et la route `/metrics` de la webui les lit par le cas d'usage
 `ListNodeMetrics`, derrière son port pilotant `NodeMetricLister`, puis écrit elle-même le format
@@ -834,11 +842,11 @@ règle : aucun tour n'est le sien. La webui est une partie aussi (`webui`) : cha
 `WebuiThreadWatch` regarde si son thread tourne encore, et un thread terminé est un bug. Chaque
 service de notification, une URL configurée, est une partie aussi, nommée par le schéma de son URL
 et son audience, jamais par l'URL, qui porte le jeton d'un webhook (`notifier discord community`,
-`notifier discord community 2` pour un second pareil) : le dispatcher envoie une notification à
-tous les services de son audience ensemble, si bien qu'elle prend au plus un délai de
-notification, puis, une fois tous les envois terminés, enregistre sur la partie de chacun si son
-envoi a rencontré un bug et, sinon, s'il a échoué (« sends failed » : refusé par le service,
-`NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`), aux mêmes seuils. Une URL
+`notifier discord community 2` pour un second pareil) : le `Supervisor` enregistre chaque tour du
+travail du notifieur, un envoi, sur la partie de chaque service ; après un envoi sans bug, ce
+travail enregistre sur la partie de son service s'il a échoué (« sends failed » : refusé par le
+service, `NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`), aux mêmes
+seuils. Une URL
 qu'apprise ne sait pas charger est un refus, écrit à chaque envoi. Aucune alerte ne nomme les
 règles d'un service : elle passerait par ce service. `NodeHealth` journalise chaque changement
 d'état et le transmet aux alertes (`HealthAlerter`), puis aux redémarrages (`RestartPolicy`).
@@ -866,13 +874,12 @@ composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent 
 `WebuiRestartable` arrête l'ancien thread, sert la webui sur un thread neuf et rend la surveillance
 de ce thread. Un port pris ailleurs ne fait pas lever la reconstruction : le thread neuf se termine,
 sa surveillance le retrouve terminé, et après trois reconstructions vaines la webui n'est plus
-redémarrée. Le notifieur en est un aussi (`composition/notifier_restartable.py`) : aucun `Work`
-ne tourne dessus, et `NotifierRestartable` construit un notifieur neuf sans rendre de `Work`. Le
-dispatcher lui demande le notifieur à chaque envoi, si bien qu'un envoi en cours finit sur
-l'ancien, sans s'enregistrer sur aucune partie : il ne dit rien du notifieur neuf. Les parties des
-services sont celles du dispatcher, construites une fois, sur les services du premier notifieur,
-qu'un notifieur reconstruit sur la même configuration liste à l'identique ; `node_restart_policy`
-les lit dans le dispatcher, si bien que la politique ne peut pas en recevoir d'autres. Au
+redémarrée. Le notifieur en est un aussi (`composition/notifier_restartable.py`) :
+`NotifierRestartable` construit un notifieur neuf et rend le travail du notifieur sur lui ; l'envoi
+qu'arrête la reconstruction garde son entrée, que le travail neuf envoie. Les parties des services
+sont construites une fois, sur les services du premier notifieur, qu'un notifieur reconstruit sur
+la même configuration liste à l'identique ; sans service configuré, rien n'est laissé à envoyer, et
+le notifieur n'a pas de travail. Au
 démarrage, une ligne de débogage par objet nomme ses parties (`webui: rebuilt for bugs in webui`).
 La politique refuse, à sa construction, une partie de deux objets
 et un `Work` qu'aucun redémarrage n'arrêterait : sans partie, ou sur une partie d'aucun objet. Les
@@ -913,7 +920,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 | Matching | `domain/matching/` (moteur + politique `deploy/matcher.yml`) |
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
-| Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
+| Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `application/steps/notification_outbox.py`, `application/steps/notification_sender.py`, `adapters/driven/observability/` |
 | Santé | `domain/health/` (dépendances externes, règles, transitions), `domain/work_dependencies.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit), `composition/webui_restartable.py` (la webui reconstruite), `composition/notifier_restartable.py` (le notifieur reconstruit) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |

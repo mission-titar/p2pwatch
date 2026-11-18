@@ -10,7 +10,7 @@ class TestFakeNotifier(NotifierContract):
         return self._built
 
     def refusing_notifier(self) -> Notifier:
-        return FakeNotifier(refusing=True)
+        return FakeNotifier(refusing=ONE_SERVICE_PER_AUDIENCE)
 
     def configured_services(self) -> tuple[NotificationService, ...]:
         return ONE_SERVICE_PER_AUDIENCE

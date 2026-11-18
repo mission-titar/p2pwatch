@@ -247,7 +247,8 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   lignes de démarrage `crawler started` et `download enabled` journalisent sous
   `p2pwatch.application.crawler_lifecycle`, la version au démarrage sous
   `p2pwatch.composition.crawler_composition`, le dispatcher des événements sous
-  `p2pwatch.application.steps.observability_dispatcher`, la réévaluation du catalogue sous
+  `p2pwatch.application.steps.observability_dispatcher`, l'envoi des notifications sous
+  `p2pwatch.application.steps.notification_sender`, la réévaluation du catalogue sous
   `p2pwatch.application.steps.catalog_reevaluator` et l'échec d'écriture du backoff des recherches
   sous `p2pwatch.application.steps.backoff_saver`. La recherche ne journalise plus
   `client <nom> connected` ni l'avertissement

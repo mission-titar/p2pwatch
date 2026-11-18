@@ -49,11 +49,7 @@ _EXEMPTIONS: dict[str, str] = {
     "crawler/tests/fakes/adapters/driven/fake_hanging_notifier.py"
     "::FakeHangingNotifier": "never ends a send, by design",
     "crawler/tests/fakes/adapters/driven/fake_held_notifier.py"
-    "::FakeHeldNotifier": "holds each send until its test releases it, by design",
-    "crawler/tests/fakes/adapters/driven/fake_slow_community_notifier.py"
-    "::FakeSlowCommunityNotifier": "holds each community send for its test's seconds, by design",
-    "crawler/tests/fakes/adapters/driven/fake_timed_notifier.py"
-    "::FakeTimedNotifier": "a spy keeping each send's instant: it refuses none",
+    "::FakeHeldNotifier": "holds each send until it is cancelled, by design",
 }
 
 

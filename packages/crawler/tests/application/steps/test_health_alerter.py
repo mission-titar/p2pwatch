@@ -4,8 +4,6 @@ from dataclasses import replace
 import pytest
 
 from p2pwatch.application.steps.health_alerter import HealthAlerter
-from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.disk_space import (
     CONNECTED_TO_NO_NETWORK,
     DISK_SPACE_LOW,
@@ -29,9 +27,6 @@ from p2pwatch.domain.status_reading import (
     client_dependency,
 )
 from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency, webui_dependency
-from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
-from tests.fakes.adapters.driven.fake_logger import FakeLogger
-from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
@@ -253,19 +248,11 @@ async def test_the_disk_failing_on_a_node_without_a_floor_raises() -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
-    # The rule is already failing once its alert is sent: a send lost here is never sent again.
-    notifier = FakeHeldNotifier()
-    dispatcher = ObservabilityDispatcher(
-        logger=FakeLogger(),
-        node_metric_writer=FakeNodeMetricStore(),
-        current_notifier=lambda: notifier,
-        notification_timeout_seconds=5.0,
-        record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        service_dependencies=notification_service_dependencies(notifier.services()),
-    )
+async def test_an_alert_whose_turn_is_cut_before_its_dispatch_ran_is_still_left() -> None:
+    # The rule is already failing once its alert is left: one lost here is never sent again.
+    observability = ObservabilityOverFakes()
     alerter = HealthAlerter(
-        observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
+        observability_dispatcher=observability.dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
     )
     transition = HealthTransition(
         dependency=_AMULE,
@@ -274,12 +261,10 @@ async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
         current=HealthState.FAILING,
     )
     turn = asyncio.create_task(alerter.send(transition))
-    await notifier.reached.wait()
+    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
 
     turn.cancel()
     with pytest.raises(asyncio.CancelledError):
         await turn
-    notifier.released.set()
-    await notifier.wait_until_sent(timeout_seconds=1.0)
 
-    assert [notification for _, notification in notifier.calls] == [_UNREACHABLE]
+    assert [notification for _, notification in observability.notifications] == [_UNREACHABLE]

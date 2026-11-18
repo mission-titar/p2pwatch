@@ -1,5 +1,6 @@
-"""The sends of the notifications: the services the notifier sends to, the error a refused send
-raises, and each service's part, judged on its sends that failed and on its bugs."""
+"""The sends of the notifications: the services the notifier sends to, a notification left to send
+to one, the error a refused send raises, and each service's part, judged on its sends that failed
+and on its bugs."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from dataclasses import dataclass
 from p2pwatch.domain.expected_error import ExpectedError
 from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
+from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.work_dependencies import BUGS
 
@@ -27,6 +29,15 @@ class NotificationService:
     def __str__(self) -> str:
         named = f"{self.scheme} {self.audience.value}"
         return named if self.ordinal == 1 else f"{named} {self.ordinal}"
+
+
+@dataclass(kw_only=True, frozen=True)
+class PendingNotification:
+    """A notification left to send to one service, such as a tier rise for the community's
+    Discord webhook: one entry of the outbox."""
+
+    notification: Notification
+    service: NotificationService
 
 
 # A send refused or past the notification timeout is detected; a bug of the notifier is not.
