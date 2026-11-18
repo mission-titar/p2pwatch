@@ -199,6 +199,10 @@ Un nœud direct dont la box redirige ses ports redirige désormais `4672/udp` (K
   restent appliquées, et le crawler ne démarre pas. Pour revenir à la 4.x, restaurez la copie de
   `local.db` qui porte le plus petit numéro ([la copie d'avant
   migration](operate.md#la-copie-davant-migration)).
+- **`local.db` garde les notifications restant à envoyer**, dans sa nouvelle table
+  `pending_notifications` : une ligne par notification et service, les champs de la notification en
+  objet JSON que la colonne `kind` nomme. Une notification décidée avant un arrêt part au démarrage
+  suivant ; celle d'un service retiré de `crawler.yml` entre-temps est écartée, en une ligne.
 - **Les paramètres d'URL de `/files` changent de nom** : `q` devient `search`, `target` devient
   `target_id` et `dir` devient `direction`. Les anciens sont ignorés : mettez à jour vos favoris.
   Un `?tier=` inconnu est ignoré lui aussi, comme un `sort` ou un `direction` inconnu : la liste

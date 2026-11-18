@@ -11,6 +11,7 @@ from p2pwatch.domain.observability.notification_sends import NotificationService
 from p2pwatch.domain.observability.policy import Audience
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
+from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 
@@ -22,7 +23,14 @@ class ObservabilityOverFakes:
     def __init__(self) -> None:
         self.logger = FakeLogger()
         self.node_metric_store = FakeNodeMetricStore()
-        self.outbox = NotificationOutbox(waker=FakeWaker())
+        self.outbox_store = FakeNotificationOutboxStore()
+        self.outbox = NotificationOutbox(
+            writer=self.outbox_store,
+            reader=self.outbox_store,
+            services=ONE_SERVICE_PER_AUDIENCE,
+            waker=FakeWaker(),
+            logger=self.logger,
+        )
         self.notifications: list[tuple[Audience, Notification]] = []
         # Whether the callback of ``watch_for_a_suspension`` had run, at each notification left.
         self.suspended_before_each_leave: list[bool] = []

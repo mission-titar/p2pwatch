@@ -490,6 +490,7 @@ flowchart LR
     dl["downloads"]
     bs["backoff_states"]
     ls["latest_search_starts"]
+    pn["pending_notifications"]
     rs["reevaluation_state"]
   end
 ```
@@ -499,9 +500,10 @@ flowchart LR
   (`python -m p2pwatch merge`). Les insertions sont **idempotentes** (`ON CONFLICT DO NOTHING`),
   donc sans danger en cas de redémarrage en pleine écriture ; jamais `INSERT OR IGNORE`, qui
   avalerait aussi une violation de `NOT NULL` ou de `CHECK`.
-- **`local.db`** (version de schéma 16) : l'état d'exécution du nœud (identité, suivi des
+- **`local.db`** (version de schéma 17) : l'état d'exécution du nœud (identité, suivi des
   téléchargements et de leur progression, backoff des recherches, derniers départs de recherche,
-  empreinte de la politique réévaluée). **Jamais fusionnée** : elle appartient à un seul nœud.
+  empreinte de la politique réévaluée, notifications restant à envoyer). **Jamais fusionnée** : elle
+  appartient à un seul nœud.
 
 La migration `catalog/0005` a supprimé `file_verifications` et `local/0004` a supprimé
 `verification_tasks`, en réécrivant en `completed` toute ligne de téléchargement `quarantined`
@@ -555,7 +557,10 @@ ses quatre instants en microsecondes : `queued_at_micros`, `completed_at_micros`
 base dont `node_runtime` porte un `node_id` sans son `created_at` refuse de migrer plutôt que de
 perdre l'identité du nœud. `reevaluation_state` est reconstruite elle aussi, si bien que chaque table
 de `local.db` est désormais `STRICT`. `local/0016` crée `latest_search_starts`, `STRICT` elle aussi :
-le dernier départ de recherche de chaque client par canal et portée, en microsecondes. Chaque table
+le dernier départ de recherche de chaque client par canal et portée, en microsecondes.
+`local/0017` crée `pending_notifications`, `STRICT` aussi : la boîte d'envoi des notifications, une
+ligne par notification et service, dans l'ordre où elles attendent, les champs de la notification en
+objet JSON que `kind` nomme. Chaque table
 du catalogue l'est aussi, déclarée ainsi là où
 `catalog/0008`, `0010`, `0011` et `0015` la créent, avec un `CHECK` sur chaque quantité (`>= 0`), sur
 `tier` et `connectable`, et sur chaque `*_micros`, entre `datetime.min` et `datetime.max` en UTC.
@@ -784,8 +789,13 @@ sources, après celle de ses points, et `HealthAlerter`, une fois l'état de sa 
 sans rien attendre entre les deux, si bien qu'aucune coupure du tour, par sa limite de temps ou par
 une reconstruction de son objet, ne tombe entre l'écriture et l'entrée. Leurs limites de temps ne
 comptent donc aucun envoi. À l'arrêt, le cycle de vie envoie ce que garde la boîte d'envoi, par un
-notifieur à lui, dans la borne de l'arrêt, avant de fermer les ressources. Une notification décidée
-se perd seulement si le processus meurt avant son envoi.
+notifieur à lui, dans la borne de l'arrêt, avant de fermer les ressources. La boîte d'envoi se
+sauvegarde dans `local.db` à chaque changement (`SqliteNotificationOutboxStore`) et se relit à sa
+construction, au démarrage, sans les entrées d'un service que la configuration n'a plus, écartées
+en une ligne : une notification décidée survit à un redémarrage, envoyée deux fois si le nœud
+s'arrête au milieu de son envoi. Elle envoie toujours depuis la mémoire : une sauvegarde refusée
+s'écrit en une ligne et se refait au changement suivant. Une notification décidée se perd seulement
+si le processus meurt avant la sauvegarde de son entrée.
 Les métriques du nœud sont un état à nous : le dispatcher les écrit par le `NodeMetricWriter`
 d'`InMemoryNodeMetricStore`, et la route `/metrics` de la webui les lit par le cas d'usage
 `ListNodeMetrics`, derrière son port pilotant `NodeMetricLister`, puis écrit elle-même le format
