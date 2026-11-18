@@ -338,6 +338,13 @@ blocks by the lead. No release: v5 ships after lots 4c to 7 and their release ca
 Once this stack has merged, the lead closes the first stack, #718 to #754, unmerged (the spec's preamble), with its
 branches.
 
+Then lot 4b6, the health model redrawn, settled with the operator on 2026-11-18 while reading this stack: a bug is
+our code's, counted by the supervisor per object it rebuilds, which alone decides each rebuild, retried without end
+after waits that double, the node stopped for Docker to restart it after three in vain, an alert at each; an outage is
+outside the program, tracked on an external dependency (today's component), each of its rules carrying its alert or
+none. Its decisions go into the lot 4b spec, approved by the operator before any code; #798, #799 and #801, which
+began them, are closed unmerged. Lot 4c after it.
+
 Then lot 4c, what the operator reads of health (the graph of parts, one alert per root cause, the health endpoints, the
 metrics, the Node page): its spec, drafted in `agents/specs/2026-11-09-v5-fault-isolation.md`, is to be rewritten on
 this spec's names (`Component`, `HealthRule`, `NodeHealth`, `RestartPolicy`, `NotificationService`), its own Discuss
