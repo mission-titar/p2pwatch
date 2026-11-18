@@ -135,7 +135,6 @@ class _Node:
             time_limits=AmuleWorkTimeLimits(
                 request_bound=timedelta(seconds=60),
                 search_budget=timedelta(seconds=120),
-                notification_timeout=timedelta(seconds=5),
                 keywords=[Keyword(keyword) for keyword in _KEYWORDS],
             ),
         )

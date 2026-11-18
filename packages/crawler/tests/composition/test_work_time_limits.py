@@ -8,7 +8,6 @@ from p2pwatch.domain.identifiers import Channel, Keyword
 
 _START_SPACING = timedelta(seconds=60)  # between two starts on eD2k, or on one Kad word
 _BUDGET = timedelta(seconds=120)
-_NOTIFICATION = timedelta(seconds=5)
 # One call to amuleapi at its worst: six requests of 60 s each (a login ahead on the lock, its own
 # login, the request, then on a refused token the same two again and the request resent).
 _CALL = timedelta(seconds=6 * 60)
@@ -23,18 +22,14 @@ def _limits(
     return AmuleWorkTimeLimits(
         request_bound=request_bound,
         search_budget=search_budget,
-        notification_timeout=_NOTIFICATION,
         keywords=keywords or _TEN_KEYWORDS,
     )
 
 
-def test_the_status_reading_bounds_its_two_calls_and_an_alert_per_rule() -> None:
-    # The client's unreachable alert, then each channel's not connected and not connectable.
-    alerts = 1 + 2 * 2
+def test_the_status_reading_bounds_its_two_calls_its_alerts_left_awaiting_nothing() -> None:
+    limit = _limits().of_status_reading()
 
-    limit = _limits().of_status_reading(channel_count=2)
-
-    assert limit == 2 * _CALL + alerts * _NOTIFICATION + TIME_LIMIT_MARGIN
+    assert limit == 2 * _CALL + TIME_LIMIT_MARGIN
 
 
 def test_an_ed2k_search_waits_for_every_other_keywords_search_on_the_client() -> None:
@@ -81,5 +76,7 @@ def test_a_kad_search_without_a_kad_word_waits_one_spacing() -> None:
     assert limit == _START_SPACING + 2 * _BUDGET + 4 * _CALL + TIME_LIMIT_MARGIN
 
 
-def test_download_and_source_tracking_bound_their_two_calls_and_one_notification() -> None:
-    assert _limits().of_tracking() == 2 * _CALL + _NOTIFICATION + TIME_LIMIT_MARGIN
+def test_download_and_source_tracking_bound_their_two_calls_a_notification_awaiting_nothing() -> (
+    None
+):
+    assert _limits().of_tracking() == 2 * _CALL + TIME_LIMIT_MARGIN
