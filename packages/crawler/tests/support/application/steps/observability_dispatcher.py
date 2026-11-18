@@ -1,5 +1,6 @@
 """A real dispatch step over the fakes its outputs land in, for the steps that dispatch."""
 
+import asyncio
 from collections.abc import Sequence
 
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
@@ -23,6 +24,9 @@ class ObservabilityOverFakes:
         self.node_metric_store = FakeNodeMetricStore()
         self.outbox = NotificationOutbox(waker=FakeWaker())
         self.notifications: list[tuple[Audience, Notification]] = []
+        # Whether the callback of ``watch_for_a_suspension`` had run, at each notification left.
+        self.suspended_before_each_leave: list[bool] = []
+        self._suspended = False
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             node_metric_writer=self.node_metric_store,
@@ -34,10 +38,19 @@ class ObservabilityOverFakes:
     def node_ids(self) -> list[NodeId]:
         return [notification.node_id for _, notification in self.notifications]
 
+    def watch_for_a_suspension(self) -> None:
+        """Schedules a callback on the loop, which runs only once the running task suspends,
+        such as on a dispatch awaited in a task of its own."""
+        asyncio.get_running_loop().call_soon(self._suspend)
+
+    def _suspend(self) -> None:
+        self._suspended = True
+
     def _leave(
         self, notification: Notification, *, services: Sequence[NotificationService]
     ) -> None:
         """Keeps each notification with the audience of each service it is left for, oldest
         first, then leaves it in the outbox."""
+        self.suspended_before_each_leave.append(self._suspended)
         self.notifications.extend((service.audience, notification) for service in services)
         self.outbox.leave(notification, services=services)

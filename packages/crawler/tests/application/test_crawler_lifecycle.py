@@ -84,8 +84,8 @@ class _WorkWaitingForTheStop(Work):
 
 
 class _WorkLeavingACompletion(_WorkWaitingForTheStop):
-    """Calls ``on_start`` at its first turn, leaves a completion as download tracking does,
-    shielded, then waits to be cancelled."""
+    """Calls ``on_start`` at its first turn, leaves a completion as download tracking does, then
+    waits to be cancelled."""
 
     def __init__(
         self, name: str, *, on_start: _WorkStarted, dispatcher: ObservabilityDispatcher
@@ -95,7 +95,7 @@ class _WorkLeavingACompletion(_WorkWaitingForTheStop):
 
     async def run_once(self) -> None:
         self._on_start(self._name)
-        await self._dispatcher.dispatch_shielded(_COMPLETED)
+        await self._dispatcher.dispatch(_COMPLETED)
         await asyncio.Event().wait()
 
 

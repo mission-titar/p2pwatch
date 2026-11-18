@@ -232,4 +232,4 @@ class SourceWatcher(Work):
                     node_id=self._node_id,
                 )
             )
-            await self._observability_dispatcher.dispatch_shielded(event)
+            await self._observability_dispatcher.dispatch(event)

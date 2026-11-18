@@ -781,12 +781,11 @@ qui notifie porte son `node_id`, que sa notification reprend.
 Une notification déjà décidée part même quand son tour est coupé : le juge des fichiers, après
 l'écriture d'une décision, le suivi des téléchargements, après celle d'une complétion, le suivi des
 sources, après celle de ses points, et `HealthAlerter`, une fois l'état de sa règle changé, la laissent
-par `dispatch_shielded`, dans une tâche que l'annulation du tour n'atteint pas, qu'elle vienne de
-sa limite de temps ou d'une reconstruction de son objet. À l'arrêt, le cycle de vie attend ces
-tâches, puis envoie ce que garde la boîte d'envoi, par un notifieur à lui, dans la borne de
-l'arrêt, avant de fermer les ressources. Un bug d'une telle tâche, son tour déjà coupé, s'écrit
-`bug in the notification of <événement>` avec sa trace. Une notification décidée se perd
-seulement si le processus meurt avant son envoi.
+sans rien attendre entre les deux, si bien qu'aucune coupure du tour, par sa limite de temps ou par
+une reconstruction de son objet, ne tombe entre l'écriture et l'entrée. Leurs limites de temps ne
+comptent donc aucun envoi. À l'arrêt, le cycle de vie envoie ce que garde la boîte d'envoi, par un
+notifieur à lui, dans la borne de l'arrêt, avant de fermer les ressources. Une notification décidée
+se perd seulement si le processus meurt avant son envoi.
 Les métriques du nœud sont un état à nous : le dispatcher les écrit par le `NodeMetricWriter`
 d'`InMemoryNodeMetricStore`, et la route `/metrics` de la webui les lit par le cas d'usage
 `ListNodeMetrics`, derrière son port pilotant `NodeMetricLister`, puis écrit elle-même le format

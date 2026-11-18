@@ -54,5 +54,4 @@ class CrawlerLifecycle:
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed()
         await self._supervisor.supervise(self._works, arm_shutdown_bound=arm_shutdown_bound)
-        await self._observability_dispatcher.finish_shielded_dispatches()
         await self._notification_sender.send_what_is_left()

@@ -1,4 +1,3 @@
-import asyncio
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
@@ -190,10 +189,8 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_turn_cut_between_a_completion_s_write_and_its_notification_still_leaves_it() -> (
-    None
-):
-    # A completed download is never notified again, so a notification lost here is lost for good.
+async def test_nothing_is_awaited_between_a_completion_s_write_and_its_notification() -> None:
+    # A completed download is never notified again, so a turn cut between the two would lose it.
     tracked_download_store = FakeTrackedDownloadStore()
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     observability = ObservabilityOverFakes()
@@ -202,17 +199,12 @@ async def test_a_turn_cut_between_a_completion_s_write_and_its_notification_stil
         tracked_download_store=tracked_download_store,
         observability_dispatcher=observability.dispatcher,
     )
-    turn = asyncio.create_task(cycle.run_once())
-    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
+    observability.watch_for_a_suspension()
 
-    turn.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await turn
+    await cycle.run_once()
 
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
-    assert [notification for _, notification in observability.notifications] == [
-        CompletedDownload(target_titles=(), filename=HASH_A, node_id=NODE_ID)
-    ]
+    assert observability.suspended_before_each_leave == [False]
 
 
 @pytest.mark.asyncio

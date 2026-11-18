@@ -1,4 +1,3 @@
-import asyncio
 from dataclasses import replace
 
 import pytest
@@ -248,8 +247,8 @@ async def test_the_disk_failing_on_a_node_without_a_floor_raises() -> None:
 
 
 @pytest.mark.asyncio
-async def test_an_alert_whose_turn_is_cut_before_its_dispatch_ran_is_still_left() -> None:
-    # The rule is already failing once its alert is left: one lost here is never sent again.
+async def test_nothing_is_awaited_between_a_rule_turning_failing_and_its_alert() -> None:
+    # The rule is already failing once its alert is left: a turn cut between would lose it.
     observability = ObservabilityOverFakes()
     alerter = HealthAlerter(
         observability_dispatcher=observability.dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
@@ -260,11 +259,9 @@ async def test_an_alert_whose_turn_is_cut_before_its_dispatch_ran_is_still_left(
         previous=HealthState.HEALTHY,
         current=HealthState.FAILING,
     )
-    turn = asyncio.create_task(alerter.send(transition))
-    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
+    observability.watch_for_a_suspension()
 
-    turn.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await turn
+    await alerter.send(transition)
 
     assert [notification for _, notification in observability.notifications] == [_UNREACHABLE]
+    assert observability.suspended_before_each_leave == [False]

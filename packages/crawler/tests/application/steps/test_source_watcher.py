@@ -1,7 +1,6 @@
 """Source tracking: the sources of each of our downloads the client lists, read every
 ``sources_interval`` from one turn's start to the next one's, recorded and alerted on."""
 
-import asyncio
 import sqlite3
 from collections.abc import Iterator
 from datetime import timedelta
@@ -469,7 +468,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_turn_cut_between_a_source_s_points_and_its_alert_still_leaves_it() -> None:
+async def test_nothing_is_awaited_between_a_source_s_points_and_its_alert() -> None:
     # The points are written before the alert: the next round reads them as earlier ones, no alert.
     source_client = FakeSourceClient(readings={HASH_A: (_read(_PEER, source_name="AnimuseeFMR"),)})
     observability = ObservabilityOverFakes()
@@ -479,16 +478,11 @@ async def test_a_turn_cut_between_a_source_s_points_and_its_alert_still_leaves_i
         tracked_download_store=_tracking(HASH_A),
         observability_dispatcher=observability.dispatcher,
     )
-    turn = asyncio.create_task(watcher.run_once())
-    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
+    observability.watch_for_a_suspension()
 
-    turn.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await turn
+    await watcher.run_once()
 
-    assert _alerts(observability) == [
-        _alert(_PEER, source_name="AnimuseeFMR", absent_for=None, filename=HASH_A, target_titles=())
-    ]
+    assert observability.suspended_before_each_leave == [False]
 
 
 @pytest.mark.asyncio

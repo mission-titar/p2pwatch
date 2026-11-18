@@ -5,7 +5,6 @@ Real engine + real SQLite stores + the real dispatch step over fakes; ``waker`` 
 catalog knows.
 """
 
-import asyncio
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -761,7 +760,7 @@ async def test_each_row_carries_the_instant_read_right_before_its_write(
 
 
 @pytest.mark.asyncio
-async def test_a_turn_cut_between_a_decision_s_write_and_its_notification_still_leaves_it(
+async def test_nothing_is_awaited_between_a_decision_s_write_and_its_notification(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -769,34 +768,20 @@ async def test_a_turn_cut_between_a_decision_s_write_and_its_notification_still_
     engine: MatchingEngine,
     wall_clock: FakeWallClock,
 ) -> None:
-    # The next judgement sees no change, so a notification lost here is lost for good.
+    # The next judgement sees no change, so a turn cut between the two would lose it for good.
     observability = ObservabilityOverFakes()
-    turn = asyncio.create_task(
-        _record(
-            _HASH_DL,
-            filename=_DL_NAME,
-            observation_store=observation_store,
-            decision_store=decision_store,
-            engine=engine,
-            waker=FakeWaker(),
-            observability=observability,
-            wall_clock=wall_clock,
-        )
-    )
-    await asyncio.sleep(0)  # noqa: TID251  # the turn runs to its dispatch's task, not yet run
+    observability.watch_for_a_suspension()
 
-    turn.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await turn
+    await _record(
+        _HASH_DL,
+        filename=_DL_NAME,
+        observation_store=observation_store,
+        decision_store=decision_store,
+        engine=engine,
+        waker=FakeWaker(),
+        observability=observability,
+        wall_clock=wall_clock,
+    )
 
     assert count_decisions(catalog_connection) == 1
-    assert [notification for _, notification in observability.notifications] == [
-        TierRise(
-            tier=DecisionTier.DOWNLOAD,
-            target_titles=(TargetTitle(target_id=TargetId("062A"), title=_TITLE_A),),
-            file=_key(_HASH_DL),
-            filename=_DL_NAME,
-            size_bytes=_SIZE,
-            node_id=_NODE_ID,
-        )
-    ]
+    assert observability.suspended_before_each_leave == [False]
