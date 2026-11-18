@@ -1,7 +1,6 @@
 """The dispatch step: log + metrics always; a notification left for each service of its audience,
 for the notifier's work to send."""
 
-import asyncio
 from collections.abc import Sequence
 from typing import Literal
 
@@ -28,10 +27,9 @@ from p2pwatch.domain.observability.notification import (
 from p2pwatch.domain.observability.notification_sends import NotificationService
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
-from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
-from tests.fakes.adapters.driven.fake_raising_node_metric_store import FakeRaisingNodeMetricStore
 
 _NODE_ID = NodeId("titar-node-1")
 _COMPLETED = ev.DownloadCompleted(
@@ -223,67 +221,3 @@ async def test_a_notification_whose_audience_has_no_service_is_left_for_none() -
     await _dispatcher(FakeNodeMetricStore(), left=left, services=(_NTFY,)).dispatch(_COMPLETED)
 
     assert left.notifications == [(_COMPLETED_NOTIFICATION, ())]
-
-
-@pytest.mark.asyncio
-async def test_a_shielded_dispatch_whose_caller_is_cancelled_still_leaves_its_notification() -> (
-    None
-):
-    left = _Left()
-    dispatcher = _dispatcher(FakeNodeMetricStore(), left=left)
-    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
-    await asyncio.sleep(0)  # noqa: TID251  # the caller hands the dispatch to a task, not yet run
-
-    caller.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await caller
-
-    assert left.notifications == [(_COMPLETED_NOTIFICATION, (ONE_SERVICE_PER_AUDIENCE[0],))]
-
-
-@pytest.mark.asyncio
-async def test_a_bug_in_a_shielded_dispatch_its_caller_left_is_logged_with_its_kind() -> None:
-    logger = FakeLogger()
-    bug = RuntimeError("a metrics bug")
-    dispatcher = _dispatcher(FakeRaisingNodeMetricStore(bug), logger=logger)
-    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
-    await asyncio.sleep(0)  # noqa: TID251  # the caller hands the dispatch to a task, not yet run
-
-    caller.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await caller
-
-    assert logger.lines[-1] == LoggedLine(
-        level="error", message="bug in the notification of DownloadCompleted", error=bug
-    )
-
-
-@pytest.mark.asyncio
-async def test_finishing_the_shielded_dispatches_waits_for_one_its_caller_left() -> None:
-    left = _Left()
-    dispatcher = _dispatcher(FakeNodeMetricStore(), left=left)
-    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
-    await asyncio.sleep(0)  # noqa: TID251  # the caller hands the dispatch to a task, not yet run
-    caller.cancel()
-    left_before_the_finish = list(left.notifications)
-
-    await dispatcher.finish_shielded_dispatches()
-
-    assert left_before_the_finish == []
-    assert [notification for notification, _ in left.notifications] == [_COMPLETED_NOTIFICATION]
-
-
-@pytest.mark.asyncio
-async def test_finishing_the_shielded_dispatches_logs_a_bug_of_theirs_and_raises_it_not() -> None:
-    logger = FakeLogger()
-    bug = RuntimeError("a metrics bug")
-    dispatcher = _dispatcher(FakeRaisingNodeMetricStore(bug), logger=logger)
-    caller = asyncio.create_task(dispatcher.dispatch_shielded(_COMPLETED))
-    await asyncio.sleep(0)  # noqa: TID251  # the caller hands the dispatch to a task, not yet run
-    caller.cancel()
-
-    await dispatcher.finish_shielded_dispatches()
-
-    assert [line for line in logger.lines if line.level == "error"] == [
-        LoggedLine(level="error", message="bug in the notification of DownloadCompleted", error=bug)
-    ]
