@@ -252,9 +252,7 @@ class AmuleClientWorks:
         return works_in_start_order(
             status_watcher=SupervisedWork(
                 work=status_watcher,
-                time_limit=self._time_limits.of_status_reading(
-                    channel_count=len(self._channel_dependencies)
-                ),
+                time_limit=self._time_limits.of_status_reading(),
                 dependencies=(self._status_reading_dependency,),
             ),
             tracking=(
