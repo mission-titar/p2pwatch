@@ -276,7 +276,7 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 | 90 | `docs/lot-4b5-wrap` | closing block | |
 | 93 | `refactor/health-alerts-name-their-parts` | the alerter given the parts it alerts on, each with what its alert names (Corrected: added on the operator's comment on #791, "Pourquoi None pour la webui ?", the shape approved on 2026-11-18) | |
 | 96 | `refactor/health-part-name-and-rules` | a component its name and its rules alone (Corrected: cut out of block 93, which came to 386 lines and 23 files, the lead on 2026-11-18) | |
-| 98 | `refactor/rebuilt-by-construction` | each object built whole at each restart, the supervisor holding the latest (Corrected: added on the operator's comment on #791, "Pourquoi on a besoin d'une fonction de rebuild, vs détruire l'objet et le construire", the shape approved on 2026-11-18) | |
+| 98 | `refactor/rebuilt-by-construction` | each object built whole at each restart, the supervisor holding the latest (Corrected: added on the operator's comment on #791, "Pourquoi on a besoin d'une fonction de rebuild, vs détruire l'objet et le construire", the shape approved on 2026-11-18; 1 140 lines, 31 files, past both bounds, the port shared by the policy, the supervisor, the three objects and the fake, accepted by the operator on 2026-11-18, "A") | |
 
 ## 6. Limits and scope
 
