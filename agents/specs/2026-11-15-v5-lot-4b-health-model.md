@@ -12,6 +12,10 @@ concepts are named (2026-11-13 to 2026-11-15). This spec keeps the operator's ea
 2026-11-12) and states them with those names. The first stack stays open, read only as a draft, and is closed unmerged
 once the last lot below has merged.
 
+(Corrected: lot 4b6, `agents/specs/2026-11-18-v5-lot-4b6-health-model-redrawn.md`, replaces D1, D4, D6 and D14 to D16
+and adds a word to D18, settled with the operator on 2026-11-18; so are the limits of section 6 on rebuilds in
+vain, the notifier's count, a keyword's bug rebuilding its client and a notification lost when the process dies.)
+
 ## 1. In short
 
 Today an unexpected error anywhere in the crawler (a bug in a Kad search, a refused password) stops the whole node,
