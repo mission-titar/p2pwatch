@@ -1,19 +1,19 @@
-"""``Restartable``: an object holding state in memory that the node can rebuild, such as the aMule
-client and its session."""
+"""``Restartable``: an object holding state in memory that the node can restart, such as a client
+logged in to aMule; its ``RestartableBuilder`` builds a new one at each restart."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 
 class Restartable[W](ABC):
-    """An object holding state in memory, such as the aMule client and its session with aMule: a
-    rebuild builds that state anew, and hands back the works ``W`` to run over it."""
+    """An object holding state in memory, such as a client logged in to aMule and the works ``W``
+    over it: built whole, it never changes; a restart closes it and builds another."""
 
     @abstractmethod
-    def __str__(self) -> str:
-        """The object as the log names it, such as ``client amuled``."""
+    def works(self) -> Sequence[W]:
+        """The works over its state, such as every search over the client's session."""
 
     @abstractmethod
-    async def rebuild(self) -> Sequence[W]:
-        """Builds its state anew, such as a new session with aMule, and returns the works over it;
-        the works over the old state are stopped before."""
+    async def close(self) -> None:
+        """Releases its state, such as the session with aMule logged out; a second close does
+        nothing more."""

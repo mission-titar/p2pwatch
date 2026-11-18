@@ -396,6 +396,7 @@ depends_on = [
   "p2pwatch.application.ports.driven.policy_fingerprint_reader",
   "p2pwatch.application.ports.driven.policy_fingerprint_writer",
   "p2pwatch.application.ports.driven.restartable",
+  "p2pwatch.application.ports.driven.restartable_builder",
   "p2pwatch.application.ports.driven.run_state_reader",
   "p2pwatch.application.ports.driven.search_client",
   "p2pwatch.application.ports.driven.source_client",
@@ -468,6 +469,7 @@ depends_on = [
   "p2pwatch.application.crawler_lifecycle",
   "p2pwatch.application.ports.driven.monotonic_clock",
   "p2pwatch.application.ports.driven.restartable",
+  "p2pwatch.application.ports.driven.restartable_builder",
   "p2pwatch.application.ports.driven.status_reading_writer",
   "p2pwatch.application.ports.driven.waker",
   "p2pwatch.application.ports.driven.wall_clock",
@@ -646,6 +648,11 @@ depends_on = []
 path = "p2pwatch.application.ports.driven.restartable"
 layer = "ports"
 depends_on = []
+
+[[modules]]
+path = "p2pwatch.application.ports.driven.restartable_builder"
+layer = "ports"
+depends_on = ["p2pwatch.application.ports.driven.restartable"]
 
 [[modules]]
 path = "p2pwatch.application.ports.driven.run_state_reader"

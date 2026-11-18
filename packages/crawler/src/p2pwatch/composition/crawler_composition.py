@@ -8,12 +8,13 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (migrations applied at startup, a failed one stopping the start).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
-  over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartable`` rebuilds
-  the client and its works when the ``RestartPolicy`` asks.
-- ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartable`` rebuilds it and
-  the watch over it when the ``RestartPolicy`` asks.
-- ONE ``AppriseNotifier`` at a time, which ``NotifierRestartable`` rebuilds when the
-  ``RestartPolicy`` asks; the dispatcher asks it for the notifier at each send.
+  over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartableBuilder``
+  builds the client and its works anew when the ``RestartPolicy`` asks.
+- ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartableBuilder`` builds it
+  and the watch over it anew when the ``RestartPolicy`` asks.
+- ONE ``AppriseNotifier`` at a time, which ``NotifierRestartableBuilder`` builds anew when the
+  ``RestartPolicy`` asks; the dispatcher asks the supervisor for the latest at each send.
+The ``Supervisor`` holds the object each builder built latest, and closes them at the unwind.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
 source tracking when configured, and the webui's thread watch, which ``CrawlerLifecycle`` runs
@@ -37,7 +38,7 @@ import apprise
 import httpx
 
 import p2pwatch.adapters.driving.webui
-from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
+from p2pwatch.adapters.driven.amule_api.amule_api_client import CHANNELS, AmuleApiClient
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
@@ -116,12 +117,12 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
-from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
+from p2pwatch.composition.amule_client_restartable import AmuleClientRestartableBuilder
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.health_subscriber_built_later import HealthSubscriberBuiltLater
 from p2pwatch.composition.node_restart_policy import node_restart_policy
-from p2pwatch.composition.notifier_restartable import NotifierRestartable
-from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
+from p2pwatch.composition.notifier_restartable import NotifierRestartableBuilder
+from p2pwatch.composition.webui_restartable import WebuiRestartableBuilder, webui_thread_watch_over
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
@@ -401,12 +402,6 @@ class CrawlerComposition(CrawlerRunner):
             policy_fingerprint_store = SqlitePolicyFingerprintStore(local_connection)
             observability = crawler_config.observability
             node_metric_store = InMemoryNodeMetricStore()
-            notifier = NotifierRestartable(
-                build_notifier=lambda: AppriseNotifier(
-                    tuple((t.url, t.audience, t.node_prefix) for t in observability.notifications),
-                    apprise_factory=apprise.Apprise,
-                )
-            )
             # Set once the client's parts are built, which it alerts on; the dispatcher it sends
             # through records each send on the node's health.
             alerts = HealthSubscriberBuiltLater("the alerts")
@@ -415,14 +410,34 @@ class CrawlerComposition(CrawlerRunner):
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
             )
+            supervisor = Supervisor(
+                run_state_reader=run_state_store,
+                monotonic_clock=monotonic_clock,
+                node_health=node_health,
+                logger=StdlibLogger(Supervisor.__module__),
+            )
+            # The objects it holds then, closed at the unwind before the database connections.
+            stack.push_async_callback(supervisor.close)
+            notifier = await supervisor.build_first(
+                NotifierRestartableBuilder(
+                    build_notifier=lambda: AppriseNotifier(
+                        tuple(
+                            (t.url, t.audience, t.node_prefix) for t in observability.notifications
+                        ),
+                        apprise_factory=apprise.Apprise,
+                    )
+                )
+            )
             observability_dispatcher = ObservabilityDispatcher(
                 logger=StdlibLogger(ObservabilityDispatcher.__module__),
                 node_metric_writer=node_metric_store,
-                current_notifier=notifier.notifier,
+                current_notifier=lambda: notifier.latest().notifier,
                 notification_timeout_seconds=observability.notification_timeout_seconds,
                 record_check=node_health.record,
                 # Built once: a notifier rebuilt on the same configuration lists the same services.
-                service_components=notification_service_components(notifier.notifier().services()),
+                service_components=notification_service_components(
+                    notifier.latest().notifier.services()
+                ),
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
@@ -459,13 +474,11 @@ class CrawlerComposition(CrawlerRunner):
                     thread, component=webui_part, monotonic_clock=monotonic_clock
                 )
 
-            webui_thread = build_webui_thread()
-            webui = WebuiRestartable(
-                webui_thread, build_thread=build_webui_thread, works_over=webui_works_over
+            webui = await supervisor.build_first(
+                WebuiRestartableBuilder(
+                    build_thread=build_webui_thread, works_over=webui_works_over
+                )
             )
-            # The thread held then, stopped at the unwind before the database connections close.
-            stack.push_async_callback(webui.close)
-            await webui_thread.start()
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
             # (backoff survives restart, spec §3/§7), injected into ALL workers + the saver the
             # searches share. Single writer on the event loop.
@@ -506,10 +519,9 @@ class CrawlerComposition(CrawlerRunner):
                     search_start_store=search_start_store,
                 )
 
-            client = build_client()
             client_works = AmuleClientWorks(
                 client_name=_AMULE_CLIENT_NAME,
-                channels=client.channels(),
+                channels=CHANNELS,
                 keywords=crawler_config.search.keywords,
                 download_steps=(
                     None
@@ -543,7 +555,7 @@ class CrawlerComposition(CrawlerRunner):
                 wall_clock=wall_clock,
                 monotonic_clock=monotonic_clock,
                 time_limits=AmuleWorkTimeLimits(
-                    request_bound=client.request_bound,
+                    request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
                     search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
                     notification_timeout=timedelta(
                         seconds=observability.notification_timeout_seconds
@@ -552,34 +564,23 @@ class CrawlerComposition(CrawlerRunner):
                 ),
             )
             alerts.set(client_works.health_alerter(node_id=node_id).send)
-            amule_client = AmuleClientRestartable(
-                client,
-                client_name=_AMULE_CLIENT_NAME,
-                build_client=build_client,
-                works_over=client_works.over,
+            amule_client = await supervisor.build_first(
+                AmuleClientRestartableBuilder(
+                    client_name=_AMULE_CLIENT_NAME,
+                    build_client=build_client,
+                    works_over=client_works.over,
+                )
             )
-            # The client held then, not this first one, which a rebuild replaces.
-            stack.push_async_callback(amule_client.close)
-            await client.open()
-            works_of = {
-                amule_client: client_works.over(client),
-                webui: webui_works_over(webui_thread),
-            }
-            works = [supervised for works in works_of.values() for supervised in works]
+            objects = (amule_client, webui)
+            works = [supervised for held in objects for supervised in held.latest().works()]
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
                 parts = ", ".join(component.name for component in supervised.components)
                 _logger.debug("%s: turns recorded on %s", supervised.work, parts)
-            supervisor = Supervisor(
-                run_state_reader=run_state_store,
-                monotonic_clock=monotonic_clock,
-                node_health=node_health,
-                logger=StdlibLogger(Supervisor.__module__),
-            )
             restart_policy.set(
                 node_restart_policy(
-                    works_of,
+                    objects,
                     notifier=notifier,
                     observability_dispatcher=observability_dispatcher,
                     supervisor=supervisor,

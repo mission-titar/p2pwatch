@@ -1,15 +1,18 @@
 """Runs every task the node repeats, such as the status reading, until the shutdown is requested,
 then cancels them all; a turn that raises or outlasts its time limit fails alone, the others go
-on, and whether it met a bug is recorded on the parts it is about. It also restarts an object such
-as the aMule client when the restart policy asks."""
+on, and whether it met a bug is recorded on the parts it is about. It also holds the objects the
+node can restart, such as the aMule client, and restarts one when the restart policy asks."""
 
 import asyncio
 from collections.abc import Sequence
+from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import NoReturn, Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
+from p2pwatch.application.ports.driven.restartable import Restartable
+from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.restart_policy import RestartRequest
@@ -30,9 +33,36 @@ class ShutdownBoundArmer(Protocol):
     def __call__(self) -> None: ...
 
 
+class HeldRestartable[R: Restartable[SupervisedWork]]:
+    """The object a builder built latest, such as the notifier the next send goes to: the
+    supervisor replaces it at each restart."""
+
+    def __init__(self, first: R, *, builder: RestartableBuilder[R]) -> None:
+        self._object = first
+        self._builder = builder
+
+    @property
+    def builder(self) -> RestartableBuilder[R]:
+        return self._builder
+
+    def latest(self) -> R:
+        """The object its builder built latest, such as the notifier the next send goes to."""
+        return self._object
+
+    async def _replace(self) -> Sequence[SupervisedWork]:
+        """Closes the object, then holds the next its builder builds and returns its works; a
+        build that raises leaves the closed one held, closed again by the next attempt."""
+        await self._object.close()
+        self._object = await self._builder.build()
+        return self._object.works()
+
+    async def _close(self) -> None:
+        await self._object.close()
+
+
 class Supervisor:
-    """Takes the turns of the works it is given, and those of the works a restart hands back, until
-    the run state says the shutdown was requested."""
+    """Takes the turns of the works it is given, and those of the objects a restart builds, until
+    the run state says the shutdown was requested; holds the object each builder built latest."""
 
     def __init__(
         self,
@@ -49,6 +79,26 @@ class Supervisor:
         self._restart_requests: asyncio.Queue[RestartRequest] = asyncio.Queue()
         # Each work's task while it runs, so a restart can stop the works over its object.
         self._running: dict[asyncio.Task[None], SupervisedWork] = {}
+        self._held: dict[
+            RestartableBuilder[Restartable[SupervisedWork]],
+            HeldRestartable[Restartable[SupervisedWork]],
+        ] = {}
+
+    async def build_first[R: Restartable[SupervisedWork]](
+        self, builder: RestartableBuilder[R]
+    ) -> HeldRestartable[R]:
+        """Has ``builder`` build its first object, such as the webui serving on its thread, and
+        holds it: a restart replaces it, and ``close`` closes the one held then."""
+        held = HeldRestartable(await builder.build(), builder=builder)
+        self._held[builder] = held
+        return held
+
+    async def close(self) -> None:
+        """Closes the object each builder built latest, the latest built first, as the shutdown
+        does once every work has stopped; one that raises lets the others close."""
+        async with AsyncExitStack() as closing:
+            for held in self._held.values():
+                closing.push_async_callback(held._close)
 
     async def supervise(
         self,
@@ -87,8 +137,8 @@ class Supervisor:
                 restarts.create_task(self._restart(request, group=group))
 
     async def _restart(self, request: RestartRequest, *, group: asyncio.TaskGroup) -> None:
-        """Stops the works over the request's object, then has it rebuilt; a rebuild that raises
-        is tried again 60 s later, as long as the policy allows."""
+        """Stops the works over the request's object, then closes it and has its builder build
+        another; a rebuild that raises is tried again 60 s later, as long as the policy allows."""
         await self._stop_works_recorded_on(request.components)
         while not await self._rebuilt(request, group=group):
             if not request.rebuild_raised():
@@ -107,18 +157,18 @@ class Supervisor:
             await asyncio.wait((task,))
 
     async def _rebuilt(self, request: RestartRequest, *, group: asyncio.TaskGroup) -> bool:
-        """Has the request's object rebuilt and runs the works it hands back; whether it was, a
-        rebuild that raised recorded as a bug on each of its parts."""
-        restartable = request.restartable
+        """Closes the request's object, holds the one its builder builds next and runs the works
+        over it; whether it was built, a rebuild that raised recorded as a bug on each part."""
+        builder = request.builder
         try:
-            works = await restartable.rebuild()
+            works = await self._held[builder]._replace()
         except ExpectedError as error:  # aMule refusing the new login's password
-            self._logger.warning("rebuild of %s: %s", restartable, error)
+            self._logger.warning("rebuild of %s: %s", builder, error)
         except Exception as error:  # the boundary of a rebuild, by design
-            self._logger.exception("bug in the rebuild of %s", restartable, error=error)
+            self._logger.exception("bug in the rebuild of %s", builder, error=error)
         else:
             request.rebuilt()
-            self._logger.info("%s rebuilt", restartable)
+            self._logger.info("%s rebuilt", builder)
             for supervised in works:
                 self._add(supervised, group=group)
             return True

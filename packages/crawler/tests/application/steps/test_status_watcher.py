@@ -44,7 +44,7 @@ from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
@@ -536,25 +536,19 @@ class _RebuiltNode:
         self.client_part = self.observability.client_part
         self._channel_parts = self.observability.channel_parts
         self._status_reading_part = status_reading_component(_AMULED)
-        self.amule_client = FakeRestartable(works_over=lambda _state: [self._status_reading()])
-        self._works = [self._status_reading()]
+        self.amule_client = FakeRestartableBuilder(
+            works_over=lambda _state: [self._status_reading()]
+        )
+        self._other_works: list[SupervisedWork] = []
         if kad_search_bug:
             kad_part = self._channel_parts[Channel("kad")]
             bug = SupervisedWork(work=_KadSearchBug(), time_limit=_HOUR, components=(kad_part,))
-            self._works.append(bug)
+            self._other_works.append(bug)
         self._run_state = FakeRunStateStore()
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=self._monotonic_clock,
             node_health=self.observability.node_health,
-            logger=FakeLogger(),
-        )
-        self._policy = RestartPolicy(
-            components_of={
-                self.amule_client: [self._status_reading_part, *self._channel_parts.values()]
-            },
-            works=self._works,
-            restart=self._supervisor.restart,
             logger=FakeLogger(),
         )
 
@@ -580,9 +574,20 @@ class _RebuiltNode:
 
     def run_for(self, seconds: float) -> None:
         self._loop.call_later(seconds, self._run_state.set_shutdown_requested)
-        self._loop.run_until_complete(
-            self._supervisor.supervise(self._works, arm_shutdown_bound=lambda: None)
+        self._loop.run_until_complete(self._run())
+
+    async def _run(self) -> None:
+        amule_client = await self._supervisor.build_first(self.amule_client)
+        works = [*amule_client.latest().works(), *self._other_works]
+        self._policy = RestartPolicy(
+            components_of={
+                self.amule_client: [self._status_reading_part, *self._channel_parts.values()]
+            },
+            works=works,
+            restart=self._supervisor.restart,
+            logger=FakeLogger(),
         )
+        await self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
 
 
 def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(
@@ -592,7 +597,7 @@ def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(
 
     node.run_for(19 * 60.0 + 1.0)
 
-    assert node.amule_client.rebuilt_at == []
+    assert node.amule_client.rebuilds() == 0
     assert node.client_part.state(CLIENT_UNREACHABLE) is HealthState.FAILING
 
 
@@ -605,7 +610,7 @@ def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_
 
     node.run_for(600.0 + 7 * 60.0 + 1.0)  # eight readings after the rebuild, all off
 
-    assert node.amule_client.rebuilt_at == [600.0]
+    assert node.amule_client.built_at == [0.0, 600.0]
     notifications = node.observability.notifier.notifications
     assert [notification for _, notification in notifications] == [
         _warning("amuled kad: off its network for 5 min")

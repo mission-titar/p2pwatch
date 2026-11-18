@@ -33,7 +33,7 @@ from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, 
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,12 +72,16 @@ class _Node:
     policy and the supervisor wired as the node wires them."""
 
     def __init__(self) -> None:
-        self.client = FakeRestartable("client amuled")
         self.client_part = client_component(ClientName("amuled"))
-        self.webui = FakeRestartable("webui")
-        self.notifier = FakeRestartable("notifier")
         self.status_reading_part = status_reading_component(ClientName("amuled"))
         self.webui_part = webui_component()
+        self.client = FakeRestartableBuilder(
+            "client amuled", works_over=lambda _: [_recorded_on(self.status_reading_part)]
+        )
+        self.webui = FakeRestartableBuilder(
+            "webui", works_over=lambda _: [_recorded_on(self.webui_part)]
+        )
+        self.notifier = FakeRestartableBuilder("notifier")
         self.service_parts = notification_service_components(ONE_SERVICE_PER_AUDIENCE)
         self._run_state = FakeRunStateStore()
         self.health_logger = FakeLogger()
@@ -106,15 +110,6 @@ class _Node:
             node_health=self.node_health,
             logger=FakeLogger(),
         )
-        self._policy: RestartPolicy = node_restart_policy(
-            {
-                self.client: [_recorded_on(self.status_reading_part)],
-                self.webui: [_recorded_on(self.webui_part)],
-            },
-            notifier=self.notifier,
-            observability_dispatcher=self.dispatcher,
-            supervisor=self._supervisor,
-        )
 
     async def _to_alerts(self, transition: HealthTransition) -> None:
         await self._alerter.send(transition)
@@ -124,14 +119,19 @@ class _Node:
 
     def rebuilds(self) -> tuple[int, int, int]:
         """How many times the client, the webui and the notifier were rebuilt."""
-        return (
-            len(self.client.rebuilt_at),
-            len(self.webui.rebuilt_at),
-            len(self.notifier.rebuilt_at),
-        )
+        return (self.client.rebuilds(), self.webui.rebuilds(), self.notifier.rebuilds())
 
     async def supervising(self, checks: Coroutine[None, None, None]) -> None:
-        """Records ``checks`` while the supervisor runs, then the restarts they asked for."""
+        """Builds each object, then records ``checks`` while the supervisor runs, then the
+        restarts they asked for."""
+        build_first = self._supervisor.build_first
+        client, webui = await build_first(self.client), await build_first(self.webui)
+        self._policy: RestartPolicy = node_restart_policy(
+            [client, webui],
+            notifier=await build_first(self.notifier),
+            observability_dispatcher=self.dispatcher,
+            supervisor=self._supervisor,
+        )
         supervision = asyncio.create_task(
             self._supervisor.supervise((), arm_shutdown_bound=lambda: None)
         )

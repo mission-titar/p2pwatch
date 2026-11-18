@@ -1,14 +1,16 @@
-"""The notifier as the node rebuilds it: built anew, no work handed back, the next send going to
-the notifier built latest."""
-
-from collections.abc import Sequence
+"""The notifier as the node builds it at each restart: a notifier built anew, no work over it."""
 
 import pytest
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.application.ports.driven.restartable import Restartable
-from p2pwatch.composition.notifier_restartable import NotifierRestartable
-from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
+from p2pwatch.composition.notifier_restartable import (
+    NotifierRestartable,
+    NotifierRestartableBuilder,
+)
+from tests.contracts.application.ports.driven.restartable_builder_contract import (
+    RestartableBuilderContract,
+)
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 
 
@@ -23,35 +25,23 @@ class _Notifiers:
         return self.built[-1]
 
 
-class TestNotifierRestartable(RestartableContract):
+class TestNotifierRestartableBuilder(RestartableBuilderContract):
     @pytest.fixture
-    def restartable(self) -> NotifierRestartable:
+    def builder(self) -> NotifierRestartableBuilder:
         self._notifiers = _Notifiers()
-        self._restartable = NotifierRestartable(build_notifier=self._notifiers.build)
-        return self._restartable
+        return NotifierRestartableBuilder(build_notifier=self._notifiers.build)
 
     def state_of(self, restartable: Restartable[object]) -> object:
         return self._notifiers.built[-1]
 
-    def state_under(self, works: Sequence[object]) -> object:
-        # No work runs over the notifier: the sends reach it through ``notifier()``.
-        assert list(works) == []
-        return self._restartable.notifier()
+    def state_reached(self, restartable: Restartable[object]) -> object:
+        # No work runs over the notifier: the dispatcher's sends reach it.
+        assert list(restartable.works()) == []
+        assert isinstance(restartable, NotifierRestartable)
+        return restartable.notifier
 
 
-def test_it_is_named_as_the_notifier_s_part_is() -> None:
-    notifier = NotifierRestartable(build_notifier=_Notifiers().build)
+def test_it_names_its_notifiers_as_the_notifier_s_part_is() -> None:
+    builder = NotifierRestartableBuilder(build_notifier=_Notifiers().build)
 
-    assert str(notifier) == "notifier"
-
-
-@pytest.mark.asyncio
-async def test_the_next_send_goes_to_the_notifier_built_latest() -> None:
-    notifiers = _Notifiers()
-    notifier = NotifierRestartable(build_notifier=notifiers.build)
-    first = notifier.notifier()
-
-    await notifier.rebuild()
-
-    assert notifiers.built[0] is first
-    assert notifier.notifier() is notifiers.built[1]
+    assert str(builder) == "notifier"

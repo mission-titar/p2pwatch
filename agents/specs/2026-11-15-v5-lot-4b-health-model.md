@@ -276,6 +276,7 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 | 90 | `docs/lot-4b5-wrap` | closing block | |
 | 93 | `refactor/health-alerts-name-their-parts` | the alerter given the parts it alerts on, each with what its alert names (Corrected: added on the operator's comment on #791, "Pourquoi None pour la webui ?", the shape approved on 2026-11-18) | |
 | 96 | `refactor/health-part-name-and-rules` | a component its name and its rules alone (Corrected: cut out of block 93, which came to 386 lines and 23 files, the lead on 2026-11-18) | |
+| 98 | `refactor/rebuilt-by-construction` | each object built whole at each restart, the supervisor holding the latest (Corrected: added on the operator's comment on #791, "Pourquoi on a besoin d'une fonction de rebuild, vs détruire l'objet et le construire", the shape approved on 2026-11-18) | |
 
 ## 6. Limits and scope
 
@@ -344,7 +345,7 @@ Each concept, what it is, and an example. The glossary gains each line in the bl
 | `SupervisedWork` | a work, its time limit, and from lot 4b4 the components its turns are recorded on | |
 | `ExpectedError` | an error the code expects from outside: aMule down, a search refused, a full disk; any other exception is a bug | `ClientError`, `StoreError` |
 | `TurnTimeoutError` | a turn cut past its time limit, counted as a bug | |
-| `Restartable` | an object holding state in memory that the node can rebuild | the aMule client, the webui, the notifier |
+| `Restartable` | an object holding state in memory that the node can rebuild (Corrected: built whole, it never changes; it hands back its works and closes itself, and its `RestartableBuilder` builds a new one at each restart, the supervisor holding the latest, a `HeldRestartable`; lot 4b5 block 98) | the aMule client, the webui, the notifier |
 | `RestartPolicy` | decides when to rebuild an object, and stops after three rebuilds in vain | |
 | `BackoffSaver` | sets the channels' backoff in its store after each search turn | |
 | `LatestSearchStart` | when a client last started a search on a channel, for one scope | eD2k at 12:00:00 |
@@ -540,9 +541,14 @@ its turn, the first one included, its wait computed from its own state.
   `Restartable` is generic in the works it hands back, `Restartable[W]`, since a port cannot import the steps, and
   `SupervisedWork` moved to `work.py`, so the policy and the supervisor import each other's names without a cycle.) The rebuild runs in a task of the supervisor, never in the turn that triggered it: the supervisor stops
   and awaits the object's works (Corrected: once, before the first attempt, not before each: a rebuild that raises
-  hands no work back), the object rebuilds and hands its new works back, and only the bugs rules of its
+  hands no work back), the object rebuilds and hands its new works back (Corrected: the supervisor closes the
+  object, its builder builds another, whose works it runs; a rebuild that raises leaves the closed one held,
+  closed again at the next attempt; lot 4b5 block 98), and only the bugs rules of its
   components are forgotten (forgetting a reading's rule would lose an open alert's end or send it twice). The aMule
-  client's `Restartable`, in its own composition module, rebuilds every object holding the client; the composition
+  client's `Restartable`, in its own composition module, rebuilds every object holding the client (Corrected:
+  `AmuleClientRestartableBuilder` builds a client logged in and every work over it at each call, the first
+  included, an `AmuleClientRestartable` that never changes; the supervisor holds the latest and closes it at the
+  shutdown, where the composition's resource stack closed the holder; lot 4b5 block 98); the composition
   names each component's object, a component without one refused at construction (Corrected: the refusal is the
   policy's, built over the map and the works: a part of two objects, a work recorded on no part or on a part of no
   object, brought back by the closing block; the map is derived from the works the client's first build hands
@@ -568,7 +574,10 @@ its turn, the first one included, its wait computed from its own state.
   replaces `amule_client_restart_policy`, mapping each object to the parts its first works are recorded on, the
   notifier to the parts of its services through `parts_without_works`, which the closing block replaced by reading
   them from the dispatcher, with one debug line per object; the work named `webui` in the log, as its part, since
-  the closing block.)
+  the closing block.) (Corrected: since block 98, `WebuiRestartableBuilder` serves the webui on a thread built
+  anew at each call, the first included, a `WebuiRestartable` whose close stops that thread; the supervisor closes
+  the old one before the build, and a build cut while its thread binds stops that thread; `node_restart_policy`
+  maps the objects the supervisor holds, each `HeldRestartable` its `build_first` hands back.)
 - **Block 20** (draft #743): the webui's `Restartable`, rebuilt by the composition; a rebuild whose port is held
   elsewhere does not raise, the watch fails it again, three rebuilds in vain. (Corrected: merged into block 10.)
 - **Block 30** (draft #744): the dispatcher records each send on the notifier's component, after every send of the
@@ -576,7 +585,9 @@ its turn, the first one included, its wait computed from its own state.
   send past `N` seconds records detected on "sends failed" and not detected on bugs; any other exception records
   detected on bugs and nothing on "sends failed". (Corrected: merged with block 40, "reco ok, b"; each send on its
   service's part since block 53; a send whose notifier was rebuilt meanwhile is recorded on no part, since the
-  closing block.)
+  closing block.) (Corrected: since block 98, `NotifierRestartableBuilder` builds a `NotifierRestartable` at each
+  call, which never changes, and the dispatcher's indirection reads the notifier from the supervisor's
+  `HeldRestartable`; a rebuild of the notifier that raises leaves the one before held, which the sends go on to.)
 - **Block 40** (draft #745): the notifier's `Restartable`, the dispatcher holding the rebuilt notifier through one
   indirection; a send in flight finishes on the old one. (Corrected: merged into block 30.)
 - **Block 50** (draft #746, and #754's contract): the notifier lists its services and sends to one; one apprise object

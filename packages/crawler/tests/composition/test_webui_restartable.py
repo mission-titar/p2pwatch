@@ -1,6 +1,7 @@
-"""The webui as the node rebuilds it: the old thread stopped, the webui served on a thread built
-anew, the watch over it handed back; the node's shutdown stops the thread held then."""
+"""The webui as the node builds it at each restart: served on a thread built anew, the watch over
+that thread; its close stops the thread."""
 
+import asyncio
 import socket
 import threading
 from collections.abc import AsyncIterator, Sequence
@@ -18,9 +19,15 @@ from p2pwatch.adapters.driving.webui.uvicorn_server_thread import UvicornServerT
 from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.steps.webui_thread_watch import WebuiThreadEndedError
 from p2pwatch.application.steps.work import SupervisedWork, Work
-from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
+from p2pwatch.composition.webui_restartable import (
+    WebuiRestartable,
+    WebuiRestartableBuilder,
+    webui_thread_watch_over,
+)
 from p2pwatch.domain.work_components import webui_component
-from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
+from tests.contracts.application.ports.driven.restartable_builder_contract import (
+    RestartableBuilderContract,
+)
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
 
@@ -77,12 +84,10 @@ async def threads() -> AsyncIterator[_Threads]:
         await thread.stop()
 
 
-@pytest_asyncio.fixture
-async def webui(threads: _Threads) -> WebuiRestartable:
-    """A webui whose first thread serves, its works ``_works_over``."""
-    webui = WebuiRestartable(threads.build(), build_thread=threads.build, works_over=_works_over)
-    await threads.built[0].start()
-    return webui
+@pytest.fixture
+def webui(threads: _Threads) -> WebuiRestartableBuilder:
+    """The webui's builder, its threads ``threads``, its works ``_works_over``."""
+    return WebuiRestartableBuilder(build_thread=threads.build, works_over=_works_over)
 
 
 def _webui_threads() -> list[threading.Thread]:
@@ -95,63 +100,77 @@ async def _served(thread: UvicornServerThread) -> str:
         return (await http.get(f"http://{host}:{port}/")).text
 
 
-class TestWebuiRestartable(RestartableContract):
+class TestWebuiRestartableBuilder(RestartableBuilderContract):
     @pytest.fixture
-    def restartable(self, *, threads: _Threads, webui: WebuiRestartable) -> WebuiRestartable:
-        self._threads = threads
+    def builder(self, webui: WebuiRestartableBuilder) -> WebuiRestartableBuilder:
         return webui
 
     def state_of(self, restartable: Restartable[object]) -> object:
-        return self._threads.built[-1]
+        assert isinstance(restartable, WebuiRestartable)
+        return restartable.thread
 
-    def state_under(self, works: Sequence[object]) -> object:
-        [supervised] = works
+    def state_reached(self, restartable: Restartable[object]) -> object:
+        [supervised] = restartable.works()
         assert isinstance(supervised, SupervisedWork)
         assert isinstance(supervised.work, _Over)
         return supervised.work.thread
 
 
-def test_it_is_named_as_the_webui_s_part_is() -> None:
+def test_it_names_its_webuis_as_the_webui_s_part_is() -> None:
     threads = _Threads()
-    webui = WebuiRestartable(threads.build(), build_thread=threads.build, works_over=_works_over)
+    webui = WebuiRestartableBuilder(build_thread=threads.build, works_over=_works_over)
 
     assert str(webui) == "webui"
 
 
 @pytest.mark.asyncio
-async def test_a_rebuild_stops_the_old_thread_and_serves_on_a_new_one(
-    *, threads: _Threads, webui: WebuiRestartable
+async def test_each_build_serves_the_webui_on_a_thread_of_its_own(
+    webui: WebuiRestartableBuilder,
 ) -> None:
-    await webui.rebuild()
+    restartable = await webui.build()
 
-    assert [thread.is_alive() for thread in threads.built] == [False, True]
-    assert await _served(threads.built[-1]) == "ok"
+    assert await _served(restartable.thread) == "ok"
     assert len(_webui_threads()) == 1
 
 
 @pytest.mark.asyncio
 async def test_a_webui_whose_thread_ended_serves_again_once_rebuilt(
-    *, threads: _Threads, webui: WebuiRestartable
+    webui: WebuiRestartableBuilder,
 ) -> None:
-    await threads.built[0].stop()
+    first = await webui.build()
+    await first.thread.stop()
 
-    await webui.rebuild()
+    second = await webui.build()
 
-    assert [thread.is_alive() for thread in threads.built] == [False, True]
-    assert await _served(threads.built[-1]) == "ok"
+    assert [first.thread.is_alive(), second.thread.is_alive()] == [False, True]
+    assert await _served(second.thread) == "ok"
 
 
 @pytest.mark.asyncio
-async def test_a_close_stops_the_thread_held_then(webui: WebuiRestartable) -> None:
-    await webui.rebuild()
+async def test_a_close_stops_its_thread(webui: WebuiRestartableBuilder) -> None:
+    restartable = await webui.build()
 
-    await webui.close()
+    await restartable.close()
 
     assert _webui_threads() == []
 
 
 @pytest.mark.asyncio
-async def test_a_rebuild_on_a_port_held_elsewhere_raises_nothing_and_its_watch_finds_it_ended() -> (
+async def test_a_build_cut_while_its_thread_binds_stops_that_thread(threads: _Threads) -> None:
+    webui = WebuiRestartableBuilder(build_thread=threads.build, works_over=_works_over)
+    building = asyncio.create_task(webui.build())
+    await asyncio.sleep(0)  # noqa: TID251  # the thread starts, the build waits for its bind
+
+    building.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await building
+
+    assert len(threads.built) == 1
+    assert _webui_threads() == []
+
+
+@pytest.mark.asyncio
+async def test_a_build_on_a_port_held_elsewhere_raises_nothing_and_its_watch_finds_it_ended() -> (
     None
 ):
     webui_part = webui_component()
@@ -159,37 +178,36 @@ async def test_a_rebuild_on_a_port_held_elsewhere_raises_nothing_and_its_watch_f
         holder.bind(("127.0.0.1", 0))
         holder.listen()
         threads = _Threads(holder.getsockname())
-        webui = WebuiRestartable(
-            threads.build(),
+        webui = WebuiRestartableBuilder(
             build_thread=threads.build,
             works_over=lambda thread: webui_thread_watch_over(
                 thread, component=webui_part, monotonic_clock=FakeTime().monotonic
             ),
         )
-        await threads.built[0].start()
 
-        [watch] = await webui.rebuild()
-        await webui.close()  # waits for the thread the failed bind ended
+        restartable = await webui.build()
+        await restartable.close()  # waits for the thread the failed bind ended
 
+    [watch] = restartable.works()
     with pytest.raises(WebuiThreadEndedError):
         await watch.work.run_once()
 
 
 @pytest.mark.asyncio
-async def test_the_watch_handed_back_looks_at_the_thread_built_anew(threads: _Threads) -> None:
+async def test_the_watch_handed_back_looks_at_the_thread_it_built(threads: _Threads) -> None:
     webui_part = webui_component()
-    webui = WebuiRestartable(
-        threads.build(),
+    webui = WebuiRestartableBuilder(
         build_thread=threads.build,
         works_over=lambda thread: webui_thread_watch_over(
             thread, component=webui_part, monotonic_clock=FakeTime().monotonic
         ),
     )
-    await threads.built[0].start()
+    first = await webui.build()
+    await first.close()
 
-    [watch] = await webui.rebuild()
+    [watch] = (await webui.build()).works()
 
-    await watch.work.run_once()  # the old thread has ended, the new one serves
+    await watch.work.run_once()  # the first thread has ended, the new one serves
     assert (str(watch.work), watch.components) == ("webui", (webui_part,))
     # Its turn awaits nothing: its time limit is the margin alone.
     assert watch.time_limit == timedelta(minutes=5)

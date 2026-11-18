@@ -22,7 +22,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.virtual_time import VirtualLoop
 
 
@@ -90,20 +90,13 @@ class _Webui:
         self.part = webui_component()
         self.first_thread = _WebuiThread()
         self._rebuilt_threads_serve = rebuilt_threads_serve
-        self.webui = FakeRestartable("webui", works_over=self._works_over_a_new_thread)
+        self.webui = FakeRestartableBuilder("webui", works_over=self._works_over_a_thread)
         self._run_state = FakeRunStateStore()
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
             node_health=NodeHealth(logger=FakeLogger(), subscribers=(self._to_policy,)),
             logger=self.logger,
-        )
-        self._first_works = self._watch_over(self.first_thread)
-        self._policy = RestartPolicy(
-            components_of={self.webui: [self.part]},
-            works=self._first_works,
-            restart=self._supervisor.restart,
-            logger=FakeLogger(),
         )
 
     async def _to_policy(self, transition: HealthTransition) -> None:
@@ -117,7 +110,10 @@ class _Webui:
             SupervisedWork(work=watch, time_limit=timedelta(minutes=5), components=(self.part,))
         ]
 
-    def _works_over_a_new_thread(self, _state: object, /) -> Sequence[SupervisedWork]:
+    def _works_over_a_thread(self, _state: object, /) -> Sequence[SupervisedWork]:
+        """The first thread at the first build, then one built anew."""
+        if not self.webui.built:
+            return self._watch_over(self.first_thread)
         thread = _WebuiThread()
         if not self._rebuilt_threads_serve:
             thread.end()  # its bind failed: the port is held elsewhere
@@ -125,9 +121,17 @@ class _Webui:
 
     def run_for(self, seconds: float) -> None:
         self.loop.call_later(seconds, self._run_state.set_shutdown_requested)
-        self.loop.run_until_complete(
-            self._supervisor.supervise(self._first_works, arm_shutdown_bound=lambda: None)
+        self.loop.run_until_complete(self._run())
+
+    async def _run(self) -> None:
+        webui = await self._supervisor.build_first(self.webui)
+        self._policy = RestartPolicy(
+            components_of={self.webui: [self.part]},
+            works=webui.latest().works(),
+            restart=self._supervisor.restart,
+            logger=FakeLogger(),
         )
+        await self._supervisor.supervise(webui.latest().works(), arm_shutdown_bound=lambda: None)
 
     def bug_lines(self) -> int:
         return sum(1 for line in self.logger.lines if line.message == "bug in webui")
@@ -143,7 +147,7 @@ def test_a_thread_ended_has_the_webui_rebuilt_at_the_third_watch_after(
     webui.run_for(900.0)
 
     # Its looks at 120, 180 and 240 s met the ended thread; the new thread's watch finds it serving.
-    assert webui.webui.rebuilt_at == [240.0]
+    assert webui.webui.built_at == [0.0, 240.0]
     assert webui.bug_lines() == 3
     assert webui.part.state(BUGS) is HealthState.HEALTHY
 
@@ -157,5 +161,5 @@ def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vai
     webui.run_for(1800.0)
 
     # Each rebuilt thread's watch meets it ended three times, a minute apart, from a minute on.
-    assert webui.webui.rebuilt_at == [180.0, 360.0, 540.0]
+    assert webui.webui.built_at == [0.0, 180.0, 360.0, 540.0]
     assert webui.part.state(BUGS) is HealthState.FAILING

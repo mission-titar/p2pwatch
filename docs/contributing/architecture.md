@@ -850,33 +850,38 @@ sur les parties qu'il bâtit une fois.
 ### 10.2 Les redémarrages du client aMule, de la webui et du notifieur
 
 Un objet qui tient un état en mémoire, comme le client aMule (sa session, son verrou eD2k, ses
-créneaux Kad), est un `Restartable` : il se reconstruit et rend les `Work` qui tournent dessus.
-Quand la règle des bugs d'une de ses parties passe en échec, la `RestartPolicy` demande son
-redémarrage au `Supervisor` (une `RestartRequest`), qui le fait dans une tâche à lui, jamais dans
-le tour qui l'a déclenché : il arrête les `Work` dont les tours s'enregistrent sur ces parties et
-les attend, fait reconstruire l'objet, oublie la règle des bugs de ses parties (les autres règles
-gardent leurs vérifications, si bien qu'une alerte ouverte ne repart pas et ne finit pas), puis
-lance les `Work` rendus. Une reconstruction qui lève enregistre un bug sur chacune de ces parties
-et se retente 60 s plus tard. Une reconstruction est vaine quand une règle des bugs repasse en
-échec avant qu'elles soient toutes saines, ou quand elle a levé ; après trois, l'objet n'est plus
-redémarré. Ses `Work` tournent alors encore si la dernière reconstruction a réussi, seuls leurs
-tours fautifs échouant, et le compte repart de zéro une fois toutes les règles des bugs saines ;
-après trois reconstructions qui ont levé, rien ne tourne plus sur lui jusqu'au redémarrage du
-conteneur. Un réseau en panne n'est jamais réparé par un redémarrage : seule la règle des bugs
-redémarre. `AmuleClientRestartable` (`composition/amule_client_restartable.py`) déconnecte
-l'ancienne session, connecte un client neuf et rend ses `Work` par `AmuleClientWorks.over` ; la
-composition lui donne toutes les parties sur lesquelles ces `Work` enregistrent leurs tours
-(`node_restart_policy`). La webui est un autre `Restartable` (`composition/webui_restartable.py`) :
-`WebuiRestartable` arrête l'ancien thread, sert la webui sur un thread neuf et rend la surveillance
-de ce thread. Un port pris ailleurs ne fait pas lever la reconstruction : le thread neuf se termine,
-sa surveillance le retrouve terminé, et après trois reconstructions vaines la webui n'est plus
-redémarrée. Le notifieur en est un aussi (`composition/notifier_restartable.py`) : aucun `Work`
-ne tourne dessus, et `NotifierRestartable` construit un notifieur neuf sans rendre de `Work`. Le
-dispatcher lui demande le notifieur à chaque envoi, si bien qu'un envoi en cours finit sur
-l'ancien, sans s'enregistrer sur aucune partie : il ne dit rien du notifieur neuf. Les parties des
-services sont celles du dispatcher, construites une fois, sur les services du premier notifieur,
-qu'un notifieur reconstruit sur la même configuration liste à l'identique ; `node_restart_policy`
-les lit dans le dispatcher, si bien que la politique ne peut pas en recevoir d'autres. Au
+créneaux Kad), est un `Restartable` : construit entier, il ne change plus ; il rend les `Work` qui
+tournent sur son état et sait se fermer. Son `RestartableBuilder` en construit un neuf à chaque
+appel, le premier compris : le `Supervisor` les fait construire (`build_first`) et tient le dernier
+de chacun (`HeldRestartable`), que l'arrêt du nœud ferme. Quand la règle des bugs d'une de ses
+parties passe en échec, la `RestartPolicy` demande son redémarrage au `Supervisor` (une
+`RestartRequest`), qui le fait dans une tâche à lui, jamais dans le tour qui l'a déclenché : il
+arrête les `Work` dont les tours s'enregistrent sur ces parties et les attend, ferme l'objet, en
+fait construire un neuf, oublie la règle des bugs de ses parties (les autres règles gardent leurs
+vérifications, si bien qu'une alerte ouverte ne repart pas et ne finit pas), puis lance les `Work`
+du neuf. Une reconstruction qui lève enregistre un bug sur chacune de ces parties, laisse tenu
+l'objet fermé et se retente 60 s plus tard. Une reconstruction est vaine quand une règle des bugs
+repasse en échec avant qu'elles soient toutes saines, ou quand elle a levé ; après trois, l'objet
+n'est plus redémarré. Ses `Work` tournent alors encore si la dernière reconstruction a réussi,
+seuls leurs tours fautifs échouant, et le compte repart de zéro une fois toutes les règles des bugs
+saines ; après trois reconstructions qui ont levé, rien ne tourne plus sur lui jusqu'au
+redémarrage du conteneur. Un réseau en panne n'est jamais réparé par un redémarrage : seule la
+règle des bugs redémarre. `AmuleClientRestartableBuilder`
+(`composition/amule_client_restartable.py`) connecte un client neuf et rend un
+`AmuleClientRestartable`, ce client et ses `Work` par `AmuleClientWorks.over`, dont la fermeture
+déconnecte la session ; la composition donne à la politique toutes les parties sur lesquelles ces
+`Work` enregistrent leurs tours (`node_restart_policy`). La webui en est un autre
+(`composition/webui_restartable.py`) : `WebuiRestartableBuilder` sert la webui sur un thread neuf
+et rend la surveillance de ce thread, que la fermeture arrête. Un port pris ailleurs ne fait pas
+lever la reconstruction : le thread neuf se termine, sa surveillance le retrouve terminé, et après
+trois reconstructions vaines la webui n'est plus redémarrée. Le notifieur en est un aussi
+(`composition/notifier_restartable.py`) : `NotifierRestartableBuilder` construit un notifieur neuf,
+sur lequel aucun `Work` ne tourne, et que la fermeture laisse tel quel. Le dispatcher demande au
+`Supervisor` le dernier à chaque envoi, si bien qu'un envoi en cours finit sur l'ancien, sans
+s'enregistrer sur aucune partie : il ne dit rien du notifieur neuf. Les parties des services sont
+celles du dispatcher, construites une fois, sur les services du premier notifieur, qu'un notifieur
+reconstruit sur la même configuration liste à l'identique ; `node_restart_policy` les lit dans le
+dispatcher, si bien que la politique ne peut pas en recevoir d'autres. Au
 démarrage, une ligne de débogage par objet nomme ses parties (`webui: rebuilt for bugs in webui`).
 La politique refuse, à sa construction, une partie de deux objets
 et un `Work` qu'aucun redémarrage n'arrêterait : sans partie, ou sur une partie d'aucun objet. Les
@@ -907,7 +912,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
-| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/node_restart_policy.py` (`node_restart_policy`, la politique de redémarrage du nœud), `composition/webui_restartable.py` (`WebuiRestartable`, la webui telle que le nœud la reconstruit), `composition/notifier_restartable.py` (`NotifierRestartable`, le notifieur tel que le nœud le reconstruit), `composition/health_subscriber_built_later.py` (`HealthSubscriberBuiltLater`, les alertes et la politique telles que `NodeHealth` les atteint, construites après lui) |
+| Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/node_restart_policy.py` (`node_restart_policy`, la politique de redémarrage du nœud), `composition/webui_restartable.py` (`WebuiRestartableBuilder`, la webui telle que le nœud la construit à chaque redémarrage), `composition/notifier_restartable.py` (`NotifierRestartableBuilder`, le notifieur tel que le nœud le construit à chaque redémarrage), `composition/health_subscriber_built_later.py` (`HealthSubscriberBuiltLater`, les alertes et la politique telles que `NodeHealth` les atteint, construites après lui) |
 | Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `webui_thread_watch.py` (`WebuiThreadWatch`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
@@ -918,7 +923,7 @@ bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `composition/amule_client_restartable.py` (le client aMule reconstruit), `composition/webui_restartable.py` (la webui reconstruite), `composition/notifier_restartable.py` (le notifieur reconstruit) |
+| Santé | `domain/health/` (composants, règles, transitions), `domain/work_components.py` (la règle des bugs, les parties jugées sur elle seule), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé), `application/steps/health_alerter.py` (les changements en alertes), `application/steps/restart_policy.py` (quand reconstruire un objet), `application/steps/supervisor.py` (le dernier objet de chaque constructeur, tenu et fermé), `composition/amule_client_restartable.py` (le client aMule construit à neuf), `composition/webui_restartable.py` (la webui construite à neuf), `composition/notifier_restartable.py` (le notifieur construit à neuf) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |
