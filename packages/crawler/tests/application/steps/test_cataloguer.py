@@ -168,7 +168,7 @@ async def test_new_verdict_is_persisted_and_nudged(
     ]
     assert observation_node_ids(catalog_connection) == decision_node_ids(catalog_connection)
     assert decision_node_ids(catalog_connection) == {_NODE_ID}
-    assert observability.notifier.node_ids == [_NODE_ID]
+    assert observability.node_ids == [_NODE_ID]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 

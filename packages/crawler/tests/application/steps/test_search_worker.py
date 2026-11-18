@@ -528,7 +528,7 @@ async def test_successful_search_emits_search_executed_with_network_and_counts(
             node_metric=NodeCounter.DECISIONS, labels=(("tier", "download"),), value=1.0
         ),
     }
-    assert observability.notifier.node_ids == [_NODE_ID]
+    assert observability.node_ids == [_NODE_ID]
 
 
 @pytest.mark.asyncio
