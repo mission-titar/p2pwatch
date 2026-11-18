@@ -33,6 +33,8 @@ from p2pwatch.domain.health.component import Component, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
+from p2pwatch.domain.observability.notification import RelayedLogLine
+from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED
 from p2pwatch.domain.work_components import BUGS
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -43,7 +45,7 @@ from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartS
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable import FakeRestartable
-from tests.fakes.fake_amule_api import FakeAmuleApi
+from tests.fakes.fake_amule_api import FakeAmuleApi, error
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
     open_local,
@@ -316,6 +318,40 @@ async def test_download_tracking_records_the_disk_on_the_part_its_turns_are_reco
 
     [disk_low] = node.changes_under(DISK_SPACE_LOW)
     assert disk_low.component is download_tracking.components[0]
+
+
+async def test_the_alerts_name_the_client_its_channels_and_the_download_disk(
+    node: _Node,
+) -> None:
+    api = FakeAmuleApi()
+    client_works = node.client_works(downloading=True)
+    works = client_works.over(node.client(api))
+    status_reading = _named(works, name="status reading amuled")
+    download_tracking = _named(works, name="download tracking amuled")
+
+    api.overrides[("GET", "/api/v1/status")] = lambda _: error(503, code="unavailable")
+    for _ in range(3):
+        await status_reading.work.run_once()
+    del api.overrides[("GET", "/api/v1/status")]
+    # aMule's status by default: neither channel connected, 6 readings to turn failing.
+    for _ in range(6):
+        await status_reading.work.run_once()
+    await download_tracking.work.run_once()
+    alerter = client_works.health_alerter(node_id=_NODE_ID)
+    for transition in node.transitions:
+        await alerter.send(transition)
+
+    sent = [notification for _, notification in node.observability.notifier.calls]
+    assert sent == [
+        _warning("amuled unreachable for 2 min"),
+        _warning("amuled ed2k: off its network for 5 min"),
+        _warning("amuled kad: off its network for 5 min"),
+        _warning("download disk low: under the 4294967296.0 GiB floor (no new download)"),
+    ]
+
+
+def _warning(message: str) -> RelayedLogLine:
+    return RelayedLogLine(message=message, severity=Severity.WARNING, node_id=_NODE_ID)
 
 
 async def _rebuilt(amule_client: FakeRestartable) -> None:

@@ -10,7 +10,7 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.ports.driven.notifier import Notifier
-from p2pwatch.application.steps.health_alerter import HealthAlerter
+from p2pwatch.application.steps.health_alerter import ClientAlert, HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.restart_policy import RestartPolicy
@@ -68,11 +68,12 @@ async def _restarts_run() -> None:
 
 class _Node:
     """The aMule client and the webui, each with one work on a part of its own, the notifier with
-    a part per service and no work, the dispatcher, the alerts, the restart policy and the
-    supervisor wired as the node wires them."""
+    a part per service and no work, the dispatcher, the alerts on the client's part, the restart
+    policy and the supervisor wired as the node wires them."""
 
     def __init__(self) -> None:
         self.client = FakeRestartable("client amuled")
+        self.client_part = client_component(ClientName("amuled"))
         self.webui = FakeRestartable("webui")
         self.notifier = FakeRestartable("notifier")
         self.status_reading_part = status_reading_component(ClientName("amuled"))
@@ -93,7 +94,11 @@ class _Node:
             service_components=self.service_parts,
         )
         self._alerter = HealthAlerter(
-            observability_dispatcher=self.dispatcher, node_id=NodeId("n1"), min_free_bytes=None
+            observability_dispatcher=self.dispatcher,
+            node_id=NodeId("n1"),
+            client=ClientAlert(part=self.client_part, client_name=ClientName("amuled")),
+            channels=[],
+            disk=None,
         )
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
@@ -190,11 +195,12 @@ async def test_an_alert_through_a_refusing_service_fails_its_sends_and_sends_not
     node = _Node()
     refusing = FakeRaisingNotifier(NotificationRefusedError("the service refused it (FAILURE)"))
     node.current_notifier = refusing
-    client = client_component(ClientName("amuled"))
 
     async def unreachable_answering_then_unreachable() -> None:
         for detected in [True] * 3 + [False] * 9 + [True] * 3:
-            await node.node_health.record(on=client, rule=CLIENT_UNREACHABLE, detected=detected)
+            await node.node_health.record(
+                on=node.client_part, rule=CLIENT_UNREACHABLE, detected=detected
+            )
 
     await node.supervising(unreachable_answering_then_unreachable())
 

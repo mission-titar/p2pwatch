@@ -100,7 +100,6 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -408,7 +407,8 @@ class CrawlerComposition(CrawlerRunner):
                     apprise_factory=apprise.Apprise,
                 )
             )
-            # Set once the dispatcher is built: it records each send on the node's health.
+            # Set once the client's parts are built, which it alerts on; the dispatcher it sends
+            # through records each send on the node's health.
             alerts = HealthSubscriberBuiltLater("the alerts")
             # Set once the works are built: they record on the node's health, the policy maps them.
             restart_policy = HealthSubscriberBuiltLater("the restart policy")
@@ -426,15 +426,6 @@ class CrawlerComposition(CrawlerRunner):
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
-            alerts.set(
-                HealthAlerter(
-                    observability_dispatcher=observability_dispatcher,
-                    node_id=node_id,
-                    min_free_bytes=(
-                        None if download_config is None else download_config.min_free_bytes
-                    ),
-                ).send
-            )
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
             decision_store = SqliteDecisionStore(catalog_connection)
@@ -560,6 +551,7 @@ class CrawlerComposition(CrawlerRunner):
                     keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
             )
+            alerts.set(client_works.health_alerter(node_id=node_id).send)
             amule_client = AmuleClientRestartable(
                 client,
                 client_name=_AMULE_CLIENT_NAME,

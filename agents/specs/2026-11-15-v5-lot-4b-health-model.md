@@ -274,6 +274,7 @@ A block past a bound says why it cannot split, with the operator's acceptance (a
 | 50 | `feat/notification-services-rules` | one component and one rule per service | #746, 497 lines, 19 files, and #754's contract (Corrected: written as one block, 604 lines and 21 files without the contract, it was cut into 50, the notifier listing its services and sending to one, 487 lines, 16 files, and 53, `feat/notification-service-parts`, one part per service and the contract, 292 lines, 18 files, accepted by the operator on 2026-11-17, "reco ok") |
 | 80 | `fix/lot-4b5-review-fixes` | the holistic review's fixes in the code (Corrected: split out of block 90, which came to 382 lines and 27 files, the lead on 2026-11-17) | |
 | 90 | `docs/lot-4b5-wrap` | closing block | |
+| 93 | `refactor/health-alerts-name-their-parts` | the alerter given the parts it alerts on, each with what its alert names (Corrected: added on the operator's comment on #791, "Pourquoi None pour la webui ?", the shape approved on 2026-11-18) | |
 
 ## 6. Limits and scope
 
@@ -404,7 +405,10 @@ for component in work.components:
 
 `NodeHealth` logs each change, then calls its subscribers in order: `HealthAlerter` (lot 4b1), then `RestartPolicy`
 (lot 4b4); the order is fixed so the log reads the same at every run. A component carries what the alerts name it by,
-as typed fields: its client, its channel, none where it has none.
+as typed fields: its client, its channel, none where it has none. (Corrected: `HealthAlerter` is given at its
+construction the parts it alerts on, each with what its alert names, `ClientAlert`, `ChannelAlert` and `DiskAlert`,
+the last absent on a node without `download:`, which `AmuleClientWorks.health_alerter` builds over the parts it
+builds once; the operator on 2026-11-18, on #791, lot 4b5 block 93.)
 
 ### The rules
 
@@ -446,7 +450,9 @@ x the status period.
   unrecorded; the old `_AlertTimer` removed with its last user.
 - **Block 50** (draft #741): download tracking's component, built by the composition; `DISK_SPACE_LOW` recorded by the
   download decision at each free-space reading; `HealthAlerter` sends the disk alert, the floor given at its
-  construction; `EdgeState` removed with its only user.
+  construction; `EdgeState` removed with its only user. (Corrected: lot 4b1's accepted limit, the floor `int | None`
+  in `HealthAlerter` and its `ValueError` on a disk change without one, is gone since lot 4b5 block 93: the floor
+  comes in the disk's `DiskAlert`, which a node without `download:` does not give.)
 - **Block 90**: the handoff, the holistic review's fixes, the matching comparison.
 
 ### Lot 4b2

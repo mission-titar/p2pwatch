@@ -9,7 +9,7 @@ import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
-from p2pwatch.application.steps.health_alerter import HealthAlerter
+from p2pwatch.application.steps.health_alerter import ChannelAlert, ClientAlert, HealthAlerter
 from p2pwatch.application.steps.node_health import HealthSubscriber, NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.restart_policy import RestartPolicy
@@ -60,10 +60,18 @@ _HOUR = timedelta(hours=1)
 
 
 class _Observability:
-    """The dispatch step over fakes, each notification timed: an alert is one; each change of
-    health also passed on to ``also``, after the alerts."""
+    """The dispatch step over fakes, each notification timed: an alert is one; the alerts on the
+    client's part and its channels', built here once; each change of health also passed on to
+    ``also``, after the alerts."""
 
-    def __init__(self, fake_time: FakeTime, *, also: Sequence[HealthSubscriber] = ()) -> None:
+    def __init__(
+        self,
+        fake_time: FakeTime,
+        *,
+        client_name: ClientName = _AMULED,
+        channels: Sequence[Channel] = _CHANNELS,
+        also: Sequence[HealthSubscriber] = (),
+    ) -> None:
         self.logger = FakeLogger()
         self.notifier = FakeTimedNotifier(fake_time)
         self.dispatcher = ObservabilityDispatcher(
@@ -74,8 +82,20 @@ class _Observability:
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
             service_components=notification_service_components(self.notifier.services()),
         )
+        self.client_part = client_component(client_name)
+        self.channel_parts = {
+            channel: channel_component(client_name=client_name, channel=channel)
+            for channel in channels
+        }
         alerter = HealthAlerter(
-            observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None
+            observability_dispatcher=self.dispatcher,
+            node_id=_NODE_ID,
+            client=ClientAlert(part=self.client_part, client_name=client_name),
+            channels=[
+                ChannelAlert(part=part, client_name=client_name, channel=channel)
+                for channel, part in self.channel_parts.items()
+            ],
+            disk=None,
         )
         self.health_logger = FakeLogger()
         self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send, *also))
@@ -98,7 +118,6 @@ def _status_watcher(
     fake_time: FakeTime,
     observability: _Observability,
     status_reading_writer: StatusReadingWriter | None = None,
-    channels: Sequence[Channel] = _CHANNELS,
     download_tracking: Component | None = None,
 ) -> StatusWatcher:
     return StatusWatcher(
@@ -109,11 +128,8 @@ def _status_watcher(
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_health=observability.node_health,
-        client_component=client_component(client_name),
-        channel_components={
-            channel: channel_component(client_name=client_name, channel=channel)
-            for channel in channels
-        },
+        client_component=observability.client_part,
+        channel_components=observability.channel_parts,
         download_tracking_component=download_tracking,
     )
 
@@ -131,13 +147,12 @@ async def _run(
     download_tracking: Component | None = None,
 ) -> _Observability:
     fake_time = FakeTime()
-    observability = _Observability(fake_time)
+    observability = _Observability(fake_time, client_name=client, channels=channels)
     watcher = _status_watcher(
         client,
         client=FakeStatusClient(list(readings)),
         fake_time=fake_time,
         observability=observability,
-        channels=channels,
         download_tracking=download_tracking,
     )
     await _take_turns(watcher, turns=len(readings))
@@ -517,13 +532,10 @@ class _RebuiltNode:
         self._loop = loop
         self._client = FakeStatusClient(list(readings))
         self._monotonic_clock = FakeLoopMonotonicClock(loop)
-        self.client_part = client_component(_AMULED)
-        self._channel_parts = {
-            channel: channel_component(client_name=_AMULED, channel=channel)
-            for channel in _CHANNELS
-        }
-        self._status_reading_part = status_reading_component(_AMULED)
         self.observability = _Observability(FakeTime(), also=(self._to_policy,))
+        self.client_part = self.observability.client_part
+        self._channel_parts = self.observability.channel_parts
+        self._status_reading_part = status_reading_component(_AMULED)
         self.amule_client = FakeRestartable(works_over=lambda _state: [self._status_reading()])
         self._works = [self._status_reading()]
         if kad_search_bug:

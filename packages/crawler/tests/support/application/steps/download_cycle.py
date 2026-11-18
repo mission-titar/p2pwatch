@@ -14,7 +14,7 @@ from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
-from p2pwatch.application.steps.health_alerter import HealthAlerter
+from p2pwatch.application.steps.health_alerter import ClientAlert, DiskAlert, HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -26,6 +26,7 @@ from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.status_reading import client_component
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
@@ -127,8 +128,15 @@ def build_cycle(
     observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
     logger = logger or FakeLogger()
     # As the composition wires it: the disk's rule sends its alert through the dispatcher.
+    download_tracking = download_tracking_component(ClientName("amuled"))
     alerter = HealthAlerter(
-        observability_dispatcher=observability_dispatcher, node_id=NODE_ID, min_free_bytes=min_free
+        observability_dispatcher=observability_dispatcher,
+        node_id=NODE_ID,
+        client=ClientAlert(
+            part=client_component(ClientName("amuled")), client_name=ClientName("amuled")
+        ),
+        channels=[],
+        disk=DiskAlert(part=download_tracking, min_free_bytes=min_free),
     )
     node_health = NodeHealth(logger=health_logger or FakeLogger(), subscribers=(alerter.send,))
     download_labeler = DownloadLabeler(
@@ -164,7 +172,7 @@ def build_cycle(
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
             node_health=node_health,
-            download_tracking_component=download_tracking_component(ClientName("amuled")),
+            download_tracking_component=download_tracking,
             logger=logger,
         ),
         download_starter=DownloadStarter(

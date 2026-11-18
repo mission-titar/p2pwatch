@@ -3,7 +3,12 @@ from dataclasses import replace
 
 import pytest
 
-from p2pwatch.application.steps.health_alerter import HealthAlerter
+from p2pwatch.application.steps.health_alerter import (
+    ChannelAlert,
+    ClientAlert,
+    DiskAlert,
+    HealthAlerter,
+)
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.disk_space import (
@@ -44,9 +49,11 @@ _REACHABLE_AGAIN = RelayedLogLine(
 
 
 _AMULE = client_component(ClientName("amuled"))
+_ED2K = channel_component(client_name=ClientName("amuled"), channel=Channel("ed2k"))
 _KAD = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
 _DOWNLOAD_TRACKING = download_tracking_component(ClientName("amuled"))
 _TEN_GIB = 10 * 2**30
+_DISK = DiskAlert(part=_DOWNLOAD_TRACKING, min_free_bytes=_TEN_GIB)
 _NOTIFICATION_SERVICE_PART = notification_service_components(ONE_SERVICE_PER_AUDIENCE)[
     ONE_SERVICE_PER_AUDIENCE[0]
 ]
@@ -58,9 +65,10 @@ async def _sent(
     current: HealthState,
     rule: HealthRule = CLIENT_UNREACHABLE,
     on: Component = _AMULE,
-    min_free_bytes: int | None = _TEN_GIB,
+    disk: DiskAlert | None = _DISK,
 ) -> list[Notification]:
-    """The notifications sent when the health of ``on`` under ``rule`` changes."""
+    """The notifications sent when the health of ``on`` under ``rule`` changes, the alerter
+    given the client's part, both its channels' and ``disk``."""
     notifier = FakeNotifier()
     dispatcher = ObservabilityDispatcher(
         logger=FakeLogger(),
@@ -70,13 +78,25 @@ async def _sent(
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
         service_components=notification_service_components(notifier.services()),
     )
-    alerter = HealthAlerter(
-        observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=min_free_bytes
-    )
+    alerter = _alerter(dispatcher, disk=disk)
     await alerter.send(
         HealthTransition(component=on, rule=rule, previous=previous, current=current)
     )
     return [notification for _, notification in notifier.calls]
+
+
+def _alerter(dispatcher: ObservabilityDispatcher, *, disk: DiskAlert | None) -> HealthAlerter:
+    amuled = ClientName("amuled")
+    return HealthAlerter(
+        observability_dispatcher=dispatcher,
+        node_id=_NODE_ID,
+        client=ClientAlert(part=_AMULE, client_name=amuled),
+        channels=[
+            ChannelAlert(part=_ED2K, client_name=amuled, channel=Channel("ed2k")),
+            ChannelAlert(part=_KAD, client_name=amuled, channel=Channel("kad")),
+        ],
+        disk=disk,
+    )
 
 
 @pytest.mark.asyncio
@@ -110,7 +130,9 @@ async def test_a_rule_it_has_no_alert_for_raises(
     *, previous: HealthState, current: HealthState
 ) -> None:
     other = replace(CLIENT_UNREACHABLE, name="other")
-    with pytest.raises(ValueError, match="^client amuled, other: no alert for this rule$"):
+    with pytest.raises(
+        ValueError, match="^client amuled, other: no alert for this part under this rule$"
+    ):
         await _sent(previous=previous, current=current, rule=other)
 
 
@@ -201,22 +223,48 @@ async def test_a_channel_healthy_from_its_first_readings_sends_nothing(
 
 
 @pytest.mark.asyncio
-async def test_a_channel_s_rule_on_a_component_with_no_channel_raises() -> None:
-    with pytest.raises(ValueError, match="client amuled: no channel to name in its alert"):
-        await _sent(
-            previous=HealthState.HEALTHY, current=HealthState.FAILING, rule=CHANNEL_NOT_CONNECTED
+async def test_each_channel_s_alert_names_its_own_channel() -> None:
+    sent = await _sent(
+        previous=HealthState.HEALTHY,
+        current=HealthState.FAILING,
+        rule=CHANNEL_NOT_CONNECTED,
+        on=_ED2K,
+    )
+    assert sent == [
+        RelayedLogLine(
+            message="amuled ed2k: off its network for 5 min",
+            severity=Severity.WARNING,
+            node_id=_NODE_ID,
         )
+    ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("rule", "on", "message"),
+    [
+        (CLIENT_UNREACHABLE, webui_component(), "webui, unreachable"),
+        (CLIENT_UNREACHABLE, _KAD, "channel amuled kad, unreachable"),
+        (CHANNEL_NOT_CONNECTED, _AMULE, "client amuled, not connected"),
+        (DISK_SPACE_LOW, _KAD, "channel amuled kad, disk space low"),
+    ],
+    ids=[
+        "the client's rule on the webui",
+        "the client's rule on a channel",
+        "a channel's rule on the client",
+        "the disk's rule on a channel",
+    ],
+)
+@pytest.mark.parametrize(
     "current", [HealthState.FAILING, HealthState.HEALTHY], ids=["its alert", "its end"]
 )
-async def test_a_client_s_rule_on_a_part_of_no_client_raises(current: HealthState) -> None:
+async def test_a_rule_with_an_alert_on_a_part_it_was_not_given_for_it_raises(
+    *, rule: HealthRule, on: Component, message: str, current: HealthState
+) -> None:
     previous = HealthState.HEALTHY if current is HealthState.FAILING else HealthState.FAILING
 
-    with pytest.raises(ValueError, match="^webui: no client to name in its alert$"):
-        await _sent(previous=previous, current=current, on=webui_component())
+    with pytest.raises(ValueError, match=f"^{message}: no alert for this part under this rule$"):
+        await _sent(previous=previous, current=current, rule=rule, on=on)
 
 
 @pytest.mark.asyncio
@@ -246,14 +294,22 @@ async def test_the_disk_healthy_sends_nothing_since_its_alert_has_no_end(
 
 
 @pytest.mark.asyncio
-async def test_the_disk_failing_on_a_node_without_a_floor_raises() -> None:
-    with pytest.raises(ValueError, match="download tracking amuled: no disk floor for its alert"):
+@pytest.mark.parametrize(
+    "current", [HealthState.FAILING, HealthState.HEALTHY], ids=["its alert", "its end"]
+)
+async def test_the_disk_s_rule_on_a_node_that_downloads_nothing_raises(
+    current: HealthState,
+) -> None:
+    previous = HealthState.HEALTHY if current is HealthState.FAILING else HealthState.FAILING
+    message = "^download tracking amuled, disk space low: no alert for this part under this rule$"
+
+    with pytest.raises(ValueError, match=message):
         await _sent(
-            previous=HealthState.HEALTHY,
-            current=HealthState.FAILING,
+            previous=previous,
+            current=current,
             rule=DISK_SPACE_LOW,
             on=_DOWNLOAD_TRACKING,
-            min_free_bytes=None,
+            disk=None,
         )
 
 
@@ -269,9 +325,7 @@ async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
         service_components=notification_service_components(notifier.services()),
     )
-    alerter = HealthAlerter(
-        observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
-    )
+    alerter = _alerter(dispatcher, disk=_DISK)
     transition = HealthTransition(
         component=_AMULE,
         rule=CLIENT_UNREACHABLE,

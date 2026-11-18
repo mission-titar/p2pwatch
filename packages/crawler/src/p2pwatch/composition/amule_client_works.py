@@ -1,5 +1,6 @@
 """The works over the node's aMule client, built anew over each client the node opens, such as
-its status reading and its searches, over parts built once, such as the health of each part."""
+its status reading and its searches, over parts built once, such as the health of each part, and
+the alerts on those parts."""
 
 import sqlite3
 from collections.abc import Sequence
@@ -30,6 +31,12 @@ from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.health_alerter import (
+    ChannelAlert,
+    ClientAlert,
+    DiskAlert,
+    HealthAlerter,
+)
 from p2pwatch.application.steps.keyword_search import keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -90,6 +97,9 @@ class DownloadSteps:
         self._node_id = node_id
         # One part for the disk's readings, the client's networks and the cycle's bugs.
         self.download_tracking = download_tracking_component(client_name)
+        self.disk_alert = DiskAlert(
+            part=self.download_tracking, min_free_bytes=download_config.min_free_bytes
+        )
         self._source_tracking = source_tracking_component(client_name)
         # Both share ``local_connection`` and the catalog's stores: one writer, on the event loop.
         self._tracked_download_store = SqliteTrackedDownloadStore(local_connection)
@@ -223,6 +233,21 @@ class AmuleClientWorks:
             for keyword in dedupe_keywords(keywords)
             for channel in channels
         }
+
+    def health_alerter(self, *, node_id: NodeId) -> HealthAlerter:
+        """The alerts on the client's part, its channels' and download tracking's, such as "amuled
+        unreachable for 2 min"; no disk alert on a node that downloads nothing."""
+        download_steps = self._download_steps
+        return HealthAlerter(
+            observability_dispatcher=self._observability_dispatcher,
+            node_id=node_id,
+            client=ClientAlert(part=self._client_component, client_name=self._client_name),
+            channels=[
+                ChannelAlert(part=part, client_name=self._client_name, channel=channel)
+                for channel, part in self._channel_components.items()
+            ],
+            disk=None if download_steps is None else download_steps.disk_alert,
+        )
 
     def over(self, client: AmuleApiClient) -> list[SupervisedWork]:
         """Every work over ``client``, in the order the supervisor starts them."""
