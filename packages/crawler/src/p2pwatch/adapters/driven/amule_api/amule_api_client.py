@@ -65,6 +65,8 @@ from p2pwatch.domain.store_error import StoreError
 ED2K = Channel("ed2k")
 KAD = Channel("kad")
 _SEARCH_TYPES = {ED2K: "global", KAD: "kad"}
+# The channels every client of amuleapi searches, known before any is built.
+CHANNELS = tuple(_SEARCH_TYPES)
 
 # The scope of eD2k's spacing: the whole channel, where Kad spaces each Kad word apart.
 _ED2K_SCOPE = ""
@@ -146,12 +148,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         }
 
     def channels(self) -> tuple[Channel, ...]:
-        return tuple(_SEARCH_TYPES)
-
-    @property
-    def request_bound(self) -> timedelta:
-        """The longest one request to amuleapi lasts, its phases in all."""
-        return timedelta(seconds=self._request_bound_seconds)
+        return CHANNELS
 
     async def _connect(self) -> httpx.AsyncClient:
         """The session, opened and logged in if there is none. Serialized: callers arriving
