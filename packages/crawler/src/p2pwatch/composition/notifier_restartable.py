@@ -1,5 +1,5 @@
-"""The notifier as the node rebuilds it: built anew with the work sending the outbox's
-notifications through it."""
+"""The notifier as the node builds it, at its start and at each rebuild: built anew with the work
+sending the outbox's notifications through it."""
 
 from collections.abc import Sequence
 from datetime import timedelta
@@ -7,6 +7,7 @@ from typing import Protocol
 
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.application.ports.driven.restartable import Restartable
+from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
@@ -38,8 +39,22 @@ def notification_sending(
 
 
 class NotifierRestartable(Restartable[SupervisedWork]):
-    """The notifier the outbox's notifications go through, rebuilt with the work sending them: a
-    send under way at the rebuild keeps its entry for the new one."""
+    """The notifier the outbox's notifications go through, and the work sending them."""
+
+    def __init__(self, notifier: AppriseNotifier, *, works: Sequence[SupervisedWork]) -> None:
+        self.notifier = notifier
+        self._works = tuple(works)
+
+    def works(self) -> Sequence[SupervisedWork]:
+        return self._works
+
+    async def close(self) -> None:
+        """Nothing to release: apprise holds no connection between two sends."""
+
+
+class NotifierRestartableBuilder(RestartableBuilder[SupervisedWork]):
+    """Builds the notifier anew with the work sending through it: a send under way at a rebuild
+    keeps its entry for the new one."""
 
     def __init__(
         self, *, build_notifier: AppriseNotifierBuilder, works_over: WorksOverNotifier
@@ -50,6 +65,6 @@ class NotifierRestartable(Restartable[SupervisedWork]):
     def __str__(self) -> str:
         return "notifier"
 
-    async def rebuild(self) -> Sequence[SupervisedWork]:
-        """Builds the notifier anew and returns the work over it."""
-        return self._works_over(self._build_notifier())
+    async def build(self) -> NotifierRestartable:
+        notifier = self._build_notifier()
+        return NotifierRestartable(notifier, works=self._works_over(notifier))

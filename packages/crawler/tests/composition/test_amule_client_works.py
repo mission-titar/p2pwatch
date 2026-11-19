@@ -42,7 +42,7 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.fakes.fake_amule_api import FakeAmuleApi
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
@@ -317,8 +317,8 @@ async def test_download_tracking_records_the_disk_on_the_part_its_turns_are_reco
     assert disk_low.dependency is download_tracking.dependencies[0]
 
 
-async def _rebuilt(amule_client: FakeRestartable) -> None:
-    while not amule_client.rebuilt_at:
+async def _rebuilt(amule_client: FakeRestartableBuilder) -> None:
+    while not amule_client.rebuilds():
         await asyncio.sleep(0)  # noqa: TID251
 
 
@@ -327,7 +327,7 @@ async def _rebuilds_once_failing(
 ) -> int:
     """How many times the client is rebuilt once the bugs rule of ``part`` turns failing, its
     restart policy and the supervisor wired as the node wires them."""
-    amule_client = FakeRestartable("client amuled")
+    amule_client = FakeRestartableBuilder("client amuled", works_over=lambda _state: works)
     run_state = FakeRunStateStore()
     supervisor = Supervisor(
         run_state_reader=run_state,
@@ -335,7 +335,9 @@ async def _rebuilds_once_failing(
         node_health=node.node_health,
         logger=FakeLogger(),
     )
-    policy = node_restart_policy({amule_client: works}, supervisor=supervisor)
+    policy = node_restart_policy(
+        {amule_client: await supervisor.build_first(amule_client)}, supervisor=supervisor
+    )
     supervision = asyncio.create_task(supervisor.supervise((), arm_shutdown_bound=lambda: None))
 
     await policy(
@@ -348,7 +350,7 @@ async def _rebuilds_once_failing(
 
     run_state.set_shutdown_requested()
     await supervision
-    return len(amule_client.rebuilt_at)
+    return amule_client.rebuilds()
 
 
 @pytest.mark.parametrize("downloading", [True, False], ids=["downloading", "not-downloading"])

@@ -8,13 +8,14 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
   (migrations applied at startup, a failed one stopping the start).
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
-  over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartable`` rebuilds
-  the client and its works when the ``RestartPolicy`` asks.
-- ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartable`` rebuilds it and
-  the watch over it when the ``RestartPolicy`` asks.
-- ONE ``AppriseNotifier`` at a time for the works, which ``NotifierRestartable`` rebuilds with the
-  work sending the outbox's notifications through it when the ``RestartPolicy`` asks, and one for
-  the lifecycle's last sends at the shutdown.
+  over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartableBuilder``
+  builds the client and its works at the start, and anew when the ``RestartPolicy`` asks.
+- ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartableBuilder`` builds it
+  and the watch over it at the start, and anew when the ``RestartPolicy`` asks.
+- ONE ``AppriseNotifier`` at a time for the works, which ``NotifierRestartableBuilder`` builds
+  with the work sending the outbox's notifications through it at the start, and anew when the
+  ``RestartPolicy`` asks, and one for the lifecycle's last sends at the shutdown.
+The ``Supervisor`` holds the object each builder built latest, and closes them at the unwind.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
 source tracking when configured, the webui's thread watch, and the notifications' sending when a
@@ -124,12 +125,15 @@ from p2pwatch.application.use_cases.list_sources import ListSources
 from p2pwatch.application.use_cases.request_shutdown import RequestShutdown
 from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
-from p2pwatch.composition.amule_client_restartable import AmuleClientRestartable
+from p2pwatch.composition.amule_client_restartable import AmuleClientRestartableBuilder
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.health_subscriber_built_later import HealthSubscriberBuiltLater
 from p2pwatch.composition.node_restart_policy import node_restart_policy
-from p2pwatch.composition.notifier_restartable import NotifierRestartable, notification_sending
-from p2pwatch.composition.webui_restartable import WebuiRestartable, webui_thread_watch_over
+from p2pwatch.composition.notifier_restartable import (
+    NotifierRestartableBuilder,
+    notification_sending,
+)
+from p2pwatch.composition.webui_restartable import WebuiRestartableBuilder, webui_thread_watch_over
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
@@ -419,9 +423,8 @@ class CrawlerComposition(CrawlerRunner):
                     apprise_factory=apprise.Apprise,
                 )
 
-            notifier = build_notifier()
             # Built once: a notifier rebuilt on the same configuration lists the same services.
-            service_parts = notification_service_dependencies(notifier.services())
+            service_parts = notification_service_dependencies(build_notifier().services())
             # Set once the dispatcher is built.
             alerts = HealthSubscriberBuiltLater("the alerts")
             # Set once the works are built: they record on the node's health, the policy maps them.
@@ -429,6 +432,14 @@ class CrawlerComposition(CrawlerRunner):
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
             )
+            supervisor = Supervisor(
+                run_state_reader=run_state_store,
+                monotonic_clock=monotonic_clock,
+                node_health=node_health,
+                logger=StdlibLogger(Supervisor.__module__),
+            )
+            # The objects it holds then, closed at the unwind before the database connections.
+            stack.push_async_callback(supervisor.close)
             local_database = local_database_dependency()
             outbox_store = SqliteNotificationOutboxStore(local_connection)
             outbox = NotificationOutbox(
@@ -507,13 +518,10 @@ class CrawlerComposition(CrawlerRunner):
                     thread, dependency=webui_part, monotonic_clock=monotonic_clock
                 )
 
-            webui_thread = build_webui_thread()
-            webui = WebuiRestartable(
-                webui_thread, build_thread=build_webui_thread, works_over=webui_works_over
+            webui = WebuiRestartableBuilder(
+                build_thread=build_webui_thread, works_over=webui_works_over
             )
-            # The thread held then, stopped at the unwind before the database connections close.
-            stack.push_async_callback(webui.close)
-            await webui_thread.start()
+            webui_works = await supervisor.build_first(webui)
             # SHARED backoff registry: built ONCE, resumes its waits at the lifecycle's start
             # (backoff survives restart, spec §3/§7), injected into ALL workers + the saver the
             # searches share. Single writer on the event loop.
@@ -554,7 +562,6 @@ class CrawlerComposition(CrawlerRunner):
                     search_start_store=search_start_store,
                 )
 
-            client = build_client()
             client_works = AmuleClientWorks(
                 client_name=_AMULE_CLIENT_NAME,
                 channels=CHANNELS,
@@ -596,21 +603,18 @@ class CrawlerComposition(CrawlerRunner):
                     keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
             )
-            amule_client = AmuleClientRestartable(
-                client,
+            amule_client = AmuleClientRestartableBuilder(
                 client_name=_AMULE_CLIENT_NAME,
                 build_client=build_client,
                 works_over=client_works.over,
             )
-            # The client held then, not this first one, which a rebuild replaces.
-            stack.push_async_callback(amule_client.close)
-            await client.open()
+            notifier = NotifierRestartableBuilder(
+                build_notifier=build_notifier, works_over=notifier_works_over
+            )
             works_of = {
-                amule_client: client_works.over(client),
-                webui: webui_works_over(webui_thread),
-                NotifierRestartable(
-                    build_notifier=build_notifier, works_over=notifier_works_over
-                ): notifier_works_over(notifier),
+                amule_client: await supervisor.build_first(amule_client),
+                webui: webui_works,
+                notifier: await supervisor.build_first(notifier),
             }
             works = [supervised for works in works_of.values() for supervised in works]
             for supervised in works:
@@ -618,12 +622,6 @@ class CrawlerComposition(CrawlerRunner):
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
                 parts = ", ".join(dependency.name for dependency in supervised.dependencies)
                 _logger.debug("%s: turns recorded on %s", supervised.work, parts)
-            supervisor = Supervisor(
-                run_state_reader=run_state_store,
-                monotonic_clock=monotonic_clock,
-                node_health=node_health,
-                logger=StdlibLogger(Supervisor.__module__),
-            )
             restart_policy.set(node_restart_policy(works_of, supervisor=supervisor))
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
