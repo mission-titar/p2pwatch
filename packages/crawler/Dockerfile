@@ -2,7 +2,7 @@
 
 # Keep the stage: Dependabot only reads FROM lines, so inlining it as a COPY --from=<image>
 # would freeze this digest with no update path.
-FROM ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
 # --- Python stage: build /app/.venv against Debian's python3, the same one the runtime holds ---
 FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS python
