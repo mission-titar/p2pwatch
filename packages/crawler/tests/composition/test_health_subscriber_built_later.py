@@ -12,7 +12,7 @@ from p2pwatch.composition.health_subscriber_built_later import (
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 
 pytestmark = pytest.mark.asyncio
 
@@ -37,7 +37,7 @@ async def test_once_set_the_subscriber_takes_each_change_of_health() -> None:
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
     part = status_reading_dependency(ClientName("amuled"))
     requests: list[RestartRequest] = []
-    client = FakeRestartable()
+    client = FakeRestartableBuilder()
     later.set(
         RestartPolicy(
             dependencies_of={client: [part]}, works=(), restart=requests.append, logger=FakeLogger()
@@ -47,4 +47,4 @@ async def test_once_set_the_subscriber_takes_each_change_of_health() -> None:
     for _ in range(3):
         await node_health.record(on=part, rule=BUGS, detected=True)
 
-    assert [request.restartable for request in requests] == [client]
+    assert [request.builder for request in requests] == [client]

@@ -44,7 +44,7 @@ from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
@@ -526,7 +526,7 @@ class _RebuiltNode:
         }
         self._status_reading_part = status_reading_dependency(_AMULED)
         self.observability = _Observability(FakeTime(), also=(self._to_policy,))
-        self.amule_client = FakeRestartable(works_over=lambda _state: [self._status_reading()])
+        self.amule_client = FakeRestartableBuilder(works_over=self._works_over)
         self._works = [self._status_reading()]
         if kad_search_bug:
             kad_part = self._channel_parts[Channel("kad")]
@@ -551,6 +551,10 @@ class _RebuiltNode:
     async def _to_policy(self, transition: HealthTransition) -> None:
         await self._policy(transition)
 
+    def _works_over(self, _state: object, /) -> Sequence[SupervisedWork]:
+        """The first works at the first build, the status reading alone at each rebuild."""
+        return [self._status_reading()] if self.amule_client.built else self._works
+
     def _status_reading(self) -> SupervisedWork:
         watcher = StatusWatcher(
             client_name=_AMULED,
@@ -570,9 +574,11 @@ class _RebuiltNode:
 
     def run_for(self, seconds: float) -> None:
         self._loop.call_later(seconds, self._run_state.set_shutdown_requested)
-        self._loop.run_until_complete(
-            self._supervisor.supervise(self._works, arm_shutdown_bound=lambda: None)
-        )
+        self._loop.run_until_complete(self._run())
+
+    async def _run(self) -> None:
+        works = await self._supervisor.build_first(self.amule_client)
+        await self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
 
 
 def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(
@@ -582,7 +588,7 @@ def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(
 
     node.run_for(19 * 60.0 + 1.0)
 
-    assert node.amule_client.rebuilt_at == []
+    assert node.amule_client.rebuilds() == 0
     assert node.client_part.state(CLIENT_UNREACHABLE) is HealthState.FAILING
 
 
@@ -595,7 +601,7 @@ def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_
 
     node.run_for(600.0 + 7 * 60.0 + 1.0)  # eight readings after the rebuild, all off
 
-    assert node.amule_client.rebuilt_at == [600.0]
+    assert node.amule_client.built_at == [0.0, 600.0]
     notifications = node.observability.notifications
     assert [notification for _, notification in notifications] == [
         _warning("amuled kad: off its network for 5 min")

@@ -1,5 +1,5 @@
-"""The notifier as the node rebuilds it: built anew with the work sending the outbox's
-notifications through it, one send's timeout and the margin its time limit."""
+"""The notifier as the node builds it, at its start and at each rebuild: built anew with the work
+sending the outbox's notifications through it, one send's timeout and the margin its time limit."""
 
 from collections.abc import Sequence
 from datetime import timedelta
@@ -12,12 +12,18 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork, Work
-from p2pwatch.composition.notifier_restartable import NotifierRestartable, notification_sending
+from p2pwatch.composition.notifier_restartable import (
+    NotifierRestartable,
+    NotifierRestartableBuilder,
+    notification_sending,
+)
 from p2pwatch.domain.observability.notification_sends import (
     local_database_dependency,
     notification_service_dependencies,
 )
-from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
+from tests.contracts.application.ports.driven.restartable_builder_contract import (
+    RestartableBuilderContract,
+)
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
@@ -25,15 +31,9 @@ from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, 
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 
 
-class _Notifiers:
-    """Builds apprise notifiers with no service, keeping each, as the composition builds them."""
-
-    def __init__(self) -> None:
-        self.built: list[AppriseNotifier] = []
-
-    def build(self) -> AppriseNotifier:
-        self.built.append(AppriseNotifier((), apprise_factory=FakeApprise))
-        return self.built[-1]
+def _build_notifier() -> AppriseNotifier:
+    """An apprise notifier with no service, as the composition builds them."""
+    return AppriseNotifier((), apprise_factory=FakeApprise)
 
 
 class _Over(Work):
@@ -56,27 +56,26 @@ def _works_over(notifier: AppriseNotifier, /) -> Sequence[SupervisedWork]:
     return [SupervisedWork(work=_Over(notifier), time_limit=timedelta(minutes=5), dependencies=())]
 
 
-class TestNotifierRestartable(RestartableContract):
+class TestNotifierRestartableBuilder(RestartableBuilderContract):
     @pytest.fixture
-    def restartable(self) -> NotifierRestartable:
-        self._notifiers = _Notifiers()
-        self._notifiers.build()  # the first, which the composition builds
-        return NotifierRestartable(build_notifier=self._notifiers.build, works_over=_works_over)
+    def restartable_builder(self) -> NotifierRestartableBuilder:
+        return NotifierRestartableBuilder(build_notifier=_build_notifier, works_over=_works_over)
 
     def state_of(self, restartable: Restartable[object]) -> object:
-        return self._notifiers.built[-1]
+        assert isinstance(restartable, NotifierRestartable)
+        return restartable.notifier
 
-    def state_under(self, works: Sequence[object]) -> object:
-        [supervised] = works
+    def state_reached(self, restartable: Restartable[object]) -> object:
+        [supervised] = restartable.works()
         assert isinstance(supervised, SupervisedWork)
         assert isinstance(supervised.work, _Over)
         return supervised.work.notifier
 
 
-def test_it_is_named_as_the_notifier_s_part_is() -> None:
-    notifier = NotifierRestartable(build_notifier=_Notifiers().build, works_over=_works_over)
+def test_it_names_its_notifiers_as_the_notifier_s_part_is() -> None:
+    builder = NotifierRestartableBuilder(build_notifier=_build_notifier, works_over=_works_over)
 
-    assert str(notifier) == "notifier"
+    assert str(builder) == "notifier"
 
 
 def _sender() -> NotificationSender:

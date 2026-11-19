@@ -9,6 +9,7 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
@@ -33,7 +34,7 @@ from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifie
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 
 pytestmark = pytest.mark.asyncio
 
@@ -74,11 +75,15 @@ class _Node:
     restart policy and the supervisor wired as the node wires them."""
 
     def __init__(self, *, notifier: Notifier | None = None) -> None:
-        self.client = FakeRestartable("client amuled")
-        self.webui = FakeRestartable("webui")
-        self.notifier = FakeRestartable("notifier", works_over=lambda _: self._sending())
         self.status_reading_part = status_reading_dependency(ClientName("amuled"))
         self.webui_part = webui_dependency()
+        self.client = FakeRestartableBuilder(
+            "client amuled", works_over=lambda _: [_recorded_on(self.status_reading_part)]
+        )
+        self.webui = FakeRestartableBuilder(
+            "webui", works_over=lambda _: [_recorded_on(self.webui_part)]
+        )
+        self.notifier = FakeRestartableBuilder("notifier", works_over=lambda _: self._sending())
         self.service_parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE)
         outbox_store = FakeNotificationOutboxStore()
         self.outbox = NotificationOutbox(
@@ -97,15 +102,7 @@ class _Node:
             node_health=self.node_health,
             logger=FakeLogger(),
         )
-        self.first_sending = self._sending()
-        self._policy: RestartPolicy = node_restart_policy(
-            {
-                self.client: [_recorded_on(self.status_reading_part)],
-                self.webui: [_recorded_on(self.webui_part)],
-                self.notifier: self.first_sending,
-            },
-            supervisor=self._supervisor,
-        )
+        self._policy: RestartPolicy  # built over the first objects, once they are built
 
     def _sending(self) -> Sequence[SupervisedWork]:
         sender = NotificationSender(
@@ -125,17 +122,22 @@ class _Node:
 
     def rebuilds(self) -> tuple[int, int, int]:
         """How many times the client, the webui and the notifier were rebuilt."""
-        return (
-            len(self.client.rebuilt_at),
-            len(self.webui.rebuilt_at),
-            len(self.notifier.rebuilt_at),
-        )
+        return (self.client.rebuilds(), self.webui.rebuilds(), self.notifier.rebuilds())
 
     async def supervising(
-        self, checks: Coroutine[None, None, None], *, works: Sequence[SupervisedWork] = ()
+        self,
+        checks: Coroutine[None, None, None],
+        *,
+        running: Sequence[FakeRestartableBuilder] = (),
     ) -> None:
-        """Records ``checks`` while the supervisor runs ``works``, then the restarts they asked
-        for."""
+        """Builds each object, then records ``checks`` while the supervisor runs the works of
+        those ``running``, then the restarts they asked for."""
+        works_of: dict[RestartableBuilder[SupervisedWork], Sequence[SupervisedWork]] = {
+            builder: await self._supervisor.build_first(builder)
+            for builder in (self.client, self.webui, self.notifier)
+        }
+        self._policy = node_restart_policy(works_of, supervisor=self._supervisor)
+        works = [supervised for builder in running for supervised in works_of[builder]]
         supervision = asyncio.create_task(
             self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
         )
@@ -188,7 +190,7 @@ async def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_the
     for _ in range(20):
         node.outbox.leave(_ONLINE, services=[ONE_SERVICE_PER_AUDIENCE[1]])
 
-    await node.supervising(node.every_notification_sent(), works=node.first_sending)
+    await node.supervising(node.every_notification_sent(), running=[node.notifier])
 
     assert raising.sends == 20
     assert node.rebuilds() == (0, 0, 3)
