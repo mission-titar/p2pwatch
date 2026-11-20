@@ -203,7 +203,9 @@ class _Crawl:
                 outbox=self.observability.outbox,
                 notifier=self.notifier,
                 notification_timeout_seconds=5.0,
-                record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+                record_check=NodeHealth(
+                    logger=FakeLogger(), observability_dispatcher=self.observability.dispatcher
+                ).record,
                 service_dependencies=notification_service_dependencies(self.notifier.services()),
                 local_database=local_database_dependency(node_id=_NODE_ID),
                 logger=FakeLogger(),

@@ -9,7 +9,6 @@ import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
-from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
@@ -67,9 +66,10 @@ class _Observability:
             leave_notification=self._leave,
             services=ONE_SERVICE_PER_AUDIENCE,
         )
-        alerter = HealthAlerter(observability_dispatcher=self.dispatcher)
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send,))
+        self.node_health = NodeHealth(
+            logger=self.health_logger, observability_dispatcher=self.dispatcher
+        )
 
     def _leave(
         self, notification: Notification, *, services: Sequence[NotificationService]
