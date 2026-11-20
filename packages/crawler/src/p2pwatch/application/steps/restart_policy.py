@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
-from p2pwatch.application.ports.driven.restartable import Restartable
+from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthState
@@ -23,12 +23,12 @@ class _Restarts:
 
     def __init__(
         self,
-        restartable: Restartable[SupervisedWork],
+        builder: RestartableBuilder[SupervisedWork],
         *,
         dependencies: tuple[ExternalDependency, ...],
         logger: Logger,
     ) -> None:
-        self.restartable = restartable
+        self.builder = builder
         self.dependencies = dependencies
         self.phase: _Phase = "running"
         self.in_vain = 0
@@ -41,16 +41,16 @@ class _Restarts:
             return True
         self.phase = "given up"
         message = "%s not restarted again: %d rebuilds in vain"
-        self._logger.error(message, self.restartable, self.in_vain)
+        self._logger.error(message, self.builder, self.in_vain)
         return False
 
 
 class RestartRequest:
     """The restart of one object, such as the aMule client: the supervisor stops the works over it,
-    has it rebuilt, then says how the rebuild ended."""
+    closes it, has its builder build another, then says how the rebuild ended."""
 
     def __init__(self, restarts: _Restarts) -> None:
-        self.restartable = restarts.restartable
+        self.builder = restarts.builder
         self.dependencies = restarts.dependencies  # its parts, every work over it recorded on some
         self._restarts = restarts
 
@@ -78,19 +78,19 @@ class RestartPolicy:
     def __init__(
         self,
         *,
-        dependencies_of: Mapping[Restartable[SupervisedWork], Sequence[ExternalDependency]],
+        dependencies_of: Mapping[RestartableBuilder[SupervisedWork], Sequence[ExternalDependency]],
         works: Sequence[SupervisedWork],
         restart: RestartRunner,
         logger: Logger,
     ) -> None:
         self._restarts_of: dict[ExternalDependency, _Restarts] = {}
-        for restartable, dependencies in dependencies_of.items():
+        for builder, dependencies in dependencies_of.items():
             # A channel's part is recorded on by each of its searches: named once.
             each_once = tuple(dict.fromkeys(dependencies))
-            restarts = _Restarts(restartable, dependencies=each_once, logger=logger)
+            restarts = _Restarts(builder, dependencies=each_once, logger=logger)
             for dependency in each_once:
                 if (other := self._restarts_of.get(dependency)) is not None:
-                    of_both = f"{other.restartable} and of {restartable}"
+                    of_both = f"{other.builder} and of {builder}"
                     raise ValueError(f"{dependency.name}: a part of {of_both}")
                 self._restarts_of[dependency] = restarts
         for supervised in works:
@@ -125,11 +125,9 @@ class RestartPolicy:
             if not restarts.count_in_vain():
                 return
             in_vain = f"{restarts.in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
-            self._logger.warning(
-                "restarting %s again, %s: %s", restarts.restartable, in_vain, bugs_in
-            )
+            self._logger.warning("restarting %s again, %s: %s", restarts.builder, in_vain, bugs_in)
         elif restarts.phase == "running":
-            self._logger.warning("restarting %s: %s", restarts.restartable, bugs_in)
+            self._logger.warning("restarting %s: %s", restarts.builder, bugs_in)
         else:
             return  # a restart under way, or none to come
         restarts.phase = "restarting"

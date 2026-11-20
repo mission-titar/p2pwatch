@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.application.ports.driven.restartable import Restartable
+from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.restart_policy import RestartPolicy, RestartRequest
 from p2pwatch.application.steps.work import SupervisedWork, Work
@@ -25,7 +25,7 @@ from p2pwatch.domain.work_dependencies import (
     status_reading_dependency,
 )
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
-from tests.fakes.composition.fake_restartable import FakeRestartable
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 
 pytestmark = pytest.mark.asyncio
 
@@ -55,7 +55,7 @@ class _Policy:
 
     def __init__(self) -> None:
         self.logger = FakeLogger()
-        self.client = FakeRestartable("client amuled")
+        self.client = FakeRestartableBuilder("client amuled")
         self.search = keyword_search_dependency(
             keyword=Keyword("keroro"), client_name=_AMULED, channel=Channel("kad")
         )
@@ -97,7 +97,7 @@ async def test_a_bugs_rule_turning_failing_restarts_the_object_its_part_is_of() 
 
     await policy.check(policy.search, detected=True, times=1)
 
-    assert [request.restartable for request in policy.requests] == [policy.client]
+    assert [request.builder for request in policy.requests] == [policy.client]
     assert policy.requests[0].dependencies == (policy.search, policy.status, policy.kad)
     message = "restarting client amuled: bugs in search 'keroro' amuled kad"
     assert policy.logger.lines == [LoggedLine(level="warning", message=message)]
@@ -243,9 +243,9 @@ async def test_a_part_of_two_objects_is_refused() -> None:
     search = keyword_search_dependency(
         keyword=Keyword("keroro"), client_name=_AMULED, channel=Channel("kad")
     )
-    dependencies_of: dict[Restartable[SupervisedWork], list[ExternalDependency]] = {
-        FakeRestartable("client amuled"): [search],
-        FakeRestartable("webui"): [search],
+    dependencies_of: dict[RestartableBuilder[SupervisedWork], list[ExternalDependency]] = {
+        FakeRestartableBuilder("client amuled"): [search],
+        FakeRestartableBuilder("webui"): [search],
     }
 
     message = "^search 'keroro' amuled kad: a part of client amuled and of webui$"
@@ -264,7 +264,7 @@ async def test_a_work_recorded_on_a_part_of_no_object_is_refused() -> None:
     message = "^search 'keroro' amuled kad: recorded on channel amuled kad, a part of no object$"
     with pytest.raises(ValueError, match=message):
         RestartPolicy(
-            dependencies_of={FakeRestartable("client amuled"): [search]},
+            dependencies_of={FakeRestartableBuilder("client amuled"): [search]},
             works=[_search_recorded_on(search, kad)],
             restart=lambda _: None,
             logger=FakeLogger(),
@@ -276,7 +276,7 @@ async def test_a_work_recorded_on_no_part_is_refused() -> None:
     message = "^search 'keroro' amuled kad: recorded on no part, so over no object$"
     with pytest.raises(ValueError, match=message):
         RestartPolicy(
-            dependencies_of={FakeRestartable("client amuled"): []},
+            dependencies_of={FakeRestartableBuilder("client amuled"): []},
             works=[_search_recorded_on()],
             restart=lambda _: None,
             logger=FakeLogger(),

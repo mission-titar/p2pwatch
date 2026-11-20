@@ -1,44 +1,34 @@
-import asyncio
-from collections.abc import Iterable, Sequence
-from typing import Protocol
+from collections.abc import Sequence
 
 from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.steps.work import SupervisedWork
 
 
-# The works over ``state``, the one a rebuild just built.
-class WorksOver(Protocol):
-    def __call__(self, state: object, /) -> Sequence[SupervisedWork]: ...
-
-
-def _no_work(state: object, /) -> Sequence[SupervisedWork]:
-    return ()
-
-
 class FakeRestartable(Restartable[SupervisedWork]):
-    """Its state an ``object()``, built anew at each rebuild, which hands back ``works_over`` it;
-    a rebuild raises the next of ``errors`` first, until they run out."""
+    """Its state an ``object()`` and the works over it; each close is counted and noted under
+    ``name`` in ``closed``, then raises ``close_error`` if one is given."""
 
     def __init__(
         self,
-        name: str = "client amuled",
         *,
-        works_over: WorksOver = _no_work,
-        errors: Iterable[Exception] = (),
+        state: object,
+        works: Sequence[SupervisedWork],
+        name: str,
+        closed: list[str],
+        close_error: Exception | None,
     ) -> None:
+        self.state = state
+        self._works = tuple(works)
         self._name = name
-        self._works_over = works_over
-        self._errors = iter(errors)
-        self.state = object()
-        self.rebuilt_at: list[float] = []  # the loop's time at each rebuild, one that raised too
+        self._closed = closed
+        self._close_error = close_error
+        self.closes = 0
 
-    def __str__(self) -> str:
-        return self._name
+    def works(self) -> Sequence[SupervisedWork]:
+        return self._works
 
-    async def rebuild(self) -> Sequence[SupervisedWork]:
-        self.rebuilt_at.append(asyncio.get_running_loop().time())
-        error = next(self._errors, None)
-        if error is not None:
-            raise error
-        self.state = object()
-        return self._works_over(self.state)
+    async def close(self) -> None:
+        self.closes += 1
+        self._closed.append(self._name)
+        if self._close_error is not None:
+            raise self._close_error
