@@ -237,7 +237,8 @@ async def test_each_turn_comes_after_its_wait_the_first_included() -> None:
         1.0,
     )
 
-    assert work.calls == ["wait", "turn", "wait", "turn"]
+    # Its last wait, which never suspends, ends before the supervision cancels it: no turn after.
+    assert work.calls == ["wait", "turn", "wait", "turn", "wait"]
 
 
 @pytest.mark.asyncio

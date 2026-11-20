@@ -875,10 +875,15 @@ l'objet, en fait construire un neuf, oublie les bugs de ses tours, puis lance le
 les parties, construites une fois, gardent leurs vérifications, si bien qu'une alerte ouverte ne
 repart pas et ne finit pas. Une reconstruction qui lève laisse gardé l'objet fermé, qu'une seconde
 fermeture laisse tel quel, et se retente après l'attente suivante. Une reconstruction est vaine quand les
-bugs de l'objet repassent en échec avant d'être sains, ou quand elle a levé ; après trois, l'objet
-n'est plus redémarré. Ses `Work` tournent alors encore si la dernière reconstruction a réussi,
-seuls leurs tours fautifs échouant, et le compte repart de zéro une fois ses bugs sains ; après
-trois reconstructions qui ont levé, rien ne tourne plus sur lui jusqu'au redémarrage du conteneur.
+bugs de l'objet repassent en échec avant d'être sains, ou quand elle a levé, le compte repartant de
+zéro une fois ses bugs sains. Après trois, la cause est tenue pour partagée (les connexions aux
+bases, le moteur de matching), que seul un processus neuf renouvelle : comme un superviseur OTP
+au-delà de sa borne, le `Supervisor` arrête les `Work` de l'objet, puis tous, et finit sa
+supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie alors l'alerte
+`client amuled rebuilt 3 times in vain: the crawler restarts` avec ce qui reste dans la boîte
+d'envoi, puis lève l'erreur : la ligne de commande sort en 1 et Docker relance le crawler entier,
+`amuled` intact. Un nœud qui échoue toujours redémarre ainsi sans fin, 7 minutes et son démarrage
+au moins entre deux fois.
 Un bug qui revient sur un seul mot-clé, entre les tours sains des autres `Work`, ne reconstruit
 rien : chacun garde sa ligne et sa trace. Un réseau en panne n'est jamais réparé par un
 redémarrage : seuls les bugs redémarrent. `AmuleClientRestartableBuilder`
@@ -890,7 +895,7 @@ et rend la surveillance de ce thread (`WebuiThreadWatch`, qui regarde chaque min
 tourne encore : un thread terminé est un bug), que la fermeture arrête ; une construction coupée pendant que
 le thread se lie arrête ce thread. Un port pris ailleurs ne fait pas lever la construction : le
 thread neuf se termine, sa surveillance le retrouve terminé, et après trois reconstructions vaines
-la webui n'est plus redémarrée. Le notifieur en est un aussi (`composition/notifier_restartable.py`) :
+le crawler redémarre. Le notifieur en est un aussi (`composition/notifier_restartable.py`) :
 `NotifierRestartableBuilder` construit un notifieur neuf et rend le travail du notifieur sur lui,
 que la fermeture laisse tel quel ; l'envoi qu'arrête la reconstruction garde son entrée, que le
 travail neuf envoie. Les parties des services sont construites une fois, sur les services d'un

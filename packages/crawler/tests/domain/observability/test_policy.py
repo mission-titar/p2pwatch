@@ -231,6 +231,12 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(Severity.INFO, message="notifications saved again"),
     ),
     (
+        ev.RebuiltInVain(restartable="client amuled", rebuilds=3, node_id=_NODE_ID),
+        _relayed(
+            Severity.WARNING, message="client amuled rebuilt 3 times in vain: the crawler restarts"
+        ),
+    ),
+    (
         ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID),
         _relayed(
             Severity.INFO,

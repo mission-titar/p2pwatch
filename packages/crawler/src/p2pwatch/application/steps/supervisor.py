@@ -1,7 +1,8 @@
 """Runs every task the node repeats, such as the status reading, the works of the objects it
 built, until the shutdown is requested, then cancels them all; a turn that raises or outlasts its
 time limit fails alone, the others go on. It counts the bugs of each object's turns, and rebuilds
-the object, such as the aMule client, whose bugs keep coming back, waiting longer each time."""
+the object, such as the aMule client, whose bugs keep coming back, waiting longer each time; its
+third rebuild in vain ends the supervision with a ``CrawlerRestartError``."""
 
 import asyncio
 from collections.abc import Sequence
@@ -15,6 +16,7 @@ from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.work import SupervisedWork, Work
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
 
@@ -28,7 +30,8 @@ BUGS = HealthRule(
     recovers_under=Detections(times=2, among_last=10),
 )
 
-# Past three, a rebuild is taken to repair nothing, as an OTP supervisor bounds its restarts.
+# Past three, the cause is taken to lie in something shared, which only a new process renews: the
+# supervision ends, as an OTP supervisor past its bound stops its children, then itself.
 REBUILDS_IN_VAIN_AT_MOST = 3
 
 # Doubled after each rebuild in vain, 1, 2, then 4 min, as Kubernetes' CrashLoopBackOff waits.
@@ -63,9 +66,14 @@ class SupervisedObject:
         self._rebuilt = False
         self._in_vain = 0
 
+    @property
+    def rebuilds_in_vain(self) -> int:
+        """Its rebuilds in vain since its bugs were last healthy, one that raised included."""
+        return self._in_vain
+
     def record_turn(self, *, met_a_bug: bool) -> bool:
-        """Counts one turn of its works, such as a search that met a bug; whether to rebuild it now,
-        its bugs just turned failing, never past three rebuilds in vain."""
+        """Counts one turn of its works, such as a search that met a bug; whether its bugs just
+        turned failing, which stops its works for a rebuild, or after three in vain, for good."""
         previous = self._bugs
         self._latest_met_a_bug = (*self._latest_met_a_bug, met_a_bug)[-BUGS.checks_kept :]
         self._bugs = BUGS.state_after(self._latest_met_a_bug, previous=previous)
@@ -78,21 +86,16 @@ class SupervisedObject:
             self._rebuilt = True
             self._logger.warning("restarting %s: bugs in its works", self.builder)
             return True
-        if not self.count_in_vain():
-            return False
-        in_vain = f"{self._in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
-        self._logger.warning("restarting %s again, %s: bugs in its works", self.builder, in_vain)
+        self.count_in_vain()
+        if self._in_vain < REBUILDS_IN_VAIN_AT_MOST:
+            in_vain = f"{self._in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
+            message = "restarting %s again, %s: bugs in its works"
+            self._logger.warning(message, self.builder, in_vain)
         return True
 
-    def count_in_vain(self) -> bool:
-        """Counts one rebuild in vain, such as one that raised; whether to rebuild it again, never
-        past three."""
+    def count_in_vain(self) -> None:
+        """Counts one rebuild in vain, such as one that raised."""
         self._in_vain += 1
-        if self._in_vain < REBUILDS_IN_VAIN_AT_MOST:
-            return True
-        message = "%s not restarted again: %d rebuilds in vain"
-        self._logger.error(message, self.builder, self._in_vain)
-        return False
 
     def wait_before_rebuild(self) -> timedelta:
         """How long its next rebuild waits once its works stopped: 1 min, doubled after each
@@ -111,7 +114,7 @@ class SupervisedObject:
 class Supervisor:
     """Takes the turns of the works of each object it built, until the run state says the shutdown
     was requested; holds the object each builder built latest, and rebuilds it when its bugs keep
-    coming back."""
+    coming back, three times in vain at most."""
 
     def __init__(
         self,
@@ -127,6 +130,8 @@ class Supervisor:
         # Each work's task while it runs, and the object it is over, which a rebuild stops it with.
         self._running: dict[asyncio.Task[None], SupervisedObject] = {}
         self._objects: dict[RestartableBuilder[SupervisedWork], SupervisedObject] = {}
+        # An object's third rebuild in vain, which ends the supervision.
+        self._restarts_decided: asyncio.Queue[CrawlerRestartError] = asyncio.Queue()
 
     async def build_first(
         self, builder: RestartableBuilder[SupervisedWork]
@@ -146,19 +151,25 @@ class Supervisor:
 
     async def supervise(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
         """Takes the turns of each object's works and runs each rebuild until the shutdown is
-        requested, arms the bound, cancels them; a wait's exception escapes in a group."""
+        requested or an object's third rebuild in vain, arms the bound, cancels them, then raises
+        the latter's ``CrawlerRestartError``; a wait's exception escapes in a group."""
         async with asyncio.TaskGroup() as group:
             for supervised in self._objects.values():
                 for work in supervised.latest.works():
                     self._add(work, over=supervised, group=group)
             rebuilds = group.create_task(self._rebuild_each_decided(group))
-            await self._run_state_reader.wait_until_shutdown_requested()
+            restart = group.create_task(self._restarts_decided.get())
+            requested = group.create_task(self._run_state_reader.wait_until_shutdown_requested())
+            await asyncio.wait((restart, requested), return_when=asyncio.FIRST_COMPLETED)
             arm_shutdown_bound()
-            rebuilds.cancel()
+            for task in (rebuilds, restart, requested):
+                task.cancel()
             # Every work, not only the searches: one asleep in its wait would hold the unwind
             # until the bound fires, and turn a clean stop into a forced one.
             for task in tuple(self._running):
                 task.cancel()
+        if not restart.cancelled():
+            raise restart.result()
 
     def _add(
         self, supervised: SupervisedWork, *, over: SupervisedObject, group: asyncio.TaskGroup
@@ -175,13 +186,16 @@ class Supervisor:
                 rebuilds.create_task(self._rebuild(supervised, group=group))
 
     async def _rebuild(self, supervised: SupervisedObject, *, group: asyncio.TaskGroup) -> None:
-        """Stops the works over the object, then has it rebuilt after 1, 2, then 4 min; a rebuild
-        that raises counts in vain and is tried again after the next wait, never past three."""
+        """Stops the works over the object, then has it rebuilt after 1, 2, then 4 min, a rebuild
+        that raised counting in vain; after three in vain, ends the supervision instead."""
         await self._stop_works_over(supervised)
-        while True:
+        while supervised.rebuilds_in_vain < REBUILDS_IN_VAIN_AT_MOST:
             await self._monotonic_clock.sleep(supervised.wait_before_rebuild())
-            if await self._rebuilt(supervised, group=group) or not supervised.count_in_vain():
+            if await self._rebuilt(supervised, group=group):
                 return
+            supervised.count_in_vain()
+        restart = CrawlerRestartError(str(supervised.builder), rebuilds=supervised.rebuilds_in_vain)
+        self._restarts_decided.put_nowait(restart)
 
     async def _stop_works_over(self, supervised: SupervisedObject) -> None:
         stopping = [task for task, over in self._running.items() if over is supervised]
@@ -210,6 +224,9 @@ class Supervisor:
         met_a_bug = False
         while True:
             await self._wait(supervised.work, after_a_bug=met_a_bug)
+            # The supervision sees a shutdown a few loop turns after the works: no turn starts then.
+            if self._run_state_reader.is_shutdown_requested():
+                return
             met_a_bug = await self._take_turn(supervised)
             if over.record_turn(met_a_bug=met_a_bug):
                 self._rebuilds_decided.put_nowait(over)

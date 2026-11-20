@@ -145,6 +145,14 @@ class NotificationsSavedAgain:
 
 
 @dataclass(kw_only=True, frozen=True)
+class RebuiltInVain:
+    # An object, such as the aMule client, rebuilt ``rebuilds`` times in vain: the crawler restarts.
+    restartable: str
+    rebuilds: int
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class SourceFirstUseful:
     # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
@@ -190,6 +198,7 @@ type Event = (
     | DiskSpaceLow
     | NotificationsNotSaved
     | NotificationsSavedAgain
+    | RebuiltInVain
     | SourceFirstUseful
     | SourceReappeared
     | CrawlerStarted

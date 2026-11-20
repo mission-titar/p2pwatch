@@ -6,14 +6,15 @@ from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.identifiers import NodeId
-from p2pwatch.domain.observability.events import CrawlerStarted
+from p2pwatch.domain.observability.events import CrawlerStarted, RebuiltInVain
 
 
 class CrawlerLifecycle:
     """Resumes the saved backoffs, announces the node online, re-evaluates the catalog if the
     policy changed, has the supervisor run the works of the objects it built, then sends the
-    notifications left."""
+    notifications left, a third rebuild in vain's alert among them."""
 
     def __init__(
         self,
@@ -38,7 +39,8 @@ class CrawlerLifecycle:
 
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
         """Runs until the shutdown is requested, arming the bound before the works are cancelled;
-        returns once the notifications left in the outbox are sent, within that bound."""
+        returns once the notifications left in the outbox are sent, within that bound, or raises
+        the ``CrawlerRestartError`` of a third rebuild in vain once its alert is sent with them."""
         self._backoff.resume_waits()
         self._logger.info("crawler started: node_id=%s", self._node_id)
         if self._download_enabled:
@@ -49,5 +51,16 @@ class CrawlerLifecycle:
         # Before the works, so the first search's tier actions (download wake, notify) see the
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed()
-        await self._supervisor.supervise(arm_shutdown_bound=arm_shutdown_bound)
+        try:
+            await self._supervisor.supervise(arm_shutdown_bound=arm_shutdown_bound)
+        except CrawlerRestartError as restart:
+            await self._observability_dispatcher.dispatch(
+                RebuiltInVain(
+                    restartable=restart.restartable,
+                    rebuilds=restart.rebuilds,
+                    node_id=self._node_id,
+                )
+            )
+            await self._notification_sender.send_what_is_left()
+            raise
         await self._notification_sender.send_what_is_left()
