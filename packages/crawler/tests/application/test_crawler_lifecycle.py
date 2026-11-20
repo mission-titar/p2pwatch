@@ -48,6 +48,7 @@ from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicy
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _FINGERPRINT = "policy-2"
@@ -136,6 +137,24 @@ class _Crawl:
         )
         self._works_started = 0
         self._both_works_started = asyncio.Event()
+        self._works = [
+            SupervisedWork(work=work, time_limit=timedelta(days=1), dependencies=())
+            for work in (
+                _WorkLeavingACompletion(
+                    "search", on_start=self._work_started, dispatcher=self.observability.dispatcher
+                )
+                if search_leaves_a_completion
+                else _WorkWaitingForTheStop("search", on_start=self._work_started),
+                _WorkWaitingForTheStop("status", on_start=self._work_started),
+            )
+        ]
+        self._supervisor = Supervisor(
+            run_state_reader=self.run_state,
+            # Its sleeps never end: with instant ones, every time limit would expire at once.
+            monotonic_clock=FakeBlockingMonotonicClock(),
+            node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
+            logger=FakeLogger(),
+        )
         self.crawler_lifecycle = CrawlerLifecycle(
             node_id=_NODE_ID,
             observability_dispatcher=self.observability.dispatcher,
@@ -160,27 +179,8 @@ class _Crawl:
                 logger=self.catalog_reevaluator_logger,
             ),
             backoff=self.backoff,
-            works=[
-                SupervisedWork(work=work, time_limit=timedelta(days=1), dependencies=())
-                for work in (
-                    _WorkLeavingACompletion(
-                        "search",
-                        on_start=self._work_started,
-                        dispatcher=self.observability.dispatcher,
-                    )
-                    if search_leaves_a_completion
-                    else _WorkWaitingForTheStop("search", on_start=self._work_started),
-                    _WorkWaitingForTheStop("status", on_start=self._work_started),
-                )
-            ],
             download_enabled=download_enabled,
-            supervisor=Supervisor(
-                run_state_reader=self.run_state,
-                # Its sleeps never end: with instant ones, every time limit would expire at once.
-                monotonic_clock=FakeBlockingMonotonicClock(),
-                node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
-                logger=FakeLogger(),
-            ),
+            supervisor=self._supervisor,
             notification_sender=NotificationSender(
                 outbox=self.observability.outbox,
                 notifier=self.notifier,
@@ -201,6 +201,9 @@ class _Crawl:
             self._both_works_started.set()
 
     async def run_until_both_works_start_then_stop(self) -> None:
+        """Builds the one object the two works are over, runs the crawler until both have started,
+        then stops it."""
+        await self._supervisor.build_first(FakeRestartableBuilder(works_over=lambda _: self._works))
         run = asyncio.create_task(
             self.crawler_lifecycle.run(arm_shutdown_bound=lambda: self.steps.append("bound armed"))
         )

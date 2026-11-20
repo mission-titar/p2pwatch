@@ -471,19 +471,18 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
         logger=logger,
     )
 
-    # Returns at the shutdown, with no exception: the node ran on.
-    virtual_loop.run_until_complete(
-        supervisor.supervise(
-            [
-                SupervisedWork(
-                    work=watcher,
-                    time_limit=timedelta(hours=1),
-                    dependencies=(status_reading_dependency(_AMULED),),
-                )
-            ],
-            arm_shutdown_bound=lambda: None,
-        )
+    reading = SupervisedWork(
+        work=watcher,
+        time_limit=timedelta(hours=1),
+        dependencies=(status_reading_dependency(_AMULED),),
     )
+
+    async def supervise() -> None:
+        await supervisor.build_first(FakeRestartableBuilder(works_over=lambda _state: [reading]))
+        await supervisor.supervise(arm_shutdown_bound=lambda: None)
+
+    # Returns at the shutdown, with no exception: the node ran on.
+    virtual_loop.run_until_complete(supervise())
 
     message = "status reading amuled: amuleapi refused the admin password"
     assert logger.lines == [LoggedLine(level="warning", message=message)] * 5
@@ -577,8 +576,8 @@ class _RebuiltNode:
         self._loop.run_until_complete(self._run())
 
     async def _run(self) -> None:
-        works = await self._supervisor.build_first(self.amule_client)
-        await self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
+        await self._supervisor.build_first(self.amule_client)
+        await self._supervisor.supervise(arm_shutdown_bound=lambda: None)
 
 
 def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(

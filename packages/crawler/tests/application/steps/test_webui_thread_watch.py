@@ -131,8 +131,8 @@ class _Webui:
         self.loop.run_until_complete(self._run())
 
     async def _run(self) -> None:
-        works = await self._supervisor.build_first(self.webui)
-        await self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
+        await self._supervisor.build_first(self.webui)
+        await self._supervisor.supervise(arm_shutdown_bound=lambda: None)
 
     def bug_lines(self) -> int:
         return sum(1 for line in self.logger.lines if line.message == "bug in webui")
