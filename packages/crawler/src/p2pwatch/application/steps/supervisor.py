@@ -1,7 +1,7 @@
 """Runs every task the node repeats, such as the status reading, the works of the objects it
 built, until the shutdown is requested, then cancels them all; a turn that raises or outlasts its
 time limit fails alone, the others go on. It counts the bugs of each object's turns, and rebuilds
-the object, such as the aMule client, whose bugs keep coming back."""
+the object, such as the aMule client, whose bugs keep coming back, waiting longer each time."""
 
 import asyncio
 from collections.abc import Sequence
@@ -30,6 +30,9 @@ BUGS = HealthRule(
 
 # Past three, a rebuild is taken to repair nothing, as an OTP supervisor bounds its restarts.
 REBUILDS_IN_VAIN_AT_MOST = 3
+
+# Doubled after each rebuild in vain, 1, 2, then 4 min, as Kubernetes' CrashLoopBackOff waits.
+FIRST_WAIT_BEFORE_A_REBUILD = timedelta(minutes=1)
 
 
 class TurnTimeoutError(Exception):
@@ -90,6 +93,11 @@ class SupervisedObject:
         message = "%s not restarted again: %d rebuilds in vain"
         self._logger.error(message, self.builder, self._in_vain)
         return False
+
+    def wait_before_rebuild(self) -> timedelta:
+        """How long its next rebuild waits once its works stopped: 1 min, doubled after each
+        rebuild in vain."""
+        return FIRST_WAIT_BEFORE_A_REBUILD * (1 << self._in_vain)
 
     async def rebuild(self) -> Sequence[SupervisedWork]:
         """Closes the latest object, holds the one its builder builds next, forgets the bugs of the
@@ -167,13 +175,13 @@ class Supervisor:
                 rebuilds.create_task(self._rebuild(supervised, group=group))
 
     async def _rebuild(self, supervised: SupervisedObject, *, group: asyncio.TaskGroup) -> None:
-        """Stops the works over the object, then has it rebuilt; a rebuild that raises counts in
-        vain and is tried again 60 s later, never past three in vain."""
+        """Stops the works over the object, then has it rebuilt after 1, 2, then 4 min; a rebuild
+        that raises counts in vain and is tried again after the next wait, never past three."""
         await self._stop_works_over(supervised)
-        while not await self._rebuilt(supervised, group=group):
-            if not supervised.count_in_vain():
+        while True:
+            await self._monotonic_clock.sleep(supervised.wait_before_rebuild())
+            if await self._rebuilt(supervised, group=group) or not supervised.count_in_vain():
                 return
-            await self._monotonic_clock.sleep(WAIT_AFTER_A_BUG)
 
     async def _stop_works_over(self, supervised: SupervisedObject) -> None:
         stopping = [task for task, over in self._running.items() if over is supervised]

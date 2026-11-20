@@ -151,8 +151,8 @@ refusé) s'écrit en une ligne d'avertissement, `<work>: <erreur>`. Toute autre 
 plus tardif de ces 60 s et de sa propre attente, jamais leur somme. Une attente qui lève arrête
 encore le nœud. Chaque `Work` se nomme dans ces lignes : `status reading amuled`, `download
 tracking amuled`, `source tracking amuled`, `search 'keroro' amuled kad`, `webui`. Les bugs des
-tours sont comptés sur l'objet dont ils font tourner les `Work`, que trois d'affilée reconstruisent
-(§10.2). À l'arrêt demandé, il arme le délai d'arrêt, puis
+tours sont comptés sur l'objet dont ils font tourner les `Work`, que trois d'affilée reconstruisent,
+après 1, 2, puis 4 minutes (§10.2). À l'arrêt demandé, il arme le délai d'arrêt, puis
 annule chaque `Work`. L'attente vient avant chaque tour, le premier compris, et chaque `Work` la calcule depuis son propre état : pour une recherche, la fin du backoff
 de son client et de son canal, si bien qu'un backoff repris au démarrage retarde aussi la première
 (§5) ; pour le statut, ce qui reste de la minute depuis la fin de la lecture précédente, rien avant
@@ -869,11 +869,12 @@ ferme, le dernier construit d'abord. Ce `SupervisedObject` compte aussi, sur cha
 `Work` de l'objet, s'il a rencontré un bug, une erreur attendue n'en étant pas un, aux seuils de
 `BUGS` : 3 tours d'affilée en échec, moins de 2 sur les 10 derniers sains. En échec, le
 `Supervisor` reconstruit l'objet (`restarting client amuled: bugs in its works`) dans une tâche à
-lui, jamais dans le tour qui l'a décidé : il arrête les `Work` de l'objet et les attend, ferme
+lui, jamais dans le tour qui l'a décidé : il arrête les `Work` de l'objet et les attend, puis,
+après 1 minute, doublée après chaque reconstruction vaine (1, 2, puis 4 minutes, en mémoire), ferme
 l'objet, en fait construire un neuf, oublie les bugs de ses tours, puis lance les `Work` du neuf ;
 les parties, construites une fois, gardent leurs vérifications, si bien qu'une alerte ouverte ne
 repart pas et ne finit pas. Une reconstruction qui lève laisse gardé l'objet fermé, qu'une seconde
-fermeture laisse tel quel, et se retente 60 s plus tard. Une reconstruction est vaine quand les
+fermeture laisse tel quel, et se retente après l'attente suivante. Une reconstruction est vaine quand les
 bugs de l'objet repassent en échec avant d'être sains, ou quand elle a levé ; après trois, l'objet
 n'est plus redémarré. Ses `Work` tournent alors encore si la dernière reconstruction a réussi,
 seuls leurs tours fautifs échouant, et le compte repart de zéro une fois ses bugs sains ; après
