@@ -137,7 +137,6 @@ async def _status_alerts(*readings: _StatusReading) -> list[_Alert]:
             channel: channel_dependency(client_name=_AMULED, channel=channel)
             for channel in _CHANNELS
         },
-        download_tracking_dependency=None,
     )
     return await _alerts([watcher.run_once] * len(readings), observability=observability)
 

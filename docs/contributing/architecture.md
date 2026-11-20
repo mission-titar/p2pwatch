@@ -836,13 +836,13 @@ Chaque canal a une troisième règle, « searches failed » : chaque recherche e
 l'a refusée (`SearchFailedError`) ; 3 refus d'affilée mettent le canal en échec, moins de 2 sur les
 10 dernières recherches le rendent sain. Un client injoignable ou un mot de passe refusé
 n'enregistre rien, si bien qu'une panne d'aMule ne guérit pas le canal.
-Le suivi des téléchargements est une partie aussi : à chaque mesure de l'espace libre, la décision
-de téléchargement enregistre si le disque est sous son plancher. Une mesure basse suffit pour
-l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
-redevenir sain, et cette alerte n'a pas de fin. La lecture d'état y enregistre aussi si aucun canal
-du client n'est connecté (« connected to no network ») : 6 lectures d'affilée mettent la partie en
-échec, moins de 2 sur les 10 dernières la rendent saine. Un nœud sans `download:` n'a pas cette
-partie. Un bug n'est pas une panne : c'est notre code, jamais une partie, qui l'a ; le
+Le client a une seconde règle, « connected to no network » : la lecture d'état y enregistre si
+aucun de ses canaux n'est connecté, que le nœud télécharge ou non ; 6 lectures d'affilée le mettent
+en échec, moins de 2 sur les 10 dernières le rendent sain, et aucune alerte ne la nomme.
+Le disque des téléchargements est une partie aussi (`download disk`) : à chaque mesure de l'espace
+libre, la décision de téléchargement enregistre s'il est sous son plancher. Une mesure basse suffit
+pour l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
+redevenir sain, et cette alerte n'a pas de fin. Un nœud sans `download:` n'a pas cette partie. Un bug n'est pas une panne : c'est notre code, jamais une partie, qui l'a ; le
 `Supervisor` compte les bugs de chaque objet qu'il reconstruit (§10.2), et aucune ligne ne dit
 qu'un canal a des bugs. Chaque service de notification, une URL configurée, est une partie aussi,
 nommée par le schéma de son URL et son audience, jamais par l'URL, qui porte le jeton d'un webhook

@@ -1,8 +1,8 @@
 """Reads one client's status every minute: each reading feeds the channel gauges and the health
-of the client, of each channel and of download tracking, which needs a channel connected.
+of the client, whether it answers and whether any channel is connected, and of each channel.
 
-A field aMule did not give records nothing, so while aMule does not answer each channel and
-download tracking keep their health.
+A field aMule did not give records nothing, so while aMule does not answer each channel and the
+client's networks keep their health.
 """
 
 from collections.abc import Mapping
@@ -16,7 +16,6 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
-from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK
 from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
@@ -25,6 +24,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    CONNECTED_TO_NO_NETWORK,
     STATUS_PERIOD,
     ChannelStatus,
     ClientStatus,
@@ -48,7 +48,6 @@ class StatusWatcher(Work):
         node_health: NodeHealth,
         client_dependency: ExternalDependency,
         channel_dependencies: Mapping[Channel, ExternalDependency],
-        download_tracking_dependency: ExternalDependency | None,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -59,7 +58,6 @@ class StatusWatcher(Work):
         self._node_health = node_health
         self._client_dependency = client_dependency
         self._channel_dependencies = channel_dependencies
-        self._download_tracking_dependency = download_tracking_dependency  # None: no download
         self._latest_reading_ended_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
@@ -101,12 +99,10 @@ class StatusWatcher(Work):
         channels = {c.channel: c for c in status.channels} if status else {}
         for channel, dependency in self._channel_dependencies.items():
             await self._read_channel(channel, reading=channels.get(channel), on=dependency)
-        if status is not None and self._download_tracking_dependency is not None:
+        if status is not None:
             on_a_network = any(channel.connected for channel in status.channels)
             await self._node_health.record(
-                on=self._download_tracking_dependency,
-                rule=CONNECTED_TO_NO_NETWORK,
-                detected=not on_a_network,
+                on=self._client_dependency, rule=CONNECTED_TO_NO_NETWORK, detected=not on_a_network
             )
 
     def _publish(self, status: ClientStatus | None) -> None:

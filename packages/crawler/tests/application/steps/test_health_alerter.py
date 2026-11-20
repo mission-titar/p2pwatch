@@ -3,11 +3,7 @@ from dataclasses import replace
 import pytest
 
 from p2pwatch.application.steps.health_alerter import HealthAlerter
-from p2pwatch.domain.download.disk_space import (
-    CONNECTED_TO_NO_NETWORK,
-    DISK_SPACE_LOW,
-    download_tracking_dependency,
-)
+from p2pwatch.domain.download.disk_space import DISK_SPACE_LOW, download_disk_dependency
 from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -23,6 +19,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    CONNECTED_TO_NO_NETWORK,
     SEARCHES_FAILED,
     channel_dependency,
     client_dependency,
@@ -41,7 +38,7 @@ _REACHABLE_AGAIN = RelayedLogLine(
 
 _AMULE = client_dependency(ClientName("amuled"))
 _KAD = channel_dependency(client_name=ClientName("amuled"), channel=Channel("kad"))
-_DOWNLOAD_TRACKING = download_tracking_dependency(ClientName("amuled"))
+_DOWNLOAD_DISK = download_disk_dependency()
 _TEN_GIB = 10 * 2**30
 _NOTIFICATION_SERVICE_PART = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE)[
     ONE_SERVICE_PER_AUDIENCE[0]
@@ -109,13 +106,13 @@ async def test_a_rule_it_has_no_alert_for_raises(
     ("rule", "on"),
     [
         (SEARCHES_FAILED, _KAD),
-        (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
+        (CONNECTED_TO_NO_NETWORK, _AMULE),
         # An alert about the notifier would be sent through the notifier itself.
         (SENDS_FAILED, _NOTIFICATION_SERVICE_PART),
     ],
     ids=[
         "a channel's searches failed",
-        "download tracking connected to no network",
+        "the client connected to no network",
         "a notification service's sends failed",
     ],
 )
@@ -203,7 +200,7 @@ async def test_a_client_s_rule_on_a_part_of_no_client_raises(current: HealthStat
 @pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
 async def test_the_disk_failing_sends_disk_low_under_its_floor(previous: HealthState) -> None:
     sent = await _sent(
-        previous=previous, current=HealthState.FAILING, rule=DISK_SPACE_LOW, on=_DOWNLOAD_TRACKING
+        previous=previous, current=HealthState.FAILING, rule=DISK_SPACE_LOW, on=_DOWNLOAD_DISK
     )
     assert sent == [
         RelayedLogLine(
@@ -220,7 +217,7 @@ async def test_the_disk_healthy_sends_nothing_since_its_alert_has_no_end(
     previous: HealthState,
 ) -> None:
     sent = await _sent(
-        previous=previous, current=HealthState.HEALTHY, rule=DISK_SPACE_LOW, on=_DOWNLOAD_TRACKING
+        previous=previous, current=HealthState.HEALTHY, rule=DISK_SPACE_LOW, on=_DOWNLOAD_DISK
     )
     assert sent == []
 
@@ -262,12 +259,12 @@ async def test_the_local_database_healthy_again_sends_notifications_saved_again(
 
 @pytest.mark.asyncio
 async def test_the_disk_failing_on_a_node_without_a_floor_raises() -> None:
-    with pytest.raises(ValueError, match="download tracking amuled: no disk floor for its alert"):
+    with pytest.raises(ValueError, match="download disk: no disk floor for its alert"):
         await _sent(
             previous=HealthState.HEALTHY,
             current=HealthState.FAILING,
             rule=DISK_SPACE_LOW,
-            on=_DOWNLOAD_TRACKING,
+            on=_DOWNLOAD_DISK,
             min_free_bytes=None,
         )
 

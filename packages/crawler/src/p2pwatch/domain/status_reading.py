@@ -36,6 +36,13 @@ CHANNEL_NOT_CONNECTABLE = HealthRule(
 # A channel's sixth reading in a row comes 5 minutes after the first.
 CHANNEL_ALERT_AFTER = (_CHANNEL_DETECTED_IN_A_ROW - 1) * STATUS_PERIOD
 
+# No channel of the client connected, so no download finds a source: 6 readings, as a channel's.
+CONNECTED_TO_NO_NETWORK = HealthRule(
+    name="connected to no network",
+    fails_at=Detections(times=_CHANNEL_DETECTED_IN_A_ROW, among_last=_CHANNEL_DETECTED_IN_A_ROW),
+    recovers_under=Detections(times=2, among_last=10),
+)
+
 # A channel whose network refuses its searches, such as Kad answering with an error.
 SEARCHES_FAILED = HealthRule(
     name="searches failed",
@@ -45,9 +52,12 @@ SEARCHES_FAILED = HealthRule(
 
 
 def client_dependency(client_name: ClientName) -> ExternalDependency:
-    """The client, judged by whether its API answers: "client amuled"."""
+    """The client, judged by whether its API answers and whether any of its channels is
+    connected: "client amuled"."""
     return ExternalDependency(
-        name=f"client {client_name}", client_name=client_name, rules=(CLIENT_UNREACHABLE,)
+        name=f"client {client_name}",
+        client_name=client_name,
+        rules=(CLIENT_UNREACHABLE, CONNECTED_TO_NO_NETWORK),
     )
 
 

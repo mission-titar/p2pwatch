@@ -39,7 +39,7 @@ from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
-from p2pwatch.domain.download.disk_space import download_tracking_dependency
+from p2pwatch.domain.download.disk_space import download_disk_dependency
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.status_reading import channel_dependency, client_dependency
@@ -82,8 +82,6 @@ class DownloadSteps:
         self._monotonic_clock = monotonic_clock
         self._observability_dispatcher = observability_dispatcher
         self._node_id = node_id
-        # One part for the disk's readings and the client's networks.
-        self.download_tracking = download_tracking_dependency(client_name)
         # Both share ``local_connection`` and the catalog's stores: one writer, on the event loop.
         self._tracked_download_store = SqliteTrackedDownloadStore(local_connection)
         self._source_point_store = SqliteSourcePointStore(catalog_connection)
@@ -116,7 +114,7 @@ class DownloadSteps:
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
             node_health=node_health,
-            download_tracking_dependency=self.download_tracking,
+            download_disk_dependency=download_disk_dependency(),
             logger=StdlibLogger(DownloadDecider.__module__),
         )
 
@@ -218,9 +216,6 @@ class AmuleClientWorks:
             node_health=self._node_health,
             client_dependency=self._client_dependency,
             channel_dependencies=self._channel_dependencies,
-            download_tracking_dependency=(
-                None if download_steps is None else download_steps.download_tracking
-            ),
         )
         search_worker = SearchWorker(
             client_name=self._client_name,
