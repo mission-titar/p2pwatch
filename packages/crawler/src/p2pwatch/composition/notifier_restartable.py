@@ -11,7 +11,7 @@ from p2pwatch.application.ports.driven.restartable_builder import RestartableBui
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
-from p2pwatch.domain.health.external_dependency import ExternalDependency
+from p2pwatch.domain.observability.notification_sends import NotificationService
 
 
 class AppriseNotifierBuilder(Protocol):
@@ -27,15 +27,15 @@ def notification_sending(
     sender: NotificationSender,
     *,
     notification_timeout_seconds: float,
-    dependencies: tuple[ExternalDependency, ...],
+    services: Sequence[NotificationService],
 ) -> Sequence[SupervisedWork]:
-    """``sender``'s turns, each recorded on the part of every service, such as ``notifier discord
-    community``; none without a service, since nothing is then left to send."""
-    if not dependencies:
-        return ()  # the restart policy refuses a work recorded on no part
+    """``sender``'s turns, each a send to one of ``services``, such as ``discord community``; none
+    without a service, since nothing is then left to send."""
+    if not services:
+        return ()
     # One send per turn: its timeout, then the margin.
     time_limit = timedelta(seconds=notification_timeout_seconds) + TIME_LIMIT_MARGIN
-    return [SupervisedWork(work=sender, time_limit=time_limit, dependencies=dependencies)]
+    return [SupervisedWork(work=sender, time_limit=time_limit)]
 
 
 class NotifierRestartable(Restartable[SupervisedWork]):

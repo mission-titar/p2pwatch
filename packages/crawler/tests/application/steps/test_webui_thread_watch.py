@@ -1,13 +1,11 @@
 """The webui's thread watch: every minute, whether the webui's thread still runs; a thread that has
-ended is a bug of the webui, which the node rebuilds at the third in a row."""
+ended is a bug of the webui, which the supervisor rebuilds at the third in a row."""
 
 from collections.abc import Sequence
 from datetime import timedelta
 
 import pytest
 
-from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.application.steps.restart_policy import RestartPolicy
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.webui_thread_watch import (
     WebuiThreadEndedError,
@@ -15,10 +13,7 @@ from p2pwatch.application.steps.webui_thread_watch import (
 )
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.domain.expected_error import ExpectedError
-from p2pwatch.domain.health.external_dependency import HealthTransition
-from p2pwatch.domain.health.health_rule import HealthState
-from p2pwatch.domain.work_dependencies import BUGS, webui_dependency
-from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -58,7 +53,7 @@ async def test_a_turn_over_an_ended_thread_raises_a_bug() -> None:
     with pytest.raises(WebuiThreadEndedError) as raised:
         await watch.run_once()
 
-    # A bug, never an expected error: the bugs rule counts it, and a failing one rebuilds.
+    # A bug, never an expected error: the supervisor counts it, and three in a row rebuild.
     assert not isinstance(raised.value, ExpectedError)
     assert str(raised.value) == "the webui's thread has ended while the node runs"
 
@@ -81,13 +76,12 @@ async def test_the_log_names_it_as_its_part_the_webui() -> None:
 
 
 class _Webui:
-    """The webui and its thread watch under the supervisor and the restart policy, as the node
-    wires them; each rebuild builds a thread anew, serving if ``rebuilt_threads_serve``."""
+    """The webui and its thread watch under the supervisor, as the node wires them; each rebuild
+    builds a thread anew, serving if ``rebuilt_threads_serve``."""
 
     def __init__(self, loop: VirtualLoop, *, rebuilt_threads_serve: bool) -> None:
         self.loop = loop
         self.logger = FakeLogger()
-        self.part = webui_dependency()
         self.first_thread = _WebuiThread()
         self._rebuilt_threads_serve = rebuilt_threads_serve
         self.webui = FakeRestartableBuilder("webui", works_over=self._works_over_a_thread)
@@ -95,27 +89,15 @@ class _Webui:
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
-            node_health=NodeHealth(logger=FakeLogger(), subscribers=(self._to_policy,)),
             logger=self.logger,
         )
         self._first_works = self._watch_over(self.first_thread)
-        self._policy = RestartPolicy(
-            dependencies_of={self.webui: [self.part]},
-            works=self._first_works,
-            restart=self._supervisor.restart,
-            logger=FakeLogger(),
-        )
-
-    async def _to_policy(self, transition: HealthTransition) -> None:
-        await self._policy(transition)
 
     def _watch_over(self, thread: _WebuiThread) -> Sequence[SupervisedWork]:
         watch = WebuiThreadWatch(
             thread_alive=thread.is_alive, monotonic_clock=FakeLoopMonotonicClock(self.loop)
         )
-        return [
-            SupervisedWork(work=watch, time_limit=timedelta(minutes=5), dependencies=(self.part,))
-        ]
+        return [SupervisedWork(work=watch, time_limit=timedelta(minutes=5))]
 
     def _works_over_a_thread(self, _state: object, /) -> Sequence[SupervisedWork]:
         """The first thread's watch at the first build, then a watch over a thread built anew."""
@@ -150,7 +132,6 @@ def test_a_thread_ended_has_the_webui_rebuilt_at_the_third_watch_after(
     # Its looks at 120, 180 and 240 s met the ended thread; the new thread's watch finds it serving.
     assert webui.webui.built_at == [0.0, 240.0]
     assert webui.bug_lines() == 3
-    assert webui.part.state(BUGS) is HealthState.HEALTHY
 
 
 def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vain_then_no_more(
@@ -163,4 +144,6 @@ def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vai
 
     # Each rebuilt thread's watch meets it ended three times, a minute apart, from a minute on.
     assert webui.webui.built_at == [0.0, 180.0, 360.0, 540.0]
-    assert webui.part.state(BUGS) is HealthState.FAILING
+    # Its fourth thread found ended three times too: given up.
+    given_up = "webui not restarted again: 3 rebuilds in vain"
+    assert LoggedLine(level="error", message=given_up) in webui.logger.lines

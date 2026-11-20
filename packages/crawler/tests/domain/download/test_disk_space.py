@@ -5,7 +5,6 @@ from p2pwatch.domain.download.disk_space import (
 )
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_dependencies import BUGS
 
 
 def _changes(*detected: bool) -> list[HealthState | None]:
@@ -27,12 +26,6 @@ def test_the_disk_fails_at_its_first_low_reading_and_is_healthy_at_its_first_goo
 
 def test_the_disk_good_at_its_first_reading_is_healthy() -> None:
     assert _changes(False) == [HealthState.HEALTHY]
-
-
-def test_download_tracking_fails_at_the_third_bug_in_a_row_of_its_turns() -> None:
-    tracking = download_tracking_dependency(ClientName("amuled"))
-    transitions = [tracking.record(rule=BUGS, detected=True) for _ in range(3)]
-    assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
 
 
 def test_download_tracking_fails_at_6_readings_on_no_network_and_heals_under_2_in_the_last_10() -> (

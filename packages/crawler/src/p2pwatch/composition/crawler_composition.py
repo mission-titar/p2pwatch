@@ -9,13 +9,14 @@ COMPOSITION ring (the only one allowed to import adapters AND application). Buil
 - the ``MatchingEngine`` (once),
 - ONE ``AmuleApiClient`` at a time on the one amuled the core drives, whose session every work
   over it shares, those works built by ``AmuleClientWorks``; ``AmuleClientRestartableBuilder``
-  builds the client and its works at the start, and anew when the ``RestartPolicy`` asks.
+  builds the client and its works at the start, and anew when the ``Supervisor`` rebuilds it.
 - ONE ``UvicornServerThread`` at a time serving the webui; ``WebuiRestartableBuilder`` builds it
-  and the watch over it at the start, and anew when the ``RestartPolicy`` asks.
+  and the watch over it at the start, and anew when the ``Supervisor`` rebuilds it.
 - ONE ``AppriseNotifier`` at a time for the works, which ``NotifierRestartableBuilder`` builds
   with the work sending the outbox's notifications through it at the start, and anew when the
-  ``RestartPolicy`` asks, and one for the lifecycle's last sends at the shutdown.
-The ``Supervisor`` holds the object each builder built latest, and closes them at the unwind.
+  ``Supervisor`` rebuilds it, and one for the lifecycle's last sends at the shutdown.
+The ``Supervisor`` holds the object each builder built latest, runs its works, counts their bugs,
+and closes them at the unwind.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
 source tracking when configured, the webui's thread watch, and the notifications' sending when a
@@ -128,7 +129,6 @@ from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_restartable import AmuleClientRestartableBuilder
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.health_subscriber_built_later import HealthSubscriberBuiltLater
-from p2pwatch.composition.node_restart_policy import node_restart_policy
 from p2pwatch.composition.notifier_restartable import (
     NotifierRestartableBuilder,
     notification_sending,
@@ -146,7 +146,6 @@ from p2pwatch.domain.observability.notification_sends import (
 )
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
-from p2pwatch.domain.work_dependencies import webui_dependency
 
 _logger = logging.getLogger(__name__)
 
@@ -427,15 +426,12 @@ class CrawlerComposition(CrawlerRunner):
             service_parts = notification_service_dependencies(build_notifier().services())
             # Set once the dispatcher is built.
             alerts = HealthSubscriberBuiltLater("the alerts")
-            # Set once the works are built: they record on the node's health, the policy maps them.
-            restart_policy = HealthSubscriberBuiltLater("the restart policy")
             node_health = NodeHealth(
-                logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts, restart_policy)
+                logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts,)
             )
             supervisor = Supervisor(
                 run_state_reader=run_state_store,
                 monotonic_clock=monotonic_clock,
-                node_health=node_health,
                 logger=StdlibLogger(Supervisor.__module__),
             )
             # The objects it holds then, closed at the unwind before the database connections.
@@ -465,7 +461,7 @@ class CrawlerComposition(CrawlerRunner):
                 return notification_sending(
                     notification_sender_over(built),
                     notification_timeout_seconds=observability.notification_timeout_seconds,
-                    dependencies=tuple(service_parts.values()),
+                    services=tuple(service_parts),
                 )
 
             observability_dispatcher = ObservabilityDispatcher(
@@ -511,12 +507,8 @@ class CrawlerComposition(CrawlerRunner):
                     database_opener=database_opener,
                 )
 
-            webui_part = webui_dependency()
-
             def webui_works_over(thread: UvicornServerThread) -> Sequence[SupervisedWork]:
-                return webui_thread_watch_over(
-                    thread, dependency=webui_part, monotonic_clock=monotonic_clock
-                )
+                return webui_thread_watch_over(thread, monotonic_clock=monotonic_clock)
 
             webui = WebuiRestartableBuilder(
                 build_thread=build_webui_thread, works_over=webui_works_over
@@ -611,18 +603,14 @@ class CrawlerComposition(CrawlerRunner):
             notifier = NotifierRestartableBuilder(
                 build_notifier=build_notifier, works_over=notifier_works_over
             )
-            works_of = {
-                amule_client: await supervisor.build_first(amule_client),
-                webui: webui_works,
-                notifier: await supervisor.build_first(notifier),
-            }
-            works = [supervised for works in works_of.values() for supervised in works]
+            works = [
+                *await supervisor.build_first(amule_client),
+                *webui_works,
+                *await supervisor.build_first(notifier),
+            ]
             for supervised in works:
                 seconds = supervised.time_limit.total_seconds()
                 _logger.debug("%s: time limit %g s", supervised.work, seconds)
-                parts = ", ".join(dependency.name for dependency in supervised.dependencies)
-                _logger.debug("%s: turns recorded on %s", supervised.work, parts)
-            restart_policy.set(node_restart_policy(works_of, supervisor=supervisor))
             crawler_lifecycle = CrawlerLifecycle(
                 node_id=node_id,
                 observability_dispatcher=observability_dispatcher,

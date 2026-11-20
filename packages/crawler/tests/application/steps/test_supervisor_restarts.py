@@ -1,8 +1,9 @@
-"""The supervisor holds the object each builder built latest, such as the aMule client, and
-restarts it in a task of its own, as the restart policy asks: it stops and awaits the works over
-it, closes it, has its builder build another, then runs that one's works; a rebuild that raises is
-tried again 60 s later; the shutdown closes the latest of each. The tests share one simulated time,
-on the virtual-time loop."""
+"""The supervisor counts the bugs of each object's turns, such as the aMule client's, and rebuilds
+the object in a task of its own once 3 turns in a row of its works met one: it stops and awaits
+those works, closes it, has its builder build another, then runs that one's works. Three rebuilds
+in vain at most, the count reset once its bugs are healthy again; a rebuild that raises is tried
+again 60 s later; the shutdown closes the latest of each. The tests share one simulated time, on
+the virtual-time loop."""
 
 import asyncio
 from collections.abc import Iterable, Sequence
@@ -12,22 +13,31 @@ from typing import Protocol
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.application.steps.restart_policy import RestartPolicy
+from p2pwatch.application.steps.notification_outbox import NotificationOutbox
+from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError
-from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
-from p2pwatch.domain.health.health_rule import HealthState
-from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_dependencies import BUGS
+from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.observability.notification import RelayedLogLine
+from p2pwatch.domain.observability.notification_sends import (
+    local_database_dependency,
+    notification_service_dependencies,
+)
+from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
+from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
+from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
+from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.virtual_time import VirtualLoop
 
 _DAY = timedelta(days=1)
+_ONLINE = RelayedLogLine(message="🟢 node online", severity=Severity.INFO, node_id=NodeId("n1"))
 
 
 # The client's works over its ``build``-th build, 0 the client as first built.
@@ -35,8 +45,21 @@ class _ClientWorks(Protocol):
     def __call__(self, build: int, /) -> Sequence[SupervisedWork]: ...
 
 
-class _Reading(Protocol):
-    def __call__(self) -> object: ...
+# Whether the ``turn``-th turn, 0 the first, of a work over the ``build``-th build meets a bug.
+class _Bugs(Protocol):
+    def __call__(self, *, build: int, turn: int) -> bool: ...
+
+
+def _always(*, build: int, turn: int) -> bool:
+    return True
+
+
+def _never(*, build: int, turn: int) -> bool:
+    return False
+
+
+def _first_build_buggy(*, build: int, turn: int) -> bool:
+    return build == 0
 
 
 class _Turns:
@@ -51,12 +74,14 @@ class _Turns:
 
 
 class _Searching(Work):
-    """Waits a second before each turn, the first included; each turn meets a bug if ``buggy``."""
+    """Waits a second before each turn, the first included; each turn meets a bug as ``bugs``
+    says."""
 
-    def __init__(self, *, build: int, turns: _Turns, buggy: bool) -> None:
+    def __init__(self, *, build: int, turns: _Turns, bugs: _Bugs) -> None:
         self._build = build
         self._turns = turns
-        self._buggy = buggy
+        self._bugs = bugs
+        self._taken = 0
 
     def __str__(self) -> str:
         return "search 'keroro' amuled kad"
@@ -66,7 +91,8 @@ class _Searching(Work):
 
     async def run_once(self) -> None:
         self._turns.taken.append((self._build, asyncio.get_running_loop().time()))
-        if self._buggy:
+        turn, self._taken = self._taken, self._taken + 1
+        if self._bugs(build=self._build, turn=turn):
             raise KeyError("results")
 
 
@@ -90,13 +116,9 @@ class _Blocked(Work):
             raise
 
 
-def _part(name: str) -> ExternalDependency:
-    return ExternalDependency(name=name, client_name=ClientName("amuled"), rules=(BUGS,))
-
-
 class _Node:
-    """A supervisor over the works of the aMule client and of the webui, each rebuilt as the
-    restart policy decides; the client's works are built anew over each of its builds."""
+    """A supervisor over the works of the aMule client and of the webui, each object rebuilt as
+    the supervisor decides; the client's works are built anew over each of its builds."""
 
     def __init__(
         self,
@@ -108,7 +130,6 @@ class _Node:
         self.loop = loop
         self.logger = FakeLogger()
         self.webui_turns = _Turns()
-        self.webui_part = _part("webui")
         self._client_works = client_works
         self._builds = 0
         self.client = FakeRestartableBuilder(
@@ -116,30 +137,19 @@ class _Node:
         )
         self.webui = FakeRestartableBuilder("webui", works_over=self._webui_serving)
         self._run_state = FakeRunStateStore()
-        self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(self._to_policy,))
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
-            node_health=self.node_health,
             logger=self.logger,
         )
-
-    async def _to_policy(self, transition: HealthTransition) -> None:
-        await self._policy(transition)
 
     def _works_over(self, _state: object, /) -> Sequence[SupervisedWork]:
         build, self._builds = self._builds, self._builds + 1
         return self._client_works(build)
 
     def _webui_serving(self, _state: object, /) -> Sequence[SupervisedWork]:
-        serving = _Searching(build=0, turns=self.webui_turns, buggy=False)
-        return [SupervisedWork(work=serving, time_limit=_DAY, dependencies=(self.webui_part,))]
-
-    def at(self, *, seconds: float, read: _Reading) -> list[object]:
-        """What ``read`` returns at ``seconds``, once the node has run that long."""
-        read_then: list[object] = []
-        self.loop.call_later(seconds, lambda: read_then.append(read()))
-        return read_then
+        serving = _Searching(build=0, turns=self.webui_turns, bugs=_never)
+        return [SupervisedWork(work=serving, time_limit=_DAY)]
 
     def run_for(self, seconds: float) -> None:
         """Builds each object, runs the node ``seconds``, then closes what the supervisor holds,
@@ -148,45 +158,36 @@ class _Node:
         self.loop.run_until_complete(self._run())
 
     async def _run(self) -> None:
-        client_works = await self._supervisor.build_first(self.client)
+        await self._supervisor.build_first(self.client)
         await self._supervisor.build_first(self.webui)
-        self._policy = RestartPolicy(
-            dependencies_of={
-                self.client: [part for work in client_works for part in work.dependencies],
-                self.webui: [self.webui_part],
-            },
-            works=client_works,
-            restart=self._supervisor.restart,
-            logger=FakeLogger(),
-        )
         await self._supervisor.supervise(arm_shutdown_bound=lambda: None)
         await self._supervisor.close()
 
+    def client_lines(self) -> list[LoggedLine]:
+        """The lines that name the client: each rebuild decided, and how it ended."""
+        return [line for line in self.logger.lines if "client amuled" in line.message]
 
-def _one_search(
-    turns: _Turns, *, part: ExternalDependency, buggy_until: int | None = None
-) -> _ClientWorks:
-    """One search over each build, on ``part``, meeting a bug at every turn over the builds
-    before ``buggy_until``, over all of them if it is ``None``."""
+
+def _one_search(turns: _Turns, *, bugs: _Bugs = _always) -> _ClientWorks:
+    """One search over each build, meeting a bug at each turn ``bugs`` names."""
 
     def works(build: int) -> Sequence[SupervisedWork]:
-        buggy = buggy_until is None or build < buggy_until
-        search = _Searching(build=build, turns=turns, buggy=buggy)
-        return [SupervisedWork(work=search, time_limit=_DAY, dependencies=(part,))]
+        search = _Searching(build=build, turns=turns, bugs=bugs)
+        return [SupervisedWork(work=search, time_limit=_DAY)]
 
     return works
 
 
-def test_a_bugs_rule_failing_with_no_recovery_rebuilds_its_object_three_times_then_never(
+def test_bugs_at_three_turns_in_a_row_rebuild_their_object_three_times_then_never(
     virtual_loop: VirtualLoop,
 ) -> None:
     turns = _Turns()
-    node = _Node(virtual_loop, client_works=_one_search(turns, part=_part("search")))
+    node = _Node(virtual_loop, client_works=_one_search(turns))
 
     node.run_for(1000.0)
 
-    # Built at the start; each third bug in a row fails the search's part: at 121 s, then 121 s
-    # after each rebuild.
+    # Built at the start; each third bug in a row turns its bugs failing: at 121 s, then 121 s
+    # after each rebuild. The webui's turns, every second and healthy, are another object's.
     assert node.client.built_at == [0.0, 121.0, 242.0, 363.0]
     assert turns.of_build(0) == [1.0, 61.0, 121.0]
     assert turns.of_build(1) == [122.0, 182.0, 242.0]
@@ -195,19 +196,88 @@ def test_a_bugs_rule_failing_with_no_recovery_rebuilds_its_object_three_times_th
     assert node.webui.rebuilds() == 0
 
 
-def test_a_restart_stops_and_awaits_the_works_over_its_object_before_its_rebuild(
+def test_each_rebuild_names_its_object_and_how_many_came_before_in_vain(
+    virtual_loop: VirtualLoop,
+) -> None:
+    node = _Node(virtual_loop, client_works=_one_search(_Turns()))
+
+    node.run_for(500.0)
+
+    restarting, again = "restarting client amuled", "restarting client amuled again"
+    assert node.client_lines() == [
+        LoggedLine(level="warning", message=f"{restarting}: bugs in its works"),
+        LoggedLine(level="info", message="client amuled rebuilt"),
+        LoggedLine(level="warning", message=f"{again}, 1 of 3 rebuilds in vain: bugs in its works"),
+        LoggedLine(level="info", message="client amuled rebuilt"),
+        LoggedLine(level="warning", message=f"{again}, 2 of 3 rebuilds in vain: bugs in its works"),
+        LoggedLine(level="info", message="client amuled rebuilt"),
+        LoggedLine(level="error", message="client amuled not restarted again: 3 rebuilds in vain"),
+    ]
+
+
+def test_a_bug_at_every_turn_of_one_of_three_works_rebuilds_nothing_each_logged_with_its_trace(
+    virtual_loop: VirtualLoop,
+) -> None:
+    buggy = _Turns()
+
+    def works(build: int) -> Sequence[SupervisedWork]:
+        return [
+            SupervisedWork(work=_Searching(build=build, turns=turns, bugs=bugs), time_limit=_DAY)
+            for turns, bugs in [(buggy, _always), (_Turns(), _never), (_Turns(), _never)]
+        ]
+
+    node = _Node(virtual_loop, client_works=works)
+
+    # Its 30th turn at 1741 s, each a minute after the bug before.
+    node.run_for(1750.0)
+
+    assert len(buggy.taken) == 30
+    assert node.client.rebuilds() == 0
+    bug_lines = [line for line in node.logger.lines if line.message.startswith("bug in ")]
+    assert len(bug_lines) == 30
+    assert all(isinstance(line.error, KeyError) for line in bug_lines)
+
+
+def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_its_count_reset(
+    virtual_loop: VirtualLoop,
+) -> None:
+    def bugs(*, build: int, turn: int) -> bool:
+        return build != 3 or turn >= 10
+
+    node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=bugs))
+
+    node.run_for(1000.0)
+
+    # Rebuilt at 121 s, then twice in vain; its fourth build healthy from 366 s, failing at 494 s
+    # and rebuilt at once, its count back at zero: three rebuilds more before it is given up.
+    assert node.client.built_at == [0.0, 121.0, 242.0, 363.0, 494.0, 615.0, 736.0]
+
+
+def test_three_rebuilds_in_vain_then_its_bugs_healthy_then_bugs_again_rebuild_it_again(
+    virtual_loop: VirtualLoop,
+) -> None:
+    def bugs(*, build: int, turn: int) -> bool:
+        return build != 3 or not 3 <= turn < 13
+
+    node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=bugs))
+
+    node.run_for(700.0)
+
+    # Given up at 484 s; healthy again at 552 s, then failing at 674 s.
+    assert node.client.built_at == [0.0, 121.0, 242.0, 363.0, 674.0]
+
+
+def test_a_rebuild_stops_and_awaits_the_works_over_its_object_before_its_rebuild(
     virtual_loop: VirtualLoop,
 ) -> None:
     events: list[str] = []
     turns = _Turns()
-    search, tracking = _part("search"), _part("download tracking")
 
     def works(build: int) -> Sequence[SupervisedWork]:
         events.append(f"works over build {build} built")
-        tracking_work = _Blocked(events=events)
         return [
-            *_one_search(turns, part=search, buggy_until=1)(build),
-            SupervisedWork(work=tracking_work, time_limit=_DAY, dependencies=(tracking,)),
+            *_one_search(turns, bugs=_first_build_buggy)(build),
+            SupervisedWork(work=_Blocked(events=events), time_limit=_DAY),
         ]
 
     node = _Node(virtual_loop, client_works=works)
@@ -229,7 +299,7 @@ def test_a_rebuild_closes_the_object_before_its_builder_builds_the_next(
     virtual_loop: VirtualLoop,
 ) -> None:
     closes_at_each_build: list[list[int]] = []
-    search = _one_search(_Turns(), part=_part("search"), buggy_until=1)
+    search = _one_search(_Turns(), bugs=_first_build_buggy)
     node: _Node
 
     def works(build: int) -> Sequence[SupervisedWork]:
@@ -247,9 +317,7 @@ def test_a_rebuild_closes_the_object_before_its_builder_builds_the_next(
 def test_the_shutdown_closes_the_object_each_builder_built_latest(
     virtual_loop: VirtualLoop,
 ) -> None:
-    node = _Node(
-        virtual_loop, client_works=_one_search(_Turns(), part=_part("search"), buggy_until=1)
-    )
+    node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=_first_build_buggy))
 
     node.run_for(200.0)
 
@@ -258,57 +326,44 @@ def test_the_shutdown_closes_the_object_each_builder_built_latest(
     assert closes == [1, 1, 1]
 
 
-def test_a_rebuild_that_raises_is_tried_again_60_s_later_its_parts_failing_meanwhile(
-    virtual_loop: VirtualLoop,
-) -> None:
+def test_a_rebuild_that_raises_is_tried_again_60_s_later(virtual_loop: VirtualLoop) -> None:
     turns = _Turns()
-    search = _part("search")
     errors = [RuntimeError("no session"), RuntimeError("no session again")]
     node = _Node(
         virtual_loop,
-        client_works=_one_search(turns, part=search, buggy_until=1),
+        client_works=_one_search(turns, bugs=_first_build_buggy),
         rebuild_errors=errors,
     )
-    between_attempts = [
-        node.at(seconds=seconds, read=lambda: search.state(BUGS)) for seconds in (150, 210)
-    ]
 
     node.run_for(300.0)
 
     assert node.client.built_at == [0.0, 121.0, 181.0, 241.0]
-    assert between_attempts == [[HealthState.FAILING], [HealthState.FAILING]]
     assert turns.of_build(1)[:3] == [242.0, 243.0, 244.0]
-    rebuild_lines = [line for line in node.logger.lines if "client amuled" in line.message]
-    assert rebuild_lines == [
+    assert node.client_lines()[1:] == [
         LoggedLine(level="error", message="bug in the rebuild of client amuled", error=errors[0]),
         LoggedLine(level="error", message="bug in the rebuild of client amuled", error=errors[1]),
         LoggedLine(level="info", message="client amuled rebuilt"),
     ]
 
 
-def test_a_rebuild_that_raises_records_a_bug_on_each_part_of_its_object(
+def test_rebuilds_that_raised_and_bugs_failing_again_after_one_share_one_count(
     virtual_loop: VirtualLoop,
 ) -> None:
-    search, tracking = _part("search"), _part("download tracking")
+    turns = _Turns()
+    node = _Node(
+        virtual_loop,
+        client_works=_one_search(turns),
+        rebuild_errors=[RuntimeError("no session")] * 2,
+    )
 
-    def works(build: int) -> Sequence[SupervisedWork]:
-        tracking_work = _Searching(build=build, turns=_Turns(), buggy=False)
-        return [
-            *_one_search(_Turns(), part=search)(build),
-            SupervisedWork(work=tracking_work, time_limit=_DAY, dependencies=(tracking,)),
-        ]
+    node.run_for(500.0)
 
-    errors = [RuntimeError("no session")] * 3
-    node = _Node(virtual_loop, client_works=works, rebuild_errors=errors)
-    tracking_bugs = [
-        node.at(seconds=seconds, read=lambda: tracking.state(BUGS)) for seconds in (120, 210, 300)
-    ]
-
-    node.run_for(400.0)
-
-    # Its own turns worked; each of the three raises at 121, 181 and 241 s is a bug of it too.
+    # Two that raised, then the one that worked failing again at 362 s: its third in vain.
     assert node.client.built_at == [0.0, 121.0, 181.0, 241.0]
-    assert tracking_bugs == [[HealthState.HEALTHY], [HealthState.HEALTHY], [HealthState.FAILING]]
+    assert node.client_lines()[-1] == LoggedLine(
+        level="error", message="client amuled not restarted again: 3 rebuilds in vain"
+    )
+    assert turns.of_build(1)[-1] == 482.0  # its works run on
 
 
 def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running(
@@ -316,14 +371,11 @@ def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running
 ) -> None:
     turns = _Turns()
     errors = [RuntimeError("no session")] * 3
-    node = _Node(
-        virtual_loop, client_works=_one_search(turns, part=_part("search")), rebuild_errors=errors
-    )
+    node = _Node(virtual_loop, client_works=_one_search(turns), rebuild_errors=errors)
 
     node.run_for(1000.0)
 
     assert node.client.built_at == [0.0, 121.0, 181.0, 241.0]
-    assert turns.of_build(0) == [1.0, 61.0, 121.0]
     assert turns.taken == [(0, 1.0), (0, 61.0), (0, 121.0)]
     assert node.webui_turns.of_build(0)[-1] == 999.0
 
@@ -331,19 +383,17 @@ def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running
 def test_a_rebuild_refused_by_amule_is_logged_in_one_line_and_tried_again(
     virtual_loop: VirtualLoop,
 ) -> None:
-    turns = _Turns()
     refused = ClientAuthError("amuleapi refused the admin password")
     node = _Node(
         virtual_loop,
-        client_works=_one_search(turns, part=_part("search"), buggy_until=1),
+        client_works=_one_search(_Turns(), bugs=_first_build_buggy),
         rebuild_errors=[refused],
     )
 
     node.run_for(200.0)
 
     assert node.client.built_at == [0.0, 121.0, 181.0]
-    rebuild_lines = [line for line in node.logger.lines if "client amuled" in line.message]
-    assert rebuild_lines == [
+    assert node.client_lines()[1:] == [
         LoggedLine(
             level="warning",
             message="rebuild of client amuled: amuleapi refused the admin password",
@@ -357,7 +407,7 @@ def test_a_shutdown_while_a_rebuild_waits_to_be_tried_again_ends_the_supervision
 ) -> None:
     node = _Node(
         virtual_loop,
-        client_works=_one_search(_Turns(), part=_part("search")),
+        client_works=_one_search(_Turns()),
         rebuild_errors=[RuntimeError("no session")] * 3,
     )
 
@@ -366,18 +416,64 @@ def test_a_shutdown_while_a_rebuild_waits_to_be_tried_again_ends_the_supervision
     assert node.client.built_at == [0.0, 121.0]
 
 
+def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_then_never(
+    virtual_loop: VirtualLoop,
+) -> None:
+    raising = FakeRaisingNotifier(RuntimeError("an embed apprise cannot build"))
+    store = FakeNotificationOutboxStore()
+    outbox = NotificationOutbox(
+        writer=store,
+        reader=store,
+        services=ONE_SERVICE_PER_AUDIENCE,
+        waker=FakeWaker(),
+        logger=FakeLogger(),
+    )
+    for _ in range(20):
+        outbox.leave(_ONLINE, services=[ONE_SERVICE_PER_AUDIENCE[1]])
+
+    def sending(_state: object, /) -> Sequence[SupervisedWork]:
+        sender = NotificationSender(
+            outbox=outbox,
+            notifier=raising,  # each rebuild in vain: the notifier still raises
+            notification_timeout_seconds=5.0,
+            record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+            service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+            local_database=local_database_dependency(),
+            logger=FakeLogger(),
+        )
+        return [SupervisedWork(work=sender, time_limit=timedelta(minutes=5))]
+
+    notifier = FakeRestartableBuilder("notifier", works_over=sending)
+    run_state = FakeRunStateStore()
+    virtual_loop.call_later(1500.0, run_state.set_shutdown_requested)
+    supervisor = Supervisor(
+        run_state_reader=run_state,
+        monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
+        logger=FakeLogger(),
+    )
+
+    async def supervise() -> None:
+        await supervisor.build_first(notifier)
+        await supervisor.supervise(arm_shutdown_bound=lambda: None)
+
+    virtual_loop.run_until_complete(supervise())
+
+    # A send that met a bug removes its entry: each of the 20 tried once.
+    assert raising.sends == 20
+    assert notifier.rebuilds() == 3
+
+
 def _supervisor() -> Supervisor:
     return Supervisor(
         run_state_reader=FakeRunStateStore(),
         monotonic_clock=FakeTime().monotonic,
-        node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
         logger=FakeLogger(),
     )
 
 
 @pytest.mark.asyncio
 async def test_build_first_hands_back_the_works_of_the_object_its_builder_built() -> None:
-    search = _one_search(_Turns(), part=_part("search"))
+    search = _one_search(_Turns())
     builder = FakeRestartableBuilder(works_over=lambda _state: search(0))
 
     works = await _supervisor().build_first(builder)

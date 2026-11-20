@@ -8,7 +8,6 @@ from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.value_bounds import require_well_formed_text
-from p2pwatch.domain.work_dependencies import BUGS
 
 STATUS_PERIOD = timedelta(minutes=1)
 READING_FRESH_FOR = 2 * STATUS_PERIOD
@@ -53,13 +52,13 @@ def client_dependency(client_name: ClientName) -> ExternalDependency:
 
 
 def channel_dependency(*, client_name: ClientName, channel: Channel) -> ExternalDependency:
-    """One of the client's channels, judged by whether it is connected and connectable, whether the
-    network refuses its searches, and by their bugs: "channel amuled kad"."""
+    """One of the client's channels, judged by whether it is connected and connectable and whether
+    the network refuses its searches: "channel amuled kad"."""
     return ExternalDependency(
         name=f"channel {client_name} {channel}",
         client_name=client_name,
         channel=channel,
-        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, SEARCHES_FAILED, BUGS),
+        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, SEARCHES_FAILED),
     )
 
 

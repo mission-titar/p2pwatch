@@ -22,11 +22,6 @@ class SearchTimeLimitOf(Protocol):
     def __call__(self, keyword: Keyword, /, *, channel: Channel) -> timedelta: ...
 
 
-# The part the search of ``keyword`` on ``channel`` is judged on by its bugs, built once.
-class SearchDependencyOf(Protocol):
-    def __call__(self, keyword: Keyword, /, *, channel: Channel) -> ExternalDependency: ...
-
-
 class KeywordSearch(Work):
     """Searches one keyword on one channel, such as "keroro" on Kad, each turn once neither the
     client nor the channel is backed off."""
@@ -85,12 +80,11 @@ def keyword_searches(
     backoff_saver: BackoffSaver,
     monotonic_clock: MonotonicClock,
     time_limit_of: SearchTimeLimitOf,
-    search_dependency_of: SearchDependencyOf,
     node_health: NodeHealth,
     channel_dependencies: Iterable[ExternalDependency],
 ) -> list[SupervisedWork]:
     """One search per client, channel and keyword of the config, with its time limit, a keyword
-    listed twice searched once and an empty one never; its turns recorded on its channel too."""
+    listed twice searched once and an empty one never; each records its refusals on its channel."""
     each_keyword_once = dedupe_keywords(keywords)
     channel_of = {
         (channel.client_name, channel.channel): channel for channel in channel_dependencies
@@ -107,10 +101,6 @@ def keyword_searches(
                 channel_dependency=channel_of[search_worker.client_name, channel],
             ),
             time_limit=time_limit_of(keyword, channel=channel),
-            dependencies=(
-                search_dependency_of(keyword, channel=channel),
-                channel_of[search_worker.client_name, channel],
-            ),
         )
         for search_worker in search_workers
         for channel in search_worker.channels

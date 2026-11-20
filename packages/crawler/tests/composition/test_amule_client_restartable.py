@@ -75,7 +75,7 @@ class _Clients:
 
 
 def _works_over(client: AmuleApiClient, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(client), time_limit=timedelta(minutes=1), dependencies=())]
+    return [SupervisedWork(work=_Over(client), time_limit=timedelta(minutes=1))]
 
 
 class TestAmuleClientRestartableBuilder(RestartableBuilderContract):
