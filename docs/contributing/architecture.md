@@ -242,7 +242,8 @@ flowchart TB
   les trois fichiers et en liste chaque problème, résout le `node_id` dès `local.db` ouverte, câble
   les adapters concrets qu'elle décrit et donne le `node_id` à chaque étape qui l'écrit, puis lance
   `CrawlerLifecycle` (`application/crawler_lifecycle.py`), la racine du graphe : il annonce le
-  démarrage, réévalue le catalogue si la politique a changé, puis confie les `Work` au `Supervisor`.
+  démarrage, réévalue le catalogue si la politique a changé, puis le `Supervisor` fait tourner les
+  `Work` des objets qu'il a fait construire (§10.2).
 - **`composition/command_line.py`** (`build_command_line`) construit les ports `crawl`,
   `validate-config` et `merge` (le cas d'usage `MergeCatalogs`) et les passe à la ligne de
   commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;
@@ -873,8 +874,8 @@ appel, le premier compris : le `Supervisor` fait construire le premier (`build_f
 pour chaque constructeur, le dernier objet construit (un `SupervisedObject`), que l'arrêt du nœud
 ferme, le dernier construit d'abord. Quand la règle des bugs d'une de ses parties passe en échec,
 la `RestartPolicy` demande son redémarrage au `Supervisor` (une `RestartRequest`), qui le fait dans
-une tâche à lui, jamais dans le tour qui l'a déclenché : il arrête les `Work` dont les tours
-s'enregistrent sur ces parties et les attend, ferme l'objet, en fait construire un neuf, oublie la
+une tâche à lui, jamais dans le tour qui l'a déclenché : il arrête les `Work` de l'objet et les
+attend, ferme l'objet, en fait construire un neuf, oublie la
 règle des bugs de ses parties (les autres règles gardent leurs vérifications, si bien qu'une
 alerte ouverte ne repart pas et ne finit pas), puis lance les `Work` du neuf. Une reconstruction
 qui lève enregistre un bug sur chacune de ces parties, laisse gardé l'objet fermé, qu'une seconde

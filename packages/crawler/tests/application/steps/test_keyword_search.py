@@ -45,6 +45,7 @@ from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearchClient
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import EPOCH, VirtualLoop
@@ -151,18 +152,17 @@ class _Searches:
         keywords: list[str],
         time_limit_of: SearchTimeLimitOf = lambda _keyword, *, channel: _DAY,
     ) -> None:
-        """Runs every search the node would list for ``keywords`` under the supervisor, until the
-        shutdown is requested."""
+        """Runs every search the node would list for ``keywords`` under the supervisor, the works
+        of one client, until the shutdown is requested."""
         supervisor = Supervisor(
             run_state_reader=self.run_state,
             monotonic_clock=self.monotonic_clock,
             node_health=self.node_health,
             logger=self.supervisor_logger,
         )
-        await supervisor.supervise(
-            self.works(client, keywords=keywords, time_limit_of=time_limit_of),
-            arm_shutdown_bound=lambda: None,
-        )
+        works = self.works(client, keywords=keywords, time_limit_of=time_limit_of)
+        await supervisor.build_first(FakeRestartableBuilder(works_over=lambda _state: works))
+        await supervisor.supervise(arm_shutdown_bound=lambda: None)
 
     def run_for(
         self,

@@ -149,7 +149,7 @@ class _Node:
 
     async def _run(self) -> None:
         client_works = await self._supervisor.build_first(self.client)
-        webui_works = await self._supervisor.build_first(self.webui)
+        await self._supervisor.build_first(self.webui)
         self._policy = RestartPolicy(
             dependencies_of={
                 self.client: [part for work in client_works for part in work.dependencies],
@@ -159,8 +159,7 @@ class _Node:
             restart=self._supervisor.restart,
             logger=FakeLogger(),
         )
-        works = [*client_works, *webui_works]
-        await self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
+        await self._supervisor.supervise(arm_shutdown_bound=lambda: None)
         await self._supervisor.close()
 
 
