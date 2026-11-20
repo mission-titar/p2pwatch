@@ -171,8 +171,9 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 23 | `refactor/no-notification-timeout-in-time-limits` | the notification timeout in the turns' limits removed | 37 lines, 7 files (Corrected: cut out of block 20, which came to 25 files, the lead on 2026-11-18) |
 | 25 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound (Corrected: 913 lines, 22 files, the outbox saved and read back alone, past both bounds, accepted by the operator on 2026-11-19) |
 | 27 | `feat/local-database-outage` | the local database an outage, with its alert | 249 lines, 18 files (Corrected: cut out of block 25, which came to 1 161 lines and 31 files) |
-| 30 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor keeping one record per object | ~600 lines, ~14 files, past the line bound |
-| 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files |
+| 28 | `refactor/channels-known-before-the-client` | the client's channels and request bound known before any client is built | 15 lines, 3 files (Corrected: cut out of block 30, the lead on 2026-11-20) |
+| 30 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor keeping one record per object | ~600 lines, ~14 files, past the line bound (Corrected: block 35 merged in, the port shared by the three objects, the policy, the supervisor and the fake; 1 034 lines, 29 files, past both bounds, accepted by the operator on 2026-11-20) |
+| 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files (Corrected: merged into block 30) |
 | 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds |
 | 45 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files |
 | 50 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files |
@@ -323,6 +324,7 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
   (#801, read as a draft, without its handle on the latest object, which nothing reads once the outbox sends).
 - `SupervisedObject`, private to the supervisor: one per builder, its latest object, closed at the shutdown.
 - 30 brings the port, the builder, their contract and fakes, and the aMule client; 35 the webui and the notifier.
+  (Corrected: 35 merged into 30, a block keeping the old shape beside the new one for the webui and the notifier.)
 - The restart policy still decides until block 40. The glossary gains `restartable builder`.
 
 ### Block 40, the supervisor counts the bugs
