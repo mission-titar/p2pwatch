@@ -345,7 +345,7 @@ async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_spa
     assert health_logger.lines == [
         LoggedLine(
             level="info" if change.endswith("healthy") else "warning",
-            message=f"download tracking amuled, disk space low: {change}",
+            message=f"download disk, disk space low: {change}",
         )
         for change in changes
     ]

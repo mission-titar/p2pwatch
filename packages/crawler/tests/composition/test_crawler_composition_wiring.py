@@ -389,7 +389,7 @@ async def test_a_disk_under_its_floor_alerts_with_the_floor_from_the_config(
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
-    assert "download tracking amuled, disk space low: unknown to failing" in caplog.messages
+    assert "download disk, disk space low: unknown to failing" in caplog.messages
     low = "download disk low: under the 1073741824.0 GiB floor (no new download)"
     assert caplog.messages.count(low) == 1
 
