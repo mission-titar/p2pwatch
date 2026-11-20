@@ -638,7 +638,6 @@ class CrawlerComposition(CrawlerRunner):
                     logger=StdlibLogger(CatalogReevaluator.__module__),
                 ),
                 backoff=backoff,
-                works=works,
                 download_enabled=download_config is not None,
                 supervisor=supervisor,
                 # A notifier of its own: every work, the latest notifier's included, has stopped.

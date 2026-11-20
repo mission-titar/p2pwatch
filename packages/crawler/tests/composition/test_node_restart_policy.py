@@ -42,7 +42,7 @@ _ONLINE = RelayedLogLine(message="🟢 node online", severity=Severity.INFO, nod
 
 
 class _Never(Work):
-    """A work whose turns are never taken."""
+    """A work whose wait never ends."""
 
     def __init__(self, name: str) -> None:
         self._name = name
@@ -51,10 +51,10 @@ class _Never(Work):
         return self._name
 
     async def wait_for_next_turn(self) -> None:
-        """Never awaited."""
+        await asyncio.Event().wait()
 
     async def run_once(self) -> None:
-        """Never awaited."""
+        """Never reached: its wait never ends."""
 
 
 def _recorded_on(part: ExternalDependency) -> SupervisedWork:
@@ -124,22 +124,16 @@ class _Node:
         """How many times the client, the webui and the notifier were rebuilt."""
         return (self.client.rebuilds(), self.webui.rebuilds(), self.notifier.rebuilds())
 
-    async def supervising(
-        self,
-        checks: Coroutine[None, None, None],
-        *,
-        running: Sequence[FakeRestartableBuilder] = (),
-    ) -> None:
-        """Builds each object, then records ``checks`` while the supervisor runs the works of
-        those ``running``, then the restarts they asked for."""
+    async def supervising(self, checks: Coroutine[None, None, None]) -> None:
+        """Builds each object, then records ``checks`` while the supervisor runs their works,
+        then the restarts they asked for."""
         works_of: dict[RestartableBuilder[SupervisedWork], Sequence[SupervisedWork]] = {
             builder: await self._supervisor.build_first(builder)
             for builder in (self.client, self.webui, self.notifier)
         }
         self._policy = node_restart_policy(works_of, supervisor=self._supervisor)
-        works = [supervised for builder in running for supervised in works_of[builder]]
         supervision = asyncio.create_task(
-            self._supervisor.supervise(works, arm_shutdown_bound=lambda: None)
+            self._supervisor.supervise(arm_shutdown_bound=lambda: None)
         )
         await checks
         await _restarts_run()
@@ -190,7 +184,7 @@ async def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_the
     for _ in range(20):
         node.outbox.leave(_ONLINE, services=[ONE_SERVICE_PER_AUDIENCE[1]])
 
-    await node.supervising(node.every_notification_sent(), running=[node.notifier])
+    await node.supervising(node.every_notification_sent())
 
     assert raising.sends == 20
     assert node.rebuilds() == (0, 0, 3)

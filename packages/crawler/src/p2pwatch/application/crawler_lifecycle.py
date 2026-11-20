@@ -1,21 +1,19 @@
 """``CrawlerLifecycle``: the root of the crawler's graph, which the composition runs once built."""
 
-from collections.abc import Sequence
-
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
-from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import CrawlerStarted
 
 
 class CrawlerLifecycle:
     """Resumes the saved backoffs, announces the node online, re-evaluates the catalog if the
-    policy changed, has the supervisor run the works, then sends the notifications left."""
+    policy changed, has the supervisor run the works of the objects it built, then sends the
+    notifications left."""
 
     def __init__(
         self,
@@ -24,7 +22,6 @@ class CrawlerLifecycle:
         observability_dispatcher: ObservabilityDispatcher,
         catalog_reevaluator: CatalogReevaluator,
         backoff: BackoffRegistry,
-        works: Sequence[SupervisedWork],
         download_enabled: bool,
         supervisor: Supervisor,
         notification_sender: NotificationSender,
@@ -34,7 +31,6 @@ class CrawlerLifecycle:
         self._observability_dispatcher = observability_dispatcher
         self._catalog_reevaluator = catalog_reevaluator
         self._backoff = backoff
-        self._works = works
         self._download_enabled = download_enabled
         self._supervisor = supervisor
         self._notification_sender = notification_sender
@@ -53,5 +49,5 @@ class CrawlerLifecycle:
         # Before the works, so the first search's tier actions (download wake, notify) see the
         # current policy. A comment-only edit of matcher.yml or targets.yml still runs one pass.
         await self._catalog_reevaluator.reevaluate_if_policy_changed()
-        await self._supervisor.supervise(self._works, arm_shutdown_bound=arm_shutdown_bound)
+        await self._supervisor.supervise(arm_shutdown_bound=arm_shutdown_bound)
         await self._notification_sender.send_what_is_left()

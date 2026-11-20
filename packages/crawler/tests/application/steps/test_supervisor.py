@@ -15,7 +15,11 @@ from datetime import timedelta
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.application.steps.supervisor import WAIT_AFTER_A_BUG, Supervisor
+from p2pwatch.application.steps.supervisor import (
+    WAIT_AFTER_A_BUG,
+    ShutdownBoundArmer,
+    Supervisor,
+)
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
 from p2pwatch.domain.health.external_dependency import ExternalDependency
@@ -25,6 +29,7 @@ from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlocki
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
+from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.virtual_time import VirtualLoop
 
 # Every wait on a work's start is bounded: a work that never starts would hang the test.
@@ -210,6 +215,18 @@ def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
     )
 
 
+async def _supervise(
+    supervisor: Supervisor,
+    /,
+    *works: SupervisedWork,
+    arm_shutdown_bound: ShutdownBoundArmer = lambda: None,
+) -> None:
+    """Takes the turns of ``works``, those of one object ``supervisor`` built first, until the
+    shutdown is requested."""
+    await supervisor.build_first(FakeRestartableBuilder(works_over=lambda _state: works))
+    await supervisor.supervise(arm_shutdown_bound=arm_shutdown_bound)
+
+
 def _supervise_until(
     loop: VirtualLoop,
     *works: Work,
@@ -230,9 +247,8 @@ def _supervise_until(
         logger=logger or FakeLogger(),
     )
     loop.run_until_complete(
-        supervisor.supervise(
-            _supervised(*works, time_limit=time_limit, dependencies=dependencies),
-            arm_shutdown_bound=lambda: None,
+        _supervise(
+            supervisor, *_supervised(*works, time_limit=time_limit, dependencies=dependencies)
         )
     )
 
@@ -242,7 +258,7 @@ async def test_each_turn_comes_after_its_wait_the_first_included() -> None:
     work = _CountedWork(turns=2)
 
     await asyncio.wait_for(
-        _supervisor(work.run_state).supervise(_supervised(work), arm_shutdown_bound=lambda: None),
+        _supervise(_supervisor(work.run_state), *_supervised(work)),
         1.0,
     )
 
@@ -252,15 +268,41 @@ async def test_each_turn_comes_after_its_wait_the_first_included() -> None:
 @pytest.mark.asyncio
 async def test_a_turn_that_never_suspends_still_lets_other_tasks_run_after_it() -> None:
     work = _CountedWork(turns=3)
-    supervision = asyncio.create_task(
-        _supervisor(work.run_state).supervise(_supervised(work), arm_shutdown_bound=lambda: None)
-    )
+    supervision = asyncio.create_task(_supervise(_supervisor(work.run_state), *_supervised(work)))
 
     await asyncio.sleep(0)  # noqa: TID251  # the supervisor starts the work's task
     await asyncio.sleep(0)  # noqa: TID251  # the work takes its first turn, then lets this test run
 
     assert work.calls == ["wait", "turn"]
     await asyncio.wait_for(supervision, 1.0)
+
+
+def test_it_takes_the_turns_of_the_works_of_each_object_it_built_first(
+    virtual_loop: VirtualLoop,
+) -> None:
+    search = _TimedWork("search 'keroro' amuled kad", wait_seconds=10.0)
+    watch = _TimedWork("webui", wait_seconds=10.0)
+    builders = [
+        FakeRestartableBuilder("client amuled", works_over=lambda _state: _supervised(search)),
+        FakeRestartableBuilder("webui", works_over=lambda _state: _supervised(watch)),
+    ]
+    run_state = FakeRunStateStore()
+    virtual_loop.call_later(35.0, run_state.set_shutdown_requested)
+    supervisor = Supervisor(
+        run_state_reader=run_state,
+        monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
+        node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
+        logger=FakeLogger(),
+    )
+
+    async def build_each_then_supervise() -> None:
+        for builder in builders:
+            await supervisor.build_first(builder)
+        await supervisor.supervise(arm_shutdown_bound=lambda: None)
+
+    virtual_loop.run_until_complete(build_each_then_supervise())
+
+    assert search.turns == watch.turns == [10.0, 20.0, 30.0]
 
 
 def test_an_expected_error_fails_its_turn_alone_in_one_warning_line(
@@ -436,8 +478,10 @@ async def test_a_stop_without_a_signal_arms_the_bound_before_cancelling_every_wo
     run_state = FakeRunStateStore()
     search, status = _BlockedWork("search", events=events), _BlockedWork("status", events=events)
     supervision = asyncio.create_task(
-        _supervisor(run_state).supervise(
-            _supervised(search, status), arm_shutdown_bound=lambda: events.append("armed")
+        _supervise(
+            _supervisor(run_state),
+            *_supervised(search, status),
+            arm_shutdown_bound=lambda: events.append("armed"),
         )
     )
     await asyncio.wait_for(search.started.wait(), _START_BOUND_SECONDS)
@@ -455,8 +499,9 @@ async def test_a_wait_that_raises_escapes_as_an_exception_group_without_arming_t
     events: list[str] = []
     status = _BlockedWork("status", events=events)
 
-    supervision = _supervisor(FakeRunStateStore()).supervise(
-        _supervised(status, _WorkWhoseWaitRaises()),
+    supervision = _supervise(
+        _supervisor(FakeRunStateStore()),
+        *_supervised(status, _WorkWhoseWaitRaises()),
         arm_shutdown_bound=lambda: events.append("armed"),
     )
 
@@ -472,9 +517,7 @@ async def test_a_shutdown_requested_before_the_start_starts_no_turn() -> None:
     run_state.set_shutdown_requested()
     status = _BlockedWork("status", events=[])
 
-    await asyncio.wait_for(
-        _supervisor(run_state).supervise(_supervised(status), arm_shutdown_bound=lambda: None), 1
-    )
+    await asyncio.wait_for(_supervise(_supervisor(run_state), *_supervised(status)), 1)
 
     assert not status.started.is_set()
 
@@ -483,8 +526,6 @@ async def test_a_shutdown_requested_before_the_start_starts_no_turn() -> None:
 async def test_a_shutdown_requested_during_a_turn_lets_that_work_take_no_further_turn() -> None:
     work = _WorkStoppingTheNode()
 
-    await asyncio.wait_for(
-        _supervisor(work.run_state).supervise(_supervised(work), arm_shutdown_bound=lambda: None), 1
-    )
+    await asyncio.wait_for(_supervise(_supervisor(work.run_state), *_supervised(work)), 1)
 
     assert work.turns == 1

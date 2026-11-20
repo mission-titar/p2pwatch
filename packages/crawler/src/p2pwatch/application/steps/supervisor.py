@@ -18,7 +18,6 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.restart_policy import RestartRequest
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.expected_error import ExpectedError
-from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.work_dependencies import BUGS
 
 # A bug that strikes at once would otherwise rerun at full speed, one trace per turn.
@@ -52,8 +51,8 @@ class SupervisedObject:
 
 
 class Supervisor:
-    """Takes the turns of the works it is given, and those of the objects a restart builds, until
-    the run state says the shutdown was requested; holds the object each builder built latest."""
+    """Takes the turns of the works of each object it built, until the run state says the shutdown
+    was requested; holds the object each builder built latest, and rebuilds it."""
 
     def __init__(
         self,
@@ -68,15 +67,15 @@ class Supervisor:
         self._node_health = node_health
         self._logger = logger
         self._restart_requests: asyncio.Queue[RestartRequest] = asyncio.Queue()
-        # Each work's task while it runs, so a restart can stop the works over its object.
-        self._running: dict[asyncio.Task[None], SupervisedWork] = {}
+        # Each work's task while it runs, and the object it is over, which a restart stops it with.
+        self._running: dict[asyncio.Task[None], SupervisedObject] = {}
         self._objects: dict[RestartableBuilder[SupervisedWork], SupervisedObject] = {}
 
     async def build_first(
         self, builder: RestartableBuilder[SupervisedWork]
     ) -> Sequence[SupervisedWork]:
         """Has ``builder`` build its first object, such as the webui serving on its thread, holds
-        it until a rebuild or the shutdown, and returns the works over it."""
+        it until a rebuild or the shutdown, and returns the works ``supervise`` runs over it."""
         first = await builder.build()
         self._objects[builder] = SupervisedObject(builder, first=first)
         return first.works()
@@ -88,17 +87,13 @@ class Supervisor:
             for supervised in self._objects.values():
                 closing.push_async_callback(supervised.latest.close)
 
-    async def supervise(
-        self,
-        works: Sequence[SupervisedWork],
-        *,
-        arm_shutdown_bound: ShutdownBoundArmer,
-    ) -> None:
-        """Takes each work's turns and runs each restart until the shutdown is requested, arms the
-        bound, cancels them; a turn's exception fails it alone, a wait's escapes in a group."""
+    async def supervise(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
+        """Takes the turns of each object's works and runs each restart until the shutdown is
+        requested, arms the bound, cancels them; a wait's exception escapes in a group."""
         async with asyncio.TaskGroup() as group:
-            for supervised in works:
-                self._add(supervised, group=group)
+            for supervised in self._objects.values():
+                for work in supervised.latest.works():
+                    self._add(work, over=supervised, group=group)
             restarts = group.create_task(self._restart_each_requested(group))
             await self._run_state_reader.wait_until_shutdown_requested()
             arm_shutdown_bound()
@@ -113,9 +108,11 @@ class Supervisor:
         the turn that asked for it, which the restart stops."""
         self._restart_requests.put_nowait(request)
 
-    def _add(self, supervised: SupervisedWork, *, group: asyncio.TaskGroup) -> None:
+    def _add(
+        self, supervised: SupervisedWork, *, over: SupervisedObject, group: asyncio.TaskGroup
+    ) -> None:
         task = group.create_task(self._take_turns(supervised))
-        self._running[task] = supervised
+        self._running[task] = over
         task.add_done_callback(self._running.pop)
 
     async def _restart_each_requested(self, group: asyncio.TaskGroup) -> None:
@@ -127,18 +124,14 @@ class Supervisor:
     async def _restart(self, request: RestartRequest, *, group: asyncio.TaskGroup) -> None:
         """Stops the works over the request's object, then closes it and has its builder build
         another; a rebuild that raises is tried again 60 s later, as long as the policy allows."""
-        await self._stop_works_recorded_on(request.dependencies)
+        await self._stop_works_over(self._objects[request.builder])
         while not await self._rebuilt(request, group=group):
             if not request.rebuild_raised():
                 return
             await self._monotonic_clock.sleep(WAIT_AFTER_A_BUG)
 
-    async def _stop_works_recorded_on(self, dependencies: Sequence[ExternalDependency]) -> None:
-        stopping = [
-            task
-            for task, supervised in self._running.items()
-            if not set(supervised.dependencies).isdisjoint(dependencies)
-        ]
+    async def _stop_works_over(self, supervised: SupervisedObject) -> None:
+        stopping = [task for task, over in self._running.items() if over is supervised]
         for task in stopping:
             task.cancel()
         for task in stopping:  # awaited, so no turn runs on the old object once it is rebuilt
@@ -148,8 +141,9 @@ class Supervisor:
         """Has the request's object rebuilt and runs the works over the new one; whether it was, a
         rebuild that raised recorded as a bug on each of its parts."""
         builder = request.builder
+        supervised = self._objects[builder]
         try:
-            works = await self._objects[builder].rebuild()
+            works = await supervised.rebuild()
         except ExpectedError as error:  # aMule refusing the new login's password
             self._logger.warning("rebuild of %s: %s", builder, error)
         except Exception as error:  # the boundary of a rebuild, by design
@@ -157,8 +151,8 @@ class Supervisor:
         else:
             request.rebuilt()
             self._logger.info("%s rebuilt", builder)
-            for supervised in works:
-                self._add(supervised, group=group)
+            for work in works:
+                self._add(work, over=supervised, group=group)
             return True
         for dependency in request.dependencies:
             await self._node_health.record(on=dependency, rule=BUGS, detected=True)
