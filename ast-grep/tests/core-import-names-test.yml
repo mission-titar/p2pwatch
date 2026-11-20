@@ -17,6 +17,7 @@ invalid:
   - io.open("conf")
   - from asyncio import Event
   - shutdown = asyncio.Event()
+  - await asyncio.shield(dispatch)
   - from uuid import uuid5
   - import pathlib
   - from pathlib import Path
