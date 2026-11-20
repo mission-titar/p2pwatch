@@ -134,6 +134,7 @@ class _Node:
                 search_budget=timedelta(seconds=120),
                 keywords=[Keyword(keyword) for keyword in _KEYWORDS],
             ),
+            node_id=_NODE_ID,
         )
 
     def client(self, api: FakeAmuleApi) -> AmuleApiClient:

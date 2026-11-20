@@ -9,7 +9,7 @@ from p2pwatch.composition.health_subscriber_built_later import (
     HealthSubscriberNotSetError,
 )
 from p2pwatch.domain.health.external_dependency import HealthTransition
-from p2pwatch.domain.identifiers import ClientName
+from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 
@@ -19,7 +19,7 @@ pytestmark = pytest.mark.asyncio
 async def test_a_change_of_health_passed_on_before_the_subscriber_is_set_raises_naming_it() -> None:
     later = HealthSubscriberBuiltLater("the alerts")
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
-    client = client_dependency(ClientName("amuled"))
+    client = client_dependency(ClientName("amuled"), node_id=NodeId("n1"))
 
     with pytest.raises(HealthSubscriberNotSetError, match="^the alerts, reached before it is set$"):
         for _ in range(3):
@@ -29,7 +29,7 @@ async def test_a_change_of_health_passed_on_before_the_subscriber_is_set_raises_
 async def test_once_set_the_subscriber_takes_each_change_of_health() -> None:
     later = HealthSubscriberBuiltLater("the alerts")
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
-    client = client_dependency(ClientName("amuled"))
+    client = client_dependency(ClientName("amuled"), node_id=NodeId("n1"))
     taken: list[HealthTransition] = []
 
     async def take(transition: HealthTransition) -> None:

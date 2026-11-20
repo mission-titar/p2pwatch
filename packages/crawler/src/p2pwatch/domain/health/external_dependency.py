@@ -1,20 +1,43 @@
-"""The parts of the node whose health is tracked."""
+"""The parts of the node whose health is tracked, each rule with the alert it sends, or none."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName
+from p2pwatch.domain.observability.events import Event
+
+
+@dataclass(kw_only=True, frozen=True)
+class HealthAlert:
+    """The alert a rule of a part sends when it turns failing, and its end when it turns healthy
+    again, such as Kad's "off its network for 5 min", then "back on its network"."""
+
+    when_failing: Event
+    when_healthy_again: Event | None  # None: an alert with no end, such as the disk's
 
 
 @dataclass(kw_only=True, frozen=True)
 class HealthTransition:
     """A change of one part's state under one rule, such as the aMule client going from healthy to
-    failing."""
+    failing, with that rule's alert."""
 
     dependency: "ExternalDependency"
     rule: HealthRule
+    alert: HealthAlert | None  # None: the change's log line alone tells it
     previous: HealthState
     current: HealthState
+
+    def alert_event(self) -> Event | None:
+        """What its rule's alert sends at this change: the alert turning failing, its end turning
+        healthy from failing, nothing healthy from the start."""
+        if self.alert is None:
+            return None
+        if self.current is HealthState.FAILING:
+            return self.alert.when_failing
+        if self.previous is HealthState.FAILING:
+            return self.alert.when_healthy_again
+        return None
 
 
 class ExternalDependency:
@@ -26,11 +49,12 @@ class ExternalDependency:
         name: str,
         client_name: ClientName | None,
         channel: Channel | None = None,
-        rules: tuple[HealthRule, ...],
+        rules: Mapping[HealthRule, HealthAlert | None],
     ) -> None:
         self.name = name  # "client amuled", as the log names it
-        self.client_name = client_name  # "amuled" in the alerts; None for the webui, the services
-        self.channel = channel  # "kad" for a part of one channel, as the alerts name it
+        self.client_name = client_name  # "amuled"; None for the disk, the services, local.db
+        self.channel = channel  # "kad" for a part of one channel
+        self._alerts = dict(rules)
         self._latest_detected: dict[HealthRule, tuple[bool, ...]] = dict.fromkeys(rules, ())
         self._states = dict.fromkeys(rules, HealthState.UNKNOWN)
 
@@ -47,4 +71,10 @@ class ExternalDependency:
         self._latest_detected[rule], self._states[rule] = latest_detected, current
         if current is previous:
             return None
-        return HealthTransition(dependency=self, rule=rule, previous=previous, current=current)
+        return HealthTransition(
+            dependency=self,
+            rule=rule,
+            alert=self._alerts[rule],
+            previous=previous,
+            current=current,
+        )

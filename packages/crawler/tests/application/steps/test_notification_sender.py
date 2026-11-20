@@ -84,7 +84,7 @@ def _sender(
         notification_timeout_seconds=timeout,
         record_check=checks or _Checks(),
         service_dependencies=notification_service_dependencies(notifier.services()),
-        local_database=local_database_dependency(),
+        local_database=local_database_dependency(node_id=_NODE_ID),
         logger=logger or FakeLogger(),
     )
 
@@ -284,16 +284,14 @@ async def test_two_services_one_refusing_the_other_sent_once_the_refused_tried_o
 
 async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_alerts_no_one() -> None:
     observability, health_logger = ObservabilityOverFakes(), FakeLogger()
-    alerter = HealthAlerter(
-        observability_dispatcher=observability.dispatcher, node_id=_NODE_ID, min_free_bytes=None
-    )
+    alerter = HealthAlerter(observability_dispatcher=observability.dispatcher)
     sender = NotificationSender(
         outbox=observability.outbox,
         notifier=FakeNotifier(refusing=[_OPERATIONS]),
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=health_logger, subscribers=(alerter.send,)).record,
         service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
-        local_database=local_database_dependency(),
+        local_database=local_database_dependency(node_id=_NODE_ID),
         logger=FakeLogger(),
     )
     for _ in range(3):
@@ -314,16 +312,14 @@ async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_aler
 async def test_a_local_database_refusing_every_save_still_sends_every_entry_and_its_alert() -> None:
     observability, health_logger, notifier = ObservabilityOverFakes(), FakeLogger(), FakeNotifier()
     observability.outbox_store.writes_fail = True
-    alerter = HealthAlerter(
-        observability_dispatcher=observability.dispatcher, node_id=_NODE_ID, min_free_bytes=None
-    )
+    alerter = HealthAlerter(observability_dispatcher=observability.dispatcher)
     sender = NotificationSender(
         outbox=observability.outbox,
         notifier=notifier,
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=health_logger, subscribers=(alerter.send,)).record,
         service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
-        local_database=local_database_dependency(),
+        local_database=local_database_dependency(node_id=_NODE_ID),
         logger=FakeLogger(),
     )
     for _ in range(3):

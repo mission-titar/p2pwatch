@@ -436,7 +436,7 @@ class CrawlerComposition(CrawlerRunner):
             )
             # The objects it holds then, closed at the unwind before the database connections.
             stack.push_async_callback(supervisor.close)
-            local_database = local_database_dependency()
+            local_database = local_database_dependency(node_id=node_id)
             outbox_store = SqliteNotificationOutboxStore(local_connection)
             outbox = NotificationOutbox(
                 writer=outbox_store,
@@ -472,15 +472,7 @@ class CrawlerComposition(CrawlerRunner):
             )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
-            alerts.set(
-                HealthAlerter(
-                    observability_dispatcher=observability_dispatcher,
-                    node_id=node_id,
-                    min_free_bytes=(
-                        None if download_config is None else download_config.min_free_bytes
-                    ),
-                ).send
-            )
+            alerts.set(HealthAlerter(observability_dispatcher=observability_dispatcher).send)
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
             decision_store = SqliteDecisionStore(catalog_connection)
@@ -594,6 +586,7 @@ class CrawlerComposition(CrawlerRunner):
                     search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
                     keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
+                node_id=node_id,
             )
             amule_client = AmuleClientRestartableBuilder(
                 client_name=_AMULE_CLIENT_NAME,
