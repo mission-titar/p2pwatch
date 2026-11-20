@@ -18,6 +18,7 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.node_health import NodeHealth
+from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
@@ -30,6 +31,7 @@ from p2pwatch.domain.observability.notification import (
     CompletedDownload,
     RelayedLogLine,
 )
+from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -41,11 +43,9 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
-from tests.fakes.adapters.driven.fake_slow_community_notifier import FakeSlowCommunityNotifier
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.virtual_time import VirtualLoop
 
 _FINGERPRINT = "policy-2"
 _NODE_ID = NodeId("titar-node")
@@ -83,9 +83,9 @@ class _WorkWaitingForTheStop(Work):
         await asyncio.Event().wait()
 
 
-class _WorkSendingACompletion(_WorkWaitingForTheStop):
-    """Calls ``on_start`` at its first turn, then sends a completion as download tracking does,
-    shielded, which lasts until the work is cancelled."""
+class _WorkLeavingACompletion(_WorkWaitingForTheStop):
+    """Calls ``on_start`` at its first turn, leaves a completion as download tracking does,
+    shielded, then waits to be cancelled."""
 
     def __init__(
         self, name: str, *, on_start: _WorkStarted, dispatcher: ObservabilityDispatcher
@@ -96,6 +96,7 @@ class _WorkSendingACompletion(_WorkWaitingForTheStop):
     async def run_once(self) -> None:
         self._on_start(self._name)
         await self._dispatcher.dispatch_shielded(_COMPLETED)
+        await asyncio.Event().wait()
 
 
 class _Crawl:
@@ -111,12 +112,12 @@ class _Crawl:
         engine: MatchingEngine,
         stored_fingerprint: str | None = _FINGERPRINT,
         download_enabled: bool = False,
-        notifier: FakeNotifier | None = None,
-        search_sends_a_completion: bool = False,
+        search_leaves_a_completion: bool = False,
     ) -> None:
         self.steps: list[str] = []
         self.backoff_states_seen_by_works: list[dict[BackoffKey, BackoffState]] = []
-        self.observability = ObservabilityOverFakes(notifier=notifier)
+        self.observability = ObservabilityOverFakes()
+        self.notifier = FakeNotifier()
         self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
         self.catalog_reevaluator_logger = FakeLogger()
@@ -159,12 +160,12 @@ class _Crawl:
             works=[
                 SupervisedWork(work=work, time_limit=timedelta(days=1), dependencies=())
                 for work in (
-                    _WorkSendingACompletion(
+                    _WorkLeavingACompletion(
                         "search",
                         on_start=self._work_started,
                         dispatcher=self.observability.dispatcher,
                     )
-                    if search_sends_a_completion
+                    if search_leaves_a_completion
                     else _WorkWaitingForTheStop("search", on_start=self._work_started),
                     _WorkWaitingForTheStop("status", on_start=self._work_started),
                 )
@@ -175,6 +176,14 @@ class _Crawl:
                 # Its sleeps never end: with instant ones, every time limit would expire at once.
                 monotonic_clock=FakeBlockingMonotonicClock(),
                 node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
+                logger=FakeLogger(),
+            ),
+            notification_sender=NotificationSender(
+                outbox=self.observability.outbox,
+                notifier=self.notifier,
+                notification_timeout_seconds=5.0,
+                record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+                service_dependencies=notification_service_dependencies(self.notifier.services()),
                 logger=FakeLogger(),
             ),
             logger=self.logger,
@@ -341,8 +350,8 @@ async def test_the_backoff_waits_the_previous_run_saved_are_resumed_before_the_w
     assert crawl.backoff.time_until_retry(_KAD) == timedelta(seconds=200)
 
 
-def test_a_completion_still_sending_at_the_shutdown_is_sent_before_the_run_returns(
-    virtual_loop: VirtualLoop,
+@pytest.mark.asyncio
+async def test_the_notifications_left_at_the_shutdown_are_sent_before_the_run_returns(
     *,
     observation_store: SqliteObservationStore,
     decision_store: SqliteDecisionStore,
@@ -354,18 +363,26 @@ def test_a_completion_still_sending_at_the_shutdown_is_sent_before_the_run_retur
         decision_store=decision_store,
         catalog_scan_reader=catalog_scan_reader,
         engine=engine,
-        notifier=FakeSlowCommunityNotifier(held_seconds=0.5),
-        search_sends_a_completion=True,
+        search_leaves_a_completion=True,
     )
 
-    # The shutdown comes as the completion starts its send, which then lasts 0.5 s.
-    virtual_loop.run_until_complete(crawl.run_until_both_works_start_then_stop())
+    # No work sends them: the node online, then the completion, both left for the shutdown.
+    await crawl.run_until_both_works_start_then_stop()
 
-    assert crawl.observability.notifications[-1] == (
-        Audience.COMMUNITY,
-        CompletedDownload(
-            target_titles=(TargetTitle(target_id=TargetId("062A"), title="t"),),
-            filename="Keroro 062.avi",
-            node_id=_NODE_ID,
+    assert crawl.notifier.calls == [
+        (
+            Audience.OPERATIONS,
+            RelayedLogLine(
+                message="🟢 node online (download off)", severity=Severity.INFO, node_id=_NODE_ID
+            ),
         ),
-    )
+        (
+            Audience.COMMUNITY,
+            CompletedDownload(
+                target_titles=(TargetTitle(target_id=TargetId("062A"), title="t"),),
+                filename="Keroro 062.avi",
+                node_id=_NODE_ID,
+            ),
+        ),
+    ]
+    assert crawl.observability.outbox.oldest() is None

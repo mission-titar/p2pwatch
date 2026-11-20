@@ -7,3 +7,4 @@ class WakeSubject(Enum):
     """The loop a ``wake`` resumes."""
 
     DOWNLOAD = auto()
+    NOTIFICATION = auto()  # the notifier's work, once a notification is left in the outbox

@@ -22,7 +22,7 @@ from p2pwatch.domain.health.external_dependency import ExternalDependency, Healt
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
-from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
+from p2pwatch.domain.observability.notification_sends import NotificationService
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     CLIENT_UNREACHABLE,
@@ -38,12 +38,12 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
-from tests.fakes.adapters.driven.fake_timed_notifier import FakeTimedNotifier
 from tests.fakes.composition.fake_restartable import FakeRestartable
 from tests.support.virtual_time import VirtualLoop
 
@@ -55,30 +55,36 @@ _DOWN = make_unreachable()
 _NODE_ID = NodeId("titar-node-1")
 _AMULED = ClientName("amuled")
 _CHANNELS = (Channel("ed2k"), Channel("kad"))
-_NOTIFICATION_TIMEOUT_SECONDS = 5.0
 _HOUR = timedelta(hours=1)
 
 
 class _Observability:
-    """The dispatch step over fakes, each notification timed: an alert is one; each change of
-    health also passed on to ``also``, after the alerts."""
+    """The dispatch step over fakes, each notification left timed: an alert is one; each change
+    of health also passed on to ``also``, after the alerts."""
 
     def __init__(self, fake_time: FakeTime, *, also: Sequence[HealthSubscriber] = ()) -> None:
         self.logger = FakeLogger()
-        self.notifier = FakeTimedNotifier(fake_time)
+        self._fake_time, self._start = fake_time, fake_time.monotonic.now()
+        self.notifications: list[tuple[float, Notification]] = []
         self.dispatcher = ObservabilityDispatcher(
             logger=self.logger,
             node_metric_writer=FakeNodeMetricStore(),
-            current_notifier=lambda: self.notifier,
-            notification_timeout_seconds=_NOTIFICATION_TIMEOUT_SECONDS,
-            record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-            service_dependencies=notification_service_dependencies(self.notifier.services()),
+            leave_notification=self._leave,
+            services=ONE_SERVICE_PER_AUDIENCE,
         )
         alerter = HealthAlerter(
             observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None
         )
         self.health_logger = FakeLogger()
         self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send, *also))
+
+    def _leave(
+        self, notification: Notification, *, services: Sequence[NotificationService]
+    ) -> None:
+        """Keeps ``notification`` for each of ``services``, with the seconds elapsed on the
+        monotonic clock."""
+        elapsed = (self._fake_time.monotonic.now() - self._start).total_seconds()
+        self.notifications.extend((elapsed, notification) for _ in services)
 
 
 def _status(**channels: tuple[bool, bool | None]) -> ClientStatus:
@@ -145,7 +151,7 @@ async def _run(
 
 
 async def _alerts(*readings: _Reading) -> list[tuple[float, Notification]]:
-    return (await _run(*readings)).notifier.notifications
+    return (await _run(*readings)).notifications
 
 
 def _warning(message: str) -> RelayedLogLine:
@@ -162,9 +168,7 @@ _NOT_CONNECTABLE = "not connectable for 5 min"
 @pytest.mark.asyncio
 async def test_not_connectable_from_the_first_reading_alerts_at_five_minutes_once() -> None:
     observability = await _run(*[_status(kad=_LOW_ID)] * 10)
-    assert observability.notifier.notifications == [
-        (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))
-    ]
+    assert observability.notifications == [(300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
     assert (
         LoggedLine(
             level="warning", message="channel amuled kad, not connectable: unknown to failing"
@@ -184,9 +188,7 @@ async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
     observability = await _run(
         *[_status(x=(False, None))] * 6, client=ClientName("fake"), channels=(Channel("x"),)
     )
-    assert observability.notifier.notifications == [
-        (300.0, _warning("fake x: off its network for 5 min"))
-    ]
+    assert observability.notifications == [(300.0, _warning("fake x: off its network for 5 min"))]
     assert (
         LoggedLine(level="warning", message="channel fake x, not connected: unknown to failing")
         in observability.health_logger.lines
@@ -245,7 +247,7 @@ async def test_an_unknown_connectable_field_after_an_alert_ends_nothing() -> Non
 async def test_unreachable_alerts_at_two_minutes_and_ends_at_the_ninth_answer() -> None:
     # It ends under 2 unanswered among the last 10 readings: the eighth answer still sees two.
     observability = await _run(_DOWN, _DOWN, _DOWN, *[_status(ed2k=_UP)] * 9)
-    assert observability.notifier.notifications == [
+    assert observability.notifications == [
         (120.0, _warning("amuled unreachable for 2 min")),
         (660.0, _info("amuled reachable again")),
     ]
@@ -594,7 +596,7 @@ def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_
     node.run_for(600.0 + 7 * 60.0 + 1.0)  # eight readings after the rebuild, all off
 
     assert node.amule_client.rebuilt_at == [600.0]
-    notifications = node.observability.notifier.notifications
+    notifications = node.observability.notifications
     assert [notification for _, notification in notifications] == [
         _warning("amuled kad: off its network for 5 min")
     ]

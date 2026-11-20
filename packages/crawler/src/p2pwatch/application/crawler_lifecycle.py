@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
+from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
@@ -14,7 +15,7 @@ from p2pwatch.domain.observability.events import CrawlerStarted
 
 class CrawlerLifecycle:
     """Resumes the saved backoffs, announces the node online, re-evaluates the catalog if the
-    policy changed, has the supervisor run the works, then finishes the sends they left."""
+    policy changed, has the supervisor run the works, then sends the notifications left."""
 
     def __init__(
         self,
@@ -26,6 +27,7 @@ class CrawlerLifecycle:
         works: Sequence[SupervisedWork],
         download_enabled: bool,
         supervisor: Supervisor,
+        notification_sender: NotificationSender,
         logger: Logger,
     ) -> None:
         self._node_id = node_id
@@ -35,11 +37,12 @@ class CrawlerLifecycle:
         self._works = works
         self._download_enabled = download_enabled
         self._supervisor = supervisor
+        self._notification_sender = notification_sender
         self._logger = logger
 
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
         """Runs until the shutdown is requested, arming the bound before the works are cancelled;
-        returns once the notifications their turns left in flight are sent."""
+        returns once the notifications left in the outbox are sent, within that bound."""
         self._backoff.resume_waits()
         self._logger.info("crawler started: node_id=%s", self._node_id)
         if self._download_enabled:
@@ -52,3 +55,4 @@ class CrawlerLifecycle:
         await self._catalog_reevaluator.reevaluate_if_policy_changed()
         await self._supervisor.supervise(self._works, arm_shutdown_bound=arm_shutdown_bound)
         await self._observability_dispatcher.finish_shielded_dispatches()
+        await self._notification_sender.send_what_is_left()
