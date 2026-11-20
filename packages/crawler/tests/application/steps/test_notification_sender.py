@@ -30,6 +30,7 @@ from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_hanging_notifier import FakeHangingNotifier
 from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
@@ -84,8 +85,19 @@ def _sender(
     )
 
 
+def _empty_outbox() -> NotificationOutbox:
+    store = FakeNotificationOutboxStore()
+    return NotificationOutbox(
+        writer=store,
+        reader=store,
+        services=ONE_SERVICE_PER_AUDIENCE,
+        waker=FakeWaker(),
+        logger=FakeLogger(),
+    )
+
+
 def _completed_left() -> NotificationOutbox:
-    outbox = NotificationOutbox(waker=FakeWaker())
+    outbox = _empty_outbox()
     outbox.leave(_COMPLETED, services=[_COMMUNITY])
     return outbox
 
@@ -97,7 +109,7 @@ async def test_it_is_named_in_the_log_by_what_it_does() -> None:
 
 
 async def test_its_wait_returns_once_a_notification_is_left() -> None:
-    outbox = NotificationOutbox(waker=FakeWaker())
+    outbox = _empty_outbox()
     waiting = asyncio.create_task(_sender(FakeNotifier(), outbox=outbox).wait_for_next_turn())
     for _ in range(3):
         await asyncio.sleep(0)  # noqa: TID251
@@ -200,7 +212,7 @@ async def test_a_send_cancelled_mid_send_keeps_its_entry() -> None:
 
 async def test_a_turn_with_nothing_left_sends_and_records_nothing() -> None:
     notifier, checks = FakeNotifier(), _Checks()
-    outbox = NotificationOutbox(waker=FakeWaker())
+    outbox = _empty_outbox()
 
     await _sender(notifier, outbox=outbox, checks=checks).run_once()
 
@@ -227,7 +239,7 @@ async def test_two_services_one_refusing_the_other_sent_once_the_refused_tried_o
     refused = NotificationService(scheme="discord", audience=Audience.OPERATIONS)
     taking = NotificationService(scheme="ntfy", audience=Audience.OPERATIONS)
     notifier, logger = FakeNotifier((refused, taking), refusing=[refused]), FakeLogger()
-    outbox = NotificationOutbox(waker=FakeWaker())
+    outbox = _empty_outbox()
     outbox.leave(_ONLINE, services=[refused, taking])
     sender = _sender(notifier, outbox=outbox, logger=logger)
 

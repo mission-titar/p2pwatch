@@ -26,6 +26,9 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     SqliteDatabaseOpener,
 )
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_node_id_store import SqliteNodeIdStore
+from p2pwatch.adapters.driven.persistence_sqlite.sqlite_notification_outbox_store import (
+    SqliteNotificationOutboxStore,
+)
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_search_start_store import (
     SqliteSearchStartStore,
 )
@@ -40,6 +43,13 @@ from p2pwatch.domain.client_errors import ClientAuthError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.observability.notification import RelayedLogLine
+from p2pwatch.domain.observability.notification_sends import (
+    NotificationService,
+    PendingNotification,
+)
+from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.search.latest_search_start import LatestSearchStart
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
@@ -538,6 +548,49 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
     sink.server_close()
 
     assert ("p2pwatch - wired-node", "[wired-node]") in FakeNotificationSink.received
+
+
+@pytest.mark.asyncio
+async def test_a_notification_a_stop_left_unsent_is_sent_once_the_node_starts_again(
+    tmp_path: Path,
+) -> None:
+    sink = ThreadingHTTPServer(("127.0.0.1", 0), FakeNotificationSink)
+    FakeNotificationSink.received = []
+    threading.Thread(target=sink.serve_forever, daemon=True).start()
+    notification = {"url": f"json://127.0.0.1:{sink.server_port}/", "audience": "operations"}
+    observability = {"log_level": "INFO", "notifications": [notification]}
+    left_unsent = RelayedLogLine(
+        message="amuled unreachable for 2 min",
+        severity=Severity.WARNING,
+        node_id=NodeId("an-earlier-run"),
+    )
+    with closing(open_local(tmp_path / "local.db")) as local:
+        SqliteNotificationOutboxStore(local).set_pending_notifications(
+            [
+                PendingNotification(
+                    notification=left_unsent,
+                    service=NotificationService(scheme="json", audience=Audience.OPERATIONS),
+                )
+            ]
+        )
+    config_path = _write(
+        tmp_path / "crawler.yml", config=_config(tmp_path, observability=observability)
+    )
+    default_sigterm = signal.getsignal(signal.SIGTERM)
+
+    with FakeAmuleApiServer(FakeAmuleApi()) as server:
+        run = _crawl(server, config_path=config_path)
+        assert await asyncio.to_thread(
+            server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
+        )
+        _send_sigterm(default_sigterm)
+        await asyncio.wait_for(run, _WAIT_SECONDS)
+    sink.shutdown()
+    sink.server_close()
+
+    assert ("p2pwatch - an-earlier-run", "[an-earlier-run]") in FakeNotificationSink.received
+    with closing(open_local(tmp_path / "local.db")) as local:
+        assert SqliteNotificationOutboxStore(local).read_pending_notifications() == ()
 
 
 @pytest.mark.asyncio

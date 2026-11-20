@@ -62,6 +62,7 @@ _LOCAL_TABLES = {
     "downloads",
     "backoff_states",
     "latest_search_starts",
+    "pending_notifications",
     "reevaluation_state",
 }
 
@@ -112,7 +113,7 @@ def test_open_local_creates_the_tables_and_versions_the_schema(tmp_path: Path) -
     connection = database_opener().open_local(tmp_path / "local.db")
     try:
         assert _table_names(connection) == _LOCAL_TABLES
-        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 16}]
+        assert rows(connection, sql="PRAGMA user_version") == [{"user_version": 17}]
     finally:
         connection.close()
 

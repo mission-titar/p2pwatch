@@ -17,6 +17,7 @@ from p2pwatch.domain.observability.notification_sends import notification_servic
 from tests.contracts.application.ports.driven.restartable_contract import RestartableContract
 from tests.fakes.adapters.driven.fake_apprise import FakeApprise
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
+from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 
@@ -76,9 +77,15 @@ def test_it_is_named_as_the_notifier_s_part_is() -> None:
 
 
 def _sender() -> NotificationSender:
-    notifier = FakeNotifier()
+    notifier, store = FakeNotifier(), FakeNotificationOutboxStore()
     return NotificationSender(
-        outbox=NotificationOutbox(waker=FakeWaker()),
+        outbox=NotificationOutbox(
+            writer=store,
+            reader=store,
+            services=notifier.services(),
+            waker=FakeWaker(),
+            logger=FakeLogger(),
+        ),
         notifier=notifier,
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
