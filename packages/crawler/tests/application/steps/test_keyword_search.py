@@ -503,7 +503,6 @@ def test_ten_ed2k_keywords_queued_on_the_client_each_search_within_its_time_limi
     time_limits = AmuleWorkTimeLimits(
         request_bound=request_bound,
         search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
-        notification_timeout=timedelta(seconds=5),
         keywords=[Keyword(keyword) for keyword in keywords],
     )
 

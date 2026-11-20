@@ -167,7 +167,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 10 | `refactor/external-dependencies` | the component renamed an external dependency | ~250 lines, ~30 files, past the file bound (Corrected: 448 lines, 51 files, its parameters, attributes and locals uncounted by the estimate) |
 | 13 | `test/steps-read-handed-on-notifications` | the steps' tests read the notifications their dispatcher hands on | 46 lines, 10 files (Corrected: cut out of block 15, the lead on 2026-11-18) |
 | 15 | `refactor/notifications-through-the-outbox` | the outbox in memory, the notifier's work sending from it | ~700 lines, ~13 files, past the line bound (Corrected: 1 542 lines, 31 files, the dispatcher's send tests moving to the notifier's work and every test building a dispatcher uncounted by the estimate, accepted by the operator on 2026-11-18) |
-| 20 | `refactor/shielded-sends-removed` | the shielded sends and the notification timeout in the turns' limits removed | ~350 lines, ~14 files |
+| 20 | `refactor/shielded-sends-removed` | the shielded sends and the notification timeout in the turns' limits removed | ~350 lines, ~14 files (Corrected: 213 lines, 18 files, the shielded sends alone) |
+| 23 | `refactor/no-notification-timeout-in-time-limits` | the notification timeout in the turns' limits removed | 37 lines, 7 files (Corrected: cut out of block 20, which came to 25 files, the lead on 2026-11-18) |
 | 25 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound |
 | 30 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor keeping one record per object | ~600 lines, ~14 files, past the line bound |
 | 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files |
@@ -290,11 +291,13 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
   through the `Waker` port, `WakeSubject.NOTIFICATION`; an entry is a `PendingNotification`. With no service
   configured, the notifier hands back no work.)
 
-### Block 20, the shielded sends removed
+### Blocks 20 and 23, the shielded sends removed
 
-- `dispatch_shielded` and its four callers (`download_tracker`, `file_judge`, `source_watcher`, `health_alerter`),
-  `finish_shielded_dispatches` and its call in `crawler_lifecycle`, `notification_timeout` in `AmuleWorkTimeLimits`
-  and its two tests.
+- 20: `dispatch_shielded` and its four callers (`download_tracker`, `file_judge`, `source_watcher`,
+  `health_alerter`), `finish_shielded_dispatches` and its call in `crawler_lifecycle`. (Corrected: as built, the
+  acceptance test covers the health alerter too, and its `call_soon` callback is scheduled before the step's call, so
+  it proves no suspension from the turn's start to `leave`, which holds the spec's interval.)
+- 23: `notification_timeout` in `AmuleWorkTimeLimits` and its two tests.
 
 ### Block 25, the outbox saved
 

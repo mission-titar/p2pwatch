@@ -578,9 +578,6 @@ class CrawlerComposition(CrawlerRunner):
                 time_limits=AmuleWorkTimeLimits(
                     request_bound=client.request_bound,
                     search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
-                    notification_timeout=timedelta(
-                        seconds=observability.notification_timeout_seconds
-                    ),
                     keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
             )

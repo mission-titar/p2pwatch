@@ -398,7 +398,7 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
         tmp_path,
         # The keyword written twice is searched once, and counted once ahead of the other.
         search=_config(tmp_path)["search"] | {"keywords": ["keroro", "keroro mission", "keroro"]},
-        observability={"log_level": "DEBUG", "notification_timeout_seconds": 10},
+        observability={"log_level": "DEBUG"},
         download=download,
     )
     config_path = _write(tmp_path / "crawler.yml", config=config)
@@ -407,15 +407,14 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
         await _crawl_until_a_search_is_read(config_path, targets_path=_SHIPPED_TARGETS)
 
     # One call to amuled: six requests of 60 s; each limit then adds its 300 s of margin. The
-    # status reading: two calls, an alert for the client and two for each of its two channels.
-    # An eD2k search: the other keyword's search ahead (its budget, then two calls), the spacing,
-    # its budget and three calls. A Kad search: a spacing for each keyword on its Kad word, two
-    # budgets and four calls. Download and source tracking: two calls and one notification. The
-    # webui's thread watch awaits nothing: the margin alone.
+    # status reading, download and source tracking: two calls, their notifications left awaiting
+    # nothing. An eD2k search: the other keyword's search ahead (its budget, then two calls), the
+    # spacing, its budget and three calls. A Kad search: a spacing for each keyword on its Kad
+    # word, two budgets and four calls. The webui's thread watch awaits nothing: the margin alone.
     assert [message for message in caplog.messages if ": time limit " in message] == [
-        "status reading amuled: time limit 1070 s",
-        "download tracking amuled: time limit 1030 s",
-        "source tracking amuled: time limit 1030 s",
+        "status reading amuled: time limit 1020 s",
+        "download tracking amuled: time limit 1020 s",
+        "source tracking amuled: time limit 1020 s",
         "search 'keroro' amuled ed2k: time limit 2400 s",
         "search 'keroro mission' amuled ed2k: time limit 2400 s",
         "search 'keroro' amuled kad: time limit 2100 s",

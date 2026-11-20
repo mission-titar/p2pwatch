@@ -28,13 +28,11 @@ class AmuleWorkTimeLimits:
 
     request_bound: timedelta
     search_budget: timedelta
-    notification_timeout: timedelta
     keywords: Sequence[Keyword]
 
-    def of_status_reading(self, *, channel_count: int) -> timedelta:
-        """Its two calls, and an alert for the client's rule and for each channel's two."""
-        alerts = 1 + 2 * channel_count
-        return 2 * self._call + alerts * self.notification_timeout + TIME_LIMIT_MARGIN
+    def of_status_reading(self) -> timedelta:
+        """Its two calls: its alerts are left in the outbox, awaiting nothing."""
+        return 2 * self._call + TIME_LIMIT_MARGIN
 
     def of_search(self, keyword: Keyword, *, channel: Channel) -> timedelta:
         """Its wait for its start, its start, its polls until the budget is spent, its answer's
@@ -54,9 +52,9 @@ class AmuleWorkTimeLimits:
         return path + TIME_LIMIT_MARGIN
 
     def of_tracking(self) -> timedelta:
-        """Download tracking's or source tracking's: the first page of the client's two lists, and
-        one notification."""
-        return 2 * self._call + self.notification_timeout + TIME_LIMIT_MARGIN
+        """Download tracking's or source tracking's: the first page of the client's two lists, its
+        notifications left in the outbox, awaiting nothing."""
+        return 2 * self._call + TIME_LIMIT_MARGIN
 
     @property
     def _call(self) -> timedelta:
