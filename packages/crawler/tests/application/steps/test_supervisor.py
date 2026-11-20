@@ -3,8 +3,8 @@ whoever asks for it; the shutdown's bound is armed before the works are cancelle
 
 A turn that raises fails alone: an expected error is one warning line, any other exception is a
 bug, logged with its trace, and its work's next turn comes at least 60 s later. A turn still
-running at its work's time limit is cut, and counts as a bug. The timed tests share one simulated
-time, on the virtual-time loop.
+running at its work's time limit is cut, and counts as a bug of its object, which three in a row
+rebuild. The timed tests share one simulated time, on the virtual-time loop.
 """
 
 import asyncio
@@ -14,7 +14,6 @@ from datetime import timedelta
 
 import pytest
 
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.supervisor import (
     WAIT_AFTER_A_BUG,
     ShutdownBoundArmer,
@@ -22,9 +21,6 @@ from p2pwatch.application.steps.supervisor import (
 )
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
-from p2pwatch.domain.health.external_dependency import ExternalDependency
-from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_dependencies import BUGS
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -182,26 +178,9 @@ class _WorkStoppingTheNode(Work):
         self.run_state.set_shutdown_requested()
 
 
-def _part_of(work: Work) -> ExternalDependency:
-    """A part named after ``work``, judged by its bugs alone."""
-    return ExternalDependency(name=str(work), client_name=ClientName("amuled"), rules=(BUGS,))
-
-
-def _supervised(
-    *works: Work,
-    time_limit: timedelta = _DAY,
-    dependencies: tuple[ExternalDependency, ...] | None = None,
-) -> list[SupervisedWork]:
-    """Each of ``works`` with ``time_limit``, its turns recorded on ``dependencies``, or else on a
-    part named after it."""
-    return [
-        SupervisedWork(
-            work=work,
-            time_limit=time_limit,
-            dependencies=(_part_of(work),) if dependencies is None else dependencies,
-        )
-        for work in works
-    ]
+def _supervised(*works: Work, time_limit: timedelta = _DAY) -> list[SupervisedWork]:
+    """Each of ``works`` with ``time_limit``."""
+    return [SupervisedWork(work=work, time_limit=time_limit) for work in works]
 
 
 def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
@@ -210,7 +189,6 @@ def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
     return Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeBlockingMonotonicClock(),
-        node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
         logger=FakeLogger(),
     )
 
@@ -220,11 +198,13 @@ async def _supervise(
     /,
     *works: SupervisedWork,
     arm_shutdown_bound: ShutdownBoundArmer = lambda: None,
-) -> None:
+) -> FakeRestartableBuilder:
     """Takes the turns of ``works``, those of one object ``supervisor`` built first, until the
-    shutdown is requested."""
-    await supervisor.build_first(FakeRestartableBuilder(works_over=lambda _state: works))
+    shutdown is requested; returns that object's builder."""
+    builder = FakeRestartableBuilder(works_over=lambda _state: works)
+    await supervisor.build_first(builder)
     await supervisor.supervise(arm_shutdown_bound=arm_shutdown_bound)
+    return builder
 
 
 def _supervise_until(
@@ -232,24 +212,19 @@ def _supervise_until(
     *works: Work,
     seconds: float,
     logger: FakeLogger | None = None,
-    health_logger: FakeLogger | None = None,
     time_limit: timedelta = _DAY,
-    dependencies: tuple[ExternalDependency, ...] | None = None,
-) -> None:
-    """Takes the turns of ``works`` on ``loop``, each with ``time_limit``, until the shutdown
-    requested at ``seconds``; each change of health is logged to ``health_logger``."""
+) -> FakeRestartableBuilder:
+    """Takes the turns of ``works`` on ``loop``, each with ``time_limit``, the works of one object,
+    until the shutdown requested at ``seconds``; returns that object's builder."""
     run_state = FakeRunStateStore()
     loop.call_later(seconds, run_state.set_shutdown_requested)
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(loop),
-        node_health=NodeHealth(logger=health_logger or FakeLogger(), subscribers=()),
         logger=logger or FakeLogger(),
     )
-    loop.run_until_complete(
-        _supervise(
-            supervisor, *_supervised(*works, time_limit=time_limit, dependencies=dependencies)
-        )
+    return loop.run_until_complete(
+        _supervise(supervisor, *_supervised(*works, time_limit=time_limit))
     )
 
 
@@ -291,7 +266,6 @@ def test_it_takes_the_turns_of_the_works_of_each_object_it_built_first(
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
-        node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
         logger=FakeLogger(),
     )
 
@@ -356,9 +330,10 @@ def test_two_turns_of_a_work_meeting_a_bug_at_once_are_never_closer_than_60_s(
     # Its own wait is 1 s: without the 60 s after a bug, its turns would follow each other.
     broken = _TimedWork("broken", wait_seconds=1.0, errors=itertools.repeat(RuntimeError("bug")))
 
-    _supervise_until(virtual_loop, broken, seconds=200.0)
+    _supervise_until(virtual_loop, broken, seconds=2.0 + 2 * _AFTER_A_BUG)
 
-    assert broken.turns == [1.0, 1.0 + _AFTER_A_BUG, 1.0 + 2 * _AFTER_A_BUG, 1.0 + 3 * _AFTER_A_BUG]
+    # Its third bug in a row rebuilds its object, whose works take their first turn afresh.
+    assert broken.turns[:3] == [1.0, 1.0 + _AFTER_A_BUG, 1.0 + 2 * _AFTER_A_BUG]
 
 
 def test_after_a_bug_a_wait_of_its_own_longer_than_60_s_is_waited_alone(
@@ -405,71 +380,34 @@ def test_after_a_turn_that_worked_the_work_waits_its_own_wait_alone_again(
     ]
 
 
-def test_a_work_meeting_a_bug_at_each_turn_fails_at_its_third_on_each_of_its_parts(
-    virtual_loop: VirtualLoop,
-) -> None:
-    health_logger = FakeLogger()
-    broken = _TimedWork(
-        "search 'keroro' amuled kad", wait_seconds=1.0, errors=itertools.repeat(KeyError("kad"))
-    )
-    search = ExternalDependency(
-        name="search 'keroro' amuled kad", client_name=ClientName("amuled"), rules=(BUGS,)
-    )
-    kad = ExternalDependency(
-        name="channel amuled kad", client_name=ClientName("amuled"), rules=(BUGS,)
-    )
-
-    _supervise_until(
-        virtual_loop,
-        broken,
-        seconds=2.0 + 2 * _AFTER_A_BUG,
-        health_logger=health_logger,
-        dependencies=(search, kad),
-    )
-
-    assert broken.turns == [1.0, 1.0 + _AFTER_A_BUG, 1.0 + 2 * _AFTER_A_BUG]
-    assert health_logger.lines == [
-        LoggedLine(level="warning", message="search 'keroro' amuled kad, bugs: unknown to failing"),
-        LoggedLine(level="warning", message="channel amuled kad, bugs: unknown to failing"),
-    ]
-
-
 @pytest.mark.parametrize(
     "errors",
     [(), itertools.repeat(SearchFailedError("amuled refused the search"))],
     ids=["turns that worked", "turns that met an expected error"],
 )
-def test_three_turns_without_a_bug_make_the_work_s_part_healthy(
+def test_turns_without_a_bug_rebuild_nothing(
     virtual_loop: VirtualLoop, *, errors: Iterable[Exception]
 ) -> None:
-    health_logger = FakeLogger()
     search = _TimedWork("search 'keroro' amuled kad", wait_seconds=10.0, errors=errors)
 
-    _supervise_until(virtual_loop, search, seconds=35.0, health_logger=health_logger)
+    client = _supervise_until(virtual_loop, search, seconds=35.0)
 
     assert search.turns == [10.0, 20.0, 30.0]
-    assert health_logger.lines == [
-        LoggedLine(level="info", message="search 'keroro' amuled kad, bugs: unknown to healthy")
-    ]
+    assert client.rebuilds() == 0
 
 
-def test_turns_cut_at_their_time_limit_count_as_bugs(virtual_loop: VirtualLoop) -> None:
-    health_logger = FakeLogger()
+def test_turns_cut_at_their_time_limit_count_as_bugs_three_in_a_row_rebuilding_their_object(
+    virtual_loop: VirtualLoop,
+) -> None:
     hung = _HungWork()
     third_cut = 3 * 30.0 + 2 * _AFTER_A_BUG
 
-    _supervise_until(
-        virtual_loop,
-        hung,
-        seconds=third_cut + 1.0,
-        health_logger=health_logger,
-        time_limit=timedelta(seconds=30),
+    client = _supervise_until(
+        virtual_loop, hung, seconds=third_cut + 1.0, time_limit=timedelta(seconds=30)
     )
 
     assert hung.cut_at[:3] == [30.0, 30.0 + _AFTER_A_BUG + 30.0, third_cut]
-    assert health_logger.lines == [
-        LoggedLine(level="warning", message="hung work, bugs: unknown to failing")
-    ]
+    assert client.built_at == [0.0, third_cut]
 
 
 @pytest.mark.asyncio

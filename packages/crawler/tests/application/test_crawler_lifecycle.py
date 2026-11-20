@@ -138,7 +138,7 @@ class _Crawl:
         self._works_started = 0
         self._both_works_started = asyncio.Event()
         self._works = [
-            SupervisedWork(work=work, time_limit=timedelta(days=1), dependencies=())
+            SupervisedWork(work=work, time_limit=timedelta(days=1))
             for work in (
                 _WorkLeavingACompletion(
                     "search", on_start=self._work_started, dispatcher=self.observability.dispatcher
@@ -152,7 +152,6 @@ class _Crawl:
             run_state_reader=self.run_state,
             # Its sleeps never end: with instant ones, every time limit would expire at once.
             monotonic_clock=FakeBlockingMonotonicClock(),
-            node_health=NodeHealth(logger=FakeLogger(), subscribers=()),
             logger=FakeLogger(),
         )
         self.crawler_lifecycle = CrawlerLifecycle(

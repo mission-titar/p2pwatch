@@ -53,7 +53,7 @@ class _Over(Work):
 
 
 def _works_over(notifier: AppriseNotifier, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(notifier), time_limit=timedelta(minutes=5), dependencies=())]
+    return [SupervisedWork(work=_Over(notifier), time_limit=timedelta(minutes=5))]
 
 
 class TestNotifierRestartableBuilder(RestartableBuilderContract):
@@ -97,16 +97,15 @@ def _sender() -> NotificationSender:
     )
 
 
-def test_the_sending_takes_one_send_s_timeout_and_the_margin_on_each_service_s_part() -> None:
+def test_the_sending_takes_one_send_s_timeout_and_the_margin() -> None:
     sender = _sender()
-    parts = tuple(notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE).values())
 
-    works = notification_sending(sender, notification_timeout_seconds=5.0, dependencies=parts)
+    works = notification_sending(
+        sender, notification_timeout_seconds=5.0, services=ONE_SERVICE_PER_AUDIENCE
+    )
 
-    assert works == [
-        SupervisedWork(work=sender, time_limit=timedelta(minutes=5, seconds=5), dependencies=parts)
-    ]
+    assert works == [SupervisedWork(work=sender, time_limit=timedelta(minutes=5, seconds=5))]
 
 
 def test_no_service_has_nothing_to_send_and_so_no_sending() -> None:
-    assert notification_sending(_sender(), notification_timeout_seconds=5.0, dependencies=()) == ()
+    assert notification_sending(_sender(), notification_timeout_seconds=5.0, services=()) == ()

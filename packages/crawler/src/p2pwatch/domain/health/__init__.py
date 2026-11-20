@@ -10,6 +10,6 @@ Detected 3 times in a row, the client is failing: "amuled unreachable for 2 min"
 Detected fewer than 2 times in the last 10, it is healthy again: "amuled reachable again".
 Turning healthy takes longer than failing, so a flaky client does not alert on and off.
 Before its first 3 checks, its state is unknown, and nothing is sent.
-Each task the node repeats is checked the same way: after each turn, whether it met a bug.
-Each notification sent is checked too: whether its service took it, and whether it met a bug.
+Each notification sent is checked too: whether its service took it.
+A bug is no outage: the supervisor counts those of each object it rebuilds, never here.
 """

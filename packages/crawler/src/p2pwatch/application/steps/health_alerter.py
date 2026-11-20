@@ -28,7 +28,6 @@ from p2pwatch.domain.status_reading import (
     SEARCHES_FAILED,
     UNREACHABLE_ALERT_AFTER,
 )
-from p2pwatch.domain.work_dependencies import BUGS
 
 # The field of the status reading each channel rule is about, as its alert names it.
 _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
@@ -38,7 +37,7 @@ _CHANNEL_FIELDS: Mapping[HealthRule, ChannelField] = {
 
 # A part failing or healthy again under these rules has no alert: its log line tells it. An alert
 # on a notification service's rule would be sent through that service.
-_RULES_WITHOUT_AN_ALERT = frozenset({BUGS, SEARCHES_FAILED, CONNECTED_TO_NO_NETWORK, SENDS_FAILED})
+_RULES_WITHOUT_AN_ALERT = frozenset({SEARCHES_FAILED, CONNECTED_TO_NO_NETWORK, SENDS_FAILED})
 
 
 class HealthAlerter:

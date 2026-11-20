@@ -1,5 +1,5 @@
-"""A subscriber of the node's health built after it, such as the restart policy, which maps the
-parts the works are recorded on, the works recording on the node's health."""
+"""A subscriber of the node's health built after it, such as the alerts, whose dispatcher is
+built after the node's health."""
 
 from p2pwatch.application.steps.node_health import HealthSubscriber
 from p2pwatch.domain.health.external_dependency import HealthTransition
@@ -11,8 +11,8 @@ class HealthSubscriberNotSetError(RuntimeError):
 
 
 class HealthSubscriberBuiltLater:
-    """Passes each change of health on to ``subscriber``, such as the restart policy, once the
-    composition set it."""
+    """Passes each change of health on to ``subscriber``, such as the alerts, once the composition
+    set it."""
 
     def __init__(self, subscriber: str) -> None:
         self._subscriber_name = subscriber

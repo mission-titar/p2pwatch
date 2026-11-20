@@ -1,5 +1,5 @@
 """The works over the node's aMule client, built anew over each client the node opens, such as
-its status reading and its searches, over parts built once, such as the health of each part."""
+its status reading and its searches, over parts built once, such as the health of each channel."""
 
 import sqlite3
 from collections.abc import Sequence
@@ -42,13 +42,7 @@ from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.download.disk_space import download_tracking_dependency
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.models import TargetSegment
-from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.status_reading import channel_dependency, client_dependency
-from p2pwatch.domain.work_dependencies import (
-    keyword_search_dependency,
-    source_tracking_dependency,
-    status_reading_dependency,
-)
 
 
 def works_in_start_order[W](
@@ -88,9 +82,8 @@ class DownloadSteps:
         self._monotonic_clock = monotonic_clock
         self._observability_dispatcher = observability_dispatcher
         self._node_id = node_id
-        # One part for the disk's readings, the client's networks and the cycle's bugs.
+        # One part for the disk's readings and the client's networks.
         self.download_tracking = download_tracking_dependency(client_name)
-        self._source_tracking = source_tracking_dependency(client_name)
         # Both share ``local_connection`` and the catalog's stores: one writer, on the event loop.
         self._tracked_download_store = SqliteTrackedDownloadStore(local_connection)
         self._source_point_store = SqliteSourcePointStore(catalog_connection)
@@ -167,12 +160,8 @@ class DownloadSteps:
             logger=StdlibLogger(SourceWatcher.__module__),
         )
         return (
-            SupervisedWork(
-                work=download_cycle, time_limit=time_limit, dependencies=(self.download_tracking,)
-            ),
-            SupervisedWork(
-                work=source_watcher, time_limit=time_limit, dependencies=(self._source_tracking,)
-            ),
+            SupervisedWork(work=download_cycle, time_limit=time_limit),
+            SupervisedWork(work=source_watcher, time_limit=time_limit),
         )
 
 
@@ -210,17 +199,9 @@ class AmuleClientWorks:
         self._monotonic_clock = monotonic_clock
         self._time_limits = time_limits
         self._client_dependency = client_dependency(client_name)
-        self._status_reading_dependency = status_reading_dependency(client_name)
-        # Each channel's readings and the bugs of its searches are recorded on one part.
+        # Each channel's readings and the refusals of its searches are recorded on one part.
         self._channel_dependencies = {
             channel: channel_dependency(client_name=client_name, channel=channel)
-            for channel in channels
-        }
-        self._search_dependencies = {
-            (keyword, channel): keyword_search_dependency(
-                keyword=keyword, client_name=client_name, channel=channel
-            )
-            for keyword in dedupe_keywords(keywords)
             for channel in channels
         }
 
@@ -251,9 +232,7 @@ class AmuleClientWorks:
         )
         return works_in_start_order(
             status_watcher=SupervisedWork(
-                work=status_watcher,
-                time_limit=self._time_limits.of_status_reading(),
-                dependencies=(self._status_reading_dependency,),
+                work=status_watcher, time_limit=self._time_limits.of_status_reading()
             ),
             tracking=(
                 ()
@@ -266,9 +245,6 @@ class AmuleClientWorks:
                 backoff_saver=self._backoff_saver,
                 monotonic_clock=self._monotonic_clock,
                 time_limit_of=self._time_limits.of_search,
-                search_dependency_of=lambda keyword, *, channel: self._search_dependencies[
-                    keyword, channel
-                ],
                 node_health=self._node_health,
                 channel_dependencies=self._channel_dependencies.values(),
             ),

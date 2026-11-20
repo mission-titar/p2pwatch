@@ -174,7 +174,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 28 | `refactor/channels-known-before-the-client` | the client's channels and request bound known before any client is built | 15 lines, 3 files (Corrected: cut out of block 30, the lead on 2026-11-20) |
 | 30 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor keeping one record per object | ~600 lines, ~14 files, past the line bound (Corrected: block 35 merged in, the port shared by the three objects, the policy, the supervisor and the fake; 1 034 lines, 29 files, past both bounds, accepted by the operator on 2026-11-20) |
 | 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files (Corrected: merged into block 30) |
-| 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds |
+| 37 | `refactor/supervisor-runs-its-objects-works` | the supervisor running the works of the objects it built | 201 lines, 12 files (Corrected: cut out of block 40, the lead on 2026-11-20) |
+| 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds (Corrected: 1 846 lines, about 1 100 removed, 40 files, accepted by the operator on 2026-11-20) |
 | 45 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files |
 | 50 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files |
 | 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files |
@@ -336,6 +337,10 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 - `RestartPolicy`, `RestartRequest`, `RestartRunner`, `node_restart_policy` and the restart policy's
   `HealthSubscriberBuiltLater` go; `BUGS` leaves every dependency's rules, and the four that held it alone go.
 - A rebuild raising an `ExpectedError` counts in vain, logged in one warning line (the lot 4b spec's D15).
+- (Corrected: as built in blocks 37 and 40. The supervisor runs the works of the objects it built, so no work escapes a
+  rebuild and the policy's refusal at construction goes; `SupervisedWork` loses its dependencies, the supervisor its
+  node's health; `BUGS` and the three-rebuild bound live in `supervisor.py`; the rebuild's line reads `restarting
+  client amuled: bugs in its works`.)
 - The glossary's `bugs rule`, `restart policy`, `rebuild in vain`, `restartable` and `supervisor` lines are corrected.
 
 ### Block 45, the rebuild waits
