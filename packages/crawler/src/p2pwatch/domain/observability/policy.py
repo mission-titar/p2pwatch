@@ -36,6 +36,7 @@ from p2pwatch.domain.observability.events import (
     NotificationsNotSaved,
     NotificationsSavedAgain,
     ObservationRecorded,
+    RebuiltInVain,
     SearchExecuted,
     SearchFailed,
     SourceFirstUseful,
@@ -365,6 +366,13 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case NotificationsSavedAgain():
             return _relayed(
                 Severity.INFO, message="notifications saved again", node_id=event.node_id
+            )
+        case RebuiltInVain():
+            return _relayed(
+                Severity.WARNING,
+                message=f"{event.restartable} rebuilt {event.rebuilds} times in vain: "
+                "the crawler restarts",
+                node_id=event.node_id,
             )
         case SourceFirstUseful():
             return _plan_source(

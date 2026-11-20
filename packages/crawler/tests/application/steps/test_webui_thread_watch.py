@@ -12,8 +12,9 @@ from p2pwatch.application.steps.webui_thread_watch import (
     WebuiThreadWatch,
 )
 from p2pwatch.application.steps.work import SupervisedWork
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
-from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
@@ -134,17 +135,16 @@ def test_a_thread_ended_has_the_webui_rebuilt_a_minute_after_the_third_watch_mee
     assert webui.bug_lines() == 3
 
 
-def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vain_then_no_more(
+def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vain_then_restarts(
     virtual_loop: VirtualLoop,
 ) -> None:
     webui = _Webui(virtual_loop, rebuilt_threads_serve=False)
     webui.first_thread.end()
 
-    webui.run_for(1800.0)
+    # Its fourth thread found ended three times too: the crawler restarts.
+    with pytest.raises(CrawlerRestartError, match="^webui rebuilt 3 times in vain$"):
+        webui.run_for(1800.0)
 
     # Each thread's watch meets it ended three times, a minute apart, from a minute on; each
     # rebuild 1, 2, then 4 min after the third.
     assert webui.webui.built_at == [0.0, 240.0, 540.0, 960.0]
-    # Its fourth thread found ended three times too: given up.
-    given_up = "webui not restarted again: 3 rebuilds in vain"
-    assert LoggedLine(level="error", message=given_up) in webui.logger.lines

@@ -17,6 +17,7 @@ from p2pwatch.application.ports.driving.config_validator import (
 )
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
 from p2pwatch.domain.config_problem import ConfigProblem
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.held_database_error import HeldDatabaseError
 from p2pwatch.domain.invalid_config import InvalidConfigError
 from p2pwatch.domain.merge_error import MergeError, OutputIsSourceError, PartialMergeError
@@ -113,6 +114,18 @@ def test_crawl_refuses_to_start_on_a_database_another_process_holds_in_one_line(
 
     assert capsys.readouterr().err == (
         "Database in use, refusing to start: /data/catalog.db is held by another process\n"
+    )
+
+
+def test_crawl_exits_one_with_why_it_stopped_once_it_stops_for_a_restart(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    crawler_runner = FakeCrawlerRunner(CrawlerRestartError("client amuled", rebuilds=3))
+
+    assert _command_line(crawler_runner=crawler_runner).run(["crawl"]) == 1
+
+    assert (
+        capsys.readouterr().err == "Exiting for a restart: client amuled rebuilt 3 times in vain\n"
     )
 
 
