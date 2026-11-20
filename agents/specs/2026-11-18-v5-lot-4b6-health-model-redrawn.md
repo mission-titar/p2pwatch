@@ -346,6 +346,10 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 ### Block 45, the rebuild waits
 
 - The rebuild waits 1, then 2, then 4 minutes, in memory.
+- (Corrected: as built in block 45, 76 lines, 7 files. The object's works stop as soon as its bugs turn failing; the
+  wait comes before the close and the build, so nothing is counted while it waits and the outbox keeps its entries
+  for the new notifier. A rebuild that raised counts in vain and doubles the wait too; the fixed 60 s between two
+  rebuilds that raised goes.)
 
 ### Block 50, the crawler's restart
 
