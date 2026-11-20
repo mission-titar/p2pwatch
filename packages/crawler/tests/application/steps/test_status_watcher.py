@@ -572,12 +572,13 @@ def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_
     virtual_loop: VirtualLoop,
 ) -> None:
     kad_off = _status(kad=(False, None))
-    # The alert opens at the sixth reading, 300 s; three bugs in a row rebuild the client at 590 s.
+    # The alert opens at the sixth reading, 300 s; three bugs in a row at 590 s rebuild the client
+    # a minute later.
     node = _RebuiltNode(virtual_loop, *[kad_off] * 30, three_bugs_at=590.0)
 
-    node.run_for(590.0 + 7 * 60.0 + 1.0)  # eight readings after the rebuild, all off
+    node.run_for(650.0 + 7 * 60.0 + 1.0)  # eight readings after the rebuild, all off
 
-    assert node.amule_client.built_at == [0.0, 590.0]
+    assert node.amule_client.built_at == [0.0, 650.0]
     notifications = node.observability.notifications
     assert [notification for _, notification in notifications] == [
         _warning("amuled kad: off its network for 5 min")

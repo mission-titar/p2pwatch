@@ -403,11 +403,11 @@ def test_turns_cut_at_their_time_limit_count_as_bugs_three_in_a_row_rebuilding_t
     third_cut = 3 * 30.0 + 2 * _AFTER_A_BUG
 
     client = _supervise_until(
-        virtual_loop, hung, seconds=third_cut + 1.0, time_limit=timedelta(seconds=30)
+        virtual_loop, hung, seconds=third_cut + 61.0, time_limit=timedelta(seconds=30)
     )
 
     assert hung.cut_at[:3] == [30.0, 30.0 + _AFTER_A_BUG + 30.0, third_cut]
-    assert client.built_at == [0.0, third_cut]
+    assert client.built_at == [0.0, third_cut + 60.0]  # a minute after the third
 
 
 @pytest.mark.asyncio
