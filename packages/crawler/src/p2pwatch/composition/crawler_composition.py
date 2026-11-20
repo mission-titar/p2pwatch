@@ -39,7 +39,7 @@ import apprise
 import httpx
 
 import p2pwatch.adapters.driving.webui
-from p2pwatch.adapters.driven.amule_api.amule_api_client import AmuleApiClient
+from p2pwatch.adapters.driven.amule_api.amule_api_client import CHANNELS, AmuleApiClient
 from p2pwatch.adapters.driven.asyncio_monotonic_clock import AsyncioMonotonicClock
 from p2pwatch.adapters.driven.asyncio_run_state_store import AsyncioRunStateStore
 from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
@@ -557,7 +557,7 @@ class CrawlerComposition(CrawlerRunner):
             client = build_client()
             client_works = AmuleClientWorks(
                 client_name=_AMULE_CLIENT_NAME,
-                channels=client.channels(),
+                channels=CHANNELS,
                 keywords=crawler_config.search.keywords,
                 download_steps=(
                     None
@@ -591,7 +591,7 @@ class CrawlerComposition(CrawlerRunner):
                 wall_clock=wall_clock,
                 monotonic_clock=monotonic_clock,
                 time_limits=AmuleWorkTimeLimits(
-                    request_bound=client.request_bound,
+                    request_bound=timedelta(seconds=_AMULE_API_REQUEST_BOUND_SECONDS),
                     search_budget=timedelta(seconds=SEARCH_BUDGET_SECONDS),
                     keywords=dedupe_keywords(crawler_config.search.keywords),
                 ),
