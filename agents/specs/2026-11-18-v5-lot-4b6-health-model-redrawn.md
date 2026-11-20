@@ -169,7 +169,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 15 | `refactor/notifications-through-the-outbox` | the outbox in memory, the notifier's work sending from it | ~700 lines, ~13 files, past the line bound (Corrected: 1 542 lines, 31 files, the dispatcher's send tests moving to the notifier's work and every test building a dispatcher uncounted by the estimate, accepted by the operator on 2026-11-18) |
 | 20 | `refactor/shielded-sends-removed` | the shielded sends and the notification timeout in the turns' limits removed | ~350 lines, ~14 files (Corrected: 213 lines, 18 files, the shielded sends alone) |
 | 23 | `refactor/no-notification-timeout-in-time-limits` | the notification timeout in the turns' limits removed | 37 lines, 7 files (Corrected: cut out of block 20, which came to 25 files, the lead on 2026-11-18) |
-| 25 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound |
+| 25 | `feat/outbox-saved` | the outbox saved in `local.db`, the local database an outage | ~650 lines, ~14 files, past the line bound (Corrected: 913 lines, 22 files, the outbox saved and read back alone, past both bounds, accepted by the operator on 2026-11-19) |
+| 27 | `feat/local-database-outage` | the local database an outage, with its alert | 249 lines, 18 files (Corrected: cut out of block 25, which came to 1 161 lines and 31 files) |
 | 30 | `refactor/client-built-whole` | the aMule client built whole at each rebuild, the supervisor keeping one record per object | ~600 lines, ~14 files, past the line bound |
 | 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files |
 | 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds |
@@ -308,7 +309,10 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
   download.
 - The outbox saves itself at each change, keeps the end of its latest save, and reads itself back at the start; an
   entry whose service no longer exists in the configuration is dropped at the start, in one log line.
-- The notifier's work records, at each turn, whether the outbox's latest save failed on the local database.
+- 27 (Corrected: cut out of 25): the notifier's work records, at each turn, whether the outbox's latest save failed on
+  the local database; the local database's dependency, rule and alert below. (Corrected: as built, the outbox reads
+  itself back in its constructor, a failing read stopping the start as the backoff's does; each refused save logs one
+  warning.)
 - The local database: a dependency, its rule "saves failed" (failing at 3 in a row, healthy again under 2 in the last
   10, as "sends failed") with its alert, `operations` audience: "notifications not saved in local.db: lost at the next
   restart", its end "notifications saved again". The glossary gains `local database` and `saves failed`.

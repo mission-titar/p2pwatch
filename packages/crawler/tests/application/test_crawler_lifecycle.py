@@ -31,7 +31,10 @@ from p2pwatch.domain.observability.notification import (
     CompletedDownload,
     RelayedLogLine,
 )
-from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
+from p2pwatch.domain.observability.notification_sends import (
+    local_database_dependency,
+    notification_service_dependencies,
+)
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.observation import FileObservation, ReportedFile
@@ -184,6 +187,7 @@ class _Crawl:
                 notification_timeout_seconds=5.0,
                 record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
                 service_dependencies=notification_service_dependencies(self.notifier.services()),
+                local_database=local_database_dependency(),
                 logger=FakeLogger(),
             ),
             logger=self.logger,

@@ -13,7 +13,9 @@ from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
+    SAVES_FAILED,
     SENDS_FAILED,
+    local_database_dependency,
     notification_service_dependencies,
 )
 from p2pwatch.domain.observability.severity import Severity
@@ -232,6 +234,41 @@ async def test_the_disk_healthy_sends_nothing_since_its_alert_has_no_end(
         previous=previous, current=HealthState.HEALTHY, rule=DISK_SPACE_LOW, on=_DOWNLOAD_TRACKING
     )
     assert sent == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
+async def test_the_local_database_failing_sends_notifications_not_saved(
+    previous: HealthState,
+) -> None:
+    sent = await _sent(
+        previous=previous,
+        current=HealthState.FAILING,
+        rule=SAVES_FAILED,
+        on=local_database_dependency(),
+    )
+    assert sent == [
+        RelayedLogLine(
+            message="notifications not saved in local.db: lost at the next restart",
+            severity=Severity.WARNING,
+            node_id=_NODE_ID,
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_local_database_healthy_again_sends_notifications_saved_again() -> None:
+    sent = await _sent(
+        previous=HealthState.FAILING,
+        current=HealthState.HEALTHY,
+        rule=SAVES_FAILED,
+        on=local_database_dependency(),
+    )
+    assert sent == [
+        RelayedLogLine(
+            message="notifications saved again", severity=Severity.INFO, node_id=_NODE_ID
+        )
+    ]
 
 
 @pytest.mark.asyncio

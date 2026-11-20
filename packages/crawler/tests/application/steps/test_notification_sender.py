@@ -19,10 +19,12 @@ from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
 from p2pwatch.domain.observability.notification import CompletedDownload, RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
+    SAVES_FAILED,
     SENDS_FAILED,
     NotificationRefusedError,
     NotificationService,
     PendingNotification,
+    local_database_dependency,
     notification_service_dependencies,
 )
 from p2pwatch.domain.observability.policy import Audience
@@ -48,6 +50,7 @@ _ONLINE = RelayedLogLine(message="🟢 node online", severity=Severity.INFO, nod
 # The fakes' one service for the community, which ``_COMPLETED`` is left for.
 _COMMUNITY = ONE_SERVICE_PER_AUDIENCE[0]
 _OPERATIONS = ONE_SERVICE_PER_AUDIENCE[1]
+_LOCAL_DATABASE = "local database"
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -81,6 +84,7 @@ def _sender(
         notification_timeout_seconds=timeout,
         record_check=checks or _Checks(),
         service_dependencies=notification_service_dependencies(notifier.services()),
+        local_database=local_database_dependency(),
         logger=logger or FakeLogger(),
     )
 
@@ -137,7 +141,30 @@ async def test_a_send_that_worked_records_its_service_s_sends_as_not_failed() ->
     await _sender(FakeNotifier(), outbox=_completed_left(), checks=checks).run_once()
 
     assert checks.recorded == [
-        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=False)
+        _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False),
+        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=False),
+    ]
+
+
+async def test_a_turn_records_on_the_local_database_whether_the_outbox_s_latest_save_failed() -> (
+    None
+):
+    checks, store = _Checks(), FakeNotificationOutboxStore()
+    outbox = NotificationOutbox(
+        writer=store,
+        reader=store,
+        services=ONE_SERVICE_PER_AUDIENCE,
+        waker=FakeWaker(),
+        logger=FakeLogger(),
+    )
+    outbox.leave(_COMPLETED, services=[_COMMUNITY])
+    store.writes_fail = True
+
+    await _sender(FakeNotifier(), outbox=outbox, checks=checks).run_once()
+
+    assert checks.recorded == [
+        _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=True),
+        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=False),
     ]
 
 
@@ -155,7 +182,8 @@ async def test_a_refused_send_is_a_failed_send_logged_in_one_line_and_removed() 
         )
     ]
     assert checks.recorded == [
-        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=True)
+        _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False),
+        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=True),
     ]
     assert outbox.oldest() is None
 
@@ -175,7 +203,8 @@ async def test_a_send_past_its_timeout_is_a_failed_send_logged_in_one_line_and_r
         )
     ]
     assert checks.recorded == [
-        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=True)
+        _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False),
+        _Check(part="notifier fake community", rule=SENDS_FAILED, detected=True),
     ]
     assert outbox.oldest() is None
 
@@ -187,8 +216,9 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_of_the_turn_its_entr
     with pytest.raises(RuntimeError) as raised:
         await sender.run_once()
 
-    # A bug tells nothing of whether the service takes the sends.
-    assert (raised.value, checks.recorded, outbox.oldest()) == (bug, [], None)
+    # A bug tells nothing of whether the service takes the sends, but the removal was saved.
+    saved = _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False)
+    assert (raised.value, checks.recorded, outbox.oldest()) == (bug, [saved], None)
 
 
 async def test_a_timeout_error_the_notifier_raises_itself_is_a_bug_not_a_timeout() -> None:
@@ -263,6 +293,7 @@ async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_aler
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=health_logger, subscribers=(alerter.send,)).record,
         service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+        local_database=local_database_dependency(),
         logger=FakeLogger(),
     )
     for _ in range(3):
@@ -271,9 +302,46 @@ async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_aler
     await sender.send_what_is_left()
 
     assert health_logger.lines == [
+        LoggedLine(level="info", message="local database, saves failed: unknown to healthy"),
         LoggedLine(
             level="warning", message="notifier fake operations, sends failed: unknown to failing"
-        )
+        ),
     ]
     # An alert would go through the service that refuses it: none is left.
     assert (observability.notifications, observability.outbox.oldest()) == ([], None)
+
+
+async def test_a_local_database_refusing_every_save_still_sends_every_entry_and_its_alert() -> None:
+    observability, health_logger, notifier = ObservabilityOverFakes(), FakeLogger(), FakeNotifier()
+    observability.outbox_store.writes_fail = True
+    alerter = HealthAlerter(
+        observability_dispatcher=observability.dispatcher, node_id=_NODE_ID, min_free_bytes=None
+    )
+    sender = NotificationSender(
+        outbox=observability.outbox,
+        notifier=notifier,
+        notification_timeout_seconds=5.0,
+        record_check=NodeHealth(logger=health_logger, subscribers=(alerter.send,)).record,
+        service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+        local_database=local_database_dependency(),
+        logger=FakeLogger(),
+    )
+    for _ in range(3):
+        observability.outbox.leave(_ONLINE, services=[_OPERATIONS])
+
+    await sender.send_what_is_left()
+
+    not_saved = RelayedLogLine(
+        message="notifications not saved in local.db: lost at the next restart",
+        severity=Severity.WARNING,
+        node_id=_NODE_ID,
+    )
+    assert notifier.calls == [(Audience.OPERATIONS, _ONLINE)] * 3 + [
+        (Audience.OPERATIONS, not_saved)
+    ]
+    assert health_logger.lines == [
+        LoggedLine(level="warning", message="local database, saves failed: unknown to failing"),
+        LoggedLine(
+            level="info", message="notifier fake operations, sends failed: unknown to healthy"
+        ),
+    ]

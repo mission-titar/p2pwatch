@@ -220,6 +220,17 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
+        ev.NotificationsNotSaved(node_id=_NODE_ID),
+        _relayed(
+            Severity.WARNING,
+            message="notifications not saved in local.db: lost at the next restart",
+        ),
+    ),
+    (
+        ev.NotificationsSavedAgain(node_id=_NODE_ID),
+        _relayed(Severity.INFO, message="notifications saved again"),
+    ),
+    (
         ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID),
         _relayed(
             Severity.INFO,

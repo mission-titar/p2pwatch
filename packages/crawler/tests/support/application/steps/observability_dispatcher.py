@@ -29,7 +29,7 @@ class ObservabilityOverFakes:
             reader=self.outbox_store,
             services=ONE_SERVICE_PER_AUDIENCE,
             waker=FakeWaker(),
-            logger=self.logger,
+            logger=FakeLogger(),
         )
         self.notifications: list[tuple[Audience, Notification]] = []
         # Whether the callback of ``watch_for_a_suspension`` had run, at each notification left.

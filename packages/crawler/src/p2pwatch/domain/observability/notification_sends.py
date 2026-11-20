@@ -1,6 +1,6 @@
 """The sends of the notifications: the services the notifier sends to, a notification left to send
-to one, the error a refused send raises, and each service's part, judged on its sends that failed
-and on its bugs."""
+to one, the error a refused send raises, each service's part, judged on its sends that failed and on
+its bugs, and the local database's, judged on the saves of the notifications left."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -46,6 +46,19 @@ SENDS_FAILED = HealthRule(
     fails_at=Detections(times=3, among_last=3),
     recovers_under=Detections(times=2, among_last=10),
 )
+
+
+# A save of the notifications left that the local database refused, such as on a full disk.
+SAVES_FAILED = HealthRule(
+    name="saves failed",
+    fails_at=Detections(times=3, among_last=3),
+    recovers_under=Detections(times=2, among_last=10),
+)
+
+
+def local_database_dependency() -> ExternalDependency:
+    """The local database, judged on the saves of the notifications left: "local database"."""
+    return ExternalDependency(name="local database", client_name=None, rules=(SAVES_FAILED,))
 
 
 def notification_service_dependencies(

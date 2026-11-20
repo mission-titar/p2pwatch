@@ -134,6 +134,17 @@ class DiskSpaceLow:
 
 
 @dataclass(kw_only=True, frozen=True)
+class NotificationsNotSaved:
+    # The notifications left no longer saved in local.db: once, until saved again.
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class NotificationsSavedAgain:
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class SourceFirstUseful:
     # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
@@ -177,6 +188,8 @@ type Event = (
     | ClientReachableAgain
     | FreeSpaceSampled
     | DiskSpaceLow
+    | NotificationsNotSaved
+    | NotificationsSavedAgain
     | SourceFirstUseful
     | SourceReappeared
     | CrawlerStarted

@@ -1,5 +1,5 @@
-"""The client's, its channels' and the download disk's alerts, sent when their health
-changes."""
+"""The client's, its channels', the download disk's and the local database's alerts, sent when
+their health changes."""
 
 from collections.abc import Mapping
 
@@ -16,8 +16,10 @@ from p2pwatch.domain.observability.events import (
     ClientUnreachableLasting,
     DiskSpaceLow,
     Event,
+    NotificationsNotSaved,
+    NotificationsSavedAgain,
 )
-from p2pwatch.domain.observability.notification_sends import SENDS_FAILED
+from p2pwatch.domain.observability.notification_sends import SAVES_FAILED, SENDS_FAILED
 from p2pwatch.domain.status_reading import (
     CHANNEL_ALERT_AFTER,
     CHANNEL_NOT_CONNECTABLE,
@@ -40,8 +42,8 @@ _RULES_WITHOUT_AN_ALERT = frozenset({BUGS, SEARCHES_FAILED, CONNECTED_TO_NO_NETW
 
 
 class HealthAlerter:
-    """Sends the client's, its channels' and the download disk's alerts when their health changes,
-    such as "amuled unreachable for 2 min" when it starts failing."""
+    """Sends the client's, its channels', the download disk's and the local database's alerts when
+    their health changes, such as "amuled unreachable for 2 min" when it starts failing."""
 
     def __init__(
         self,
@@ -85,6 +87,8 @@ class HealthAlerter:
             )
         if transition.rule == DISK_SPACE_LOW:
             return DiskSpaceLow(min_free_bytes=self._floor_of(transition), node_id=node_id)
+        if transition.rule == SAVES_FAILED:
+            return NotificationsNotSaved(node_id=node_id)
         raise _no_alert_for(transition)
 
     def _floor_of(self, transition: HealthTransition) -> int:
@@ -105,6 +109,8 @@ class HealthAlerter:
             )
         if transition.rule == DISK_SPACE_LOW:
             return None  # the disk alert has no end, as it never had
+        if transition.rule == SAVES_FAILED:
+            return NotificationsSavedAgain(node_id=node_id)
         raise _no_alert_for(transition)
 
 

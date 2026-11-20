@@ -1,8 +1,10 @@
 from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.observability.notification_sends import (
+    SAVES_FAILED,
     SENDS_FAILED,
     NotificationService,
+    local_database_dependency,
     notification_service_dependencies,
 )
 from p2pwatch.domain.observability.policy import Audience
@@ -62,3 +64,14 @@ def test_a_service_fails_at_the_third_bug_in_a_row_of_its_sends() -> None:
     changes = _changes(BUGS, True, True, True, on=_discord_part())
 
     assert changes == [None, None, HealthState.FAILING]
+
+
+def test_the_local_database_s_saves_fail_at_3_failed_in_a_row_and_heal_under_2_in_the_last_10() -> (
+    None
+):
+    part = local_database_dependency()
+
+    changes = _changes(SAVES_FAILED, *[True] * 3, *[False] * 9, on=part)
+
+    assert (part.name, part.client_name, part.channel) == ("local database", None, None)
+    assert changes == [None, None, HealthState.FAILING, *[None] * 8, HealthState.HEALTHY]
