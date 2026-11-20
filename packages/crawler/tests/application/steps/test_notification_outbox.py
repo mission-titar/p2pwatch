@@ -30,6 +30,7 @@ from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotif
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 pytestmark = pytest.mark.asyncio
 
@@ -216,7 +217,9 @@ async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_pat
             outbox=_outbox(store=store, services=services),
             notifier=notifier,
             notification_timeout_seconds=5.0,
-            record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+            record_check=NodeHealth(
+                logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
+            ).record,
             service_dependencies=notification_service_dependencies(services),
             local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),

@@ -35,6 +35,7 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import VirtualLoop
 
 _DAY = timedelta(days=1)
@@ -436,7 +437,9 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_
             outbox=outbox,
             notifier=raising,  # each rebuild in vain: the notifier still raises
             notification_timeout_seconds=5.0,
-            record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
+            record_check=NodeHealth(
+                logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
+            ).record,
             service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
             local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),

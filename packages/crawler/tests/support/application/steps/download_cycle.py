@@ -14,7 +14,6 @@ from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
-from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
@@ -127,8 +126,9 @@ def build_cycle(
     observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
     logger = logger or FakeLogger()
     # As the composition wires it: the disk's rule sends its alert through the dispatcher.
-    alerter = HealthAlerter(observability_dispatcher=observability_dispatcher)
-    node_health = NodeHealth(logger=health_logger or FakeLogger(), subscribers=(alerter.send,))
+    node_health = NodeHealth(
+        logger=health_logger or FakeLogger(), observability_dispatcher=observability_dispatcher
+    )
     download_labeler = DownloadLabeler(
         observation_reader=observation_reader,
         decision_reader=decision_reader,

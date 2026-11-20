@@ -89,7 +89,9 @@ class _Searches:
         self.run_state = FakeRunStateStore()
         self.supervisor_logger = FakeLogger()
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(logger=self.health_logger, subscribers=())
+        self.node_health = NodeHealth(
+            logger=self.health_logger, observability_dispatcher=ObservabilityOverFakes().dispatcher
+        )
 
     def works(
         self,

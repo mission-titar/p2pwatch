@@ -107,7 +107,6 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.node_id_resolver import NodeIdResolver
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
@@ -128,7 +127,6 @@ from p2pwatch.application.use_cases.run_console_query import RunConsoleQuery
 from p2pwatch.application.use_cases.summarize_crawl import SummarizeCrawl
 from p2pwatch.composition.amule_client_restartable import AmuleClientRestartableBuilder
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
-from p2pwatch.composition.health_subscriber_built_later import HealthSubscriberBuiltLater
 from p2pwatch.composition.notifier_restartable import (
     NotifierRestartableBuilder,
     notification_sending,
@@ -424,11 +422,6 @@ class CrawlerComposition(CrawlerRunner):
 
             # Built once: a notifier rebuilt on the same configuration lists the same services.
             service_parts = notification_service_dependencies(build_notifier().services())
-            # Set once the dispatcher is built.
-            alerts = HealthSubscriberBuiltLater("the alerts")
-            node_health = NodeHealth(
-                logger=StdlibLogger(NodeHealth.__module__), subscribers=(alerts,)
-            )
             supervisor = Supervisor(
                 run_state_reader=run_state_store,
                 monotonic_clock=monotonic_clock,
@@ -444,6 +437,16 @@ class CrawlerComposition(CrawlerRunner):
                 services=tuple(service_parts),
                 waker=waker,
                 logger=StdlibLogger(NotificationOutbox.__module__),
+            )
+            observability_dispatcher = ObservabilityDispatcher(
+                logger=StdlibLogger(ObservabilityDispatcher.__module__),
+                node_metric_writer=node_metric_store,
+                leave_notification=outbox.leave,
+                services=tuple(service_parts),
+            )
+            node_health = NodeHealth(
+                logger=StdlibLogger(NodeHealth.__module__),
+                observability_dispatcher=observability_dispatcher,
             )
 
             def notification_sender_over(built: AppriseNotifier) -> NotificationSender:
@@ -464,15 +467,8 @@ class CrawlerComposition(CrawlerRunner):
                     services=tuple(service_parts),
                 )
 
-            observability_dispatcher = ObservabilityDispatcher(
-                logger=StdlibLogger(ObservabilityDispatcher.__module__),
-                node_metric_writer=node_metric_store,
-                leave_notification=outbox.leave,
-                services=tuple(service_parts),
-            )
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
             download_config = crawler_config.download
-            alerts.set(HealthAlerter(observability_dispatcher=observability_dispatcher).send)
             observation_store = SqliteObservationStore(catalog_connection)
             catalog_scan_reader = SqliteCatalogScanReader(catalog_connection)
             decision_store = SqliteDecisionStore(catalog_connection)

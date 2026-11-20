@@ -9,7 +9,6 @@ from typing import Protocol
 import pytest
 
 from p2pwatch.application.steps.download_cycle import DownloadCycle
-from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.domain.client_errors import ClientError
@@ -121,7 +120,6 @@ def _text_of(notification: Notification) -> str | None:
 
 async def _status_alerts(*readings: _StatusReading) -> list[_Alert]:
     observability, fake_time = ObservabilityOverFakes(), FakeTime()
-    alerter = HealthAlerter(observability_dispatcher=observability.dispatcher)
     watcher = StatusWatcher(
         client_name=_AMULED,
         client=FakeStatusClient(list(readings)),
@@ -129,7 +127,9 @@ async def _status_alerts(*readings: _StatusReading) -> list[_Alert]:
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=FakeStatusReadingStore((_AMULED,)),
-        node_health=NodeHealth(logger=FakeLogger(), subscribers=(alerter.send,)),
+        node_health=NodeHealth(
+            logger=FakeLogger(), observability_dispatcher=observability.dispatcher
+        ),
         client_dependency=client_dependency(_AMULED, node_id=NODE_ID),
         channel_dependencies={
             channel: channel_dependency(client_name=_AMULED, channel=channel, node_id=NODE_ID)
