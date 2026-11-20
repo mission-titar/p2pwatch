@@ -11,7 +11,6 @@ from p2pwatch.application.ports.driven.restartable_builder import RestartableBui
 from p2pwatch.application.steps.webui_thread_watch import WebuiThreadWatch
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
-from p2pwatch.domain.health.external_dependency import ExternalDependency
 
 
 class WebuiThreadBuilder(Protocol):
@@ -24,12 +23,12 @@ class WorksOverWebuiThread(Protocol):
 
 
 def webui_thread_watch_over(
-    thread: UvicornServerThread, *, dependency: ExternalDependency, monotonic_clock: MonotonicClock
+    thread: UvicornServerThread, *, monotonic_clock: MonotonicClock
 ) -> Sequence[SupervisedWork]:
-    """The watch over ``thread``, its turns recorded on the webui's ``dependency``."""
+    """The watch over ``thread``, which finds it ended as a bug of the webui."""
     watch = WebuiThreadWatch(thread_alive=thread.is_alive, monotonic_clock=monotonic_clock)
     # Its turn awaits nothing: the margin alone.
-    return [SupervisedWork(work=watch, time_limit=TIME_LIMIT_MARGIN, dependencies=(dependency,))]
+    return [SupervisedWork(work=watch, time_limit=TIME_LIMIT_MARGIN)]
 
 
 class WebuiRestartable(Restartable[SupervisedWork]):

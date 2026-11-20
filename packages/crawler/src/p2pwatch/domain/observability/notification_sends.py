@@ -1,6 +1,6 @@
 """The sends of the notifications: the services the notifier sends to, a notification left to send
-to one, the error a refused send raises, each service's part, judged on its sends that failed and on
-its bugs, and the local database's, judged on the saves of the notifications left."""
+to one, the error a refused send raises, each service's part, judged on its sends that failed, and
+the local database's, judged on the saves of the notifications left."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -10,7 +10,6 @@ from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.policy import Audience
-from p2pwatch.domain.work_dependencies import BUGS
 
 
 class NotificationRefusedError(ExpectedError):
@@ -64,11 +63,10 @@ def local_database_dependency() -> ExternalDependency:
 def notification_service_dependencies(
     services: Iterable[NotificationService],
 ) -> dict[NotificationService, ExternalDependency]:
-    """A part per service, judged on its sends that failed and on its bugs: "notifier discord
-    community"."""
+    """A part per service, judged on its sends that failed: "notifier discord community"."""
     return {
         service: ExternalDependency(
-            name=f"notifier {service}", client_name=None, rules=(BUGS, SENDS_FAILED)
+            name=f"notifier {service}", client_name=None, rules=(SENDS_FAILED,)
         )
         for service in services
     }

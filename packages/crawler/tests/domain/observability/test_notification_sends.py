@@ -8,7 +8,6 @@ from p2pwatch.domain.observability.notification_sends import (
     notification_service_dependencies,
 )
 from p2pwatch.domain.observability.policy import Audience
-from p2pwatch.domain.work_dependencies import BUGS
 
 _DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY)
 _SECOND_DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY, ordinal=2)
@@ -58,12 +57,6 @@ def test_two_failed_sends_in_a_row_between_sends_that_worked_never_fail() -> Non
     )
 
     assert changes == [None, None, HealthState.HEALTHY, None, None, None, None]
-
-
-def test_a_service_fails_at_the_third_bug_in_a_row_of_its_sends() -> None:
-    changes = _changes(BUGS, True, True, True, on=_discord_part())
-
-    assert changes == [None, None, HealthState.FAILING]
 
 
 def test_the_local_database_s_saves_fail_at_3_failed_in_a_row_and_heal_under_2_in_the_last_10() -> (

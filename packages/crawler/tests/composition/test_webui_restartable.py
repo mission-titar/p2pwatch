@@ -24,7 +24,6 @@ from p2pwatch.composition.webui_restartable import (
     WebuiRestartableBuilder,
     webui_thread_watch_over,
 )
-from p2pwatch.domain.work_dependencies import webui_dependency
 from tests.contracts.application.ports.driven.restartable_builder_contract import (
     RestartableBuilderContract,
 )
@@ -52,7 +51,7 @@ class _Over(Work):
 
 
 def _works_over(thread: UvicornServerThread, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(thread), time_limit=timedelta(minutes=5), dependencies=())]
+    return [SupervisedWork(work=_Over(thread), time_limit=timedelta(minutes=5))]
 
 
 class _Threads:
@@ -173,14 +172,13 @@ async def test_a_build_cut_while_its_thread_binds_stops_that_thread(
 async def test_a_build_on_a_port_held_elsewhere_raises_nothing_and_its_watch_finds_it_ended() -> (
     None
 ):
-    webui_part = webui_dependency()
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         holder.listen()
         webui = WebuiRestartableBuilder(
             build_thread=_Threads(holder.getsockname()).build,
             works_over=lambda thread: webui_thread_watch_over(
-                thread, dependency=webui_part, monotonic_clock=FakeTime().monotonic
+                thread, monotonic_clock=FakeTime().monotonic
             ),
         )
 
@@ -193,18 +191,17 @@ async def test_a_build_on_a_port_held_elsewhere_raises_nothing_and_its_watch_fin
 
 
 @pytest.mark.asyncio
-async def test_the_watch_over_a_thread_looks_at_it_on_the_webui_s_part(threads: _Threads) -> None:
-    webui_part = webui_dependency()
+async def test_the_watch_over_a_thread_looks_at_it_named_webui(threads: _Threads) -> None:
     webui = WebuiRestartableBuilder(
         build_thread=threads.build,
         works_over=lambda thread: webui_thread_watch_over(
-            thread, dependency=webui_part, monotonic_clock=FakeTime().monotonic
+            thread, monotonic_clock=FakeTime().monotonic
         ),
     )
 
     [watch] = (await webui.build()).works()
 
     await watch.work.run_once()  # its thread serves
-    assert (str(watch.work), watch.dependencies) == ("webui", (webui_part,))
+    assert str(watch.work) == "webui"
     # Its turn awaits nothing: its time limit is the margin alone.
     assert watch.time_limit == timedelta(minutes=5)

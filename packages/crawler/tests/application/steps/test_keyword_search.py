@@ -31,7 +31,6 @@ from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.status_reading import channel_dependency
-from p2pwatch.domain.work_dependencies import keyword_search_dependency
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -135,9 +134,6 @@ class _Searches:
             ),
             monotonic_clock=self.monotonic_clock,
             time_limit_of=time_limit_of,
-            search_dependency_of=lambda keyword, *, channel: keyword_search_dependency(
-                keyword=keyword, client_name=worker.client_name, channel=channel
-            ),
             node_health=self.node_health,
             channel_dependencies=[
                 channel_dependency(client_name=worker.client_name, channel=channel)
@@ -157,7 +153,6 @@ class _Searches:
         supervisor = Supervisor(
             run_state_reader=self.run_state,
             monotonic_clock=self.monotonic_clock,
-            node_health=self.node_health,
             logger=self.supervisor_logger,
         )
         works = self.works(client, keywords=keywords, time_limit_of=time_limit_of)
@@ -189,15 +184,6 @@ def searches(
     return _Searches(
         observation_store, decision_store=decision_store, engine=engine, loop=virtual_loop
     )
-
-
-def _bugs_changes(searches: _Searches, *, level: str) -> list[str]:
-    """The messages logged at ``level`` of each change of health under the bugs rule."""
-    return [
-        line.message
-        for line in searches.health_logger.lines
-        if line.level == level and ", bugs: " in line.message
-    ]
 
 
 def test_each_channel_and_keyword_searches_in_its_own_task(searches: _Searches) -> None:
@@ -259,9 +245,7 @@ def test_a_bug_on_one_keywords_searches_leaves_the_other_keyword_searching(
     assert searches.backoff.snapshot() == {}  # a bug never backs its channel off
 
 
-def test_a_bug_on_every_kad_search_fails_kad_and_its_searches_and_nothing_of_ed2k(
-    searches: _Searches,
-) -> None:
+def test_a_bug_on_every_kad_search_logs_no_line_of_bugs_on_kad(searches: _Searches) -> None:
     client = FakeTimedSearchClient(
         {Channel("ed2k"): 30.0, Channel("kad"): 30.0}, broken_channels=frozenset({Channel("kad")})
     )
@@ -269,37 +253,12 @@ def test_a_bug_on_every_kad_search_fails_kad_and_its_searches_and_nothing_of_ed2
     # Each Kad search meets its bug at 30 s, 120 s and 210 s.
     searches.run_for(215.0, client=client, keywords=["keroro", "titar"])
 
-    failing = _bugs_changes(searches, level="warning")
-    healthy = _bugs_changes(searches, level="info")
-    # Kad meets the bugs of both its searches: its third comes at 120 s.
-    assert failing == [
-        "channel amuled kad, bugs: unknown to failing",
-        "search 'keroro' amuled kad, bugs: unknown to failing",
-        "search 'titar' amuled kad, bugs: unknown to failing",
-    ]
-    assert sorted(healthy) == [
-        "channel amuled ed2k, bugs: unknown to healthy",
-        "search 'keroro' amuled ed2k, bugs: unknown to healthy",
-        "search 'titar' amuled ed2k, bugs: unknown to healthy",
-    ]
-
-
-def test_a_bug_on_one_keywords_searches_fails_that_search_alone(searches: _Searches) -> None:
-    client = FakeTimedSearchClient(
-        {Channel("kad"): 30.0}, broken_keywords=frozenset({Keyword("keroro")})
-    )
-
-    # The broken keyword meets its bug at 30 s, 120 s and 210 s.
-    searches.run_for(215.0, client=client, keywords=["keroro", "titar"])
-
-    failing = _bugs_changes(searches, level="warning")
-    healthy = _bugs_changes(searches, level="info")
-    assert failing == ["search 'keroro' amuled kad, bugs: unknown to failing"]
-    # The other keyword's turns come between its bugs: Kad never meets three in a row.
-    assert sorted(healthy) == [
-        "channel amuled kad, bugs: unknown to healthy",
-        "search 'titar' amuled kad, bugs: unknown to healthy",
-    ]
+    # A bug is our code's, never Kad's.
+    lines = [*searches.health_logger.lines, *searches.supervisor_logger.lines]
+    assert [line.message for line in lines if "bug" in line.message] == [
+        "bug in search 'keroro' amuled kad",
+        "bug in search 'titar' amuled kad",
+    ] * 3
 
 
 def _searches_failed_lines(searches: _Searches) -> list[LoggedLine]:

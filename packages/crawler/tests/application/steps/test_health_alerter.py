@@ -27,7 +27,6 @@ from p2pwatch.domain.status_reading import (
     channel_dependency,
     client_dependency,
 )
-from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency, webui_dependency
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
@@ -109,24 +108,14 @@ async def test_a_rule_it_has_no_alert_for_raises(
 @pytest.mark.parametrize(
     ("rule", "on"),
     [
-        (BUGS, status_reading_dependency(ClientName("amuled"))),
-        (BUGS, _KAD),
-        (BUGS, _DOWNLOAD_TRACKING),
-        (BUGS, webui_dependency()),
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
         # An alert about the notifier would be sent through the notifier itself.
-        (BUGS, _NOTIFICATION_SERVICE_PART),
         (SENDS_FAILED, _NOTIFICATION_SERVICE_PART),
     ],
     ids=[
-        "a task's bugs",
-        "a channel's bugs",
-        "download tracking's bugs",
-        "the webui's bugs",
         "a channel's searches failed",
         "download tracking connected to no network",
-        "a notification service's bugs",
         "a notification service's sends failed",
     ],
 )
@@ -206,8 +195,8 @@ async def test_a_channel_s_rule_on_a_dependency_with_no_channel_raises() -> None
 async def test_a_client_s_rule_on_a_part_of_no_client_raises(current: HealthState) -> None:
     previous = HealthState.HEALTHY if current is HealthState.FAILING else HealthState.FAILING
 
-    with pytest.raises(ValueError, match="^webui: no client to name in its alert$"):
-        await _sent(previous=previous, current=current, on=webui_dependency())
+    with pytest.raises(ValueError, match="^local database: no client to name in its alert$"):
+        await _sent(previous=previous, current=current, on=local_database_dependency())
 
 
 @pytest.mark.asyncio

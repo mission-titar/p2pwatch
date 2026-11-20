@@ -4,47 +4,41 @@ set it raises, naming it; after, the subscriber takes it."""
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.application.steps.restart_policy import RestartPolicy, RestartRequest
 from p2pwatch.composition.health_subscriber_built_later import (
     HealthSubscriberBuiltLater,
     HealthSubscriberNotSetError,
 )
+from p2pwatch.domain.health.external_dependency import HealthTransition
 from p2pwatch.domain.identifiers import ClientName
-from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
-from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.mark.parametrize("subscriber", ["the restart policy", "the alerts"])
-async def test_a_change_of_health_passed_on_before_the_subscriber_is_set_raises_naming_it(
-    subscriber: str,
-) -> None:
-    later = HealthSubscriberBuiltLater(subscriber)
+async def test_a_change_of_health_passed_on_before_the_subscriber_is_set_raises_naming_it() -> None:
+    later = HealthSubscriberBuiltLater("the alerts")
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
-    part = status_reading_dependency(ClientName("amuled"))
+    client = client_dependency(ClientName("amuled"))
 
-    with pytest.raises(
-        HealthSubscriberNotSetError, match=f"^{subscriber}, reached before it is set$"
-    ):
+    with pytest.raises(HealthSubscriberNotSetError, match="^the alerts, reached before it is set$"):
         for _ in range(3):
-            await node_health.record(on=part, rule=BUGS, detected=True)
+            await node_health.record(on=client, rule=CLIENT_UNREACHABLE, detected=True)
 
 
 async def test_once_set_the_subscriber_takes_each_change_of_health() -> None:
-    later = HealthSubscriberBuiltLater("the restart policy")
+    later = HealthSubscriberBuiltLater("the alerts")
     node_health = NodeHealth(logger=FakeLogger(), subscribers=(later,))
-    part = status_reading_dependency(ClientName("amuled"))
-    requests: list[RestartRequest] = []
-    client = FakeRestartableBuilder()
-    later.set(
-        RestartPolicy(
-            dependencies_of={client: [part]}, works=(), restart=requests.append, logger=FakeLogger()
-        )
-    )
+    client = client_dependency(ClientName("amuled"))
+    taken: list[HealthTransition] = []
 
+    async def take(transition: HealthTransition) -> None:
+        taken.append(transition)
+
+    later.set(take)
     for _ in range(3):
-        await node_health.record(on=part, rule=BUGS, detected=True)
+        await node_health.record(on=client, rule=CLIENT_UNREACHABLE, detected=True)
 
-    assert [request.builder for request in requests] == [client]
+    assert [(transition.dependency, transition.rule) for transition in taken] == [
+        (client, CLIENT_UNREACHABLE)
+    ]
