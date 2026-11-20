@@ -120,7 +120,7 @@ class _Webui:
         return sum(1 for line in self.logger.lines if line.message == "bug in webui")
 
 
-def test_a_thread_ended_has_the_webui_rebuilt_at_the_third_watch_after(
+def test_a_thread_ended_has_the_webui_rebuilt_a_minute_after_the_third_watch_meeting_it(
     virtual_loop: VirtualLoop,
 ) -> None:
     webui = _Webui(virtual_loop, rebuilt_threads_serve=True)
@@ -130,7 +130,7 @@ def test_a_thread_ended_has_the_webui_rebuilt_at_the_third_watch_after(
     webui.run_for(900.0)
 
     # Its looks at 120, 180 and 240 s met the ended thread; the new thread's watch finds it serving.
-    assert webui.webui.built_at == [0.0, 240.0]
+    assert webui.webui.built_at == [0.0, 300.0]
     assert webui.bug_lines() == 3
 
 
@@ -142,8 +142,9 @@ def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vai
 
     webui.run_for(1800.0)
 
-    # Each rebuilt thread's watch meets it ended three times, a minute apart, from a minute on.
-    assert webui.webui.built_at == [0.0, 180.0, 360.0, 540.0]
+    # Each thread's watch meets it ended three times, a minute apart, from a minute on; each
+    # rebuild 1, 2, then 4 min after the third.
+    assert webui.webui.built_at == [0.0, 240.0, 540.0, 960.0]
     # Its fourth thread found ended three times too: given up.
     given_up = "webui not restarted again: 3 rebuilds in vain"
     assert LoggedLine(level="error", message=given_up) in webui.logger.lines

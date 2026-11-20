@@ -1,9 +1,9 @@
 """The supervisor counts the bugs of each object's turns, such as the aMule client's, and rebuilds
 the object in a task of its own once 3 turns in a row of its works met one: it stops and awaits
-those works, closes it, has its builder build another, then runs that one's works. Three rebuilds
-in vain at most, the count reset once its bugs are healthy again; a rebuild that raises is tried
-again 60 s later; the shutdown closes the latest of each. The tests share one simulated time, on
-the virtual-time loop."""
+those works, then, after 1, 2, then 4 min, closes it, has its builder build another and runs that
+one's works. Three rebuilds in vain at most, one that raised included, the count reset once its
+bugs are healthy again; the shutdown closes the latest of each. The tests share one simulated
+time, on the virtual-time loop."""
 
 import asyncio
 from collections.abc import Iterable, Sequence
@@ -112,7 +112,7 @@ class _Blocked(Work):
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
-            self._events.append("download tracking cut")
+            self._events.append(f"download tracking cut at {asyncio.get_running_loop().time()}")
             raise
 
 
@@ -178,7 +178,7 @@ def _one_search(turns: _Turns, *, bugs: _Bugs = _always) -> _ClientWorks:
     return works
 
 
-def test_bugs_at_three_turns_in_a_row_rebuild_their_object_three_times_then_never(
+def test_bugs_failing_rebuild_their_object_after_1_then_2_then_4_min_then_never(
     virtual_loop: VirtualLoop,
 ) -> None:
     turns = _Turns()
@@ -186,13 +186,13 @@ def test_bugs_at_three_turns_in_a_row_rebuild_their_object_three_times_then_neve
 
     node.run_for(1000.0)
 
-    # Built at the start; each third bug in a row turns its bugs failing: at 121 s, then 121 s
-    # after each rebuild. The webui's turns, every second and healthy, are another object's.
-    assert node.client.built_at == [0.0, 121.0, 242.0, 363.0]
+    # Each third bug in a row turns its bugs failing, at 121, 302 and 543 s: rebuilt 60, 120,
+    # then 240 s later. The webui's turns, every second and healthy, are another object's.
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
     assert turns.of_build(0) == [1.0, 61.0, 121.0]
-    assert turns.of_build(1) == [122.0, 182.0, 242.0]
-    # Given up after the fourth failing: its works run on, only their buggy turns failing.
-    assert turns.of_build(3)[-1] == 964.0
+    assert turns.of_build(1) == [182.0, 242.0, 302.0]
+    # Given up after the fourth failing, at 904 s: its works run on, only their turns failing.
+    assert turns.of_build(3) == [784.0, 844.0, 904.0, 964.0]
     assert node.webui.rebuilds() == 0
 
 
@@ -201,7 +201,7 @@ def test_each_rebuild_names_its_object_and_how_many_came_before_in_vain(
 ) -> None:
     node = _Node(virtual_loop, client_works=_one_search(_Turns()))
 
-    node.run_for(500.0)
+    node.run_for(1000.0)
 
     restarting, again = "restarting client amuled", "restarting client amuled again"
     assert node.client_lines() == [
@@ -238,7 +238,7 @@ def test_a_bug_at_every_turn_of_one_of_three_works_rebuilds_nothing_each_logged_
     assert all(isinstance(line.error, KeyError) for line in bug_lines)
 
 
-def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_its_count_reset(
+def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_1_min_later(
     virtual_loop: VirtualLoop,
 ) -> None:
     def bugs(*, build: int, turn: int) -> bool:
@@ -246,11 +246,11 @@ def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_its_c
 
     node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=bugs))
 
-    node.run_for(1000.0)
+    node.run_for(1700.0)
 
-    # Rebuilt at 121 s, then twice in vain; its fourth build healthy from 366 s, failing at 494 s
-    # and rebuilt at once, its count back at zero: three rebuilds more before it is given up.
-    assert node.client.built_at == [0.0, 121.0, 242.0, 363.0, 494.0, 615.0, 736.0]
+    # Its fourth build healthy from 786 s, failing at 914 s and rebuilt a minute later, its count
+    # back at zero: the next two 2, then 4 min after their bugs fail, at 1095 and 1336 s.
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 974.0, 1215.0, 1576.0]
 
 
 def test_three_rebuilds_in_vain_then_its_bugs_healthy_then_bugs_again_rebuild_it_again(
@@ -261,13 +261,13 @@ def test_three_rebuilds_in_vain_then_its_bugs_healthy_then_bugs_again_rebuild_it
 
     node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=bugs))
 
-    node.run_for(700.0)
+    node.run_for(1200.0)
 
-    # Given up at 484 s; healthy again at 552 s, then failing at 674 s.
-    assert node.client.built_at == [0.0, 121.0, 242.0, 363.0, 674.0]
+    # Given up at 904 s; healthy again at 972 s, then failing at 1094 s, rebuilt a minute later.
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 1154.0]
 
 
-def test_a_rebuild_stops_and_awaits_the_works_over_its_object_before_its_rebuild(
+def test_a_rebuild_stops_and_awaits_the_works_over_its_object_a_minute_before_its_rebuild(
     virtual_loop: VirtualLoop,
 ) -> None:
     events: list[str] = []
@@ -284,13 +284,15 @@ def test_a_rebuild_stops_and_awaits_the_works_over_its_object_before_its_rebuild
 
     node.run_for(200.0)
 
+    # Cut once its bugs turned failing, then none of its works turning until its rebuild.
     assert events[:3] == [
         "works over build 0 built",
-        "download tracking cut",
+        "download tracking cut at 121.0",
         "works over build 1 built",
     ]
+    assert node.client.built_at == [0.0, 181.0]
     assert turns.of_build(0) == [1.0, 61.0, 121.0]
-    assert turns.of_build(1)[:2] == [122.0, 123.0]  # on the new works only, every second
+    assert turns.of_build(1)[:2] == [182.0, 183.0]  # on the new works only, every second
     # The webui is another object: its works never stopped.
     assert node.webui_turns.of_build(0) == [float(second) for second in range(1, 200)]
 
@@ -326,7 +328,7 @@ def test_the_shutdown_closes_the_object_each_builder_built_latest(
     assert closes == [1, 1, 1]
 
 
-def test_a_rebuild_that_raises_is_tried_again_60_s_later(virtual_loop: VirtualLoop) -> None:
+def test_a_rebuild_that_raises_is_tried_again_2_then_4_min_later(virtual_loop: VirtualLoop) -> None:
     turns = _Turns()
     errors = [RuntimeError("no session"), RuntimeError("no session again")]
     node = _Node(
@@ -335,10 +337,11 @@ def test_a_rebuild_that_raises_is_tried_again_60_s_later(virtual_loop: VirtualLo
         rebuild_errors=errors,
     )
 
-    node.run_for(300.0)
+    node.run_for(600.0)
 
-    assert node.client.built_at == [0.0, 121.0, 181.0, 241.0]
-    assert turns.of_build(1)[:3] == [242.0, 243.0, 244.0]
+    # Its bugs failing at 121 s: rebuilt a minute later, then each one that raised in vain.
+    assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
+    assert turns.of_build(1)[:3] == [542.0, 543.0, 544.0]
     assert node.client_lines()[1:] == [
         LoggedLine(level="error", message="bug in the rebuild of client amuled", error=errors[0]),
         LoggedLine(level="error", message="bug in the rebuild of client amuled", error=errors[1]),
@@ -356,14 +359,14 @@ def test_rebuilds_that_raised_and_bugs_failing_again_after_one_share_one_count(
         rebuild_errors=[RuntimeError("no session")] * 2,
     )
 
-    node.run_for(500.0)
+    node.run_for(800.0)
 
-    # Two that raised, then the one that worked failing again at 362 s: its third in vain.
-    assert node.client.built_at == [0.0, 121.0, 181.0, 241.0]
+    # Two that raised, then the one that worked failing again at 662 s: its third in vain.
+    assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
     assert node.client_lines()[-1] == LoggedLine(
         level="error", message="client amuled not restarted again: 3 rebuilds in vain"
     )
-    assert turns.of_build(1)[-1] == 482.0  # its works run on
+    assert turns.of_build(1)[-1] == 782.0  # its works run on
 
 
 def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running(
@@ -375,7 +378,7 @@ def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running
 
     node.run_for(1000.0)
 
-    assert node.client.built_at == [0.0, 121.0, 181.0, 241.0]
+    assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
     assert turns.taken == [(0, 1.0), (0, 61.0), (0, 121.0)]
     assert node.webui_turns.of_build(0)[-1] == 999.0
 
@@ -390,9 +393,9 @@ def test_a_rebuild_refused_by_amule_is_logged_in_one_line_and_tried_again(
         rebuild_errors=[refused],
     )
 
-    node.run_for(200.0)
+    node.run_for(400.0)
 
-    assert node.client.built_at == [0.0, 121.0, 181.0]
+    assert node.client.built_at == [0.0, 181.0, 301.0]
     assert node.client_lines()[1:] == [
         LoggedLine(
             level="warning",
@@ -411,12 +414,12 @@ def test_a_shutdown_while_a_rebuild_waits_to_be_tried_again_ends_the_supervision
         rebuild_errors=[RuntimeError("no session")] * 3,
     )
 
-    node.run_for(150.0)
+    node.run_for(250.0)
 
-    assert node.client.built_at == [0.0, 121.0]
+    assert node.client.built_at == [0.0, 181.0]
 
 
-def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_then_never(
+def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_then_2_then_4_min_then_never(
     virtual_loop: VirtualLoop,
 ) -> None:
     raising = FakeRaisingNotifier(RuntimeError("an embed apprise cannot build"))
@@ -458,9 +461,10 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_three_times_then_neve
 
     virtual_loop.run_until_complete(supervise())
 
+    # Its sends meet a bug at once, then each a minute after: failing at 120, 300 and 540 s.
+    assert notifier.built_at == [0.0, 180.0, 420.0, 780.0]
     # A send that met a bug removes its entry: each of the 20 tried once.
     assert raising.sends == 20
-    assert notifier.rebuilds() == 3
 
 
 def _supervisor() -> Supervisor:
