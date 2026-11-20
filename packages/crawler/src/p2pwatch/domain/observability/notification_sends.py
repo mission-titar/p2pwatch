@@ -6,8 +6,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from p2pwatch.domain.expected_error import ExpectedError
-from p2pwatch.domain.health.external_dependency import ExternalDependency
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthAlert
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
+from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.observability.events import NotificationsNotSaved, NotificationsSavedAgain
 from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.policy import Audience
 
@@ -55,18 +57,23 @@ SAVES_FAILED = HealthRule(
 )
 
 
-def local_database_dependency() -> ExternalDependency:
+def local_database_dependency(*, node_id: NodeId) -> ExternalDependency:
     """The local database, judged on the saves of the notifications left: "local database"."""
-    return ExternalDependency(name="local database", client_name=None, rules=(SAVES_FAILED,))
+    alert = HealthAlert(
+        when_failing=NotificationsNotSaved(node_id=node_id),
+        when_healthy_again=NotificationsSavedAgain(node_id=node_id),
+    )
+    return ExternalDependency(name="local database", client_name=None, rules={SAVES_FAILED: alert})
 
 
 def notification_service_dependencies(
     services: Iterable[NotificationService],
 ) -> dict[NotificationService, ExternalDependency]:
     """A part per service, judged on its sends that failed: "notifier discord community"."""
+    # No alert: it would be sent through that service.
     return {
         service: ExternalDependency(
-            name=f"notifier {service}", client_name=None, rules=(SENDS_FAILED,)
+            name=f"notifier {service}", client_name=None, rules={SENDS_FAILED: None}
         )
         for service in services
     }

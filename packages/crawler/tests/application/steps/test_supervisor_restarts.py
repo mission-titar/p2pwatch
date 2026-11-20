@@ -438,7 +438,7 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_
             notification_timeout_seconds=5.0,
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
             service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
-            local_database=local_database_dependency(),
+            local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),
         )
         return [SupervisedWork(work=sender, time_limit=timedelta(minutes=5))]

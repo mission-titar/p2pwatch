@@ -218,7 +218,7 @@ async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_pat
             notification_timeout_seconds=5.0,
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
             service_dependencies=notification_service_dependencies(services),
-            local_database=local_database_dependency(),
+            local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),
         ).run_once()
 

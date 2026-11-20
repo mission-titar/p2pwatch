@@ -127,9 +127,7 @@ def build_cycle(
     observability_dispatcher = observability_dispatcher or ObservabilityOverFakes().dispatcher
     logger = logger or FakeLogger()
     # As the composition wires it: the disk's rule sends its alert through the dispatcher.
-    alerter = HealthAlerter(
-        observability_dispatcher=observability_dispatcher, node_id=NODE_ID, min_free_bytes=min_free
-    )
+    alerter = HealthAlerter(observability_dispatcher=observability_dispatcher)
     node_health = NodeHealth(logger=health_logger or FakeLogger(), subscribers=(alerter.send,))
     download_labeler = DownloadLabeler(
         observation_reader=observation_reader,
@@ -164,7 +162,9 @@ def build_cycle(
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
             node_health=node_health,
-            download_disk_dependency=download_disk_dependency(),
+            download_disk_dependency=download_disk_dependency(
+                min_free_bytes=min_free, node_id=NODE_ID
+            ),
             logger=logger,
         ),
         download_starter=DownloadStarter(

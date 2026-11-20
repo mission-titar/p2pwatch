@@ -17,6 +17,7 @@ from p2pwatch.composition.notifier_restartable import (
     NotifierRestartableBuilder,
     notification_sending,
 )
+from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification_sends import (
     local_database_dependency,
     notification_service_dependencies,
@@ -92,7 +93,7 @@ def _sender() -> NotificationSender:
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
         service_dependencies=notification_service_dependencies(notifier.services()),
-        local_database=local_database_dependency(),
+        local_database=local_database_dependency(node_id=NodeId("n1")),
         logger=FakeLogger(),
     )
 
