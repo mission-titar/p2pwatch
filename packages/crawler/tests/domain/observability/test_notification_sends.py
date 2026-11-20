@@ -1,27 +1,27 @@
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.observability.notification_sends import (
     SENDS_FAILED,
     NotificationService,
-    notification_service_components,
+    notification_service_dependencies,
 )
 from p2pwatch.domain.observability.policy import Audience
-from p2pwatch.domain.work_components import BUGS
+from p2pwatch.domain.work_dependencies import BUGS
 
 _DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY)
 _SECOND_DISCORD = NotificationService(scheme="discord", audience=Audience.COMMUNITY, ordinal=2)
 _NTFY = NotificationService(scheme="ntfy", audience=Audience.OPERATIONS)
 
 
-def _changes(rule: HealthRule, *detected: bool, on: Component) -> list[HealthState | None]:
+def _changes(rule: HealthRule, *detected: bool, on: ExternalDependency) -> list[HealthState | None]:
     """The new state of ``on`` under ``rule`` at each check, ``None`` for a check that changed
     nothing."""
     transitions = [on.record(rule=rule, detected=each) for each in detected]
     return [None if transition is None else transition.current for transition in transitions]
 
 
-def _discord_part() -> Component:
-    return notification_service_components([_DISCORD])[_DISCORD]
+def _discord_part() -> ExternalDependency:
+    return notification_service_dependencies([_DISCORD])[_DISCORD]
 
 
 def test_a_service_is_named_by_its_scheme_and_its_audience_a_second_alike_by_its_ordinal() -> None:
@@ -31,7 +31,7 @@ def test_a_service_is_named_by_its_scheme_and_its_audience_a_second_alike_by_its
 
 
 def test_each_service_has_a_part_of_its_own_named_after_it_and_by_no_client() -> None:
-    parts = notification_service_components([_DISCORD, _NTFY, _SECOND_DISCORD])
+    parts = notification_service_dependencies([_DISCORD, _NTFY, _SECOND_DISCORD])
 
     named = [
         (service, part.name, part.client_name, part.channel) for service, part in parts.items()

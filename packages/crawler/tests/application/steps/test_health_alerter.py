@@ -9,15 +9,15 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.domain.download.disk_space import (
     CONNECTED_TO_NO_NETWORK,
     DISK_SPACE_LOW,
-    download_tracking_component,
+    download_tracking_dependency,
 )
-from p2pwatch.domain.health.component import Component, HealthTransition
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
     SENDS_FAILED,
-    notification_service_components,
+    notification_service_dependencies,
 )
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
@@ -25,10 +25,10 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     SEARCHES_FAILED,
-    channel_component,
-    client_component,
+    channel_dependency,
+    client_dependency,
 )
-from p2pwatch.domain.work_components import BUGS, status_reading_component, webui_component
+from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency, webui_dependency
 from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
@@ -43,11 +43,11 @@ _REACHABLE_AGAIN = RelayedLogLine(
 )
 
 
-_AMULE = client_component(ClientName("amuled"))
-_KAD = channel_component(client_name=ClientName("amuled"), channel=Channel("kad"))
-_DOWNLOAD_TRACKING = download_tracking_component(ClientName("amuled"))
+_AMULE = client_dependency(ClientName("amuled"))
+_KAD = channel_dependency(client_name=ClientName("amuled"), channel=Channel("kad"))
+_DOWNLOAD_TRACKING = download_tracking_dependency(ClientName("amuled"))
 _TEN_GIB = 10 * 2**30
-_NOTIFICATION_SERVICE_PART = notification_service_components(ONE_SERVICE_PER_AUDIENCE)[
+_NOTIFICATION_SERVICE_PART = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE)[
     ONE_SERVICE_PER_AUDIENCE[0]
 ]
 
@@ -57,7 +57,7 @@ async def _sent(
     previous: HealthState,
     current: HealthState,
     rule: HealthRule = CLIENT_UNREACHABLE,
-    on: Component = _AMULE,
+    on: ExternalDependency = _AMULE,
     min_free_bytes: int | None = _TEN_GIB,
 ) -> list[Notification]:
     """The notifications sent when the health of ``on`` under ``rule`` changes."""
@@ -68,13 +68,13 @@ async def _sent(
         current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        service_components=notification_service_components(notifier.services()),
+        service_dependencies=notification_service_dependencies(notifier.services()),
     )
     alerter = HealthAlerter(
         observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=min_free_bytes
     )
     await alerter.send(
-        HealthTransition(component=on, rule=rule, previous=previous, current=current)
+        HealthTransition(dependency=on, rule=rule, previous=previous, current=current)
     )
     return [notification for _, notification in notifier.calls]
 
@@ -118,10 +118,10 @@ async def test_a_rule_it_has_no_alert_for_raises(
 @pytest.mark.parametrize(
     ("rule", "on"),
     [
-        (BUGS, status_reading_component(ClientName("amuled"))),
+        (BUGS, status_reading_dependency(ClientName("amuled"))),
         (BUGS, _KAD),
         (BUGS, _DOWNLOAD_TRACKING),
-        (BUGS, webui_component()),
+        (BUGS, webui_dependency()),
         (SEARCHES_FAILED, _KAD),
         (CONNECTED_TO_NO_NETWORK, _DOWNLOAD_TRACKING),
         # An alert about the notifier would be sent through the notifier itself.
@@ -148,7 +148,7 @@ async def test_a_rule_it_has_no_alert_for_raises(
     ],
 )
 async def test_a_part_failing_or_healthy_again_under_a_rule_without_an_alert_sends_nothing(
-    *, rule: HealthRule, on: Component, previous: HealthState, current: HealthState
+    *, rule: HealthRule, on: ExternalDependency, previous: HealthState, current: HealthState
 ) -> None:
     # The log line of the change is all the operator gets of it.
     assert await _sent(previous=previous, current=current, rule=rule, on=on) == []
@@ -201,7 +201,7 @@ async def test_a_channel_healthy_from_its_first_readings_sends_nothing(
 
 
 @pytest.mark.asyncio
-async def test_a_channel_s_rule_on_a_component_with_no_channel_raises() -> None:
+async def test_a_channel_s_rule_on_a_dependency_with_no_channel_raises() -> None:
     with pytest.raises(ValueError, match="client amuled: no channel to name in its alert"):
         await _sent(
             previous=HealthState.HEALTHY, current=HealthState.FAILING, rule=CHANNEL_NOT_CONNECTED
@@ -216,7 +216,7 @@ async def test_a_client_s_rule_on_a_part_of_no_client_raises(current: HealthStat
     previous = HealthState.HEALTHY if current is HealthState.FAILING else HealthState.FAILING
 
     with pytest.raises(ValueError, match="^webui: no client to name in its alert$"):
-        await _sent(previous=previous, current=current, on=webui_component())
+        await _sent(previous=previous, current=current, on=webui_dependency())
 
 
 @pytest.mark.asyncio
@@ -267,13 +267,13 @@ async def test_an_alert_whose_turn_is_cut_mid_send_is_still_sent() -> None:
         current_notifier=lambda: notifier,
         notification_timeout_seconds=5.0,
         record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        service_components=notification_service_components(notifier.services()),
+        service_dependencies=notification_service_dependencies(notifier.services()),
     )
     alerter = HealthAlerter(
         observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=_TEN_GIB
     )
     transition = HealthTransition(
-        component=_AMULE,
+        dependency=_AMULE,
         rule=CLIENT_UNREACHABLE,
         previous=HealthState.HEALTHY,
         current=HealthState.FAILING,

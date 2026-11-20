@@ -20,8 +20,8 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
     ChannelStatus,
     ClientStatus,
-    channel_component,
-    client_component,
+    channel_dependency,
+    client_dependency,
 )
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
@@ -132,12 +132,12 @@ async def _status_alerts(*readings: _StatusReading) -> list[_Alert]:
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=FakeStatusReadingStore((_AMULED,)),
         node_health=NodeHealth(logger=FakeLogger(), subscribers=(alerter.send,)),
-        client_component=client_component(_AMULED),
-        channel_components={
-            channel: channel_component(client_name=_AMULED, channel=channel)
+        client_dependency=client_dependency(_AMULED),
+        channel_dependencies={
+            channel: channel_dependency(client_name=_AMULED, channel=channel)
             for channel in _CHANNELS
         },
-        download_tracking_component=None,
+        download_tracking_dependency=None,
     )
     return await _alerts([watcher.run_once] * len(readings), observability=observability)
 

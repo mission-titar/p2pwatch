@@ -1,0 +1,8 @@
+id: external-dependency-record-through-node-health
+valid:
+  - "await self._node_health.record(on=dependency, rule=CLIENT_UNREACHABLE, detected=True)"
+  - "self._observation_writer.record_observation(observation)"
+  - "store.record(decision)"
+invalid:
+  - "dependency.record(rule=CLIENT_UNREACHABLE, detected=True)"
+  - "transition = self._client_dependency.record(rule=rule, detected=status is None)"

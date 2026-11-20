@@ -11,13 +11,13 @@ class HealthTransition:
     """A change of one part's state under one rule, such as the aMule client going from healthy to
     failing."""
 
-    component: "Component"
+    dependency: "ExternalDependency"
     rule: HealthRule
     previous: HealthState
     current: HealthState
 
 
-class Component:
+class ExternalDependency:
     """A part of the node whose health is tracked, such as the aMule client or its Kad channel."""
 
     def __init__(
@@ -52,4 +52,4 @@ class Component:
         self._latest_detected[rule], self._states[rule] = latest_detected, current
         if current is previous:
             return None
-        return HealthTransition(component=self, rule=rule, previous=previous, current=current)
+        return HealthTransition(dependency=self, rule=rule, previous=previous, current=current)

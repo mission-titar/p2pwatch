@@ -17,7 +17,7 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError
 from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK
-from p2pwatch.domain.health.component import Component
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import Channel, ClientName
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
 from p2pwatch.domain.observability.events import ChannelStatusSampled, ClientUnreachable
@@ -34,7 +34,7 @@ from p2pwatch.domain.status_reading import (
 
 class StatusWatcher(Work):
     """Reads one client's status every minute, a minute from the end of one reading to the start
-    of the next, each of ``channel_components``' channels in it, and whether any is connected."""
+    of the next, each of ``channel_dependencies``' channels in it, and whether any is connected."""
 
     def __init__(
         self,
@@ -46,9 +46,9 @@ class StatusWatcher(Work):
         observability_dispatcher: ObservabilityDispatcher,
         status_reading_writer: StatusReadingWriter,
         node_health: NodeHealth,
-        client_component: Component,
-        channel_components: Mapping[Channel, Component],
-        download_tracking_component: Component | None,
+        client_dependency: ExternalDependency,
+        channel_dependencies: Mapping[Channel, ExternalDependency],
+        download_tracking_dependency: ExternalDependency | None,
     ) -> None:
         self._client_name = client_name  # as alerts and metrics label it
         self._client = client
@@ -57,9 +57,9 @@ class StatusWatcher(Work):
         self._observability_dispatcher = observability_dispatcher
         self._status_reading_writer = status_reading_writer
         self._node_health = node_health
-        self._client_component = client_component
-        self._channel_components = channel_components
-        self._download_tracking_component = download_tracking_component  # None: no download
+        self._client_dependency = client_dependency
+        self._channel_dependencies = channel_dependencies
+        self._download_tracking_dependency = download_tracking_dependency  # None: no download
         self._latest_reading_ended_at: MonotonicInstant | None = None
 
     def __str__(self) -> str:
@@ -95,16 +95,16 @@ class StatusWatcher(Work):
                 ClientUnreachable(client_name=self._client_name)
             )
         await self._node_health.record(
-            on=self._client_component, rule=CLIENT_UNREACHABLE, detected=status is None
+            on=self._client_dependency, rule=CLIENT_UNREACHABLE, detected=status is None
         )
         # A channel the reading leaves out, every one while aMule does not answer, is unknown.
         channels = {c.channel: c for c in status.channels} if status else {}
-        for channel, component in self._channel_components.items():
-            await self._read_channel(channel, reading=channels.get(channel), on=component)
-        if status is not None and self._download_tracking_component is not None:
+        for channel, dependency in self._channel_dependencies.items():
+            await self._read_channel(channel, reading=channels.get(channel), on=dependency)
+        if status is not None and self._download_tracking_dependency is not None:
             on_a_network = any(channel.connected for channel in status.channels)
             await self._node_health.record(
-                on=self._download_tracking_component,
+                on=self._download_tracking_dependency,
                 rule=CONNECTED_TO_NO_NETWORK,
                 detected=not on_a_network,
             )
@@ -116,7 +116,7 @@ class StatusWatcher(Work):
         )
 
     async def _read_channel(
-        self, channel: Channel, *, reading: ChannelStatus | None, on: Component
+        self, channel: Channel, *, reading: ChannelStatus | None, on: ExternalDependency
     ) -> None:
         connected = None if reading is None else reading.connected
         connectable = None if reading is None else reading.connectable
