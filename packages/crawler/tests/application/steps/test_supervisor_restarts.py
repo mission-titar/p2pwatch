@@ -1,9 +1,9 @@
 """The supervisor counts the bugs of each object's turns, such as the aMule client's, and rebuilds
 the object in a task of its own once 3 turns in a row of its works met one: it stops and awaits
 those works, then, after 1, 2, then 4 min, closes it, has its builder build another and runs that
-one's works. Three rebuilds in vain at most, one that raised included, the count reset once its
-bugs are healthy again; the shutdown closes the latest of each. The tests share one simulated
-time, on the virtual-time loop."""
+one's works. At the third rebuild in vain, one that raised included, it ends its supervision with
+a ``CrawlerRestartError``; the count resets once its bugs are healthy again, and the shutdown
+closes the latest of each. The tests share one simulated time, on the virtual-time loop."""
 
 import asyncio
 from collections.abc import Iterable, Sequence
@@ -18,6 +18,7 @@ from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
@@ -37,6 +38,7 @@ from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuil
 from tests.support.virtual_time import VirtualLoop
 
 _DAY = timedelta(days=1)
+_CLIENT_IN_VAIN = "client amuled rebuilt 3 times in vain"
 _ONLINE = RelayedLogLine(message="🟢 node online", severity=Severity.INFO, node_id=NodeId("n1"))
 
 
@@ -137,6 +139,9 @@ class _Node:
         )
         self.webui = FakeRestartableBuilder("webui", works_over=self._webui_serving)
         self._run_state = FakeRunStateStore()
+        # The error its supervision ended with, and when it ended.
+        self.restart: CrawlerRestartError | None = None
+        self.stopped_at: float | None = None
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
@@ -152,16 +157,24 @@ class _Node:
         return [SupervisedWork(work=serving, time_limit=_DAY)]
 
     def run_for(self, seconds: float) -> None:
-        """Builds each object, runs the node ``seconds``, then closes what the supervisor holds,
-        as the shutdown does."""
+        """Builds each object, runs the node ``seconds`` at most, a third rebuild in vain ending
+        it earlier, then closes what the supervisor holds, as the shutdown does."""
         self.loop.call_later(seconds, self._run_state.set_shutdown_requested)
         self.loop.run_until_complete(self._run())
 
     async def _run(self) -> None:
         await self._supervisor.build_first(self.client)
         await self._supervisor.build_first(self.webui)
-        await self._supervisor.supervise(arm_shutdown_bound=lambda: None)
+        try:
+            await self._supervisor.supervise(arm_shutdown_bound=lambda: None)
+        except CrawlerRestartError as restart:
+            self.restart = restart
+        self.stopped_at = self.loop.time()
         await self._supervisor.close()
+
+    def ended(self) -> tuple[str | None, float | None]:
+        """The error its supervision ended with, if any, and when it ended."""
+        return (None if self.restart is None else str(self.restart)), self.stopped_at
 
     def client_lines(self) -> list[LoggedLine]:
         """The lines that name the client: each rebuild decided, and how it ended."""
@@ -178,7 +191,7 @@ def _one_search(turns: _Turns, *, bugs: _Bugs = _always) -> _ClientWorks:
     return works
 
 
-def test_bugs_failing_rebuild_their_object_after_1_then_2_then_4_min_then_never(
+def test_bugs_failing_rebuild_their_object_after_1_then_2_then_4_min_then_end_the_supervision(
     virtual_loop: VirtualLoop,
 ) -> None:
     turns = _Turns()
@@ -191,8 +204,9 @@ def test_bugs_failing_rebuild_their_object_after_1_then_2_then_4_min_then_never(
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
     assert turns.of_build(0) == [1.0, 61.0, 121.0]
     assert turns.of_build(1) == [182.0, 242.0, 302.0]
-    # Given up after the fourth failing, at 904 s: its works run on, only their turns failing.
-    assert turns.of_build(3) == [784.0, 844.0, 904.0, 964.0]
+    # The fourth failing, at 904 s, its third rebuild in vain: the supervision ends with its error.
+    assert turns.of_build(3) == [784.0, 844.0, 904.0]
+    assert node.ended() == (_CLIENT_IN_VAIN, 904.0)
     assert node.webui.rebuilds() == 0
 
 
@@ -211,7 +225,6 @@ def test_each_rebuild_names_its_object_and_how_many_came_before_in_vain(
         LoggedLine(level="info", message="client amuled rebuilt"),
         LoggedLine(level="warning", message=f"{again}, 2 of 3 rebuilds in vain: bugs in its works"),
         LoggedLine(level="info", message="client amuled rebuilt"),
-        LoggedLine(level="error", message="client amuled not restarted again: 3 rebuilds in vain"),
     ]
 
 
@@ -251,20 +264,6 @@ def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_1_min
     # Its fourth build healthy from 786 s, failing at 914 s and rebuilt a minute later, its count
     # back at zero: the next two 2, then 4 min after their bugs fail, at 1095 and 1336 s.
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 974.0, 1215.0, 1576.0]
-
-
-def test_three_rebuilds_in_vain_then_its_bugs_healthy_then_bugs_again_rebuild_it_again(
-    virtual_loop: VirtualLoop,
-) -> None:
-    def bugs(*, build: int, turn: int) -> bool:
-        return build != 3 or not 3 <= turn < 13
-
-    node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=bugs))
-
-    node.run_for(1200.0)
-
-    # Given up at 904 s; healthy again at 972 s, then failing at 1094 s, rebuilt a minute later.
-    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 1154.0]
 
 
 def test_a_rebuild_stops_and_awaits_the_works_over_its_object_a_minute_before_its_rebuild(
@@ -363,13 +362,11 @@ def test_rebuilds_that_raised_and_bugs_failing_again_after_one_share_one_count(
 
     # Two that raised, then the one that worked failing again at 662 s: its third in vain.
     assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
-    assert node.client_lines()[-1] == LoggedLine(
-        level="error", message="client amuled not restarted again: 3 rebuilds in vain"
-    )
-    assert turns.of_build(1)[-1] == 782.0  # its works run on
+    assert turns.of_build(1)[-1] == 662.0
+    assert node.ended() == (_CLIENT_IN_VAIN, 662.0)
 
 
-def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running(
+def test_three_rebuilds_that_raise_end_the_supervision_once_the_third_has_raised(
     virtual_loop: VirtualLoop,
 ) -> None:
     turns = _Turns()
@@ -380,7 +377,7 @@ def test_three_rebuilds_that_raise_give_it_up_its_works_stopped_the_node_running
 
     assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
     assert turns.taken == [(0, 1.0), (0, 61.0), (0, 121.0)]
-    assert node.webui_turns.of_build(0)[-1] == 999.0
+    assert node.ended() == (_CLIENT_IN_VAIN, 541.0)
 
 
 def test_a_rebuild_refused_by_amule_is_logged_in_one_line_and_tried_again(
@@ -419,7 +416,7 @@ def test_a_shutdown_while_a_rebuild_waits_to_be_tried_again_ends_the_supervision
     assert node.client.built_at == [0.0, 181.0]
 
 
-def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_then_2_then_4_min_then_never(
+def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_then_ends_it(
     virtual_loop: VirtualLoop,
 ) -> None:
     raising = FakeRaisingNotifier(RuntimeError("an embed apprise cannot build"))
@@ -459,12 +456,13 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_then_2_then_4
         await supervisor.build_first(notifier)
         await supervisor.supervise(arm_shutdown_bound=lambda: None)
 
-    virtual_loop.run_until_complete(supervise())
+    with pytest.raises(CrawlerRestartError, match="^notifier rebuilt 3 times in vain$"):
+        virtual_loop.run_until_complete(supervise())
 
-    # Its sends meet a bug at once, then each a minute after: failing at 120, 300 and 540 s.
+    # Its sends meet a bug at once, then each a minute after: failing at 120, 300, 540, then 900 s.
     assert notifier.built_at == [0.0, 180.0, 420.0, 780.0]
-    # A send that met a bug removes its entry: each of the 20 tried once.
-    assert raising.sends == 20
+    # A send that met a bug removes its entry: 12 of the 20 tried once, the others kept.
+    assert (raising.sends, len(store.read_pending_notifications())) == (12, 8)
 
 
 def _supervisor() -> Supervisor:

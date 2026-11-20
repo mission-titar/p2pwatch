@@ -14,6 +14,7 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_observation_store import
     SqliteObservationStore,
 )
 from p2pwatch.application.crawler_lifecycle import CrawlerLifecycle
+from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
@@ -22,6 +23,7 @@ from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -43,6 +45,7 @@ from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStat
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_policy_fingerprint_store import FakePolicyFingerprintStore
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
@@ -50,6 +53,7 @@ from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
+from tests.support.virtual_time import VirtualLoop
 
 _FINGERPRINT = "policy-2"
 _NODE_ID = NodeId("titar-node")
@@ -103,9 +107,23 @@ class _WorkLeavingACompletion(_WorkWaitingForTheStop):
         await asyncio.Event().wait()
 
 
+class _WorkRaising(Work):
+    """Waits a second before each turn, the first included, then raises a bug."""
+
+    def __str__(self) -> str:
+        return "search 'keroro' amuled kad"
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.sleep(1.0)  # noqa: TID251
+
+    async def run_once(self) -> None:
+        raise KeyError("results")
+
+
 class _Crawl:
     """A ``CrawlerLifecycle`` over its real steps, the stores real, the rest fakes: two works
-    record their start, then wait for the stop."""
+    record their start, then wait for the stop; the supervisor sleeps on ``supervisor_clock``,
+    by default never waking."""
 
     def __init__(
         self,
@@ -117,6 +135,7 @@ class _Crawl:
         stored_fingerprint: str | None = _FINGERPRINT,
         download_enabled: bool = False,
         search_leaves_a_completion: bool = False,
+        supervisor_clock: MonotonicClock | None = None,
     ) -> None:
         self.steps: list[str] = []
         self.backoff_states_seen_by_works: list[dict[BackoffKey, BackoffState]] = []
@@ -151,7 +170,7 @@ class _Crawl:
         self._supervisor = Supervisor(
             run_state_reader=self.run_state,
             # Its sleeps never end: with instant ones, every time limit would expire at once.
-            monotonic_clock=FakeBlockingMonotonicClock(),
+            monotonic_clock=supervisor_clock or FakeBlockingMonotonicClock(),
             logger=FakeLogger(),
         )
         self.crawler_lifecycle = CrawlerLifecycle(
@@ -198,6 +217,14 @@ class _Crawl:
         self._works_started += 1
         if self._works_started == 2:
             self._both_works_started.set()
+
+    async def run_a_client_buggy_at_every_turn(self) -> None:
+        """Builds a client whose one work raises at every turn, then runs the crawler, a graceful
+        shutdown requested at 2000 s."""
+        asyncio.get_running_loop().call_later(2000.0, self.run_state.set_shutdown_requested)
+        works = [SupervisedWork(work=_WorkRaising(), time_limit=timedelta(days=1))]
+        await self._supervisor.build_first(FakeRestartableBuilder(works_over=lambda _: works))
+        await self.crawler_lifecycle.run(arm_shutdown_bound=lambda: None)
 
     async def run_until_both_works_start_then_stop(self) -> None:
         """Builds the one object the two works are over, runs the crawler until both have started,
@@ -392,3 +419,33 @@ async def test_the_notifications_left_at_the_shutdown_are_sent_before_the_run_re
         ),
     ]
     assert crawl.observability.outbox.oldest() is None
+
+
+def test_the_third_rebuild_in_vain_has_its_alert_sent_local_db_refusing_then_raises_its_error(
+    virtual_loop: VirtualLoop,
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
+    engine: MatchingEngine,
+) -> None:
+    crawl = _Crawl(
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        supervisor_clock=FakeLoopMonotonicClock(virtual_loop),
+    )
+    crawl.observability.outbox_store.writes_fail = True
+
+    with pytest.raises(CrawlerRestartError, match="^client amuled rebuilt 3 times in vain$"):
+        virtual_loop.run_until_complete(crawl.run_a_client_buggy_at_every_turn())
+
+    online = "🟢 node online (download off)"
+    alert = "client amuled rebuilt 3 times in vain: the crawler restarts"
+    # Sent before the exit from memory, no save of the outbox ever having gone through.
+    assert crawl.notifier.calls == [
+        (Audience.OPERATIONS, RelayedLogLine(message=m, severity=s, node_id=_NODE_ID))
+        for m, s in [(online, Severity.INFO), (alert, Severity.WARNING)]
+    ]
+    assert crawl.observability.outbox_store.read_pending_notifications() == ()

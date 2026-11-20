@@ -5,7 +5,7 @@ from pathlib import PurePath
 
 
 class CrawlerRunner(ABC):
-    """Crawls with the three config files, until a signal or the webui stops it."""
+    """Crawls with the three config files, until a signal, the webui or a restart stops it."""
 
     @abstractmethod
     async def run_crawler(
@@ -13,4 +13,5 @@ class CrawlerRunner(ABC):
     ) -> None:
         """Raises ``InvalidConfigError`` on a refused config, ``OutOfSpaceError`` short of disk
         space for a database's opening, ``HeldDatabaseError`` for a database another process
-        holds, ``ShutdownDeadlineError`` once the shutdown deadline fired."""
+        holds, ``ShutdownDeadlineError`` once the shutdown deadline fired, ``CrawlerRestartError``
+        once it stopped for a restart, such as after an object's third rebuild in vain."""

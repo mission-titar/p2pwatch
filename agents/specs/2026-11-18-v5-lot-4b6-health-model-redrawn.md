@@ -89,7 +89,9 @@ of the node; a save that fails is an outage of the local database, with its aler
   the matching engine) is renewed only with the whole process. The literature never gives up and never loops fast: it
   waits longer, then calls a human (Kubernetes' `CrashLoopBackOff`, the SRE book). D26's waits hold the pace in
   memory, so nothing persisted holds it, since a broken database would break it too. Docker's `on-failure:3` never
-  resets its count and restarts nothing after a reboot (appendix C).*
+  resets its count and restarts nothing after a reboot (appendix C).* (Corrected: the supervisor stops its works and
+  ends its supervision with the error, as an OTP supervisor past its bound stops its children then itself; the
+  lifecycle dispatches the alert, empties the outbox and exits with the error, the operator on 2026-11-20.)
 
 ### Notifications
 
@@ -346,12 +348,18 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 ### Block 45, the rebuild waits
 
 - The rebuild waits 1, then 2, then 4 minutes, in memory.
+- (Corrected: as built in block 45, 76 lines, 7 files. The object's works stop as soon as its bugs turn failing; the
+  wait comes before the close and the build, so nothing is counted while it waits and the outbox keeps its entries
+  for the new notifier. A rebuild that raised counts in vain and doubles the wait too; the fixed 60 s between two
+  rebuilds that raised goes.)
 
 ### Block 50, the crawler's restart
 
 - At the third rebuild in vain: its alert dispatched, `operations` audience, "client amuled rebuilt 3 times in vain:
   the crawler restarts", then the shutdown requested with an error; the lifecycle empties the outbox, closes every
-  object and exits non-zero.
+  object and exits non-zero. (Corrected: the supervisor stops the works and ends `supervise()` with the error; the
+  lifecycle dispatches the alert, empties the outbox and raises it, the command line exiting 1. The run state and the
+  supervisor's constructor stay as they are: the first draft's error in the run state took the block to 24 files.)
 - `deploy/compose.yml` keeps `restart: unless-stopped`, which restarts the `p2pwatch` container whatever its exit
   code; `ed2k` is untouched.
 
@@ -378,11 +386,11 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 
 | Row | Test | Fails unless |
 |---|---|---|
-| A bug at every turn of the client's works | a supervisor test on virtual time, every work over a fake client raising | rebuilds start 1, 2, then 4 min after each in vain, the alert is dispatched and the shutdown is requested with an error after the third |
+| A bug at every turn of the client's works | a supervisor test on virtual time, every work over a fake client raising | rebuilds start 1, 2, then 4 min after each in vain, and `supervise()` ends with the error after the third (Corrected: the alert is the lifecycle's test's, below) |
 | One keyword's search | a supervisor test, one of three works raising at each turn | no rebuild in 30 turns, each bug logged with its trace |
 | Two in vain, ten healthy, then bugs | a supervisor test | the next rebuild comes 1 min after the bugs turn failing |
 | The webui's thread dying | block 35's webui test, its thread stopped | a new thread serves |
-| A bug at every send of the notifier | a supervisor test, a fake notifier raising | the notifier rebuilt after 1, 2, then 4 min, then the shutdown requested with an error |
+| A bug at every send of the notifier | a supervisor test, a fake notifier raising | the notifier rebuilt after 1, 2, then 4 min, then `supervise()` ending with the error |
 | A bug in a Kad search | a supervisor test reading the log | no line names `channel amuled kad` with `bugs` |
 | A refused password at the start | a composition test, a fake amuleapi refusing the password | the node runs, the alert is dispatched, two logins never closer than 60 s; at the release candidate, on the node |
 | A refused password while running | a status watcher test | the alert at the first refused reading |
@@ -392,7 +400,7 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 | A notification decided, then stopped | an outbox test over the SQLite store: leave, stop, read back | the entry sent after the start; at the release candidate, on the node |
 | A decision's write and its notification | the real callers (`file_judge`, `download_tracker`, `source_watcher`) and the real dispatcher over a spy outbox whose `leave` asserts that a `loop.call_soon` callback, scheduled before the decision's write, has not run yet | the flag still unset when `leave` runs |
 | `local.db` refusing every write | an outbox test over a store raising `StoreError` | every entry sent, the local database's alert dispatched |
-| The third rebuild in vain, `local.db` refusing | a lifecycle test | the alert reaches the fake notifier before the exit |
+| The third rebuild in vain, `local.db` refusing | a lifecycle test | the alert reaches the fake notifier before the exit, and the lifecycle raises the error |
 | Two services, one refusing | a notifier work test | the refusing service's send tried once, the other sent once |
 
 ## Appendix C. Facts
