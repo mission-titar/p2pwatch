@@ -181,7 +181,7 @@ async def test_new_decision_is_recorded_emitted_and_nudged(
     assert observability.logger.lines == [
         _decisions_line(_HASH_DL, filename=_DL_NAME, changes="062A none → download")
     ]
-    assert observability.notifier.node_ids == [_NODE_ID]
+    assert observability.node_ids == [_NODE_ID]
     assert waker.woken_subjects == [WakeSubject.DOWNLOAD]
 
 
@@ -217,7 +217,7 @@ async def test_multi_segment_file_records_both_segments_then_is_idempotent(
             _HASH_MULTI, filename=_MULTI_NAME, changes="062A none → download, 062B none → download"
         )
     ]
-    [(_, notification)] = observability.notifier.calls
+    [(_, notification)] = observability.notifications
     assert isinstance(notification, TierRise)
     assert (notification.tier, notification.target_titles) == (
         DecisionTier.DOWNLOAD,
@@ -285,7 +285,7 @@ async def test_a_refused_second_decision_writes_none_and_the_next_judgement_redo
             _HASH_MULTI, filename=_MULTI_NAME, changes="062A none → download, 062B none → download"
         )
     ]
-    assert observability.notifier.node_ids == [_NODE_ID]
+    assert observability.node_ids == [_NODE_ID]
 
 
 @pytest.mark.asyncio
@@ -409,7 +409,7 @@ async def test_a_target_no_name_supports_is_retracted_without_nudge(
     assert observability.logger.lines == [
         _decisions_line(_HASH_CAT, filename=_DISCARD_NAME, changes="062A notify → retracted")
     ]
-    assert observability.notifier.calls == []
+    assert observability.notifications == []
     assert waker.woken_subjects == []
 
 

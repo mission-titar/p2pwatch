@@ -32,7 +32,8 @@ from p2pwatch.domain.work_dependencies import BUGS, status_reading_dependency, w
 from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
-from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
+from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 _NODE_ID = NodeId("titar-node-1")
 _UNREACHABLE = RelayedLogLine(
@@ -61,22 +62,16 @@ async def _sent(
     min_free_bytes: int | None = _TEN_GIB,
 ) -> list[Notification]:
     """The notifications sent when the health of ``on`` under ``rule`` changes."""
-    notifier = FakeNotifier()
-    dispatcher = ObservabilityDispatcher(
-        logger=FakeLogger(),
-        node_metric_writer=FakeNodeMetricStore(),
-        current_notifier=lambda: notifier,
-        notification_timeout_seconds=5.0,
-        record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
-        service_dependencies=notification_service_dependencies(notifier.services()),
-    )
+    observability = ObservabilityOverFakes()
     alerter = HealthAlerter(
-        observability_dispatcher=dispatcher, node_id=_NODE_ID, min_free_bytes=min_free_bytes
+        observability_dispatcher=observability.dispatcher,
+        node_id=_NODE_ID,
+        min_free_bytes=min_free_bytes,
     )
     await alerter.send(
         HealthTransition(dependency=on, rule=rule, previous=previous, current=current)
     )
-    return [notification for _, notification in notifier.calls]
+    return [notification for _, notification in observability.notifications]
 
 
 @pytest.mark.asyncio

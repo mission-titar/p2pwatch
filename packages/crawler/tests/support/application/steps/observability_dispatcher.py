@@ -2,7 +2,10 @@
 
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.notification_sends import notification_service_dependencies
+from p2pwatch.domain.observability.policy import Audience
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_node_metric_store import FakeNodeMetricStore
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
@@ -26,3 +29,12 @@ class ObservabilityOverFakes:
             record_check=NodeHealth(logger=FakeLogger(), subscribers=()).record,
             service_dependencies=notification_service_dependencies(self.notifier.services()),
         )
+
+    @property
+    def notifications(self) -> list[tuple[Audience, Notification]]:
+        """Each notification, with the audience of the service it is for, oldest first."""
+        return self.notifier.calls
+
+    @property
+    def node_ids(self) -> list[NodeId]:
+        return [notification.node_id for _, notification in self.notifications]

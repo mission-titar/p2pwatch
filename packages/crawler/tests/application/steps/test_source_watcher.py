@@ -466,7 +466,7 @@ async def test_a_source_useful_on_two_files_in_one_round_is_new_once() -> None:
             target_titles=(TargetTitle(target_id=TargetId("062A"), title="t"),),
         )
     ]
-    assert observability.notifier.node_ids == [NODE_ID]
+    assert observability.node_ids == [NODE_ID]
 
 
 @pytest.mark.asyncio
@@ -719,7 +719,7 @@ def _real_watcher(
 def _alerts(observability: ObservabilityOverFakes) -> list[SourceAlert]:
     """The source alerts, the only notifications of a round without completion."""
     alerts = []
-    for _, notification in observability.notifier.calls:
+    for _, notification in observability.notifications:
         assert isinstance(notification, SourceAlert)
         alerts.append(notification)
     return alerts

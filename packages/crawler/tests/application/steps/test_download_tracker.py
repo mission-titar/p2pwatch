@@ -187,7 +187,7 @@ async def test_already_completed_shared_hash_is_not_recompleted() -> None:
     )
     await cycle.run_once()
     assert tracked_download_store.completed_at == {}
-    assert observability.notifier.calls == []
+    assert observability.notifications == []
 
 
 @pytest.mark.asyncio
@@ -232,7 +232,7 @@ async def test_failed_shared_hash_is_resurrected_and_notified() -> None:
     await cycle.run_once()
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     # No observation, no decision, no queued target: the hash names the file, no target is named.
-    [(_, notification)] = observability.notifier.calls
+    [(_, notification)] = observability.notifications
     assert notification == CompletedDownload(target_titles=(), filename=HASH_A, node_id=NODE_ID)
 
 
@@ -256,7 +256,7 @@ async def test_a_completion_names_the_clean_file_and_every_download_target_of_th
         observability_dispatcher=observability.dispatcher,
     )
     await cycle.run_once()
-    [(_, notification)] = observability.notifier.calls
+    [(_, notification)] = observability.notifications
     assert notification == CompletedDownload(
         target_titles=(
             TargetTitle(target_id=TargetId("062A"), title="t"),

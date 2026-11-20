@@ -216,7 +216,7 @@ async def test_the_crawler_starts_under_its_node_id_then_runs_each_work(
     assert crawl.logger.lines == [
         LoggedLine(level="info", message="crawler started: node_id=titar-node")
     ]
-    assert crawl.observability.notifier.calls == [
+    assert crawl.observability.notifications == [
         (
             Audience.OPERATIONS,
             RelayedLogLine(
@@ -258,7 +258,7 @@ async def test_download_enabled_shows_in_the_start(
         LoggedLine(level="info", message="crawler started: node_id=titar-node"),
         LoggedLine(level="info", message="download enabled: download loop armed"),
     ]
-    assert crawl.observability.notifier.calls == [
+    assert crawl.observability.notifications == [
         (
             Audience.OPERATIONS,
             RelayedLogLine(
@@ -361,7 +361,7 @@ def test_a_completion_still_sending_at_the_shutdown_is_sent_before_the_run_retur
     # The shutdown comes as the completion starts its send, which then lasts 0.5 s.
     virtual_loop.run_until_complete(crawl.run_until_both_works_start_then_stop())
 
-    assert crawl.observability.notifier.calls[-1] == (
+    assert crawl.observability.notifications[-1] == (
         Audience.COMMUNITY,
         CompletedDownload(
             target_titles=(TargetTitle(target_id=TargetId("062A"), title="t"),),
