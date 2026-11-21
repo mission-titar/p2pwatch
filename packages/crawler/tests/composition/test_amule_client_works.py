@@ -25,6 +25,7 @@ from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
@@ -245,6 +246,18 @@ async def test_the_works_over_a_client_built_anew_send_their_requests_to_it_alon
         ("search 'titar' amuled ed2k", True),
         ("search 'keroro' amuled kad", True),
         ("search 'titar' amuled kad", True),
+    ]
+
+
+async def test_each_work_over_the_client_serves_its_function_the_status_reading_none(
+    node: _Node,
+) -> None:
+    works = node.client_works(downloading=True).over(node.client(FakeAmuleApi()))
+
+    assert [(str(supervised.work), supervised.function) for supervised in works] == [
+        ("status reading amuled", None),
+        *[(tracking, CrawlerFunction.DOWNLOADS) for tracking in _TRACKING],
+        *[(search, CrawlerFunction.CRAWL) for search in _SEARCHES],
     ]
 
 

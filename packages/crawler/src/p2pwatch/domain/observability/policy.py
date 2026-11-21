@@ -13,6 +13,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import assert_never
 
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.decision_tier import DecisionTier
@@ -27,6 +28,7 @@ from p2pwatch.domain.observability.events import (
     ClientReachableAgain,
     ClientUnreachable,
     ClientUnreachableLasting,
+    CrawlerFunctionLost,
     CrawlerStarted,
     DecisionChange,
     DecisionsRecorded,
@@ -38,7 +40,6 @@ from p2pwatch.domain.observability.events import (
     NotificationsNotSaved,
     NotificationsSavedAgain,
     ObservationRecorded,
-    RebuiltInVain,
     SearchExecuted,
     SearchFailed,
     SourceFirstUseful,
@@ -64,6 +65,14 @@ from p2pwatch.domain.observability.notification import (
     TierRise,
 )
 from p2pwatch.domain.observability.severity import Severity
+
+# The works of each function as the alert of its loss names them all.
+_WORKS_OF = {
+    CrawlerFunction.WEBUI: "its thread watch",
+    CrawlerFunction.NOTIFICATIONS: "every notification sending",
+    CrawlerFunction.CRAWL: "every search",
+    CrawlerFunction.DOWNLOADS: "every download and source tracking",
+}
 
 
 class Audience(Enum):
@@ -381,11 +390,11 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return _relayed(
                 Severity.INFO, message="notifications saved again", node_id=event.node_id
             )
-        case RebuiltInVain():
+        case CrawlerFunctionLost():
             return _relayed(
                 Severity.WARNING,
-                message=f"{event.restartable} rebuilt {event.rebuilds} times in vain: "
-                "the crawler restarts",
+                message=f"{event.function.value} lost: {_WORKS_OF[event.function]} failing "
+                f"after {event.rebuilds} rebuilds: the crawler restarts",
                 node_id=event.node_id,
             )
         case SourceFirstUseful():

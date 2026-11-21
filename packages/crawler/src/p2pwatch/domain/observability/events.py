@@ -8,6 +8,7 @@ DOMAIN ring (pure). One FROZEN dataclass per salient observable fact; tagged uni
 from dataclasses import dataclass
 from typing import Literal
 
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.file_key import FileKey
 from p2pwatch.domain.file_target_decision import FileTargetDecision
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -158,9 +159,9 @@ class NotificationsSavedAgain:
 
 
 @dataclass(kw_only=True, frozen=True)
-class RebuiltInVain:
-    # An object, such as the aMule client, rebuilt ``rebuilds`` times in vain: the crawler restarts.
-    restartable: str
+class CrawlerFunctionLost:
+    # A function, such as the crawl, lost after ``rebuilds`` rebuilds in vain: the crawler restarts.
+    function: CrawlerFunction
     rebuilds: int
     node_id: NodeId
 
@@ -213,7 +214,7 @@ type Event = (
     | DiskSpaceLow
     | NotificationsNotSaved
     | NotificationsSavedAgain
-    | RebuiltInVain
+    | CrawlerFunctionLost
     | SourceFirstUseful
     | SourceReappeared
     | CrawlerStarted

@@ -1,11 +1,12 @@
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 
 
-def test_it_reads_as_the_object_rebuilt_in_vain_and_how_many_times() -> None:
-    error = CrawlerRestartError("client amuled", rebuilds=3)
+def test_it_reads_as_the_function_lost_and_after_how_many_rebuilds() -> None:
+    error = CrawlerRestartError(CrawlerFunction.CRAWL, rebuilds=3)
 
-    assert (str(error), error.restartable, error.rebuilds) == (
-        "client amuled rebuilt 3 times in vain",
-        "client amuled",
+    assert (str(error), error.function, error.rebuilds) == (
+        "the crawl lost after 3 rebuilds",
+        CrawlerFunction.CRAWL,
         3,
     )

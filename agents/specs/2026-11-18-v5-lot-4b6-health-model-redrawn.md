@@ -304,8 +304,8 @@ kad = ExternalDependency(name="channel amuled kad", rules={
 await node_health.record(on=kad, rule=CHANNEL_NOT_CONNECTED, detected=not status.kad.connected)
 # node_health: logs the change, dispatches its alert; the dispatcher logs it and leaves it in the outbox
 
-# application: the supervisor, once a turn has ended
-self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild after 1, 2, then 4 min
+# application: the supervisor, once a turn has ended (Corrected: per work, D32)
+over.record_turn(supervised, met_a_bug=met_a_bug)  # one work failing: rebuild after 1, 2, then 4 min
 ```
 
 ### Block 5, today's alerts held

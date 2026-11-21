@@ -893,16 +893,24 @@ repart pas et ne finit pas. Une reconstruction qui lève laisse gardé l'objet f
 fermeture laisse tel quel, et se retente après l'attente suivante. Une reconstruction est vaine quand un
 `Work` de l'objet rencontre 3 bugs d'affilée après elle, ou quand elle a levé, le compte repartant
 de zéro une fois sain chaque `Work` passé en échec, moins de 2 bugs sur ses 10 derniers tours : un
-tour sain parmi des bugs ne le remet pas à zéro. Après trois, la cause est tenue pour partagée (les connexions aux
-bases, le moteur de matching), que seul un processus neuf renouvelle : comme un superviseur OTP
-au-delà de sa borne, le `Supervisor` arrête les `Work` de l'objet, puis tous, et finit sa
-supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie alors l'alerte
-`client amuled rebuilt 3 times in vain: the crawler restarts` avec ce qui reste dans la boîte
-d'envoi, puis lève l'erreur : la ligne de commande sort en 1 et Docker relance le crawler entier,
-`amuled` intact. Un nœud qui échoue toujours redémarre ainsi sans fin, 7 minutes et son démarrage
-au moins entre deux fois.
+tour sain parmi des bugs ne le remet pas à zéro. Après trois, rien ne distingue un bug propre au
+`Work` d'un état partagé (les connexions aux bases, le moteur de matching) qu'un processus neuf
+renouvellerait : l'objet reste non réparé, plus reconstruit avant que son compte reparte de zéro,
+ses `Work` tournant toujours, ceux en échec échouant seuls. Chaque `Work` sert une fonction du
+crawler (`CrawlerFunction`) : la webui, les notifications, le crawl (les recherches de chaque client
+P2P) et, sur un nœud qui télécharge, les téléchargements (le suivi des téléchargements et des
+sources) ; la lecture du statut n'en sert aucune. Une fonction est perdue quand chaque objet qui la
+sert est non réparé, qu'aucun de ses `Work` n'est sain et qu'un au moins est en échec, un objet
+dont la troisième reconstruction a levé, qui ne tient plus de `Work`, comptant comme en échec :
+comme un superviseur OTP au-delà de sa borne, le `Supervisor` arrête alors tous les `Work` et finit
+sa supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie l'alerte
+`the crawl lost: every search failing after 3 rebuilds: the crawler restarts` avec ce qui reste dans
+la boîte d'envoi, puis lève l'erreur : la ligne de commande sort en 1 et Docker relance le crawler
+entier, `amuled` intact. Un nœud qui échoue toujours redémarre ainsi sans fin, 7 minutes et son
+démarrage au moins entre deux fois.
 Un bug qui revient sur un seul mot-clé, entre les tours sains des autres `Work`, reconstruit le
-client : chacun garde sa ligne et sa trace. Un réseau en panne n'est jamais réparé par un
+client, puis le laisse non réparé, le crawl que servent ses autres recherches n'étant pas perdu :
+chaque bug garde sa ligne et sa trace. Un réseau en panne n'est jamais réparé par un
 redémarrage : seuls les bugs redémarrent. `AmuleClientRestartableBuilder`
 (`composition/amule_client_restartable.py`) connecte un client neuf et rend un
 `AmuleClientRestartable`, ce client et ses `Work` par `AmuleClientWorks.over`, dont la fermeture
@@ -912,7 +920,7 @@ et rend la surveillance de ce thread (`WebuiThreadWatch`, qui regarde chaque min
 tourne encore : un thread terminé est un bug), que la fermeture arrête ; une construction coupée pendant que
 le thread se lie arrête ce thread. Un port pris ailleurs ne fait pas lever la construction : le
 thread neuf se termine, sa surveillance le retrouve terminé, et après trois reconstructions vaines
-le crawler redémarre. Le notifieur en est un aussi (`composition/notifier_restartable.py`) :
+la webui est perdue : le crawler redémarre. Le notifieur en est un aussi (`composition/notifier_restartable.py`) :
 `NotifierRestartableBuilder` construit un notifieur neuf et rend le travail du notifieur sur lui,
 que la fermeture laisse tel quel ; l'envoi qu'arrête la reconstruction garde son entrée, que le
 travail neuf envoie. Les parties des services sont construites une fois, sur les services d'un
@@ -947,7 +955,7 @@ bug : ce sont des objets neufs, même si leurs tours d'avant restent jugés.
 | Sous-système | Emplacement (sous `packages/crawler/src/p2pwatch/` sauf mention) |
 |---|---|
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/webui_restartable.py` (`WebuiRestartableBuilder`, la webui telle que le nœud la construit à chaque redémarrage), `composition/notifier_restartable.py` (`NotifierRestartableBuilder`, le notifieur tel que le nœud le construit à chaque redémarrage) |
-| Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`) |
+| Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`), `domain/crawler_function.py` (`CrawlerFunction`, ce que sert chaque `Work`) |
 | Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `webui_thread_watch.py` (`WebuiThreadWatch`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |

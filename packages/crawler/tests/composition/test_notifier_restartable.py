@@ -17,6 +17,7 @@ from p2pwatch.composition.notifier_restartable import (
     NotifierRestartableBuilder,
     notification_sending,
 )
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification_sends import (
     local_database_dependency,
@@ -55,7 +56,7 @@ class _Over(Work):
 
 
 def _works_over(notifier: AppriseNotifier, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(notifier), time_limit=timedelta(minutes=5))]
+    return [SupervisedWork(work=_Over(notifier), time_limit=timedelta(minutes=5), function=None)]
 
 
 class TestNotifierRestartableBuilder(RestartableBuilderContract):
@@ -108,7 +109,13 @@ def test_the_sending_takes_one_send_s_timeout_and_the_margin() -> None:
         sender, notification_timeout_seconds=5.0, services=ONE_SERVICE_PER_AUDIENCE
     )
 
-    assert works == [SupervisedWork(work=sender, time_limit=timedelta(minutes=5, seconds=5))]
+    assert works == [
+        SupervisedWork(
+            work=sender,
+            time_limit=timedelta(minutes=5, seconds=5),
+            function=CrawlerFunction.NOTIFICATIONS,
+        )
+    ]
 
 
 def test_no_service_has_nothing_to_send_and_so_no_sending() -> None:

@@ -11,6 +11,7 @@ from p2pwatch.application.ports.driven.restartable_builder import RestartableBui
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.observability.notification_sends import NotificationService
 
 
@@ -35,7 +36,9 @@ def notification_sending(
         return ()
     # One send per turn: its timeout, then the margin.
     time_limit = timedelta(seconds=notification_timeout_seconds) + TIME_LIMIT_MARGIN
-    return [SupervisedWork(work=sender, time_limit=time_limit)]
+    return [
+        SupervisedWork(work=sender, time_limit=time_limit, function=CrawlerFunction.NOTIFICATIONS)
+    ]
 
 
 class NotifierRestartable(Restartable[SupervisedWork]):

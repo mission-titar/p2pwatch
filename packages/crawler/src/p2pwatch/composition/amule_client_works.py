@@ -39,6 +39,7 @@ from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.download.disk_space import download_disk_dependency
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.models import TargetSegment
@@ -160,8 +161,12 @@ class DownloadSteps:
             logger=StdlibLogger(SourceWatcher.__module__),
         )
         return (
-            SupervisedWork(work=download_cycle, time_limit=time_limit),
-            SupervisedWork(work=source_watcher, time_limit=time_limit),
+            SupervisedWork(
+                work=download_cycle, time_limit=time_limit, function=CrawlerFunction.DOWNLOADS
+            ),
+            SupervisedWork(
+                work=source_watcher, time_limit=time_limit, function=CrawlerFunction.DOWNLOADS
+            ),
         )
 
 
@@ -230,7 +235,9 @@ class AmuleClientWorks:
         )
         return works_in_start_order(
             status_watcher=SupervisedWork(
-                work=status_watcher, time_limit=self._time_limits.of_status_reading()
+                work=status_watcher,
+                time_limit=self._time_limits.of_status_reading(),
+                function=None,
             ),
             tracking=(
                 ()

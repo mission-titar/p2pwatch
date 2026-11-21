@@ -11,6 +11,7 @@ from p2pwatch.application.ports.driven.restartable_builder import RestartableBui
 from p2pwatch.application.steps.webui_thread_watch import WebuiThreadWatch
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
+from p2pwatch.domain.crawler_function import CrawlerFunction
 
 
 class WebuiThreadBuilder(Protocol):
@@ -28,7 +29,9 @@ def webui_thread_watch_over(
     """The watch over ``thread``, which finds it ended as a bug of the webui."""
     watch = WebuiThreadWatch(thread_alive=thread.is_alive, monotonic_clock=monotonic_clock)
     # Its turn awaits nothing: the margin alone.
-    return [SupervisedWork(work=watch, time_limit=TIME_LIMIT_MARGIN)]
+    return [
+        SupervisedWork(work=watch, time_limit=TIME_LIMIT_MARGIN, function=CrawlerFunction.WEBUI)
+    ]
 
 
 class WebuiRestartable(Restartable[SupervisedWork]):
