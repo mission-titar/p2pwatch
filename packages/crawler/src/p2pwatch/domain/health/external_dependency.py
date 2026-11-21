@@ -22,8 +22,6 @@ class HealthTransition:
     """A change of one part's state under one rule, such as the aMule client going from healthy to
     failing, with that rule's alert."""
 
-    dependency: "ExternalDependency"
-    rule: HealthRule
     alert: HealthAlert | None  # None: the change's log line alone tells it
     previous: HealthState
     current: HealthState
@@ -58,10 +56,6 @@ class ExternalDependency:
         self._latest_detected: dict[HealthRule, tuple[bool, ...]] = dict.fromkeys(rules, ())
         self._states = dict.fromkeys(rules, HealthState.UNKNOWN)
 
-    def state(self, rule: HealthRule) -> HealthState:
-        """Its state under ``rule``, such as failing once aMule did not answer 3 times in a row."""
-        return self._states[rule]
-
     def record(self, *, rule: HealthRule, detected: bool) -> HealthTransition | None:
         """Counts one check of ``rule``, ``detected`` whether it saw its case; returns the change of
         state it caused, if any."""
@@ -71,10 +65,4 @@ class ExternalDependency:
         self._latest_detected[rule], self._states[rule] = latest_detected, current
         if current is previous:
             return None
-        return HealthTransition(
-            dependency=self,
-            rule=rule,
-            alert=self._alerts[rule],
-            previous=previous,
-            current=current,
-        )
+        return HealthTransition(alert=self._alerts[rule], previous=previous, current=current)
