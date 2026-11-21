@@ -22,6 +22,8 @@ from p2pwatch.domain.observability.events import (
     ChannelField,
     ChannelRecovered,
     ChannelStatusSampled,
+    ClientPasswordAcceptedAgain,
+    ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachable,
     ClientUnreachableLasting,
@@ -339,6 +341,18 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case ClientReachableAgain():
             return _relayed(
                 Severity.INFO, message=f"{event.client_name} reachable again", node_id=event.node_id
+            )
+        case ClientPasswordRefused():
+            return _relayed(
+                Severity.WARNING,
+                message=f"{event.client_name} refuses the password: check the configuration",
+                node_id=event.node_id,
+            )
+        case ClientPasswordAcceptedAgain():
+            return _relayed(
+                Severity.INFO,
+                message=f"{event.client_name} accepts the password again",
+                node_id=event.node_id,
             )
         case FreeSpaceSampled():
             return ObservabilityPlan(

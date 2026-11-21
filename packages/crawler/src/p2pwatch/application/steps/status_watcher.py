@@ -1,8 +1,9 @@
 """Reads one client's status every minute: each reading feeds the channel gauges and the health
-of the client, whether it answers and whether any channel is connected, and of each channel.
+of the client, whether it answers, accepts our password and has any channel connected, and of each
+channel.
 
-A field aMule did not give records nothing, so while aMule does not answer each channel and the
-client's networks keep their health.
+A field aMule did not give records nothing, so while aMule does not answer each channel, the
+client's networks and its password keep their health.
 """
 
 from collections.abc import Mapping
@@ -25,6 +26,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     CONNECTED_TO_NO_NETWORK,
+    PASSWORD_REFUSED,
     STATUS_PERIOD,
     ChannelStatus,
     ClientStatus,
@@ -84,7 +86,10 @@ class StatusWatcher(Work):
         try:
             status = await self._client.status()
         except ClientAuthError:
-            raise  # a wrong password is configuration, not an outage: logged at each turn
+            await self._node_health.record(
+                on=self._client_dependency, rule=PASSWORD_REFUSED, detected=True
+            )
+            raise  # no status to publish: the supervisor logs the refusal at each turn
         except ClientError:  # a refused route too: a renamed /version must not end the crawler
             status = None
         self._publish(status)
@@ -100,6 +105,9 @@ class StatusWatcher(Work):
         for channel, dependency in self._channel_dependencies.items():
             await self._read_channel(channel, reading=channels.get(channel), on=dependency)
         if status is not None:
+            await self._node_health.record(
+                on=self._client_dependency, rule=PASSWORD_REFUSED, detected=False
+            )
             on_a_network = any(channel.connected for channel in status.channels)
             await self._node_health.record(
                 on=self._client_dependency, rule=CONNECTED_TO_NO_NETWORK, detected=not on_a_network

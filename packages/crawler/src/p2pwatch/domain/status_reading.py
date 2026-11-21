@@ -11,6 +11,8 @@ from p2pwatch.domain.observability.events import (
     ChannelDegraded,
     ChannelField,
     ChannelRecovered,
+    ClientPasswordAcceptedAgain,
+    ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachableLasting,
 )
@@ -50,6 +52,13 @@ CONNECTED_TO_NO_NETWORK = HealthRule(
     recovers_under=Detections(times=2, among_last=10),
 )
 
+# No wait repairs a password: one refusal tells it, one answered reading ends it.
+PASSWORD_REFUSED = HealthRule(
+    name="password refused",
+    fails_at=Detections(times=1, among_last=1),
+    recovers_under=Detections(times=1, among_last=1),
+)
+
 # A channel whose network refuses its searches, such as Kad answering with an error.
 SEARCHES_FAILED = HealthRule(
     name="searches failed",
@@ -59,8 +68,8 @@ SEARCHES_FAILED = HealthRule(
 
 
 def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDependency:
-    """The client, judged by whether its API answers and whether any of its channels is
-    connected: "client amuled"."""
+    """The client, judged by whether its API answers, accepts our password and has any of its
+    channels connected: "client amuled"."""
     return ExternalDependency(
         name=f"client {client_name}",
         client_name=client_name,
@@ -74,6 +83,12 @@ def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDe
                 when_healthy_again=ClientReachableAgain(client_name=client_name, node_id=node_id),
             ),
             CONNECTED_TO_NO_NETWORK: None,
+            PASSWORD_REFUSED: HealthAlert(
+                when_failing=ClientPasswordRefused(client_name=client_name, node_id=node_id),
+                when_healthy_again=ClientPasswordAcceptedAgain(
+                    client_name=client_name, node_id=node_id
+                ),
+            ),
         },
     )
 
