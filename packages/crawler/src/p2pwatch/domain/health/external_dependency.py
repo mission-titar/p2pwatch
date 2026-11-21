@@ -1,4 +1,5 @@
-"""The parts of the node whose health is tracked, each rule with the alert it sends, or none."""
+"""What the node depends on and does not control, its health tracked, each rule with the alert it
+sends, or none."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -39,7 +40,8 @@ class HealthTransition:
 
 
 class ExternalDependency:
-    """A part of the node whose health is tracked, such as the aMule client or its Kad channel."""
+    """Something the node depends on and does not control, its health tracked, such as the aMule
+    client or its Kad channel."""
 
     def __init__(
         self,
