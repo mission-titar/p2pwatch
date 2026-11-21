@@ -203,6 +203,14 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(Severity.INFO, message="amuled reachable again"),
     ),
     (
+        ev.ClientPasswordRefused(client_name=ClientName("amuled"), node_id=_NODE_ID),
+        _relayed(Severity.WARNING, message="amuled refuses the password: check the configuration"),
+    ),
+    (
+        ev.ClientPasswordAcceptedAgain(client_name=ClientName("amuled"), node_id=_NODE_ID),
+        _relayed(Severity.INFO, message="amuled accepts the password again"),
+    ),
+    (
         ev.FreeSpaceSampled(free_bytes=5_000),
         ObservabilityPlan(
             severity=Severity.DEBUG,

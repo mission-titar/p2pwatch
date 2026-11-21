@@ -122,6 +122,19 @@ class ClientReachableAgain:
 
 
 @dataclass(kw_only=True, frozen=True)
+class ClientPasswordRefused:
+    # The client's API refused our password: once, until it accepts it again.
+    client_name: ClientName
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class ClientPasswordAcceptedAgain:
+    client_name: ClientName
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class FreeSpaceSampled:
     free_bytes: int  # the download cycle's statvfs on the output directory
 
@@ -194,6 +207,8 @@ type Event = (
     | ChannelRecovered
     | ClientUnreachableLasting
     | ClientReachableAgain
+    | ClientPasswordRefused
+    | ClientPasswordAcceptedAgain
     | FreeSpaceSampled
     | DiskSpaceLow
     | NotificationsNotSaved

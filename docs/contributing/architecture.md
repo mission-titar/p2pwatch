@@ -838,7 +838,12 @@ l'a refusée (`SearchFailedError`) ; 3 refus d'affilée mettent le canal en éch
 n'enregistre rien, si bien qu'une panne d'aMule ne guérit pas le canal.
 Le client a une seconde règle, « connected to no network » : la lecture d'état y enregistre si
 aucun de ses canaux n'est connecté, que le nœud télécharge ou non ; 6 lectures d'affilée le mettent
-en échec, moins de 2 sur les 10 dernières le rendent sain, et aucune alerte ne la nomme.
+en échec, moins de 2 sur les 10 dernières le rendent sain, et aucune alerte ne la nomme. Il en a
+une troisième, « password refused » : la lecture d'état y enregistre si amuled a refusé notre mot
+de passe (`ClientAuthError`). Un refus suffit pour l'échec (« amuled refuses the password: check
+the configuration »), une lecture qui répond pour redevenir sain (« amuled accepts the password
+again »), et une lecture sans réponse n'enregistre rien. Le tour qui a vu le refus lève toujours
+une erreur attendue, écrite par le `Supervisor` à chaque lecture, et le nœud tourne.
 Le disque des téléchargements est une partie aussi (`download disk`) : à chaque mesure de l'espace
 libre, la décision de téléchargement enregistre s'il est sous son plancher. Une mesure basse suffit
 pour l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
