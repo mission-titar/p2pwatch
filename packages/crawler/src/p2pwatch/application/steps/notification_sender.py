@@ -3,14 +3,14 @@ oldest first, such as a tier rise to the community's Discord webhook, and record
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from typing import Literal, Protocol
+from typing import Literal
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.notifier import Notifier
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.work import Work
 from p2pwatch.domain.health.external_dependency import ExternalDependency
-from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.observability.notification_sends import (
     SAVES_FAILED,
     SENDS_FAILED,
@@ -18,14 +18,6 @@ from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
     PendingNotification,
 )
-
-
-# Records one check of a rule on a part, such as ``NodeHealth.record``.
-class CheckRecorder(Protocol):
-    async def __call__(
-        self, *, on: ExternalDependency, rule: HealthRule, detected: bool
-    ) -> None: ...
-
 
 # How a send that met no bug ended: failed is refused by its service, or past the timeout.
 type _SendEnd = Literal["sent", "failed"]
@@ -42,7 +34,7 @@ class NotificationSender(Work):
         outbox: NotificationOutbox,
         notifier: Notifier,
         notification_timeout_seconds: float,
-        record_check: CheckRecorder,
+        node_health: NodeHealth,
         service_dependencies: Mapping[NotificationService, ExternalDependency],
         local_database: ExternalDependency,
         logger: Logger,
@@ -51,7 +43,7 @@ class NotificationSender(Work):
         self._outbox = outbox
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
-        self._record_check = record_check
+        self._node_health = node_health
         self._service_dependency = service_dependencies[service]
         self._local_database = local_database
         self._logger = logger
@@ -72,11 +64,15 @@ class NotificationSender(Work):
         end = await self._end_of_send(entry)  # a cancellation keeps the entry for the next turn
         self._outbox.remove(entry)
         saves_failed = self._outbox.latest_save_failed
-        await self._record_check(on=self._local_database, rule=SAVES_FAILED, detected=saves_failed)
+        await self._node_health.record(
+            on=self._local_database, rule=SAVES_FAILED, detected=saves_failed
+        )
         if isinstance(end, Exception):
             raise end
         detected = end == "failed"
-        await self._record_check(on=self._service_dependency, rule=SENDS_FAILED, detected=detected)
+        await self._node_health.record(
+            on=self._service_dependency, rule=SENDS_FAILED, detected=detected
+        )
 
     async def send_what_is_left(self) -> bool:
         """Sends every notification left for its service, the oldest first, as its turns do, a bug

@@ -474,7 +474,7 @@ class CrawlerComposition(CrawlerRunner):
                         outbox=outbox,
                         notifier=built,
                         notification_timeout_seconds=observability.notification_timeout_seconds,
-                        record_check=node_health.record,
+                        node_health=node_health,
                         service_dependencies=service_parts,
                         local_database=local_database,
                         logger=StdlibLogger(NotificationSender.__module__),

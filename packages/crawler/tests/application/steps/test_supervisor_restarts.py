@@ -610,16 +610,16 @@ def _supervise_the_notifier(
     ``notifier`` until 1500 s at most; its builder, and the error a function lost ended it with."""
 
     def sending(_state: object, /) -> Sequence[SupervisedWork]:
-        record_check = NodeHealth(
+        node_health = NodeHealth(
             logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
-        ).record
+        )
         senders = [
             NotificationSender(
                 service=service,
                 outbox=outbox,
                 notifier=notifier,  # each rebuild in vain: the notifier still raises
                 notification_timeout_seconds=5.0,
-                record_check=record_check,
+                node_health=node_health,
                 service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
                 local_database=local_database_dependency(node_id=NodeId("n1")),
                 logger=FakeLogger(),
