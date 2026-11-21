@@ -39,7 +39,6 @@ from p2pwatch.adapters.driven.system_wall_clock import SystemWallClock
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.composition.crawler_composition import CrawlerComposition
-from p2pwatch.domain.client_errors import ClientAuthError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
@@ -535,17 +534,25 @@ async def test_a_notification_a_stop_left_unsent_is_sent_once_the_node_starts_ag
 
 
 @pytest.mark.asyncio
-async def test_a_new_node_records_its_id_even_when_amuled_refuses_its_password(
-    tmp_path: Path,
+async def test_a_node_whose_password_amuled_refuses_runs_alerts_and_logs_in_once(
+    *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
+    api = FakeAmuleApi(password="another")
+    alert = "amuled refuses the password: check the configuration"
+    dispatcher_logger = logging.getLogger(ObservabilityDispatcher.__module__)
+    sigterm = _SigtermAtRecord(alert, default_handler=signal.getsignal(signal.SIGTERM))
+    dispatcher_logger.addHandler(sigterm)
+    try:
+        with FakeAmuleApiServer(api) as server, caplog.at_level(logging.INFO):
+            # Returns at the SIGTERM, with no exception: the node ran.
+            await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
+    finally:
+        dispatcher_logger.removeHandler(sigterm)
 
-    with (
-        FakeAmuleApiServer(FakeAmuleApi(password="another")) as server,
-        pytest.raises(ClientAuthError),
-    ):
-        await asyncio.wait_for(_crawl(server, config_path=config_path), _WAIT_SECONDS)
-
+    assert alert in caplog.messages
+    # Every work called amuled meanwhile, each refused at once: the next login waits a minute.
+    assert [request.url.path for request in api.requests] == ["/api/v1/auth/login"]
     with closing(open_local(tmp_path / "local.db")) as local:
         assert SqliteNodeIdStore(local).read_node_id() is not None
 

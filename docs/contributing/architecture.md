@@ -843,7 +843,13 @@ une troisième, « password refused » : la lecture d'état y enregistre si amul
 de passe (`ClientAuthError`). Un refus suffit pour l'échec (« amuled refuses the password: check
 the configuration »), une lecture qui répond pour redevenir sain (« amuled accepts the password
 again »), et une lecture sans réponse n'enregistre rien. Le tour qui a vu le refus lève toujours
-une erreur attendue, écrite par le `Supervisor` à chaque lecture, et le nœud tourne.
+une erreur attendue, écrite par le `Supervisor` à chaque lecture, et le nœud tourne. Le client
+tolère un mot de passe refusé à sa connexion, au démarrage du nœud comme à une reconstruction,
+comme il tolère un amuled qui n'écoute pas encore. Après une connexion refusée, chaque appel lève
+`ClientAuthError` aussitôt, sans joindre amuleapi, jusqu'à la connexion suivante : 1 minute plus
+tard, puis deux fois plus tard à chaque refus, 30 minutes au plus. Le limiteur d'amuleapi bloque
+une IP 300 s après 5 connexions refusées en 60 s, et 30 minutes bornent l'attente d'un mot de passe
+corrigé.
 Le disque des téléchargements est une partie aussi (`download disk`) : à chaque mesure de l'espace
 libre, la décision de téléchargement enregistre s'il est sous son plancher. Une mesure basse suffit
 pour l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour

@@ -10,6 +10,7 @@ mandates and Kad's "already on search list": the adapter signals, the caller dec
 import asyncio
 import json
 import logging
+import math
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
@@ -81,6 +82,11 @@ _KAD_SEPARATORS = re.compile(r'[ ()\[\]{}<>,._\-!?:;\\/"]')
 # Kad refuses a Kad word still on its search list: "not yet", someone else holds it.
 _KAD_WORD_HELD = "already on search list"
 
+# amuleapi locks an IP out for 300 s after 5 refused logins in 60 s: one a minute at most,
+# doubled at each refusal, so a password corrected meanwhile waits 30 min at most.
+_FIRST_WAIT_AFTER_A_REFUSED_LOGIN = timedelta(minutes=1)
+_LONGEST_WAIT_AFTER_A_REFUSED_LOGIN = timedelta(minutes=30)
+
 _logger = logging.getLogger(__name__)
 
 
@@ -124,6 +130,8 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         self._closed = False
         self._login_lock = asyncio.Lock()
         self._login_count = 0  # lets a call rejected with 401 tell whether another renewed it
+        self._next_login_at: MonotonicInstant | None = None  # set by a refused login
+        self._wait_after_a_refusal = _FIRST_WAIT_AFTER_A_REFUSED_LOGIN
         # Held from an ed2k start to its end: aMule's core keeps one ed2k search anchor.
         self._ed2k_lock = asyncio.Lock()
         # By channel and scope; on Kad, a keyword without a Kad word is a scope kept in memory.
@@ -174,13 +182,14 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             return http
 
     async def open(self) -> None:
-        """Logs in at startup, tolerating an amuled not listening yet: both containers start
-        together, so the crawler routinely knocks first, and the next call logs in. A refused
-        password still raises."""
+        """Logs in at startup, tolerating an amuled not listening yet, as both containers start
+        together, and a refused password, which the status reading alerts on."""
         try:
             await self._connect()
         except ApiUnreachableError as error:
             _logger.warning("amuled unreachable at startup (%s): tolerated, the loops retry", error)
+        except ApiAuthError as error:
+            _logger.warning("login refused at startup (%s): tolerated", error)
 
     async def close(self) -> None:
         """Revokes the token, then closes the session for good, after any login in flight.
@@ -388,6 +397,7 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """One request on the session, opened first if there is none, decoded into a JSON object."""
+        self._refuse_while_the_login_waits()  # a session kept would send its refused token
         http = self._http if self._http is not None else await self._connect()
         return await self._send_with_relogin(
             http, method=method, path=path, body=body, params=params
@@ -432,7 +442,9 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
         return _decode(response)
 
     async def _login(self, http: httpx.AsyncClient) -> None:
-        """Mints a token and arms the Authorization header (the bearer wins over the cookie)."""
+        """Mints a token and arms the Authorization header (the bearer wins over the cookie); once
+        refused, refuses at once until its wait has passed, for callers queued on the lock too."""
+        self._refuse_while_the_login_waits()
         response = await _send(
             http,
             method="POST",
@@ -442,7 +454,10 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             params={"include_token": "true"},
         )
         if response.status_code == httpx.codes.UNAUTHORIZED:
-            raise ApiAuthError("amuleapi refused the admin password")
+            wait = self._wait_after_a_refusal
+            self._next_login_at = self._monotonic_clock.now() + wait
+            self._wait_after_a_refusal = min(2 * wait, _LONGEST_WAIT_AFTER_A_REFUSED_LOGIN)
+            raise _password_refused(next_login_in=wait)
         if not response.is_success:
             raise error_from_response(response)
         token = _decode(response).get("token")
@@ -450,6 +465,15 @@ class AmuleApiClient(SearchClient, DownloadClient, SourceClient, StatusClient):
             raise ApiAuthError("POST /auth/login answered without a token")
         http.headers["Authorization"] = f"Bearer {token}"
         self._login_count += 1
+        self._next_login_at, self._wait_after_a_refusal = None, _FIRST_WAIT_AFTER_A_REFUSED_LOGIN
+
+    def _refuse_while_the_login_waits(self) -> None:
+        """Raises the refusal at once until the next login, without asking amuleapi."""
+        if self._next_login_at is None:
+            return
+        left = self._next_login_at - self._monotonic_clock.now()
+        if left > timedelta(0):
+            raise _password_refused(next_login_in=left)
 
     async def _collect(
         self,
@@ -507,6 +531,11 @@ async def _send(
         raise ApiUnreachableError(
             f"{method} {path}: no whole answer within {bound_seconds:g} s"
         ) from expiry
+
+
+def _password_refused(*, next_login_in: timedelta) -> ApiAuthError:
+    seconds = math.ceil(next_login_in.total_seconds())
+    return ApiAuthError(f"amuleapi refused the admin password: the next login in {seconds} s")
 
 
 def _decode(response: httpx.Response) -> dict[str, Any]:
