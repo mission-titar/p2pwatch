@@ -2,7 +2,8 @@
 built, until the shutdown is requested, then cancels them all; a turn that raises or outlasts its
 time limit fails alone, the others go on. It judges each work on its own turns, and rebuilds the
 object, such as the aMule client, one of whose works keeps meeting bugs, waiting longer each time;
-its third rebuild in vain ends the supervision with a ``CrawlerRestartError``."""
+its third rebuild in vain leaves it unrepaired, and a function of the crawler wholly lost, such as
+the crawl, every search failing, ends the supervision with a ``CrawlerRestartError``."""
 
 import asyncio
 from collections.abc import Sequence
@@ -16,6 +17,7 @@ from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
 from p2pwatch.application.steps.work import SupervisedWork, Work
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
@@ -30,8 +32,8 @@ BUGS = HealthRule(
     recovers_under=Detections(times=2, among_last=10),
 )
 
-# Past three, the cause is taken to lie in something shared, which only a new process renews: the
-# supervision ends, as an OTP supervisor past its bound stops its children, then itself.
+# Past three, nothing tells a work's own bug from a shared state but a crawler restart: the object
+# is left unrepaired, and the crawler restarts only once a function is wholly lost.
 REBUILDS_IN_VAIN_AT_MOST = 3
 
 # Doubled after each rebuild in vain, 1, 2, then 4 min, as Kubernetes' CrashLoopBackOff waits.
@@ -50,7 +52,8 @@ class _WorkTurns:
     """Whether each latest turn of one work met a bug, such as a search's, kept across its
     object's rebuilds, and its turns since the latest."""
 
-    def __init__(self) -> None:
+    def __init__(self, function: CrawlerFunction | None) -> None:
+        self.function = function
         self.bugs = HealthState.UNKNOWN
         self._latest_met_a_bug: tuple[bool, ...] = ()
         self._since_build: tuple[bool, ...] = ()
@@ -75,7 +78,7 @@ class _WorkTurns:
 class SupervisedObject:
     """The supervisor's record of one object it rebuilds, such as the aMule client: its builder, the
     latest object built, whether each latest turn of each of its works met a bug, its rebuilds in
-    vain."""
+    vain, the third leaving it unrepaired."""
 
     def __init__(
         self,
@@ -88,7 +91,8 @@ class SupervisedObject:
         self.latest = first
         self._logger = logger
         # Each work's, by its name in the log: a work built anew is the same work.
-        self._works = {str(supervised.work): _WorkTurns() for supervised in first.works()}
+        self._works: dict[str, _WorkTurns] = {}
+        self._hold(first.works())
         # Rebuilt since its works were last all healthy: one failing again counts in vain.
         self._rebuilt = False
         # A rebuild decided: the last turns of the works it stops decide nothing.
@@ -96,19 +100,32 @@ class SupervisedObject:
         self._in_vain = 0
 
     @property
-    def rebuilds_in_vain(self) -> int:
-        """Its rebuilds in vain since its works were last all healthy, one that raised included."""
-        return self._in_vain
+    def unrepaired(self) -> bool:
+        """Whether its third rebuild in vain left it so: rebuilt no more until every work of it that
+        turned failing is healthy again."""
+        return self._in_vain >= REBUILDS_IN_VAIN_AT_MOST
+
+    def states_of(self, function: CrawlerFunction) -> list[HealthState]:
+        """The bugs' state of each of its works serving ``function``, each failing while it holds no
+        work, its third rebuild having raised."""
+        lost = self.unrepaired and self._works_stopped
+        return [
+            HealthState.FAILING if lost else turns.bugs
+            for turns in self._works.values()
+            if turns.function is function
+        ]
 
     def record_turn(self, supervised: SupervisedWork, *, met_a_bug: bool) -> bool:
         """Counts one turn of one of its works, such as a search that met a bug; whether a rebuild
-        is decided, which stops its works, or after three in vain, for good."""
+        is decided, which stops its works."""
         turns = self._works[str(supervised.work)]
         previous = turns.record(met_a_bug=met_a_bug)
         if self._works_stopped:
             return False
         if previous is HealthState.FAILING and not self._failing():
             self._rebuilt, self._in_vain = False, 0
+            return False
+        if self.unrepaired:
             return False
         if not self._rebuilt:
             if turns.bugs is not HealthState.FAILING:
@@ -119,11 +136,12 @@ class SupervisedObject:
         if not turns.failing_since_build():
             return False
         self.count_in_vain()
+        if self.unrepaired:
+            return False
         self._works_stopped = True
-        if self._in_vain < REBUILDS_IN_VAIN_AT_MOST:
-            in_vain = f"{self._in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
-            message = "restarting %s again, %s: bugs in its works"
-            self._logger.warning(message, self.builder, in_vain)
+        in_vain = f"{self._in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
+        message = "restarting %s again, %s: bugs in its works"
+        self._logger.warning(message, self.builder, in_vain)
         return True
 
     def _failing(self) -> bool:
@@ -144,12 +162,15 @@ class SupervisedObject:
         await self.latest.close()
         self.latest = await self.builder.build()
         works = self.latest.works()
-        for supervised in works:
-            self._works.setdefault(str(supervised.work), _WorkTurns())
+        self._hold(works)
         for turns in self._works.values():
             turns.rebuilt()
         self._works_stopped = False
         return works
+
+    def _hold(self, works: Sequence[SupervisedWork]) -> None:
+        for supervised in works:
+            self._works.setdefault(str(supervised.work), _WorkTurns(supervised.function))
 
 
 class Supervisor:
@@ -171,7 +192,7 @@ class Supervisor:
         # Each work's task while it runs, and the object it is over, which a rebuild stops it with.
         self._running: dict[asyncio.Task[None], SupervisedObject] = {}
         self._objects: dict[RestartableBuilder[SupervisedWork], SupervisedObject] = {}
-        # An object's third rebuild in vain, which ends the supervision.
+        # A function of the crawler wholly lost, which ends the supervision.
         self._restarts_decided: asyncio.Queue[CrawlerRestartError] = asyncio.Queue()
 
     async def build_first(
@@ -192,8 +213,8 @@ class Supervisor:
 
     async def supervise(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
         """Takes the turns of each object's works and runs each rebuild until the shutdown is
-        requested or an object's third rebuild in vain, arms the bound, cancels them, then raises
-        the latter's ``CrawlerRestartError``; a wait's exception escapes in a group."""
+        requested or a function is wholly lost, arms the bound, cancels them, then raises the
+        latter's ``CrawlerRestartError``; a wait's exception escapes in a group."""
         async with asyncio.TaskGroup() as group:
             for supervised in self._objects.values():
                 for work in supervised.latest.works():
@@ -228,15 +249,31 @@ class Supervisor:
 
     async def _rebuild(self, supervised: SupervisedObject, *, group: asyncio.TaskGroup) -> None:
         """Stops the works over the object, then has it rebuilt after 1, 2, then 4 min, a rebuild
-        that raised counting in vain; after three in vain, ends the supervision instead."""
+        that raised counting in vain; the third leaves it unrepaired, holding no work."""
         await self._stop_works_over(supervised)
-        while supervised.rebuilds_in_vain < REBUILDS_IN_VAIN_AT_MOST:
+        while True:
             await self._monotonic_clock.sleep(supervised.wait_before_rebuild())
             if await self._rebuilt(supervised, group=group):
                 return
             supervised.count_in_vain()
-        restart = CrawlerRestartError(str(supervised.builder), rebuilds=supervised.rebuilds_in_vain)
-        self._restarts_decided.put_nowait(restart)
+            if supervised.unrepaired:
+                self._restart_if_a_function_is_lost()
+                return
+
+    def _restart_if_a_function_is_lost(self) -> None:
+        """Ends the supervision once a function is wholly lost: every object serving it
+        unrepaired, every one of its works failing, one that never turned not failing."""
+        for function in CrawlerFunction:
+            states = {
+                supervised: supervised.states_of(function) for supervised in self._objects.values()
+            }
+            serving = [supervised for supervised, of_function in states.items() if of_function]
+            works = {state for of_function in states.values() for state in of_function}
+            lost = works == {HealthState.FAILING}
+            if lost and all(supervised.unrepaired for supervised in serving):
+                restart = CrawlerRestartError(function, rebuilds=REBUILDS_IN_VAIN_AT_MOST)
+                self._restarts_decided.put_nowait(restart)
+                return
 
     async def _stop_works_over(self, supervised: SupervisedObject) -> None:
         stopping = [task for task, over in self._running.items() if over is supervised]
@@ -271,6 +308,8 @@ class Supervisor:
             met_a_bug = await self._take_turn(supervised)
             if over.record_turn(supervised, met_a_bug=met_a_bug):
                 self._rebuilds_decided.put_nowait(over)
+            if over.unrepaired:
+                self._restart_if_a_function_is_lost()
 
     async def _wait(self, work: Work, *, after_a_bug: bool) -> None:
         """The work's own wait; after a bug, the later of it and ``WAIT_AFTER_A_BUG``."""

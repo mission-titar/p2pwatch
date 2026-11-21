@@ -11,6 +11,7 @@ from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import SearchFailedError
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
@@ -101,6 +102,7 @@ def keyword_searches(
                 channel_dependency=channel_of[search_worker.client_name, channel],
             ),
             time_limit=time_limit_of(keyword, channel=channel),
+            function=CrawlerFunction.CRAWL,
         )
         for search_worker in search_workers
         for channel in search_worker.channels

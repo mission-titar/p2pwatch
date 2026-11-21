@@ -12,6 +12,7 @@ from p2pwatch.application.steps.webui_thread_watch import (
     WebuiThreadWatch,
 )
 from p2pwatch.application.steps.work import SupervisedWork
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -98,7 +99,11 @@ class _Webui:
         watch = WebuiThreadWatch(
             thread_alive=thread.is_alive, monotonic_clock=FakeLoopMonotonicClock(self.loop)
         )
-        return [SupervisedWork(work=watch, time_limit=timedelta(minutes=5))]
+        return [
+            SupervisedWork(
+                work=watch, time_limit=timedelta(minutes=5), function=CrawlerFunction.WEBUI
+            )
+        ]
 
     def _works_over_a_thread(self, _state: object, /) -> Sequence[SupervisedWork]:
         """The first thread's watch at the first build, then a watch over a thread built anew."""
@@ -142,7 +147,7 @@ def test_a_webui_whose_rebuilt_threads_never_serve_is_rebuilt_three_times_in_vai
     webui.first_thread.end()
 
     # Its fourth thread found ended three times too: the crawler restarts.
-    with pytest.raises(CrawlerRestartError, match="^webui rebuilt 3 times in vain$"):
+    with pytest.raises(CrawlerRestartError, match="^the webui lost after 3 rebuilds$"):
         webui.run_for(1800.0)
 
     # Each thread's watch meets it ended three times, a minute apart, from a minute on; each

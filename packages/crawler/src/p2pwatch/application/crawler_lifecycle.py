@@ -8,13 +8,13 @@ from p2pwatch.application.steps.observability_dispatcher import ObservabilityDis
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.identifiers import NodeId
-from p2pwatch.domain.observability.events import CrawlerStarted, RebuiltInVain
+from p2pwatch.domain.observability.events import CrawlerFunctionLost, CrawlerStarted
 
 
 class CrawlerLifecycle:
     """Resumes the saved backoffs, announces the node online, re-evaluates the catalog if the
     policy changed, has the supervisor run the works of the objects it built, then sends the
-    notifications left, a third rebuild in vain's alert among them."""
+    notifications left, a function lost's alert among them."""
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class CrawlerLifecycle:
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
         """Runs until the shutdown is requested, arming the bound before the works are cancelled;
         returns once the notifications left in the outbox are sent, within that bound, or raises
-        the ``CrawlerRestartError`` of a third rebuild in vain once its alert is sent with them."""
+        the ``CrawlerRestartError`` of a function lost once its alert is sent with them."""
         self._backoff.resume_waits()
         self._logger.info("crawler started: node_id=%s", self._node_id)
         if self._download_enabled:
@@ -55,8 +55,8 @@ class CrawlerLifecycle:
             await self._supervisor.supervise(arm_shutdown_bound=arm_shutdown_bound)
         except CrawlerRestartError as restart:
             await self._observability_dispatcher.dispatch(
-                RebuiltInVain(
-                    restartable=restart.restartable,
+                CrawlerFunctionLost(
+                    function=restart.function,
                     rebuilds=restart.rebuilds,
                     node_id=self._node_id,
                 )

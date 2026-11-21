@@ -5,6 +5,7 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import FileTargetDecision, Retraction
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
@@ -238,12 +239,21 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ev.NotificationsSavedAgain(node_id=_NODE_ID),
         _relayed(Severity.INFO, message="notifications saved again"),
     ),
-    (
-        ev.RebuiltInVain(restartable="client amuled", rebuilds=3, node_id=_NODE_ID),
-        _relayed(
-            Severity.WARNING, message="client amuled rebuilt 3 times in vain: the crawler restarts"
-        ),
-    ),
+    *[
+        (
+            ev.CrawlerFunctionLost(function=function, rebuilds=3, node_id=_NODE_ID),
+            _relayed(
+                Severity.WARNING,
+                message=f"{lost}: {works} failing after 3 rebuilds: the crawler restarts",
+            ),
+        )
+        for function, lost, works in [
+            (CrawlerFunction.WEBUI, "the webui lost", "its thread watch"),
+            (CrawlerFunction.NOTIFICATIONS, "the notifications lost", "every notification sending"),
+            (CrawlerFunction.CRAWL, "the crawl lost", "every search"),
+            (CrawlerFunction.DOWNLOADS, "the downloads lost", "every download and source tracking"),
+        ]
+    ],
     (
         ev.CrawlerStarted(download_enabled=True, node_id=_NODE_ID),
         _relayed(

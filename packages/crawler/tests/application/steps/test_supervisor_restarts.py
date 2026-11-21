@@ -1,9 +1,10 @@
 """The supervisor judges each work of an object, such as the aMule client's searches, on its own
 turns, kept across a rebuild, and rebuilds the object in a task of its own once 3 turns in a row of
 one work met a bug: it stops and awaits its works, then, after 1, 2, then 4 min, closes it, has its
-builder build another and runs that one's works. At the third rebuild in vain, one that raised
-included, it ends its supervision with a ``CrawlerRestartError``; the count resets once every work
-that turned failing is healthy again, and the shutdown closes the latest of each. The tests share
+builder build another and runs that one's works. Its third rebuild in vain, one that raised
+included, leaves it unrepaired, and once a function, such as the crawl, is wholly lost, the
+supervision ends with a ``CrawlerRestartError``; the count resets once every work that turned
+failing is healthy again, and the shutdown closes the latest of each. The tests share
 one simulated time, on the virtual-time loop."""
 
 import asyncio
@@ -19,6 +20,7 @@ from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.notification import RelayedLogLine
@@ -40,7 +42,7 @@ from tests.support.application.steps.observability_dispatcher import Observabili
 from tests.support.virtual_time import VirtualLoop
 
 _DAY = timedelta(days=1)
-_CLIENT_IN_VAIN = "client amuled rebuilt 3 times in vain"
+_CRAWL_LOST = "the crawl lost after 3 rebuilds"
 _ONLINE = RelayedLogLine(message="🟢 node online", severity=Severity.INFO, node_id=NodeId("n1"))
 
 
@@ -128,6 +130,19 @@ class _Blocked(Work):
             raise
 
 
+class _NeverTurning(Work):
+    """A work whose wait never ends, such as the sending to a service never notified."""
+
+    def __str__(self) -> str:
+        return "search 'titar' amuled kad"
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.Event().wait()
+
+    async def run_once(self) -> None:
+        """Never reached: its wait never ends."""
+
+
 class _Node:
     """A supervisor over the works of the aMule client and of the webui, each object rebuilt as
     the supervisor decides; the client's works are built anew over each of its builds."""
@@ -164,10 +179,10 @@ class _Node:
 
     def _webui_serving(self, _state: object, /) -> Sequence[SupervisedWork]:
         serving = _Searching(build=0, turns=self.webui_turns, bugs=_never)
-        return [SupervisedWork(work=serving, time_limit=_DAY)]
+        return [SupervisedWork(work=serving, time_limit=_DAY, function=CrawlerFunction.WEBUI)]
 
     def run_for(self, seconds: float) -> None:
-        """Builds each object, runs the node ``seconds`` at most, a third rebuild in vain ending
+        """Builds each object, runs the node ``seconds`` at most, a function lost ending
         it earlier, then closes what the supervisor holds, as the shutdown does."""
         self.loop.call_later(seconds, self._run_state.set_shutdown_requested)
         self.loop.run_until_complete(self._run())
@@ -196,7 +211,7 @@ def _one_search(turns: _Turns, *, bugs: _Bugs = _always) -> _ClientWorks:
 
     def works(build: int) -> Sequence[SupervisedWork]:
         search = _Searching(build=build, turns=turns, bugs=bugs)
-        return [SupervisedWork(work=search, time_limit=_DAY)]
+        return [SupervisedWork(work=search, time_limit=_DAY, function=CrawlerFunction.CRAWL)]
 
     return works
 
@@ -214,9 +229,9 @@ def test_bugs_failing_rebuild_their_object_after_1_then_2_then_4_min_then_end_th
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
     assert turns.of_build(0) == [1.0, 61.0, 121.0]
     assert turns.of_build(1) == [182.0, 242.0, 302.0]
-    # The fourth failing, at 904 s, its third rebuild in vain: the supervision ends with its error.
+    # Its third rebuild in vain, at 904 s, leaves its one search failing: the crawl is lost.
     assert turns.of_build(3) == [784.0, 844.0, 904.0]
-    assert node.ended() == (_CLIENT_IN_VAIN, 904.0)
+    assert node.ended() == (_CRAWL_LOST, 904.0)
     assert node.webui.rebuilds() == 0
 
 
@@ -238,33 +253,101 @@ def test_each_rebuild_names_its_object_and_how_many_came_before_in_vain(
     ]
 
 
-def _searches(*bugs: _Bugs) -> _ClientWorks:
-    """One search per ``bugs`` over each build, each on a keyword of its own."""
+def _works(*works: tuple[str, _Bugs, CrawlerFunction | None]) -> _ClientWorks:
+    """Each of ``works``, its name, the turns meeting a bug and its function, over each build."""
 
-    def works(build: int) -> Sequence[SupervisedWork]:
+    def over(build: int) -> Sequence[SupervisedWork]:
         return [
             SupervisedWork(
-                work=_Searching(build=build, turns=_Turns(), bugs=each, name=f"search '{n}' kad"),
+                work=_Searching(build=build, turns=_Turns(), bugs=bugs, name=name),
                 time_limit=_DAY,
+                function=function,
             )
-            for n, each in enumerate(bugs)
+            for name, bugs, function in works
         ]
 
-    return works
+    return over
 
 
-def test_a_bug_at_every_turn_of_one_of_three_works_rebuilds_their_object_after_1_2_then_4_min(
+def _searches(*bugs: _Bugs) -> _ClientWorks:
+    """One search per ``bugs``, each on a keyword of its own."""
+    return _works(
+        *[(f"search '{n}' kad", each, CrawlerFunction.CRAWL) for n, each in enumerate(bugs)]
+    )
+
+
+def test_a_bug_at_every_turn_of_one_of_three_searches_rebuilds_their_object_3_times_then_no_more(
     virtual_loop: VirtualLoop,
 ) -> None:
     node = _Node(virtual_loop, client_works=_searches(_always, _never, _never))
 
-    node.run_for(1000.0)
+    node.run_for(1500.0)
 
-    # The healthy turns of the two others, every second, hide none of its bugs.
+    # The healthy turns of the two others, every second, hide none of its bugs; its third rebuild
+    # in vain, at 904 s, leaves the client unrepaired, its works running on, the crawl not lost.
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
+    assert node.ended() == (None, 1500.0)
     bug_lines = [line for line in node.logger.lines if line.message.startswith("bug in ")]
-    assert len(bug_lines) == 12
+    assert len(bug_lines) == 21  # its 12th turn over the fourth build at 1444 s
     assert all(isinstance(line.error, KeyError) for line in bug_lines)
+
+
+@pytest.mark.parametrize(
+    ("failing", "healthy", "lost"),
+    [
+        (CrawlerFunction.CRAWL, CrawlerFunction.DOWNLOADS, _CRAWL_LOST),
+        (CrawlerFunction.DOWNLOADS, CrawlerFunction.CRAWL, "the downloads lost after 3 rebuilds"),
+    ],
+    ids=["the crawl", "the downloads"],
+)
+def test_every_work_of_a_function_failing_after_three_rebuilds_ends_the_supervision_naming_it(
+    virtual_loop: VirtualLoop, *, failing: CrawlerFunction, healthy: CrawlerFunction, lost: str
+) -> None:
+    works = _works(
+        ("status reading amuled", _never, None),
+        ("failing 1", _always, failing),
+        ("failing 2", _always, failing),
+        ("healthy", _never, healthy),
+    )
+    node = _Node(virtual_loop, client_works=works)
+
+    node.run_for(1500.0)
+
+    # The status reading and a work of another function healthy: the client, unrepaired at its
+    # third rebuild in vain, has lost that function alone.
+    assert node.ended() == (lost, 904.0)
+
+
+def test_a_search_healthy_keeps_the_crawl_whatever_the_status_reading_meets(
+    virtual_loop: VirtualLoop,
+) -> None:
+    works = _works(
+        ("status reading amuled", _always, None),
+        ("search 1", _always, CrawlerFunction.CRAWL),
+        ("search 2", _never, CrawlerFunction.CRAWL),
+    )
+    node = _Node(virtual_loop, client_works=works)
+
+    node.run_for(1500.0)
+
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
+    assert node.ended() == (None, 1500.0)
+
+
+def test_a_function_whose_other_work_never_turned_is_not_lost(virtual_loop: VirtualLoop) -> None:
+    def works(build: int) -> Sequence[SupervisedWork]:
+        never = SupervisedWork(
+            work=_NeverTurning(), time_limit=_DAY, function=CrawlerFunction.CRAWL
+        )
+        return [*_one_search(_Turns())(build), never]
+
+    node = _Node(virtual_loop, client_works=works)
+
+    node.run_for(1500.0)
+
+    # Its one search failing, the other never failing since it never turned: the crawl lives.
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
+    assert node.ended() == (None, 1500.0)
 
 
 def test_two_bugs_a_healthy_turn_then_three_bugs_after_a_rebuild_count_it_in_vain(
@@ -294,6 +377,22 @@ def test_a_work_healthy_again_resets_no_count_while_another_is_still_failing(
     assert node.client.built_at == [0.0, 181.0, 422.0]
 
 
+def test_after_three_rebuilds_in_vain_its_work_healthy_again_has_the_next_bugs_rebuild_it(
+    virtual_loop: VirtualLoop,
+) -> None:
+    def bugs(*, build: int, turn: int) -> bool:
+        return build < 3 or not 5 <= turn < 15
+
+    # The status reading serves no function: none is lost when it fails.
+    node = _Node(virtual_loop, client_works=_works(("status reading amuled", bugs, None)))
+
+    node.run_for(1300.0)
+
+    # Unrepaired at 904 s, healthy again at 1092 s, under 2 bugs in its last 10 turns: failing
+    # again at 1214 s, its count back at zero, it is rebuilt a minute later.
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 1274.0]
+
+
 def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_1_min_later(
     virtual_loop: VirtualLoop,
 ) -> None:
@@ -319,7 +418,7 @@ def test_a_rebuild_stops_and_awaits_the_works_over_its_object_a_minute_before_it
         events.append(f"works over build {build} built")
         return [
             *_one_search(turns, bugs=_first_build_buggy)(build),
-            SupervisedWork(work=_Blocked(events=events), time_limit=_DAY),
+            SupervisedWork(work=_Blocked(events=events), time_limit=_DAY, function=None),
         ]
 
     node = _Node(virtual_loop, client_works=works)
@@ -406,7 +505,7 @@ def test_rebuilds_that_raised_and_bugs_failing_again_after_one_share_one_count(
     # Two that raised, then the one that worked failing again at 662 s: its third in vain.
     assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
     assert turns.of_build(1)[-1] == 662.0
-    assert node.ended() == (_CLIENT_IN_VAIN, 662.0)
+    assert node.ended() == (_CRAWL_LOST, 662.0)
 
 
 def test_three_rebuilds_that_raise_end_the_supervision_once_the_third_has_raised(
@@ -420,7 +519,7 @@ def test_three_rebuilds_that_raise_end_the_supervision_once_the_third_has_raised
 
     assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
     assert turns.taken == [(0, 1.0), (0, 61.0), (0, 121.0)]
-    assert node.ended() == (_CLIENT_IN_VAIN, 541.0)
+    assert node.ended() == (_CRAWL_LOST, 541.0)
 
 
 def test_a_rebuild_refused_by_amule_is_logged_in_one_line_and_tried_again(
@@ -486,7 +585,11 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_
             local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),
         )
-        return [SupervisedWork(work=sender, time_limit=timedelta(minutes=5))]
+        return [
+            SupervisedWork(
+                work=sender, time_limit=timedelta(minutes=5), function=CrawlerFunction.NOTIFICATIONS
+            )
+        ]
 
     notifier = FakeRestartableBuilder("notifier", works_over=sending)
     run_state = FakeRunStateStore()
@@ -501,7 +604,7 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_
         await supervisor.build_first(notifier)
         await supervisor.supervise(arm_shutdown_bound=lambda: None)
 
-    with pytest.raises(CrawlerRestartError, match="^notifier rebuilt 3 times in vain$"):
+    with pytest.raises(CrawlerRestartError, match="^the notifications lost after 3 rebuilds$"):
         virtual_loop.run_until_complete(supervise())
 
     # Its sends meet a bug at once, then each a minute after: failing at 120, 300, 540, then 900 s.

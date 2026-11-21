@@ -24,6 +24,7 @@ from p2pwatch.composition.webui_restartable import (
     WebuiRestartableBuilder,
     webui_thread_watch_over,
 )
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from tests.contracts.application.ports.driven.restartable_builder_contract import (
     RestartableBuilderContract,
 )
@@ -51,7 +52,7 @@ class _Over(Work):
 
 
 def _works_over(thread: UvicornServerThread, /) -> Sequence[SupervisedWork]:
-    return [SupervisedWork(work=_Over(thread), time_limit=timedelta(minutes=5))]
+    return [SupervisedWork(work=_Over(thread), time_limit=timedelta(minutes=5), function=None)]
 
 
 class _Threads:
@@ -205,3 +206,4 @@ async def test_the_watch_over_a_thread_looks_at_it_named_webui(threads: _Threads
     assert str(watch.work) == "webui"
     # Its turn awaits nothing: its time limit is the margin alone.
     assert watch.time_limit == timedelta(minutes=5)
+    assert watch.function is CrawlerFunction.WEBUI
