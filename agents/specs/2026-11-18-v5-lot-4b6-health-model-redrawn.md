@@ -112,7 +112,8 @@ of the node; a save that fails is an outage of the local database, with its aler
   restarting every network for one keyword.* "Unrepaired", since "degraded" already names an outage.
 - **D34. Each object serves one of the crawler's three functions: the webui, the notifications, or the crawl, whose
   works are every P2P client's searches. The crawler restarts when a function is wholly lost: every object serving it
-  unrepaired, none of its works healthy, one at least failing.** *The restart is the one answer automated without
+  unrepaired, none of its works healthy, one at least failing; an object whose third rebuild raised holds no
+  work and counts as failing.** *The restart is the one answer automated without
   doubt: a function the node exists for is gone, and no smaller rebuild brought it back. A client whose searches all
   fail is lost to the crawl though its status reading answers; one client lost among others leaves the others
   crawling, which holds with the networks to come.* The operator, 2026-11-21.
