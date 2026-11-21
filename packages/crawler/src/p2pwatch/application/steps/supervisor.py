@@ -262,14 +262,14 @@ class Supervisor:
 
     def _restart_if_a_function_is_lost(self) -> None:
         """Ends the supervision once a function is wholly lost: every object serving it
-        unrepaired, none of its works healthy, one failing."""
+        unrepaired, every one of its works failing, one that never turned not failing."""
         for function in CrawlerFunction:
             states = {
                 supervised: supervised.states_of(function) for supervised in self._objects.values()
             }
             serving = [supervised for supervised, of_function in states.items() if of_function]
             works = {state for of_function in states.values() for state in of_function}
-            lost = HealthState.FAILING in works and HealthState.HEALTHY not in works
+            lost = works == {HealthState.FAILING}
             if lost and all(supervised.unrepaired for supervised in serving):
                 restart = CrawlerRestartError(function, rebuilds=REBUILDS_IN_VAIN_AT_MOST)
                 self._restarts_decided.put_nowait(restart)

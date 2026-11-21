@@ -130,6 +130,19 @@ class _Blocked(Work):
             raise
 
 
+class _NeverTurning(Work):
+    """A work whose wait never ends, such as the sending to a service never notified."""
+
+    def __str__(self) -> str:
+        return "search 'titar' amuled kad"
+
+    async def wait_for_next_turn(self) -> None:
+        await asyncio.Event().wait()
+
+    async def run_once(self) -> None:
+        """Never reached: its wait never ends."""
+
+
 class _Node:
     """A supervisor over the works of the aMule client and of the webui, each object rebuilt as
     the supervisor decides; the client's works are built anew over each of its builds."""
@@ -317,6 +330,22 @@ def test_a_search_healthy_keeps_the_crawl_whatever_the_status_reading_meets(
 
     node.run_for(1500.0)
 
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
+    assert node.ended() == (None, 1500.0)
+
+
+def test_a_function_whose_other_work_never_turned_is_not_lost(virtual_loop: VirtualLoop) -> None:
+    def works(build: int) -> Sequence[SupervisedWork]:
+        never = SupervisedWork(
+            work=_NeverTurning(), time_limit=_DAY, function=CrawlerFunction.CRAWL
+        )
+        return [*_one_search(_Turns())(build), never]
+
+    node = _Node(virtual_loop, client_works=works)
+
+    node.run_for(1500.0)
+
+    # Its one search failing, the other never failing since it never turned: the crawl lives.
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
     assert node.ended() == (None, 1500.0)
 

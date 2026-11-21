@@ -900,8 +900,9 @@ ses `Work` tournant toujours, ceux en échec échouant seuls. Chaque `Work` sert
 crawler (`CrawlerFunction`) : la webui, les notifications, le crawl (les recherches de chaque client
 P2P) et, sur un nœud qui télécharge, les téléchargements (le suivi des téléchargements et des
 sources) ; la lecture du statut n'en sert aucune. Une fonction est perdue quand chaque objet qui la
-sert est non réparé, qu'aucun de ses `Work` n'est sain et qu'un au moins est en échec, un objet
-dont la troisième reconstruction a levé, qui ne tient plus de `Work`, comptant comme en échec :
+sert est non réparé et que chacun de ses `Work` est en échec, un `Work` qui n'a jamais tourné ne
+l'étant pas, et un objet dont la troisième reconstruction a levé, qui ne tient plus de `Work`,
+comptant comme en échec :
 comme un superviseur OTP au-delà de sa borne, le `Supervisor` arrête alors tous les `Work` et finit
 sa supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie l'alerte
 `the crawl lost: every search failing after 3 rebuilds: the crawler restarts` avec ce qui reste dans
