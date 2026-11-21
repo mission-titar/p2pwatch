@@ -36,6 +36,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from datetime import timedelta
 from importlib.metadata import version
 from pathlib import Path, PurePath
+from typing import Protocol
 
 import apprise
 import httpx
@@ -135,6 +136,7 @@ from p2pwatch.composition.webui_restartable import WebuiRestartableBuilder, webu
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.console_query import ConsoleDatabase
 from p2pwatch.domain.crawler_config import CrawlerConfig, LoadedConfig
+from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.matching_read import MatchingExplainer
@@ -189,18 +191,33 @@ async def resource_stack(*, close_timeout_seconds: float) -> AsyncIterator[Async
                 await resources.aclose()
 
 
+class ShutdownClose(Protocol):
+    async def __call__(self) -> None: ...
+
+
 @asynccontextmanager
-async def shutdown_bound(*, deadline_seconds: float) -> AsyncIterator[ShutdownBoundArmer]:
-    """Unbounded until armed, then cut ``deadline_seconds`` later by ``ShutdownDeadlineError``;
-    a ``TimeoutError`` raised in its body passes through as it is."""
+async def shutdown_bound(
+    *, deadline_seconds: float, close: ShutdownClose
+) -> AsyncIterator[ShutdownBoundArmer]:
+    """Cut ``deadline_seconds`` after armed by ``ShutdownDeadlineError``, a restart keeping its
+    error, a body's own ``TimeoutError`` passing; ``close`` runs within it once its body ended."""
     loop = asyncio.get_running_loop()
+    restart: CrawlerRestartError | None = None
     try:
         async with asyncio.timeout(None) as timeout:
-            yield lambda: timeout.reschedule(loop.time() + deadline_seconds)
+            try:
+                yield lambda: timeout.reschedule(loop.time() + deadline_seconds)
+            except CrawlerRestartError as error:
+                restart = error
+            if not timeout.expired():  # once cut, the resource stack closes what is left
+                await close()
     except TimeoutError as error:
         if not timeout.expired():
             raise
-        raise ShutdownDeadlineError(f"cut after {deadline_seconds:g} s") from error
+        if restart is None:
+            raise ShutdownDeadlineError(f"cut after {deadline_seconds:g} s") from error
+    if restart is not None:
+        raise restart
 
 
 def _backoff_policy(config: CrawlerConfig) -> BackoffPolicy:
@@ -625,13 +642,16 @@ class CrawlerComposition(CrawlerRunner):
                 notification_senders=notification_senders_over(build_notifier()),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
-            # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
-            # shutdown is requested, so the unwind and the close below are bounded.
-            async with shutdown_bound(
-                deadline_seconds=crawler_config.shutdown_deadline_seconds
-            ) as arm_shutdown_bound:
-                await crawler_lifecycle.run(arm_shutdown_bound=arm_shutdown_bound)
+
+            async def close() -> None:
                 _print_progress("Workers stopped.")
                 _print_progress("amuled session closing…")
                 await stack.aclose()
                 _print_progress("Databases closed: exiting.")
+
+            # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
+            # shutdown is requested, so the unwind and the close, a restart's included, are bounded.
+            async with shutdown_bound(
+                deadline_seconds=crawler_config.shutdown_deadline_seconds, close=close
+            ) as arm_shutdown_bound:
+                await crawler_lifecycle.run(arm_shutdown_bound=arm_shutdown_bound)
