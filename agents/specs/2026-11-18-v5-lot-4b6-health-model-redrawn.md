@@ -85,7 +85,7 @@ of the node; a save that fails is an outage of the local database, with its aler
 - **D26. The supervisor alone decides each rebuild and runs it: it stops the object's works, closes the object, has
   its builder build a new one and runs that one's works, after 1, then 2, then 4 minutes. A rebuild is in vain when
   the object's bugs turn failing again before they are healthy, or when it raises; the count resets once they are
-  healthy.** *An OTP supervisor holds both the strategy and its bound; the restart policy, its request, its runner and
+  healthy.** (Corrected: when a rebuild is in vain and when the count resets are D32's.) *An OTP supervisor holds both the strategy and its bound; the restart policy, its request, its runner and
   the subscriber plugged in later only joined two halves, which the node's health separated. The waits double, as
   every backoff the literature names does, and stop at the third, which D27 hands over.*
 - **D27. At the third rebuild in vain, an alert is dispatched, and the crawler stops with an error, which says why
@@ -211,19 +211,19 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 35 | `refactor/webui-and-notifier-built-whole` | the webui and the notifier built the same way | ~300 lines, ~6 files (Corrected: merged into block 30) |
 | 37 | `refactor/supervisor-runs-its-objects-works` | the supervisor running the works of the objects it built | 201 lines, 12 files (Corrected: cut out of block 40, the lead on 2026-11-20) |
 | 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds (Corrected: 1 846 lines, about 1 100 removed, 40 files, accepted by the operator on 2026-11-20) |
-| 45 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files |
-| 50 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files |
+| 45 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files (Corrected: 76 lines, 7 files) |
+| 50 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files (Corrected: 263 lines, 17 files) |
 | 53 | `refactor/download-tracking-split` | download tracking split | 161 lines, 17 files (Corrected: cut out of block 55, the lead on 2026-11-21) |
 | 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files (Corrected: 1 012 lines, 683 removed, 30 files, past both bounds, the health alerter's cases moving to each domain module's tests and `node_id` given at 16 test sites, accepted by the operator on 2026-11-21) |
-| 60 | `feat/password-refused-outage` | the refused password an outage of amuled, with its alert | ~280 lines, ~6 files |
-| 65 | `feat/login-tried-again` | the login tried again after waits that double | ~300 lines, ~6 files |
+| 60 | `feat/password-refused-outage` | the refused password an outage of amuled, with its alert | ~280 lines, ~6 files (Corrected: 143 lines, 9 files) |
+| 65 | `feat/login-tried-again` | the login tried again after waits that double | ~300 lines, ~6 files (Corrected: 247 lines, 9 files) |
 | 70 | `feat/works-judged-alone` | each work judged on its own turns, kept across a rebuild, the count's reset (Corrected: added for D32, 2026-11-21) | 190 lines, 6 files |
-| 72 | `feat/function-lost-restarts-the-crawler` | an object left unrepaired, each work's function, the crawler restarted when a function is lost (Corrected: added for D33 and D34, cut out of block 70, which came to 686 lines and 29 files) | 334 lines, 28 files, past the file bound, 15 of them the new required function at every site |
+| 72 | `feat/function-lost-restarts-the-crawler` | an object left unrepaired, each work's function, the crawler restarted when a function is lost (Corrected: added for D33 and D34, cut out of block 70, which came to 686 lines and 29 files) | 334 lines, 28 files, past the file bound, 15 of them the new required function at every site (Corrected: 364 lines with its fix-back, accepted by the operator on 2026-11-21) |
 | 74 | `feat/unrepaired-object-alert` | the alert of an object left unrepaired, and its end (Corrected: cut out of block 70) | 205 lines, 13 files |
-| 75 | `fix/one-sending-per-service` | one notifier's work per service, so that a service that never answers holds no other (Corrected: added, the holistic review's finding on block 15's one work) | estimated at its start |
+| 75 | `fix/one-sending-per-service` | one notifier's work per service, so that a service that never answers holds no other (Corrected: added, the holistic review's finding on block 15's one work) | estimated at its start (Corrected: 443 lines, 12 files) |
 | 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | (Corrected: the behaviour fixes, 283 lines, 15 files) |
 | 82 | `refactor/lot-4b6-review-words` | the holistic review's fixes of names, words and unread surface | (Corrected: cut out of block 80, which came to 26 files; 204 lines, 17 files) |
-| 90 | `docs/lot-4b6-wrap` | closing block | |
+| 90 | `docs/lot-4b6-wrap` | closing block | (Corrected: 4 lines, 1 file, `BACKLOG.md`; the handoff and this spec outside the count) |
 
 A block past a bound carries one piece with its first reader: 10 a rename; 15 the outbox with its writer, the dispatcher, and its reader, the notifier's work; 25 the store with its
 reader, the outbox at the start; 30 the port, its contract and its fakes with the first object built through them; 40
@@ -246,7 +246,14 @@ send is already a turn of that work.
   failing service; the community service, healthy or idle, keeps the notifications from being lost, so the crawler
   runs on; the log keeps the alert.
 - **A node whose cause survives its own restart restarts every 7 minutes and its start, without end**, an alert at
-  each round, until the operator steps in (the operator, 2026-11-18).
+  each round, until the operator steps in (the operator, 2026-11-18). (Corrected: 7 minutes of waits, plus the
+  twelve bugs that turn the works failing four times, 60 s apart at least: 904 s for a search meeting a bug at every
+  turn, `test_bugs_failing_rebuild_their_object_after_1_then_2_then_4_min_then_end_the_supervision`.)
+- **An entry the start cannot read back is dropped**, in one warning line (Corrected, added: block 80, the holistic
+  review): a notification an earlier version saved without a field added since is lost, where it stopped every
+  start until the row was deleted by hand.
+- **A burst of n notifications writes about n²/2 rows** (Corrected, added: block 80, the holistic review): the outbox
+  saves its whole table at each change, a re-evaluation's tier rises included.
 - **A notification can be sent twice** when the node stops between its send and the save of its removal.
 - **A notification is lost when the process is killed** between a decision's write in `catalog.db` and the save of
   its entry, or before its save when `local.db` cannot be written.
@@ -282,7 +289,7 @@ SQLite adapter; the dependencies, their rules and their alerts are `domain/`; th
 | `HealthAlert` | the alert a rule of a dependency sends when it turns failing, and its end when it turns healthy again, or none | Kad's "off its network for 5 min", then "back on its network" |
 | `NotificationOutbox` | the notifications left to send, in memory, one entry per notification and service | |
 | `NotificationOutboxWriter`, `NotificationOutboxReader` | the outbox's save in `local.db`: `set_pending_notifications(entries)` replaces it, `read_pending_notifications()` reads it back | |
-| `SupervisedObject` | the supervisor's record of one object it rebuilds, private to it: its builder, the latest object built, whether each of its latest turns met a bug (judged by `BUGS`' thresholds), its rebuilds in vain (Corrected: the turns kept per work, D32; its function and whether it is unrepaired, D33, D34) | the aMule client's record |
+| `SupervisedObject` | the supervisor's record of one object it rebuilds, private to it: its builder, the latest object built, whether each of its latest turns met a bug (judged by `BUGS`' thresholds), its rebuilds in vain (Corrected: the turns kept per work, D32; its function and whether it is unrepaired, D33, D34) (Corrected: `_SupervisedObject`, block 82) | the aMule client's record |
 | `outage` | the glossary's word for something failing outside the program | aMule off, a refused password |
 
 Removed: `Component`, `BUGS` as a rule of a dependency, `RestartPolicy`, `RestartRequest`, `RestartRunner`,
@@ -362,7 +369,8 @@ over.record_turn(supervised, met_a_bug=met_a_bug)  # one work failing: rebuild a
 - 27 (Corrected: cut out of 25): the notifier's work records, at each turn, whether the outbox's latest save failed on
   the local database; the local database's dependency, rule and alert below. (Corrected: as built, the outbox reads
   itself back in its constructor, a failing read stopping the start as the backoff's does; each refused save logs one
-  warning.)
+  warning.) (Corrected: block 80, an entry it cannot read back, such as a row an earlier version left without a field
+  added since, is dropped in one warning line; a read the database refuses still stops the start.)
 - The local database: a dependency, its rule "saves failed" (failing at 3 in a row, healthy again under 2 in the last
   10, as "sends failed") with its alert, `operations` audience: "notifications not saved in local.db: lost at the next
   restart", its end "notifications saved again". The glossary gains `local database` and `saves failed`.
@@ -488,7 +496,7 @@ over.record_turn(supervised, met_a_bug=met_a_bug)  # one work failing: rebuild a
 | Docker's documentation, restart policies | "The `on-failure` policy only prompts a restart if the container exits with a failure. It doesn't restart the container if the daemon restarts." |
 | `deploy/compose.yml` | `restart: unless-stopped` |
 | aMule 3.2.0's `docs/api/REFERENCE.md`, "Rate limiting" | the login limiter locks an IP out for 300 s after 5 refused logins in 60 s; a successful login does not clear it |
-| The client's `open()` | tolerates an amuled not listening yet; raises on a refused password |
+| The client's `open()` | tolerates an amuled not listening yet; raises on a refused password (Corrected: on `main`; block 65 has it tolerate a refused password too) |
 | Block sizes, section 5 | estimated on `main` at `190cc145` from `git grep -w` counts of each name a block renames or removes and the lines of each module it rewrites, by an estimating agent; no `git diff` measured |
 
 ## Appendix D. For lot 7
@@ -497,5 +505,7 @@ What the operator pages must say, extending the lot 4b spec's appendix D:
 
 - A refused password no longer stops the node, at its start included: an alert asks to check the configuration.
 - A node whose rebuilds repair nothing restarts its crawler every 7 minutes and its start, an alert at each round.
+  (Corrected: when a function is wholly lost, D34, each round 7 minutes of waits plus the bugs that turn the works
+  failing; an object whose rebuilds repair only some of its works stays unrepaired, with its alert, D33.)
 - A notification may be sent twice after a restart; one refused by its service is not sent again.
 - The local database's alert: the notifications still go out, but would be lost at the next restart.

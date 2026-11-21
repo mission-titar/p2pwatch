@@ -19,10 +19,8 @@ An agent adds an entry only after the operator has agreed to it.
 
 - **v5 release readiness**: the thematic lots below, merged in this order, then release candidates checked on the
   operator's node. Umbrella spec: `agents/specs/2026-11-04-v5-release-readiness.md`.
-  - **Lot 4b6, the health model redrawn**: bugs counted and rebuilt by the supervisor alone, with growing waits and the
-    node restarted past three, outages on external dependencies carrying their alerts. Spec: `agents/specs/2026-11-18-v5-lot-4b6-health-model-redrawn.md`.
-  - **Lot 4c, what the operator sees of health**: the graph of parts, alerts per root cause, health metrics, the Node
-    page, `/health` per MicroProfile, the watchdog, the real stops. D12 of the umbrella spec; its draft, to rewrite on lot 4b's names, in `agents/specs/2026-11-09-v5-fault-isolation.md`.
+  - **Lot 4c, what the operator sees of health**: the graph of dependencies, alerts per root cause, health metrics, the
+    Node page and `/health` per MicroProfile showing an unrepaired object, the watchdog, the real stops as the functions lost of D34 in `agents/specs/2026-11-18-v5-lot-4b6-health-model-redrawn.md`, which supersedes its draft's D17. D12 of the umbrella spec; its draft, to rewrite on lot 4b6's names, in `agents/specs/2026-11-09-v5-fault-isolation.md`.
   - **Lot 5, the webui**: database reads off the event loop, abandon and retry from the Node page, the heavy file page
     out of v5. D14 to D16 of the umbrella spec.
   - **Lot 6, the release chain**: release candidates as GitHub prereleases with their own image tags, never `latest`.
