@@ -58,18 +58,20 @@ class NotificationOutbox:
         """Whether its latest save failed, such as on a full disk; ``False`` before the first."""
         return self._latest_save_failed
 
-    def oldest(self) -> PendingNotification | None:
-        """The entry left first, ``None`` when it holds none."""
-        return self._entries[0] if self._entries else None
+    def oldest(self, service: NotificationService) -> PendingNotification | None:
+        """The entry left first for ``service``, such as the community's Discord webhook, ``None``
+        when it holds none."""
+        return next((entry for entry in self._entries if entry.service == service), None)
 
     def remove(self, entry: PendingNotification) -> None:
         """Removes ``entry`` once its send has ended."""
         self._entries.remove(entry)
         self._save()
 
-    async def wait_for_an_entry(self) -> None:
-        """Returns once it holds an entry, at once if it already does."""
-        while not self._entries:  # a wake left by a notification since sent finds none
+    async def wait_for_an_entry(self, service: NotificationService) -> None:
+        """Returns once it holds an entry for ``service``, at once if it already does."""
+        # A wake left for another service, or by a notification since sent, finds none.
+        while self.oldest(service) is None:
             await self._waker.wait(WakeSubject.NOTIFICATION)
 
     def _save(self) -> None:

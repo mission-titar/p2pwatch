@@ -1,9 +1,11 @@
 """``CrawlerLifecycle``: the root of the crawler's graph, which the composition runs once built."""
 
+from collections.abc import Sequence
+
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.backoff_registry import BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
-from p2pwatch.application.steps.notification_sender import NotificationSender
+from p2pwatch.application.steps.notification_sender import NotificationSender, empty_the_outbox
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
@@ -25,7 +27,7 @@ class CrawlerLifecycle:
         backoff: BackoffRegistry,
         download_enabled: bool,
         supervisor: Supervisor,
-        notification_sender: NotificationSender,
+        notification_senders: Sequence[NotificationSender],
         logger: Logger,
     ) -> None:
         self._node_id = node_id
@@ -34,7 +36,7 @@ class CrawlerLifecycle:
         self._backoff = backoff
         self._download_enabled = download_enabled
         self._supervisor = supervisor
-        self._notification_sender = notification_sender
+        self._notification_senders = notification_senders
         self._logger = logger
 
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
@@ -61,6 +63,6 @@ class CrawlerLifecycle:
                     node_id=self._node_id,
                 )
             )
-            await self._notification_sender.send_what_is_left()
+            await empty_the_outbox(self._notification_senders)
             raise
-        await self._notification_sender.send_what_is_left()
+        await empty_the_outbox(self._notification_senders)

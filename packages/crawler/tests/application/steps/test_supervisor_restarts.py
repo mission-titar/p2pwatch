@@ -14,11 +14,13 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
+from p2pwatch.composition.notifier_restartable import notification_sending
 from p2pwatch.domain.client_errors import ClientAuthError
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
@@ -586,61 +588,109 @@ def test_a_shutdown_while_a_rebuild_waits_to_be_tried_again_ends_the_supervision
     assert node.client.built_at == [0.0, 181.0]
 
 
-def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_then_ends_it(
-    virtual_loop: VirtualLoop,
-) -> None:
-    raising = FakeRaisingNotifier(RuntimeError("an embed apprise cannot build"))
-    store = FakeNotificationOutboxStore()
-    outbox = NotificationOutbox(
+def _outbox(store: FakeNotificationOutboxStore) -> NotificationOutbox:
+    return NotificationOutbox(
         writer=store,
         reader=store,
         services=ONE_SERVICE_PER_AUDIENCE,
         waker=FakeWaker(),
         logger=FakeLogger(),
     )
-    for _ in range(20):
-        outbox.leave(_ONLINE, services=[ONE_SERVICE_PER_AUDIENCE[1]])
+
+
+def _supervise_the_notifier(
+    loop: VirtualLoop,
+    *,
+    notifier: Notifier,
+    outbox: NotificationOutbox,
+    observability: ObservabilityOverFakes,
+) -> tuple[FakeRestartableBuilder, CrawlerRestartError | None]:
+    """Supervises the notifier's works, one per service, sending ``outbox``'s entries through
+    ``notifier`` until 1500 s at most; its builder, and the error a function lost ended it with."""
 
     def sending(_state: object, /) -> Sequence[SupervisedWork]:
-        sender = NotificationSender(
-            outbox=outbox,
-            notifier=raising,  # each rebuild in vain: the notifier still raises
-            notification_timeout_seconds=5.0,
-            record_check=NodeHealth(
-                logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
-            ).record,
-            service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
-            local_database=local_database_dependency(node_id=NodeId("n1")),
-            logger=FakeLogger(),
-        )
-        return [
-            SupervisedWork(
-                work=sender, time_limit=timedelta(minutes=5), function=CrawlerFunction.NOTIFICATIONS
+        record_check = NodeHealth(
+            logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
+        ).record
+        senders = [
+            NotificationSender(
+                service=service,
+                outbox=outbox,
+                notifier=notifier,  # each rebuild in vain: the notifier still raises
+                notification_timeout_seconds=5.0,
+                record_check=record_check,
+                service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+                local_database=local_database_dependency(node_id=NodeId("n1")),
+                logger=FakeLogger(),
             )
+            for service in ONE_SERVICE_PER_AUDIENCE
         ]
+        return notification_sending(senders, notification_timeout_seconds=5.0)
 
-    notifier = FakeRestartableBuilder("notifier", works_over=sending)
+    builder = FakeRestartableBuilder("notifier", works_over=sending)
     run_state = FakeRunStateStore()
-    virtual_loop.call_later(1500.0, run_state.set_shutdown_requested)
+    loop.call_later(1500.0, run_state.set_shutdown_requested)
     supervisor = Supervisor(
         run_state_reader=run_state,
-        monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        monotonic_clock=FakeLoopMonotonicClock(loop),
+        observability_dispatcher=observability.dispatcher,
         node_id=NodeId("n1"),
         logger=FakeLogger(),
     )
 
-    async def supervise() -> None:
-        await supervisor.build_first(notifier)
-        await supervisor.supervise(arm_shutdown_bound=lambda: None)
+    async def supervise() -> CrawlerRestartError | None:
+        await supervisor.build_first(builder)
+        try:
+            await supervisor.supervise(arm_shutdown_bound=lambda: None)
+        except CrawlerRestartError as restart:
+            return restart
+        return None
 
-    with pytest.raises(CrawlerRestartError, match="^the notifications lost after 3 rebuilds$"):
-        virtual_loop.run_until_complete(supervise())
+    return builder, loop.run_until_complete(supervise())
 
-    # Its sends meet a bug at once, then each a minute after: failing at 120, 300, 540, then 900 s.
+
+def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_then_ends_it(
+    virtual_loop: VirtualLoop,
+) -> None:
+    raising = FakeRaisingNotifier(RuntimeError("an embed apprise cannot build"))
+    store = FakeNotificationOutboxStore()
+    outbox = _outbox(store)
+    for _ in range(20):
+        outbox.leave(_ONLINE, services=ONE_SERVICE_PER_AUDIENCE)
+
+    notifier, restart = _supervise_the_notifier(
+        virtual_loop, notifier=raising, outbox=outbox, observability=ObservabilityOverFakes()
+    )
+
+    assert str(restart) == "the notifications lost after 3 rebuilds"
+    # Each service's sends meet a bug at once, then each a minute after: failing at 120, 300, 540,
+    # then 900 s.
     assert notifier.built_at == [0.0, 180.0, 420.0, 780.0]
-    # A send that met a bug removes its entry: 12 of the 20 tried once, the others kept.
-    assert (raising.sends, len(store.read_pending_notifications())) == (12, 8)
+    # A send that met a bug removes its entry: 12 of each service's 20 tried once, the others kept.
+    assert (raising.sends, len(store.read_pending_notifications())) == (24, 16)
+
+
+def test_one_of_two_services_failing_at_every_send_the_other_never_sent_to_leaves_it_unrepaired(
+    virtual_loop: VirtualLoop,
+) -> None:
+    outbox, observability = _outbox(FakeNotificationOutboxStore()), ObservabilityOverFakes()
+    for _ in range(20):
+        outbox.leave(_ONLINE, services=[ONE_SERVICE_PER_AUDIENCE[1]])
+
+    notifier, restart = _supervise_the_notifier(
+        virtual_loop,
+        notifier=FakeRaisingNotifier(RuntimeError("an embed apprise cannot build")),
+        outbox=outbox,
+        observability=observability,
+    )
+
+    # The community's sending never turned: the notifications are not lost, the crawler runs on.
+    assert (restart, notifier.built_at) == (None, [0.0, 180.0, 420.0, 780.0])
+    notifications = [notification for _, notification in observability.notifications]
+    assert [n.message for n in notifications if isinstance(n, RelayedLogLine)] == [
+        "notifier: notification sending fake operations still failing after 3 rebuilds: a bug of "
+        "its own, or a shared state a crawler restart would renew"
+    ]
 
 
 def _supervisor() -> Supervisor:

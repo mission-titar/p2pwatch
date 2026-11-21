@@ -450,22 +450,25 @@ class CrawlerComposition(CrawlerRunner):
             # The objects it holds then, closed at the unwind before the database connections.
             stack.push_async_callback(supervisor.close)
 
-            def notification_sender_over(built: AppriseNotifier) -> NotificationSender:
-                return NotificationSender(
-                    outbox=outbox,
-                    notifier=built,
-                    notification_timeout_seconds=observability.notification_timeout_seconds,
-                    record_check=node_health.record,
-                    service_dependencies=service_parts,
-                    local_database=local_database,
-                    logger=StdlibLogger(NotificationSender.__module__),
-                )
+            def notification_senders_over(built: AppriseNotifier) -> list[NotificationSender]:
+                return [
+                    NotificationSender(
+                        service=service,
+                        outbox=outbox,
+                        notifier=built,
+                        notification_timeout_seconds=observability.notification_timeout_seconds,
+                        record_check=node_health.record,
+                        service_dependencies=service_parts,
+                        local_database=local_database,
+                        logger=StdlibLogger(NotificationSender.__module__),
+                    )
+                    for service in service_parts
+                ]
 
             def notifier_works_over(built: AppriseNotifier) -> Sequence[SupervisedWork]:
                 return notification_sending(
-                    notification_sender_over(built),
+                    notification_senders_over(built),
                     notification_timeout_seconds=observability.notification_timeout_seconds,
-                    services=tuple(service_parts),
                 )
 
             # Download enabled ⟺ the ``download`` section is present (``enabled: true``).
@@ -619,7 +622,7 @@ class CrawlerComposition(CrawlerRunner):
                 download_enabled=download_config is not None,
                 supervisor=supervisor,
                 # A notifier of its own: every work, the latest notifier's included, has stopped.
-                notification_sender=notification_sender_over(build_notifier()),
+                notification_senders=notification_senders_over(build_notifier()),
                 logger=StdlibLogger(CrawlerLifecycle.__module__),
             )
             # Entered disarmed: the steady state is unbounded, and the run arms it as soon as the
