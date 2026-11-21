@@ -221,7 +221,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 72 | `feat/function-lost-restarts-the-crawler` | an object left unrepaired, each work's function, the crawler restarted when a function is lost (Corrected: added for D33 and D34, cut out of block 70, which came to 686 lines and 29 files) | 334 lines, 28 files, past the file bound, 15 of them the new required function at every site |
 | 74 | `feat/unrepaired-object-alert` | the alert of an object left unrepaired, and its end (Corrected: cut out of block 70) | 205 lines, 13 files |
 | 75 | `fix/one-sending-per-service` | one notifier's work per service, so that a service that never answers holds no other (Corrected: added, the holistic review's finding on block 15's one work) | estimated at its start |
-| 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | |
+| 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | (Corrected: the behaviour fixes, 283 lines, 15 files) |
+| 82 | `refactor/lot-4b6-review-words` | the holistic review's fixes of names, words and unread surface | (Corrected: cut out of block 80, which came to 26 files; 204 lines, 17 files) |
 | 90 | `docs/lot-4b6-wrap` | closing block | |
 
 A block past a bound carries one piece with its first reader: 10 a rename; 15 the outbox with its writer, the dispatcher, and its reader, the notifier's work; 25 the store with its
@@ -439,6 +440,9 @@ over.record_turn(supervised, met_a_bug=met_a_bug)  # one work failing: rebuild a
   alert "the crawl lost: every search failing after 3 rebuilds: the crawler restarts". Commit 2's function and
   restart came before the alerts, so that no block keeps the object unrepaired with nothing ending the supervision.)
 - 75 (Corrected, added): the notifier's rebuild hands back one sending work per service, each over its own entries.
+  (Corrected: as built, each work is `notification sending <service>` in the log, its bug line and the unrepaired
+  alert naming the service; at the shutdown, `empty_the_outbox(senders)` sends every service's entries at once,
+  again while a send left another, so the local database's alert is not left behind.)
 
 ### Blocks 60 and 65, the refused password
 
