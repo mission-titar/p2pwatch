@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.adapters.driven.persistence_sqlite.errors import PersistenceError
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_notification_outbox_store import (
     SqliteNotificationOutboxStore,
 )
@@ -16,6 +15,7 @@ from p2pwatch.domain.observability.notification import CompletedDownload
 from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
     PendingNotification,
+    UnreadableNotification,
 )
 from p2pwatch.domain.observability.policy import Audience
 from tests.contracts.application.ports.driven.notification_outbox_store_contract import (
@@ -100,21 +100,32 @@ def test_an_entry_is_one_row_its_service_in_columns_its_notification_a_json_obje
 
 
 @pytest.mark.parametrize(
-    ("kind", "fields"),
-    [("completed_download", '{"filename": "x"}'), ("a_kind_no_save_writes", "{}")],
+    ("kind", "fields", "reason"),
+    [
+        (
+            "completed_download",
+            '{"filename": "x"}',
+            "a stored notification is malformed: KeyError('target_titles')",
+        ),
+        ("a_kind_no_save_writes", "{}", "no notification is of the kind 'a_kind_no_save_writes'"),
+    ],
     ids=["lacking a field", "of no kind"],
 )
-def test_a_stored_notification_no_save_writes_raises_persistence_error(
+def test_a_stored_notification_no_save_writes_is_read_back_unreadable_and_why(
     *,
     outbox_store: SqliteNotificationOutboxStore,
     connection: sqlite3.Connection,
     kind: str,
     fields: str,
+    reason: str,
 ) -> None:
+    outbox_store.set_pending_notifications([_COMPLETED])
     connection.execute(
-        "INSERT INTO pending_notifications VALUES (1, 'discord', 'community', 1, ?, ?)",
+        "INSERT INTO pending_notifications VALUES (2, 'discord', 'community', 1, ?, ?)",
         (kind, fields),
     )
 
-    with pytest.raises(PersistenceError, match="a stored value cannot be read"):
-        outbox_store.read_pending_notifications()
+    assert outbox_store.read_pending_notifications() == (
+        _COMPLETED,
+        UnreadableNotification(reason=f"a stored value cannot be read: {reason}"),
+    )

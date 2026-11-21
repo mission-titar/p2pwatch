@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Any, assert_never
 
 from p2pwatch.adapters.driven.persistence_sqlite.errors import (
+    PersistenceError,
     wrap_sqlite_errors,
     wrap_stored_value_errors,
 )
@@ -31,6 +32,7 @@ from p2pwatch.domain.observability.notification import (
 from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
     PendingNotification,
+    UnreadableNotification,
 )
 from p2pwatch.domain.observability.policy import Audience
 from p2pwatch.domain.observability.severity import Severity
@@ -57,10 +59,12 @@ class SqliteNotificationOutboxStore(NotificationOutboxReader, NotificationOutbox
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
 
-    def read_pending_notifications(self) -> tuple[PendingNotification, ...]:
+    def read_pending_notifications(
+        self,
+    ) -> tuple[PendingNotification | UnreadableNotification, ...]:
         with wrap_sqlite_errors():
             rows = self._connection.execute(_SELECT).fetchall()
-        return tuple(map(_entry_from_row, rows))
+        return tuple(map(_entry_or_unreadable, rows))
 
     def set_pending_notifications(self, entries: Sequence[PendingNotification]) -> None:
         """Replaces the whole table in one transaction, the oldest entry the lowest id."""
@@ -198,3 +202,10 @@ def _entry_from_row(row: NamedRow) -> PendingNotification:
     except (KeyError, TypeError) as error:  # a field missing, or of a type no save writes
         raise ValueError(f"a stored notification is malformed: {error!r}") from error
     return PendingNotification(notification=notification, service=service)
+
+
+def _entry_or_unreadable(row: NamedRow) -> PendingNotification | UnreadableNotification:
+    try:
+        return _entry_from_row(row)
+    except PersistenceError as error:  # a row an earlier version left, without a field added since
+        return UnreadableNotification(reason=str(error))
