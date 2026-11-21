@@ -15,7 +15,9 @@ and 35.
 A bug is our code's: the supervisor counts the bugs of each object it can rebuild (the aMule client, the webui, the
 notifier) and rebuilds the object whose bugs keep coming back, waiting longer each time. When three rebuilds repair
 nothing, the cause lies in something shared, so the crawler stops and Docker starts it again, whole; this goes on
-without end, slowly, an alert at each round.
+without end, slowly, an alert at each round. (Corrected: each work is judged on its own turns; a work three rebuilds
+do not repair leaves its object unrepaired, with an alert; the crawler restarts only when one of its functions is
+wholly lost: the webui, the notifications, the crawl (every search failing), or the downloads. D32 to D34.)
 
 An outage is outside the program: amuled silent, Kad off its network, the disk full, Discord refusing, a refused
 password. What can have one is an external dependency, and each of its rules carries the alert it sends, or none. The
@@ -28,10 +30,11 @@ of the node; a save that fails is an outage of the local database, with its aler
 ## 2. What the operator will see
 
 - **A bug rebuilds, an outage alerts**: no log line says a channel has bugs any more; a bug names the object it
-  rebuilds.
+  rebuilds. (Corrected: a bug the rebuilds do not repair alerts too, D33.)
 - **An object whose bugs repeat is rebuilt after 1, then 2, then 4 minutes**; the third rebuild in vain sends an alert
   and the crawler restarts, amuled untouched. A node that keeps failing so restarts every 7 minutes and its start at
-  least.
+  least. (Corrected: a work three rebuilds do not repair leaves its object unrepaired, with an alert; the crawler
+  restarts when the webui, the notifications or the crawl is wholly lost. D32 to D34.)
 - **A refused password calls the operator**: an alert at the start, at a rebuild or while the node runs, the node
   running and logging in again every 30 minutes at most. It no longer stops the node at its start.
 - **A notification already decided survives a restart of the node**; one may be sent twice when the node stops in the
@@ -77,7 +80,8 @@ of the node; a save that fails is an outage of the local database, with its aler
 - **D25. The supervisor counts the bugs of each object it can rebuild, over every turn of the object's works: failing
   at 3 in a row, healthy again under 2 in the last 10. A rebuild forgets them.** *The object is what a rebuild renews.
   A bug that comes back on one keyword alone, between healthy turns of the others, rebuilds nothing, which is right: a
-  bug that repeats identically is in the code, and no rebuild fixes it; each one keeps its line and its trace.*
+  bug that repeats identically is in the code, and no rebuild fixes it; each one keeps its line and its trace.* (Corrected: replaced by D32 and D33, the merged count letting a fast healthy work
+  hide a slow one's bugs, the holistic review on 2026-11-21.)
 - **D26. The supervisor alone decides each rebuild and runs it: it stops the object's works, closes the object, has
   its builder build a new one and runs that one's works, after 1, then 2, then 4 minutes. A rebuild is in vain when
   the object's bugs turn failing again before they are healthy, or when it raises; the count resets once they are
@@ -92,6 +96,29 @@ of the node; a save that fails is an outage of the local database, with its aler
   resets its count and restarts nothing after a reboot (appendix C).* (Corrected: the supervisor stops its works and
   ends its supervision with the error, as an OTP supervisor past its bound stops its children then itself; the
   lifecycle dispatches the alert, empties the outbox and exits with the error, the operator on 2026-11-20.)
+  (Corrected: its trigger is D34's, no longer an object's third rebuild in vain.)
+- **D32. The supervisor judges each work on its own turns: failing at 3 bugs in a row, healthy again once fewer than
+  2 of its last 10 met one, unknown before its third turn; a rebuild keeps them, so a failing work stays failing until
+  it heals. A work turning failing has its object rebuilt, with every work over it, after 1, then 2, then 4 minutes. A
+  rebuild is in vain when a work of the object meets 3 bugs in a row after it, or when it raises; the count resets
+  once every work of the object that turned failing is healthy again.** *Each child judged alone, the shared state
+  restarted with all its dependants, is OTP's `one_for_all`; a work that never ran, such as a service seldom notified,
+  never failed, so it holds no reset back.*
+- **D33. After three rebuilds in vain, the object is left unrepaired: it is not rebuilt again until its count resets,
+  its works run on, the failing ones failing alone, and one alert names the object, its failing works and their two
+  possible causes, a bug of their own or a shared state a restart of the crawler would renew; its end goes when the
+  count resets. A work turning failing while its object is unrepaired rebuilds nothing.** *Nothing tells a work's own
+  bug from a wider shared state but a restart, so the ambiguous case calls a human (the SRE book) rather than
+  restarting every network for one keyword.* "Unrepaired", since "degraded" already names an outage.
+- **D34. Each work serves one of the crawler's functions: the webui, the notifications, the crawl, whose works are
+  every P2P client's searches, and on a node that downloads the downloads, whose works are every client's download
+  and source tracking; the status reading serves none. The crawler restarts when a function is wholly lost: every object serving it
+  unrepaired, none of its works healthy, one at least failing; an object whose third rebuild raised holds no
+  work and counts as failing.** *The restart is the one answer automated without
+  doubt: a function the node exists for is gone, and no smaller rebuild brought it back. A client whose searches all
+  fail is lost to the crawl though its status reading answers; one client lost among others leaves the others
+  crawling, which holds with the networks to come. A node that finds its episodes and never downloads them has lost
+  what it exists for.* The operator, 2026-11-21.
 
 ### Notifications
 
@@ -125,8 +152,13 @@ Commands and the output that fails each row: appendix B.
 | Check | After the lot | On `main` |
 |---|---|---|
 | A bug at every turn of the client's works | the client rebuilt after 1, 2, then 4 min, then an alert and the crawler exiting with an error | rebuilt three times in vain, then never again |
-| A bug at every turn of one keyword's search, the others healthy | nothing rebuilt, each bug logged with its trace | the client rebuilt three times, that search's bugs rule failing |
-| After two rebuilds in vain, ten healthy turns, then bugs again | rebuilt after 1 min, the count back at zero | the count reset by the parts' bugs rules |
+| A bug at every turn of one keyword's search, the others healthy | nothing rebuilt, each bug logged with its trace (Corrected: the client rebuilt after 1, 2, then 4 min, then unrepaired, its alert naming the search; the crawler not restarted) | the client rebuilt three times, that search's bugs rule failing |
+| Both eD2k searches cut at their time limit at every turn, the status reading healthy | (Corrected, added: the client rebuilt within the third cut) | the client rebuilt, the channel's bugs rule failing |
+| Every search failing after the client's rebuilds, the status reading healthy | (Corrected, added: the client unrepaired, the crawl lost, the crawler restarting with its alert) | the client rebuilt three times in vain, then never again |
+| Download tracking and source tracking failing after the client's rebuilds, the searches healthy | (Corrected, added: the client unrepaired, the downloads lost, the crawler restarting with its alert) | the client rebuilt three times in vain, then never again |
+| One of two notification services failing at every send, the other never sent to | (Corrected, added: the notifier unrepaired, the notifications not lost, the crawler running) | n/a |
+| After three rebuilds in vain, the failing work healthy again | (Corrected, added: the unrepaired alert's end sent, the next bugs rebuilding after 1 min) | n/a |
+| After two rebuilds in vain, ten healthy turns, then bugs again | rebuilt after 1 min, the count back at zero (Corrected: back at zero only under 2 bugs in each work's last 10 turns; three turns not all bugs reset nothing) | the count reset by the parts' bugs rules |
 | The webui's thread dying | the webui rebuilt and serving again | the same |
 | A bug at every send of the notifier | the notifier rebuilt after 1, 2, then 4 min, then the crawler restarting | the notifier rebuilt three times in vain, then never again |
 | A bug in a Kad search | no `channel amuled kad, bugs` line | `channel amuled kad, bugs: unknown to failing` |
@@ -184,6 +216,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files (Corrected: 1 012 lines, 683 removed, 30 files, past both bounds, the health alerter's cases moving to each domain module's tests and `node_id` given at 16 test sites, accepted by the operator on 2026-11-21) |
 | 60 | `feat/password-refused-outage` | the refused password an outage of amuled, with its alert | ~280 lines, ~6 files |
 | 65 | `feat/login-tried-again` | the login tried again after waits that double | ~300 lines, ~6 files |
+| 70 | `feat/works-judged-alone` | each work judged on its own turns, an object left unrepaired, the crawler restarted when a function is lost (Corrected: added for D32 to D34, 2026-11-21) | estimated at its start, cut along those three if past a bound |
+| 75 | `fix/one-sending-per-service` | one notifier's work per service, so that a service that never answers holds no other (Corrected: added, the holistic review's finding on block 15's one work) | estimated at its start |
 | 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | |
 | 90 | `docs/lot-4b6-wrap` | closing block | |
 
@@ -202,6 +236,11 @@ send is already a turn of that work.
 
 ### Accepted limits
 
+- **An unrepaired object waits for the operator** (Corrected, added: D33): a work three rebuilds did not repair runs
+  on failing, an alert naming it, until it is healthy again or the operator restarts the crawler.
+- **A notifier unrepaired on its operations service alerts no one** (Corrected, added): its alert goes through that
+  failing service; the community service, healthy or idle, keeps the notifications from being lost, so the crawler
+  runs on; the log keeps the alert.
 - **A node whose cause survives its own restart restarts every 7 minutes and its start, without end**, an alert at
   each round, until the operator steps in (the operator, 2026-11-18).
 - **A notification can be sent twice** when the node stops between its send and the save of its removal.
@@ -220,6 +259,8 @@ send is already a turn of that work.
 
 - **Lot 4c**: its draft's D17 ("the crawler stops only when it cannot build its graph or the supervisor itself
   fails") is superseded by D27; its entry's "graph of parts" becomes the graph of dependencies.
+- **Lot 4c** (Corrected, added): what the Node page and `/health` show of an unrepaired object, and D34's three
+  functions as the real stops.
 - **Multi network, stage 5**: a free-space check per client's output directory meets the download disk as one
   dependency.
 
@@ -237,7 +278,7 @@ SQLite adapter; the dependencies, their rules and their alerts are `domain/`; th
 | `HealthAlert` | the alert a rule of a dependency sends when it turns failing, and its end when it turns healthy again, or none | Kad's "off its network for 5 min", then "back on its network" |
 | `NotificationOutbox` | the notifications left to send, in memory, one entry per notification and service | |
 | `NotificationOutboxWriter`, `NotificationOutboxReader` | the outbox's save in `local.db`: `set_pending_notifications(entries)` replaces it, `read_pending_notifications()` reads it back | |
-| `SupervisedObject` | the supervisor's record of one object it rebuilds, private to it: its builder, the latest object built, whether each of its latest turns met a bug (judged by `BUGS`' thresholds), its rebuilds in vain | the aMule client's record |
+| `SupervisedObject` | the supervisor's record of one object it rebuilds, private to it: its builder, the latest object built, whether each of its latest turns met a bug (judged by `BUGS`' thresholds), its rebuilds in vain (Corrected: the turns kept per work, D32; its function and whether it is unrepaired, D33, D34) | the aMule client's record |
 | `outage` | the glossary's word for something failing outside the program | aMule off, a refused password |
 
 Removed: `Component`, `BUGS` as a rule of a dependency, `RestartPolicy`, `RestartRequest`, `RestartRunner`,
@@ -377,6 +418,20 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
   the status reading and the searches record on one channel dependency compares their names in the node's health's
   log, the subscriber that kept the transitions gone; the count of dependencies built still proves the sharing.)
 
+### Blocks 70 and 75, the review's two MAJOR findings and the sending per service
+
+- 70 (Corrected, added on 2026-11-21): each `SupervisedWork`'s latest turns judged by `BUGS`' thresholds, kept across
+  a rebuild; a work turning failing rebuilds its object; `SupervisedObject` keeps the rebuilds in vain, reset when
+  every work of it that turned failing is healthy again; at the third, the object unrepaired, the supervisor
+  dispatching `WorksStillFailing` ("client amuled: search 'keroro' amuled ed2k still failing after 3 rebuilds: a bug
+  of its own, or a shared state a crawler restart would renew", `operations`) and, at the reset, `WorksHealthyAgain`
+  ("client amuled: every work healthy again"), the supervisor given the dispatcher for them. Each `SupervisedWork` names its function (`WEBUI`, `NOTIFICATIONS`, `CRAWL`, `DOWNLOADS`, or none for the
+  status reading); a function wholly lost ends `supervise()` with `CrawlerRestartError` naming it, the lifecycle's alert
+  "the crawl lost: every search failing after 3 rebuilds: the crawler restarts" (the webui's and the notifications'
+  alike). The glossary gains `unrepaired` and `function`; `SupervisedObject`'s Names row and the model sketch read per
+  work.
+- 75 (Corrected, added): the notifier's rebuild hands back one sending work per service, each over its own entries.
+
 ### Blocks 60 and 65, the refused password
 
 - 60: a rule on amuled, "password refused", failing at one detection, healthy again at one reading without it; the
@@ -392,7 +447,12 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 | Row | Test | Fails unless |
 |---|---|---|
 | A bug at every turn of the client's works | a supervisor test on virtual time, every work over a fake client raising | rebuilds start 1, 2, then 4 min after each in vain, and `supervise()` ends with the error after the third (Corrected: the alert is the lifecycle's test's, below) |
-| One keyword's search | a supervisor test, one of three works raising at each turn | no rebuild in 30 turns, each bug logged with its trace |
+| One keyword's search | a supervisor test, one of three works raising at each turn | no rebuild in 30 turns, each bug logged with its trace (Corrected: three rebuilds after 1, 2, then 4 min, then the unrepaired alert naming that work, no `CrawlerRestartError`) |
+| Both eD2k searches cut, status healthy | a supervisor test on virtual time: the status reading healthy every 60 s, a Kad search healthy every 5 min, both eD2k searches stuck past their 2 400 s time limit at every turn | a rebuild within the third cut |
+| Every search failing, status healthy | a supervisor test, every search raising after each rebuild, the status reading healthy | `supervise()` ends with the error naming the crawl after the third rebuild in vain; with the status reading raising too and one search healthy, it never ends |
+| One of two services failing | a supervisor test, one service's work raising at every turn, the other's never turning | the notifier unrepaired, `supervise()` never ending |
+| The failing work healthy again | a supervisor test, after the unrepaired alert, ten healthy turns | the end dispatched, the count at zero |
+| The count's reset | a supervisor test, turns `bug, bug, ok, bug, bug, bug` after a rebuild | the next rebuild waits 2 min, not 1 |
 | Two in vain, ten healthy, then bugs | a supervisor test | the next rebuild comes 1 min after the bugs turn failing |
 | The webui's thread dying | block 35's webui test, its thread stopped | a new thread serves |
 | A bug at every send of the notifier | a supervisor test, a fake notifier raising | the notifier rebuilt after 1, 2, then 4 min, then `supervise()` ending with the error |

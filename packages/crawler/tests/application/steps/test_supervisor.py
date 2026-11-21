@@ -3,8 +3,8 @@ whoever asks for it; the shutdown's bound is armed before the works are cancelle
 
 A turn that raises fails alone: an expected error is one warning line, any other exception is a
 bug, logged with its trace, and its work's next turn comes at least 60 s later. A turn still
-running at its work's time limit is cut, and counts as a bug of its object, which three in a row
-rebuild. The timed tests share one simulated time, on the virtual-time loop.
+running at its work's time limit is cut, and counts as a bug of its work, three in a row
+rebuilding its object. The timed tests share one simulated time, on the virtual-time loop.
 """
 
 import asyncio
@@ -127,12 +127,13 @@ class _HungWork(Work):
     """A work whose turns never end on their own; it notes when each turn starts and when it is
     cut."""
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "hung work") -> None:
+        self._name = name
         self.turns: list[float] = []
         self.cut_at: list[float] = []
 
     def __str__(self) -> str:
-        return "hung work"
+        return self._name
 
     async def wait_for_next_turn(self) -> None:
         """Waits for nothing: each turn starts at once."""
@@ -209,13 +210,13 @@ async def _supervise(
 
 def _supervise_until(
     loop: VirtualLoop,
-    *works: Work,
+    *works: Work | SupervisedWork,
     seconds: float,
     logger: FakeLogger | None = None,
     time_limit: timedelta = _DAY,
 ) -> FakeRestartableBuilder:
-    """Takes the turns of ``works`` on ``loop``, each with ``time_limit``, the works of one object,
-    until the shutdown requested at ``seconds``; returns that object's builder."""
+    """Takes the turns of ``works`` on ``loop``, each a work alone with ``time_limit``, the works
+    of one object, until the shutdown requested at ``seconds``; returns that object's builder."""
     run_state = FakeRunStateStore()
     loop.call_later(seconds, run_state.set_shutdown_requested)
     supervisor = Supervisor(
@@ -223,9 +224,11 @@ def _supervise_until(
         monotonic_clock=FakeLoopMonotonicClock(loop),
         logger=logger or FakeLogger(),
     )
-    return loop.run_until_complete(
-        _supervise(supervisor, *_supervised(*works, time_limit=time_limit))
-    )
+    supervised = [
+        work if isinstance(work, SupervisedWork) else _supervised(work, time_limit=time_limit)[0]
+        for work in works
+    ]
+    return loop.run_until_complete(_supervise(supervisor, *supervised))
 
 
 @pytest.mark.asyncio
@@ -409,6 +412,27 @@ def test_turns_cut_at_their_time_limit_count_as_bugs_three_in_a_row_rebuilding_t
 
     assert hung.cut_at[:3] == [30.0, 30.0 + _AFTER_A_BUG + 30.0, third_cut]
     assert client.built_at == [0.0, third_cut + 60.0]  # a minute after the third
+
+
+def test_two_works_cut_at_every_turn_between_the_healthy_turns_of_two_others_rebuild_their_object(
+    virtual_loop: VirtualLoop,
+) -> None:
+    status = _TimedWork("status reading amuled", wait_seconds=60.0)
+    kad = _TimedWork("search 'keroro' amuled kad", wait_seconds=300.0)
+    ed2k = [_HungWork(f"search '{keyword}' amuled ed2k") for keyword in ("keroro", "titar")]
+    third_cut = 3 * 2400.0 + 2 * _AFTER_A_BUG
+
+    client = _supervise_until(
+        virtual_loop,
+        status,
+        kad,
+        *_supervised(*ed2k, time_limit=timedelta(seconds=2400)),
+        seconds=third_cut + 61.0,
+    )
+
+    # Each work judged on its own turns: the healthy ones, every minute, hide none of the cuts.
+    assert [search.cut_at[:3] for search in ed2k] == [[2400.0, 4860.0, third_cut]] * 2
+    assert client.built_at == [0.0, third_cut + 60.0]
 
 
 @pytest.mark.asyncio
