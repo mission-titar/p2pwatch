@@ -46,11 +46,7 @@ def test_the_third_detection_in_a_row_returns_the_change_to_failing() -> None:
     assert amule.record(rule=_UNREACHABLE, detected=True) is None
     assert amule.record(rule=_UNREACHABLE, detected=True) is None
     assert amule.record(rule=_UNREACHABLE, detected=True) == HealthTransition(
-        dependency=amule,
-        rule=_UNREACHABLE,
-        alert=_UNREACHABLE_ALERT,
-        previous=HealthState.UNKNOWN,
-        current=HealthState.FAILING,
+        alert=_UNREACHABLE_ALERT, previous=HealthState.UNKNOWN, current=HealthState.FAILING
     )
 
 
@@ -66,11 +62,7 @@ def test_3_checks_not_detected_return_the_change_to_healthy() -> None:
     amule.record(rule=_UNREACHABLE, detected=False)
     amule.record(rule=_UNREACHABLE, detected=False)
     assert amule.record(rule=_UNREACHABLE, detected=False) == HealthTransition(
-        dependency=amule,
-        rule=_UNREACHABLE,
-        alert=_UNREACHABLE_ALERT,
-        previous=HealthState.UNKNOWN,
-        current=HealthState.HEALTHY,
+        alert=_UNREACHABLE_ALERT, previous=HealthState.UNKNOWN, current=HealthState.HEALTHY
     )
 
 
@@ -114,26 +106,11 @@ def test_after_failing_it_turns_healthy_at_the_ninth_check_not_detected() -> Non
     ]
 
 
-def test_its_state_under_a_rule_is_unknown_until_enough_checks_then_what_they_say() -> None:
-    amule = _amule()
-    amule.record(rule=_UNREACHABLE, detected=True)
-    amule.record(rule=_UNREACHABLE, detected=True)
-    assert amule.state(_UNREACHABLE) is HealthState.UNKNOWN
-
-    amule.record(rule=_UNREACHABLE, detected=True)
-
-    assert amule.state(_UNREACHABLE) is HealthState.FAILING
-    assert amule.state(_NOT_CONNECTED) is HealthState.UNKNOWN
-
-
 def _sent_at(
     *, previous: HealthState, current: HealthState, alert: HealthAlert | None = _UNREACHABLE_ALERT
 ) -> Event | None:
     """What the alert sends at a change from ``previous`` to ``current``."""
-    transition = HealthTransition(
-        dependency=_amule(), rule=_UNREACHABLE, alert=alert, previous=previous, current=current
-    )
-    return transition.alert_event()
+    return HealthTransition(alert=alert, previous=previous, current=current).alert_event()
 
 
 @pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
