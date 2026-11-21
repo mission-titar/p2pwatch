@@ -58,25 +58,29 @@ def _outbox(
     )
 
 
-def _taken(outbox: NotificationOutbox) -> list[PendingNotification]:
-    """Each entry it holds, the oldest first, taken out."""
+def _taken(
+    outbox: NotificationOutbox, *, service: NotificationService
+) -> list[PendingNotification]:
+    """Each entry it holds for ``service``, the oldest first, taken out."""
     taken = []
-    while (entry := outbox.oldest()) is not None:
+    while (entry := outbox.oldest(service)) is not None:
         taken.append(entry)
         outbox.remove(entry)
     return taken
 
 
-async def test_each_notification_is_left_for_each_service_and_taken_out_oldest_first() -> None:
+async def test_each_notification_is_left_for_each_service_each_one_s_taken_oldest_first() -> None:
     outbox = _outbox()
     outbox.leave(_ONLINE, services=[_DISCORD, _NTFY])
     outbox.leave(_OFFLINE, services=[_DISCORD])
 
-    assert _taken(outbox) == [
-        PendingNotification(notification=_ONLINE, service=_DISCORD),
-        PendingNotification(notification=_ONLINE, service=_NTFY),
-        PendingNotification(notification=_OFFLINE, service=_DISCORD),
-    ]
+    assert (_taken(outbox, service=_DISCORD), _taken(outbox, service=_NTFY)) == (
+        [
+            PendingNotification(notification=_ONLINE, service=_DISCORD),
+            PendingNotification(notification=_OFFLINE, service=_DISCORD),
+        ],
+        [PendingNotification(notification=_ONLINE, service=_NTFY)],
+    )
 
 
 async def test_a_notification_left_wakes_the_notifier_s_work() -> None:
@@ -89,7 +93,7 @@ async def test_a_notification_left_wakes_the_notifier_s_work() -> None:
 
 async def test_the_wait_returns_once_a_notification_is_left() -> None:
     outbox = _outbox()
-    waiting = asyncio.create_task(outbox.wait_for_an_entry())
+    waiting = asyncio.create_task(outbox.wait_for_an_entry(_DISCORD))
     for _ in range(3):
         await asyncio.sleep(0)  # noqa: TID251
     waited_while_empty = not waiting.done()
@@ -100,12 +104,26 @@ async def test_the_wait_returns_once_a_notification_is_left() -> None:
     assert waited_while_empty
 
 
+async def test_the_wait_for_one_service_keeps_waiting_while_only_another_s_entries_are_left() -> (
+    None
+):
+    outbox = _outbox()
+    waiting = asyncio.create_task(outbox.wait_for_an_entry(_DISCORD))
+
+    outbox.leave(_ONLINE, services=[_NTFY])
+    for _ in range(3):
+        await asyncio.sleep(0)  # noqa: TID251
+
+    assert not waiting.done()
+    waiting.cancel()
+
+
 async def test_the_wait_returns_at_once_while_it_holds_an_entry() -> None:
     outbox = _outbox()
     outbox.leave(_ONLINE, services=[_DISCORD])
-    await outbox.wait_for_an_entry()  # the wake, taken by this wait
+    await outbox.wait_for_an_entry(_DISCORD)  # the wake, taken by this wait
 
-    waiting = asyncio.create_task(outbox.wait_for_an_entry())
+    waiting = asyncio.create_task(outbox.wait_for_an_entry(_DISCORD))
     for _ in range(3):
         await asyncio.sleep(0)  # noqa: TID251
 
@@ -116,7 +134,7 @@ async def test_a_wake_with_nothing_left_since_the_entries_were_sent_keeps_waitin
     outbox = _outbox()
     outbox.leave(_ONLINE, services=[_DISCORD])
     outbox.remove(PendingNotification(notification=_ONLINE, service=_DISCORD))
-    waiting = asyncio.create_task(outbox.wait_for_an_entry())
+    waiting = asyncio.create_task(outbox.wait_for_an_entry(_DISCORD))
     for _ in range(3):
         await asyncio.sleep(0)  # noqa: TID251
 
@@ -155,7 +173,9 @@ async def test_a_save_its_store_refuses_is_logged_in_one_line_its_entries_kept_i
             "saved again at its next change",
         )
     ]
-    assert _taken(outbox) == [PendingNotification(notification=_ONLINE, service=_DISCORD)]
+    assert _taken(outbox, service=_DISCORD) == [
+        PendingNotification(notification=_ONLINE, service=_DISCORD)
+    ]
 
 
 async def test_it_keeps_whether_its_latest_save_failed() -> None:
@@ -178,11 +198,14 @@ async def test_it_reads_back_the_entries_an_earlier_one_saved_the_oldest_first()
     earlier.leave(_ONLINE, services=[_NTFY, _DISCORD])
     earlier.leave(_OFFLINE, services=[_NTFY])
 
-    assert _taken(_outbox(store=store)) == [
-        PendingNotification(notification=_ONLINE, service=_NTFY),
-        PendingNotification(notification=_ONLINE, service=_DISCORD),
-        PendingNotification(notification=_OFFLINE, service=_NTFY),
-    ]
+    outbox = _outbox(store=store)
+    assert (_taken(outbox, service=_NTFY), _taken(outbox, service=_DISCORD)) == (
+        [
+            PendingNotification(notification=_ONLINE, service=_NTFY),
+            PendingNotification(notification=_OFFLINE, service=_NTFY),
+        ],
+        [PendingNotification(notification=_ONLINE, service=_DISCORD)],
+    )
 
 
 async def test_an_entry_for_a_service_no_longer_configured_is_dropped_in_one_line() -> None:
@@ -201,7 +224,7 @@ async def test_an_entry_for_a_service_no_longer_configured_is_dropped_in_one_lin
         )
     ]
     kept = (PendingNotification(notification=_ONLINE, service=_DISCORD),)
-    assert (store.read_pending_notifications(), outbox.oldest()) == (kept, kept[0])
+    assert (store.read_pending_notifications(), outbox.oldest(_DISCORD)) == (kept, kept[0])
 
 
 async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_path: Path) -> None:
@@ -214,6 +237,7 @@ async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_pat
     with closing(open_local(tmp_path / "local.db")) as after_the_start:
         store = SqliteNotificationOutboxStore(after_the_start)
         await NotificationSender(
+            service=_DISCORD,
             outbox=_outbox(store=store, services=services),
             notifier=notifier,
             notification_timeout_seconds=5.0,

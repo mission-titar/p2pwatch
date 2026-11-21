@@ -778,9 +778,11 @@ Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observabil
 nœud + notification, dont le genre donne l'audience COMMUNITY ou OPERATIONS) ;
 l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
 Il n'envoie pas la notification : il la laisse, sans rien attendre, dans la boîte d'envoi
-(`NotificationOutbox`), une entrée par service de son audience. Le travail du notifieur
-(`NotificationSender`, `notification sending` dans le journal) envoie la plus ancienne à chaque
-tour, dans `notification_timeout_seconds`, puis la retire ; un envoi annulé garde son entrée.
+(`NotificationOutbox`), une entrée par service de son audience. Chaque service a son travail du
+notifieur (`NotificationSender`, `notification sending discord community` dans le journal), qui
+envoie la plus ancienne de ce service à chaque tour, dans `notification_timeout_seconds`, puis la
+retire ; un envoi annulé garde son entrée. Un service qui ne répond plus ne retient ainsi que les
+siennes.
 Une notification à la communauté y est une valeur typée (`TierRise`, `SourceAlert`,
 `CompletedDownload`) : le domaine n'écrit que du texte brut, l'adaptateur `AppriseNotifier` en écrit
 le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLogLine`). Un événement
@@ -791,7 +793,8 @@ sources, après celle de ses points, et `NodeHealth`, une fois l'état de sa rè
 sans rien attendre entre les deux, si bien qu'aucune coupure du tour, par sa limite de temps ou par
 une reconstruction de son objet, ne tombe entre l'écriture et l'entrée. Leurs limites de temps ne
 comptent donc aucun envoi. À l'arrêt, le cycle de vie envoie ce que garde la boîte d'envoi, par un
-notifieur à lui, dans la borne de l'arrêt, avant de fermer les ressources. La boîte d'envoi se
+notifieur à lui, tous les services à la fois (`empty_the_outbox`), dans la borne de l'arrêt, avant
+de fermer les ressources. La boîte d'envoi se
 sauvegarde dans `local.db` à chaque changement (`SqliteNotificationOutboxStore`) et se relit à sa
 construction, au démarrage, sans les entrées d'un service que la configuration n'a plus, écartées
 en une ligne : une notification décidée survit à un redémarrage, envoyée deux fois si le nœud
@@ -925,9 +928,11 @@ tourne encore : un thread terminé est un bug), que la fermeture arrête ; une c
 le thread se lie arrête ce thread. Un port pris ailleurs ne fait pas lever la construction : le
 thread neuf se termine, sa surveillance le retrouve terminé, et après trois reconstructions vaines
 la webui est perdue : le crawler redémarre. Le notifieur en est un aussi (`composition/notifier_restartable.py`) :
-`NotifierRestartableBuilder` construit un notifieur neuf et rend le travail du notifieur sur lui,
-que la fermeture laisse tel quel ; l'envoi qu'arrête la reconstruction garde son entrée, que le
-travail neuf envoie. Les parties des services sont construites une fois, sur les services d'un
+`NotifierRestartableBuilder` construit un notifieur neuf et rend sur lui le travail du notifieur
+de chaque service, que la fermeture laisse tel quel ; l'envoi qu'arrête la reconstruction garde
+son entrée, que le travail neuf de son service envoie. Un service en échec à chaque envoi, l'autre
+jamais sollicité, laisse le notifieur non réparé sans que les notifications soient perdues : le
+crawler tourne. Les parties des services sont construites une fois, sur les services d'un
 notifieur construit pour les lister, qu'un notifieur reconstruit sur la même configuration liste à
 l'identique ; sans service configuré, rien n'est laissé à envoyer, et le notifieur n'a pas de
 travail. Le `Supervisor` ne fait tourner que les `Work` des objets qu'il a fait construire : aucun

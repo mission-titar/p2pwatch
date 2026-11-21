@@ -168,6 +168,10 @@ class _Crawl:
                 _WorkWaitingForTheStop("status", on_start=self._work_started),
             )
         ]
+        record_check = NodeHealth(
+            logger=FakeLogger(), observability_dispatcher=self.observability.dispatcher
+        ).record
+        local_database = local_database_dependency(node_id=_NODE_ID)
         self._supervisor = Supervisor(
             run_state_reader=self.run_state,
             # Its sleeps never end: with instant ones, every time limit would expire at once.
@@ -202,17 +206,21 @@ class _Crawl:
             backoff=self.backoff,
             download_enabled=download_enabled,
             supervisor=self._supervisor,
-            notification_sender=NotificationSender(
-                outbox=self.observability.outbox,
-                notifier=self.notifier,
-                notification_timeout_seconds=5.0,
-                record_check=NodeHealth(
-                    logger=FakeLogger(), observability_dispatcher=self.observability.dispatcher
-                ).record,
-                service_dependencies=notification_service_dependencies(self.notifier.services()),
-                local_database=local_database_dependency(node_id=_NODE_ID),
-                logger=FakeLogger(),
-            ),
+            notification_senders=[
+                NotificationSender(
+                    service=service,
+                    outbox=self.observability.outbox,
+                    notifier=self.notifier,
+                    notification_timeout_seconds=5.0,
+                    record_check=record_check,
+                    service_dependencies=notification_service_dependencies(
+                        self.notifier.services()
+                    ),
+                    local_database=local_database,
+                    logger=FakeLogger(),
+                )
+                for service in self.notifier.services()
+            ],
             logger=self.logger,
         )
 
@@ -411,13 +419,8 @@ async def test_the_notifications_left_at_the_shutdown_are_sent_before_the_run_re
     # No work sends them: the node online, then the completion, both left for the shutdown.
     await crawl.run_until_both_works_start_then_stop()
 
-    assert crawl.notifier.calls == [
-        (
-            Audience.OPERATIONS,
-            RelayedLogLine(
-                message="🟢 node online (download off)", severity=Severity.INFO, node_id=_NODE_ID
-            ),
-        ),
+    # Each service's sent at once, in no order between them.
+    assert sorted(crawl.notifier.calls, key=lambda call: call[0].value) == [
         (
             Audience.COMMUNITY,
             CompletedDownload(
@@ -426,8 +429,14 @@ async def test_the_notifications_left_at_the_shutdown_are_sent_before_the_run_re
                 node_id=_NODE_ID,
             ),
         ),
+        (
+            Audience.OPERATIONS,
+            RelayedLogLine(
+                message="🟢 node online (download off)", severity=Severity.INFO, node_id=_NODE_ID
+            ),
+        ),
     ]
-    assert crawl.observability.outbox.oldest() is None
+    assert crawl.observability.outbox_store.read_pending_notifications() == ()
 
 
 def test_a_function_lost_has_its_alert_sent_local_db_refusing_then_raises_its_error(
