@@ -1,8 +1,8 @@
 """Runs every task the node repeats, such as the status reading, the works of the objects it
 built, until the shutdown is requested, then cancels them all; a turn that raises or outlasts its
-time limit fails alone, the others go on. It counts the bugs of each object's turns, and rebuilds
-the object, such as the aMule client, whose bugs keep coming back, waiting longer each time; its
-third rebuild in vain ends the supervision with a ``CrawlerRestartError``."""
+time limit fails alone, the others go on. It judges each work on its own turns, and rebuilds the
+object, such as the aMule client, one of whose works keeps meeting bugs, waiting longer each time;
+its third rebuild in vain ends the supervision with a ``CrawlerRestartError``."""
 
 import asyncio
 from collections.abc import Sequence
@@ -23,7 +23,7 @@ from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthSta
 # A bug that strikes at once would otherwise rerun at full speed, one trace per turn.
 WAIT_AFTER_A_BUG = timedelta(seconds=60)
 
-# One bug now and then fails its turn alone: three turns in a row of an object's works rebuild it.
+# One bug now and then fails its turn alone: three turns in a row of one work rebuild its object.
 BUGS = HealthRule(
     name="bugs",
     fails_at=Detections(times=3, among_last=3),
@@ -46,9 +46,36 @@ class ShutdownBoundArmer(Protocol):
     def __call__(self) -> None: ...
 
 
+class _WorkTurns:
+    """Whether each latest turn of one work met a bug, such as a search's, kept across its
+    object's rebuilds, and its turns since the latest."""
+
+    def __init__(self) -> None:
+        self.bugs = HealthState.UNKNOWN
+        self._latest_met_a_bug: tuple[bool, ...] = ()
+        self._since_build: tuple[bool, ...] = ()
+
+    def record(self, *, met_a_bug: bool) -> HealthState:
+        """Counts one turn and returns its bugs' state before it."""
+        previous = self.bugs
+        self._latest_met_a_bug = (*self._latest_met_a_bug, met_a_bug)[-BUGS.checks_kept :]
+        self._since_build = (*self._since_build, met_a_bug)[-BUGS.fails_at.among_last :]
+        self.bugs = BUGS.state_after(self._latest_met_a_bug, previous=previous)
+        return previous
+
+    def failing_since_build(self) -> bool:
+        """Whether its turns since its object's latest build alone fail, 3 bugs in a row."""
+        state = BUGS.state_after(self._since_build, previous=HealthState.UNKNOWN)
+        return state is HealthState.FAILING
+
+    def rebuilt(self) -> None:
+        self._since_build = ()
+
+
 class SupervisedObject:
     """The supervisor's record of one object it rebuilds, such as the aMule client: its builder, the
-    latest object built, whether each latest turn of its works met a bug, its rebuilds in vain."""
+    latest object built, whether each latest turn of each of its works met a bug, its rebuilds in
+    vain."""
 
     def __init__(
         self,
@@ -60,38 +87,47 @@ class SupervisedObject:
         self.builder = builder
         self.latest = first
         self._logger = logger
-        self._latest_met_a_bug: tuple[bool, ...] = ()
-        self._bugs = HealthState.UNKNOWN
-        # Rebuilt since its bugs were last healthy: their failing again counts a rebuild in vain.
+        # Each work's, by its name in the log: a work built anew is the same work.
+        self._works = {str(supervised.work): _WorkTurns() for supervised in first.works()}
+        # Rebuilt since its works were last all healthy: one failing again counts in vain.
         self._rebuilt = False
+        # A rebuild decided: the last turns of the works it stops decide nothing.
+        self._works_stopped = False
         self._in_vain = 0
 
     @property
     def rebuilds_in_vain(self) -> int:
-        """Its rebuilds in vain since its bugs were last healthy, one that raised included."""
+        """Its rebuilds in vain since its works were last all healthy, one that raised included."""
         return self._in_vain
 
-    def record_turn(self, *, met_a_bug: bool) -> bool:
-        """Counts one turn of its works, such as a search that met a bug; whether its bugs just
-        turned failing, which stops its works for a rebuild, or after three in vain, for good."""
-        previous = self._bugs
-        self._latest_met_a_bug = (*self._latest_met_a_bug, met_a_bug)[-BUGS.checks_kept :]
-        self._bugs = BUGS.state_after(self._latest_met_a_bug, previous=previous)
-        if self._bugs is previous:
+    def record_turn(self, supervised: SupervisedWork, *, met_a_bug: bool) -> bool:
+        """Counts one turn of one of its works, such as a search that met a bug; whether a rebuild
+        is decided, which stops its works, or after three in vain, for good."""
+        turns = self._works[str(supervised.work)]
+        previous = turns.record(met_a_bug=met_a_bug)
+        if self._works_stopped:
             return False
-        if self._bugs is HealthState.HEALTHY:
+        if previous is HealthState.FAILING and not self._failing():
             self._rebuilt, self._in_vain = False, 0
             return False
         if not self._rebuilt:
-            self._rebuilt = True
+            if turns.bugs is not HealthState.FAILING:
+                return False
+            self._rebuilt = self._works_stopped = True
             self._logger.warning("restarting %s: bugs in its works", self.builder)
             return True
+        if not turns.failing_since_build():
+            return False
         self.count_in_vain()
+        self._works_stopped = True
         if self._in_vain < REBUILDS_IN_VAIN_AT_MOST:
             in_vain = f"{self._in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
             message = "restarting %s again, %s: bugs in its works"
             self._logger.warning(message, self.builder, in_vain)
         return True
+
+    def _failing(self) -> bool:
+        return any(turns.bugs is HealthState.FAILING for turns in self._works.values())
 
     def count_in_vain(self) -> None:
         """Counts one rebuild in vain, such as one that raised."""
@@ -103,18 +139,23 @@ class SupervisedObject:
         return FIRST_WAIT_BEFORE_A_REBUILD * (1 << self._in_vain)
 
     async def rebuild(self) -> Sequence[SupervisedWork]:
-        """Closes the latest object, holds the one its builder builds next, forgets the bugs of the
-        turns before and returns its works; a build that raises leaves the closed one held."""
+        """Closes the latest object, holds the one its builder builds next and returns its works,
+        each work's turns kept; a build that raises leaves the closed one held."""
         await self.latest.close()
         self.latest = await self.builder.build()
-        self._latest_met_a_bug, self._bugs = (), HealthState.UNKNOWN
-        return self.latest.works()
+        works = self.latest.works()
+        for supervised in works:
+            self._works.setdefault(str(supervised.work), _WorkTurns())
+        for turns in self._works.values():
+            turns.rebuilt()
+        self._works_stopped = False
+        return works
 
 
 class Supervisor:
     """Takes the turns of the works of each object it built, until the run state says the shutdown
-    was requested; holds the object each builder built latest, and rebuilds it when its bugs keep
-    coming back, three times in vain at most."""
+    was requested; holds the object each builder built latest, and rebuilds it when one of its
+    works keeps meeting bugs, three times in vain at most."""
 
     def __init__(
         self,
@@ -228,7 +269,7 @@ class Supervisor:
             if self._run_state_reader.is_shutdown_requested():
                 return
             met_a_bug = await self._take_turn(supervised)
-            if over.record_turn(met_a_bug=met_a_bug):
+            if over.record_turn(supervised, met_a_bug=met_a_bug):
                 self._rebuilds_decided.put_nowait(over)
 
     async def _wait(self, work: Work, *, after_a_bug: bool) -> None:
