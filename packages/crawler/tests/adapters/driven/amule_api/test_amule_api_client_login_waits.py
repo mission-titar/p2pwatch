@@ -1,5 +1,5 @@
 """``AmuleApiClient`` after a refused login: every call refused at once, the next login 1 min
-later, then twice as long each time, 30 min at most, under amuleapi's login limiter (D24)."""
+later, then twice as long each time, 30 min at most, under amuleapi's login limiter."""
 
 import asyncio
 import logging

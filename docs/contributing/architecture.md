@@ -819,10 +819,10 @@ trace (§10.1) ; un échec dans un composant in-process testé à 100 % (par exe
 `InMemoryNodeMetricStore`) est un bug, pas un transitoire : il fait échouer son tour, écrit avec sa
 trace, et le tour suivant de son `Work` attend au moins 60 s (§3).
 
-### 10.1 La santé des parties du nœud
+### 10.1 La santé de ce dont le nœud dépend sans le contrôler
 
-Le nœud suit la santé de chacune de ses parties, ses dépendances externes, par exemple le client
-aMule (`ExternalDependency`).
+Le nœud suit la santé de ce dont il dépend sans le contrôler, ses dépendances externes
+(`ExternalDependency`), par exemple le client aMule ; « partie » en est le mot courant.
 Chaque partie a ses règles (`HealthRule`), par exemple « aMule ne répond pas ». À chaque
 vérification, le code enregistre dans `NodeHealth` si la règle a détecté son cas :
 `record(on=..., rule=..., detected=...)`. D'après ses dernières vérifications, la règle dit si la
@@ -881,8 +881,8 @@ Un objet qui tient un état en mémoire, comme le client aMule (sa session, son 
 créneaux Kad), est un `Restartable` : construit entier, il ne change plus ; il rend les `Work` qui
 tournent sur son état et sait se fermer. Son `RestartableBuilder` en construit un neuf à chaque
 appel, le premier compris : le `Supervisor` fait construire le premier (`build_first`) et garde,
-pour chaque constructeur, le dernier objet construit (un `SupervisedObject`), que l'arrêt du nœud
-ferme, le dernier construit d'abord. Ce `SupervisedObject` juge aussi chaque `Work` de l'objet
+pour chaque constructeur, le dernier objet construit (un `_SupervisedObject`), que l'arrêt du nœud
+ferme, le dernier construit d'abord. Ce `_SupervisedObject` juge aussi chaque `Work` de l'objet
 sur ses propres tours, gardés d'une reconstruction à l'autre et nommés comme le journal nomme le
 `Work` : s'il a rencontré un bug, une erreur attendue n'en étant pas un, aux seuils de `BUGS` : 3
 tours d'affilée en échec, moins de 2 sur les 10 derniers sains ; les tours sains d'un `Work` rapide

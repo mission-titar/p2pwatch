@@ -1,5 +1,5 @@
-"""``Restartable``: an object holding state in memory that the node can restart, such as a client
-logged in to aMule; its ``RestartableBuilder`` builds a new one at each restart."""
+"""``Restartable``: an object holding state in memory that the node can rebuild, such as a client
+logged in to aMule; its ``RestartableBuilder`` builds a new one at each rebuild."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 class Restartable[W](ABC):
     """An object holding state in memory, such as a client logged in to aMule, and the works ``W``
-    over it: built whole, it never changes; a restart closes it and builds another."""
+    over it: built whole, it never changes; a rebuild closes it and builds another."""
 
     @abstractmethod
     def works(self) -> Sequence[W]:
