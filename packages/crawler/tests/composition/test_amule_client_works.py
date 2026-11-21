@@ -25,12 +25,15 @@ from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
-from p2pwatch.domain.download.disk_space import CONNECTED_TO_NO_NETWORK, DISK_SPACE_LOW
 from p2pwatch.domain.health.external_dependency import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
-from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED, SEARCHES_FAILED
+from p2pwatch.domain.status_reading import (
+    CHANNEL_NOT_CONNECTED,
+    CONNECTED_TO_NO_NETWORK,
+    SEARCHES_FAILED,
+)
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -271,19 +274,18 @@ async def test_the_works_over_a_client_built_anew_record_on_the_parts_built_once
     ]
 
 
-async def test_the_status_reading_records_no_network_on_the_part_download_tracking_records_on(
-    node: _Node,
+@pytest.mark.parametrize("downloading", [True, False], ids=["downloading", "not-downloading"])
+async def test_the_status_reading_records_no_network_on_the_client_s_part_downloading_or_not(
+    node: _Node, *, downloading: bool
 ) -> None:
-    works = node.client_works(downloading=True).over(node.client(FakeAmuleApi()))
+    works = node.client_works(downloading=downloading).over(node.client(FakeAmuleApi()))
 
-    await _named(works, name="download tracking amuled").work.run_once()
     # aMule's status by default: neither channel connected, 6 readings to turn failing.
     for _ in range(6):
         await _named(works, name="status reading amuled").work.run_once()
 
-    [disk_low] = node.changes_under(DISK_SPACE_LOW)
     [no_network] = node.changes_under(CONNECTED_TO_NO_NETWORK)
-    assert no_network.dependency is disk_low.dependency
+    assert no_network.dependency.name == "client amuled"
 
 
 async def test_the_status_reading_records_a_channel_on_the_part_its_searches_record_on(

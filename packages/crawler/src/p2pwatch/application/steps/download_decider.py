@@ -48,7 +48,7 @@ class DownloadDecider:
         wall_clock: WallClock,
         observability_dispatcher: ObservabilityDispatcher,
         node_health: NodeHealth,
-        download_tracking_dependency: ExternalDependency,
+        download_disk_dependency: ExternalDependency,
         logger: Logger,
     ) -> None:
         self._free_space_meter = free_space_meter
@@ -62,7 +62,7 @@ class DownloadDecider:
         self._wall_clock = wall_clock
         self._observability_dispatcher = observability_dispatcher
         self._node_health = node_health
-        self._download_tracking_dependency = download_tracking_dependency
+        self._download_disk_dependency = download_disk_dependency
         self._logger = logger
 
     async def queue_new_candidates(self, outstanding_bytes: int) -> None:
@@ -74,7 +74,7 @@ class DownloadDecider:
         free_bytes = self._free_space_meter.free_bytes()
         await self._observability_dispatcher.dispatch(FreeSpaceSampled(free_bytes=free_bytes))
         await self._node_health.record(
-            on=self._download_tracking_dependency,
+            on=self._download_disk_dependency,
             rule=DISK_SPACE_LOW,
             detected=free_bytes < self._min_free_bytes,
         )

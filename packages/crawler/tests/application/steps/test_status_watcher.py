@@ -16,8 +16,6 @@ from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.download.disk_space import download_tracking_dependency
-from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
@@ -102,7 +100,6 @@ def _status_watcher(
     observability: _Observability,
     status_reading_writer: StatusReadingWriter | None = None,
     channels: Sequence[Channel] = _CHANNELS,
-    download_tracking: ExternalDependency | None = None,
 ) -> StatusWatcher:
     return StatusWatcher(
         client_name=client_name,
@@ -117,7 +114,6 @@ def _status_watcher(
             channel: channel_dependency(client_name=client_name, channel=channel)
             for channel in channels
         },
-        download_tracking_dependency=download_tracking,
     )
 
 
@@ -131,7 +127,6 @@ async def _run(
     *readings: _Reading,
     client: ClientName = _AMULED,
     channels: Sequence[Channel] = _CHANNELS,
-    download_tracking: ExternalDependency | None = None,
 ) -> _Observability:
     fake_time = FakeTime()
     observability = _Observability(fake_time)
@@ -141,7 +136,6 @@ async def _run(
         fake_time=fake_time,
         observability=observability,
         channels=channels,
-        download_tracking=download_tracking,
     )
     await _take_turns(watcher, turns=len(readings))
     return observability
@@ -252,10 +246,12 @@ async def test_unreachable_alerts_at_two_minutes_and_ends_at_the_ninth_answer() 
         observability.logger.lines.count(LoggedLine(level="warning", message="amuled unreachable"))
         == 3
     )
-    client_lines = [
-        line for line in observability.health_logger.lines if line.message.startswith("client ")
+    unreachable_lines = [
+        line
+        for line in observability.health_logger.lines
+        if line.message.startswith("client amuled, unreachable: ")
     ]
-    assert client_lines == [
+    assert unreachable_lines == [
         LoggedLine(level="warning", message="client amuled, unreachable: unknown to failing"),
         LoggedLine(level="info", message="client amuled, unreachable: failing to healthy"),
     ]
@@ -279,8 +275,7 @@ _NO_NETWORK = _status(ed2k=(False, None), kad=(False, None))
 
 
 def _no_network_lines(observability: _Observability) -> list[LoggedLine]:
-    """The log lines of each change of download tracking's health under "connected to no
-    network"."""
+    """The log lines of each change of the client's health under "connected to no network"."""
     return [
         line
         for line in observability.health_logger.lines
@@ -289,43 +284,29 @@ def _no_network_lines(observability: _Observability) -> list[LoggedLine]:
 
 
 @pytest.mark.asyncio
-async def test_six_readings_on_no_network_fail_download_tracking_and_nine_on_one_heal_it() -> None:
+async def test_six_readings_on_no_network_fail_the_client_s_rule_and_nine_on_one_heal_it() -> None:
     on_ed2k_alone = _status(ed2k=_UP, kad=(False, None))
-    observability = await _run(
-        *[_NO_NETWORK] * 6,
-        *[on_ed2k_alone] * 9,
-        download_tracking=download_tracking_dependency(_AMULED),
-    )
+    observability = await _run(*[_NO_NETWORK] * 6, *[on_ed2k_alone] * 9)
     assert _no_network_lines(observability) == [
         LoggedLine(
-            level="warning",
-            message="download tracking amuled, connected to no network: unknown to failing",
+            level="warning", message="client amuled, connected to no network: unknown to failing"
         ),
         LoggedLine(
-            level="info",
-            message="download tracking amuled, connected to no network: failing to healthy",
+            level="info", message="client amuled, connected to no network: failing to healthy"
         ),
     ]
 
 
 @pytest.mark.asyncio
 async def test_an_unreachable_reading_tells_nothing_of_the_client_s_networks() -> None:
-    held = await _run(
-        *[_NO_NETWORK] * 5, _DOWN, download_tracking=download_tracking_dependency(_AMULED)
-    )
-    failed = await _run(
-        *[_NO_NETWORK] * 5,
-        _DOWN,
-        _NO_NETWORK,
-        download_tracking=download_tracking_dependency(_AMULED),
-    )
+    held = await _run(*[_NO_NETWORK] * 5, _DOWN)
+    failed = await _run(*[_NO_NETWORK] * 5, _DOWN, _NO_NETWORK)
 
     # The sixth reading on no network is the seventh reading: aMule unreachable records nothing.
     assert _no_network_lines(held) == []
     assert _no_network_lines(failed) == [
         LoggedLine(
-            level="warning",
-            message="download tracking amuled, connected to no network: unknown to failing",
+            level="warning", message="client amuled, connected to no network: unknown to failing"
         )
     ]
 
@@ -457,7 +438,6 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
         node_health=observability.node_health,
         client_dependency=client_dependency(_AMULED),
         channel_dependencies={},
-        download_tracking_dependency=None,
     )
     run_state, logger = FakeRunStateStore(), FakeLogger()
     virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)
@@ -544,7 +524,6 @@ class _RebuiltNode:
             node_health=self.observability.node_health,
             client_dependency=self.client_part,
             channel_dependencies=self._channel_parts,
-            download_tracking_dependency=None,
         )
         return SupervisedWork(work=watcher, time_limit=_HOUR)
 

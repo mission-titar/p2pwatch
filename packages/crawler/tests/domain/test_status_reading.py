@@ -9,6 +9,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
+    CONNECTED_TO_NO_NETWORK,
     SEARCHES_FAILED,
     STATUS_PERIOD,
     ChannelStatus,
@@ -56,6 +57,17 @@ def test_the_client_s_dependency_is_named_after_it_and_fails_at_3_unanswered_rea
     assert (client.name, client.client_name, client.channel) == ("client amuled", "amuled", None)
     transitions = [client.record(rule=CLIENT_UNREACHABLE, detected=True) for _ in range(3)]
     assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
+
+
+def test_the_client_fails_at_6_readings_on_no_network_and_heals_under_2_in_the_last_10() -> None:
+    client = client_dependency(ClientName("amuled"))
+
+    offline = [client.record(rule=CONNECTED_TO_NO_NETWORK, detected=True) for _ in range(6)]
+    online = [client.record(rule=CONNECTED_TO_NO_NETWORK, detected=False) for _ in range(9)]
+
+    assert [t and t.current for t in offline] == [*[None] * 5, HealthState.FAILING]
+    # The ninth reading on a network leaves a single one on none among the last 10.
+    assert [t and t.current for t in online] == [*[None] * 8, HealthState.HEALTHY]
 
 
 def test_a_channel_s_dependency_is_named_after_it_and_holds_both_channel_rules() -> None:
