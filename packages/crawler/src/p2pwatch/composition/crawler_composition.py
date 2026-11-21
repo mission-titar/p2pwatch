@@ -421,13 +421,6 @@ class CrawlerComposition(CrawlerRunner):
 
             # Built once: a notifier rebuilt on the same configuration lists the same services.
             service_parts = notification_service_dependencies(build_notifier().services())
-            supervisor = Supervisor(
-                run_state_reader=run_state_store,
-                monotonic_clock=monotonic_clock,
-                logger=StdlibLogger(Supervisor.__module__),
-            )
-            # The objects it holds then, closed at the unwind before the database connections.
-            stack.push_async_callback(supervisor.close)
             local_database = local_database_dependency(node_id=node_id)
             outbox_store = SqliteNotificationOutboxStore(local_connection)
             outbox = NotificationOutbox(
@@ -447,6 +440,15 @@ class CrawlerComposition(CrawlerRunner):
                 logger=StdlibLogger(NodeHealth.__module__),
                 observability_dispatcher=observability_dispatcher,
             )
+            supervisor = Supervisor(
+                run_state_reader=run_state_store,
+                monotonic_clock=monotonic_clock,
+                observability_dispatcher=observability_dispatcher,
+                node_id=node_id,
+                logger=StdlibLogger(Supervisor.__module__),
+            )
+            # The objects it holds then, closed at the unwind before the database connections.
+            stack.push_async_callback(supervisor.close)
 
             def notification_sender_over(built: AppriseNotifier) -> NotificationSender:
                 return NotificationSender(
