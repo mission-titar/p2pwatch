@@ -1,9 +1,10 @@
-"""The supervisor counts the bugs of each object's turns, such as the aMule client's, and rebuilds
-the object in a task of its own once 3 turns in a row of its works met one: it stops and awaits
-those works, then, after 1, 2, then 4 min, closes it, has its builder build another and runs that
-one's works. At the third rebuild in vain, one that raised included, it ends its supervision with
-a ``CrawlerRestartError``; the count resets once its bugs are healthy again, and the shutdown
-closes the latest of each. The tests share one simulated time, on the virtual-time loop."""
+"""The supervisor judges each work of an object, such as the aMule client's searches, on its own
+turns, kept across a rebuild, and rebuilds the object in a task of its own once 3 turns in a row of
+one work met a bug: it stops and awaits its works, then, after 1, 2, then 4 min, closes it, has its
+builder build another and runs that one's works. At the third rebuild in vain, one that raised
+included, it ends its supervision with a ``CrawlerRestartError``; the count resets once every work
+that turned failing is healthy again, and the shutdown closes the latest of each. The tests share
+one simulated time, on the virtual-time loop."""
 
 import asyncio
 from collections.abc import Iterable, Sequence
@@ -80,14 +81,22 @@ class _Searching(Work):
     """Waits a second before each turn, the first included; each turn meets a bug as ``bugs``
     says."""
 
-    def __init__(self, *, build: int, turns: _Turns, bugs: _Bugs) -> None:
+    def __init__(
+        self,
+        *,
+        build: int,
+        turns: _Turns,
+        bugs: _Bugs,
+        name: str = "search 'keroro' amuled kad",
+    ) -> None:
         self._build = build
         self._turns = turns
         self._bugs = bugs
+        self._name = name
         self._taken = 0
 
     def __str__(self) -> str:
-        return "search 'keroro' amuled kad"
+        return self._name
 
     async def wait_for_next_turn(self) -> None:
         await asyncio.sleep(1.0)  # noqa: TID251
@@ -229,27 +238,60 @@ def test_each_rebuild_names_its_object_and_how_many_came_before_in_vain(
     ]
 
 
-def test_a_bug_at_every_turn_of_one_of_three_works_rebuilds_nothing_each_logged_with_its_trace(
-    virtual_loop: VirtualLoop,
-) -> None:
-    buggy = _Turns()
+def _searches(*bugs: _Bugs) -> _ClientWorks:
+    """One search per ``bugs`` over each build, each on a keyword of its own."""
 
     def works(build: int) -> Sequence[SupervisedWork]:
         return [
-            SupervisedWork(work=_Searching(build=build, turns=turns, bugs=bugs), time_limit=_DAY)
-            for turns, bugs in [(buggy, _always), (_Turns(), _never), (_Turns(), _never)]
+            SupervisedWork(
+                work=_Searching(build=build, turns=_Turns(), bugs=each, name=f"search '{n}' kad"),
+                time_limit=_DAY,
+            )
+            for n, each in enumerate(bugs)
         ]
 
-    node = _Node(virtual_loop, client_works=works)
+    return works
 
-    # Its 30th turn at 1741 s, each a minute after the bug before.
-    node.run_for(1750.0)
 
-    assert len(buggy.taken) == 30
-    assert node.client.rebuilds() == 0
+def test_a_bug_at_every_turn_of_one_of_three_works_rebuilds_their_object_after_1_2_then_4_min(
+    virtual_loop: VirtualLoop,
+) -> None:
+    node = _Node(virtual_loop, client_works=_searches(_always, _never, _never))
+
+    node.run_for(1000.0)
+
+    # The healthy turns of the two others, every second, hide none of its bugs.
+    assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
     bug_lines = [line for line in node.logger.lines if line.message.startswith("bug in ")]
-    assert len(bug_lines) == 30
+    assert len(bug_lines) == 12
     assert all(isinstance(line.error, KeyError) for line in bug_lines)
+
+
+def test_two_bugs_a_healthy_turn_then_three_bugs_after_a_rebuild_count_it_in_vain(
+    virtual_loop: VirtualLoop,
+) -> None:
+    def bugs(*, build: int, turn: int) -> bool:
+        return (build, turn) != (1, 2)
+
+    node = _Node(virtual_loop, client_works=_one_search(_Turns(), bugs=bugs))
+
+    node.run_for(600.0)
+
+    # Still failing at its healthy turn, at 302 s: its third bug in a row since, at 423 s, has
+    # its next rebuild wait 2 min.
+    assert node.client.built_at == [0.0, 181.0, 543.0]
+
+
+def test_a_work_healthy_again_resets_no_count_while_another_is_still_failing(
+    virtual_loop: VirtualLoop,
+) -> None:
+    node = _Node(virtual_loop, client_works=_searches(_first_build_buggy, _always))
+
+    node.run_for(450.0)
+
+    # Both failing at 121 s; the first healthy again at 190 s, the second failing on: its third
+    # bug since the rebuild, at 302 s, has the next wait 2 min.
+    assert node.client.built_at == [0.0, 181.0, 422.0]
 
 
 def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_1_min_later(

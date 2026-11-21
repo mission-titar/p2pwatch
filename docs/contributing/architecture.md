@@ -879,18 +879,21 @@ créneaux Kad), est un `Restartable` : construit entier, il ne change plus ; il 
 tournent sur son état et sait se fermer. Son `RestartableBuilder` en construit un neuf à chaque
 appel, le premier compris : le `Supervisor` fait construire le premier (`build_first`) et garde,
 pour chaque constructeur, le dernier objet construit (un `SupervisedObject`), que l'arrêt du nœud
-ferme, le dernier construit d'abord. Ce `SupervisedObject` compte aussi, sur chaque tour des
-`Work` de l'objet, s'il a rencontré un bug, une erreur attendue n'en étant pas un, aux seuils de
-`BUGS` : 3 tours d'affilée en échec, moins de 2 sur les 10 derniers sains. En échec, le
-`Supervisor` reconstruit l'objet (`restarting client amuled: bugs in its works`) dans une tâche à
+ferme, le dernier construit d'abord. Ce `SupervisedObject` juge aussi chaque `Work` de l'objet
+sur ses propres tours, gardés d'une reconstruction à l'autre et nommés comme le journal nomme le
+`Work` : s'il a rencontré un bug, une erreur attendue n'en étant pas un, aux seuils de `BUGS` : 3
+tours d'affilée en échec, moins de 2 sur les 10 derniers sains ; les tours sains d'un `Work` rapide
+ne cachent pas ainsi les bugs d'un lent. Un `Work` en échec fait reconstruire l'objet
+(`restarting client amuled: bugs in its works`) dans une tâche à
 lui, jamais dans le tour qui l'a décidé : il arrête les `Work` de l'objet et les attend, puis,
 après 1 minute, doublée après chaque reconstruction vaine (1, 2, puis 4 minutes, en mémoire), ferme
-l'objet, en fait construire un neuf, oublie les bugs de ses tours, puis lance les `Work` du neuf ;
+l'objet, en fait construire un neuf, puis lance les `Work` du neuf ;
 les parties, construites une fois, gardent leurs vérifications, si bien qu'une alerte ouverte ne
 repart pas et ne finit pas. Une reconstruction qui lève laisse gardé l'objet fermé, qu'une seconde
-fermeture laisse tel quel, et se retente après l'attente suivante. Une reconstruction est vaine quand les
-bugs de l'objet repassent en échec avant d'être sains, ou quand elle a levé, le compte repartant de
-zéro une fois ses bugs sains. Après trois, la cause est tenue pour partagée (les connexions aux
+fermeture laisse tel quel, et se retente après l'attente suivante. Une reconstruction est vaine quand un
+`Work` de l'objet rencontre 3 bugs d'affilée après elle, ou quand elle a levé, le compte repartant
+de zéro une fois sain chaque `Work` passé en échec, moins de 2 bugs sur ses 10 derniers tours : un
+tour sain parmi des bugs ne le remet pas à zéro. Après trois, la cause est tenue pour partagée (les connexions aux
 bases, le moteur de matching), que seul un processus neuf renouvelle : comme un superviseur OTP
 au-delà de sa borne, le `Supervisor` arrête les `Work` de l'objet, puis tous, et finit sa
 supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie alors l'alerte
@@ -898,8 +901,8 @@ supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie alors l'
 d'envoi, puis lève l'erreur : la ligne de commande sort en 1 et Docker relance le crawler entier,
 `amuled` intact. Un nœud qui échoue toujours redémarre ainsi sans fin, 7 minutes et son démarrage
 au moins entre deux fois.
-Un bug qui revient sur un seul mot-clé, entre les tours sains des autres `Work`, ne reconstruit
-rien : chacun garde sa ligne et sa trace. Un réseau en panne n'est jamais réparé par un
+Un bug qui revient sur un seul mot-clé, entre les tours sains des autres `Work`, reconstruit le
+client : chacun garde sa ligne et sa trace. Un réseau en panne n'est jamais réparé par un
 redémarrage : seuls les bugs redémarrent. `AmuleClientRestartableBuilder`
 (`composition/amule_client_restartable.py`) connecte un client neuf et rend un
 `AmuleClientRestartable`, ce client et ses `Work` par `AmuleClientWorks.over`, dont la fermeture
@@ -917,7 +920,7 @@ notifieur construit pour les lister, qu'un notifieur reconstruit sur la même co
 l'identique ; sans service configuré, rien n'est laissé à envoyer, et le notifieur n'a pas de
 travail. Le `Supervisor` ne fait tourner que les `Work` des objets qu'il a fait construire : aucun
 `Work` n'échappe à une reconstruction. Les `Work` rendus prennent leur premier tour comme au démarrage du nœud, sans les 60 s qui suivent un
-bug : ce sont des objets neufs, qu'aucun bug n'a encore touchés.
+bug : ce sont des objets neufs, même si leurs tours d'avant restent jugés.
 
 ## 11. Invariants de conception (récapitulatif)
 

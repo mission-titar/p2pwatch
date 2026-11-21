@@ -257,12 +257,15 @@ def test_a_bug_on_every_kad_search_logs_no_line_of_bugs_on_kad(searches: _Search
     # Each Kad search meets its bug at 30 s, 120 s and 210 s.
     searches.run_for(215.0, client=client, keywords=["keroro", "titar"])
 
-    # A bug is our code's, never Kad's.
+    # A bug is our code's, never Kad's: a search's third rebuilds the object, the client.
     lines = [*searches.health_logger.lines, *searches.supervisor_logger.lines]
+    keroro, titar = "bug in search 'keroro' amuled kad", "bug in search 'titar' amuled kad"
     assert [line.message for line in lines if "bug" in line.message] == [
-        "bug in search 'keroro' amuled kad",
-        "bug in search 'titar' amuled kad",
-    ] * 3
+        *[keroro, titar] * 2,
+        keroro,
+        "restarting client amuled: bugs in its works",
+        titar,
+    ]
 
 
 def _searches_failed_lines(searches: _Searches) -> list[LoggedLine]:
