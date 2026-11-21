@@ -481,7 +481,11 @@ def test_a_password_refused_at_every_reading_alerts_once_and_the_node_runs_on(
     run_state, logger = FakeRunStateStore(), FakeLogger()
     virtual_loop.call_later(4 * 60.0 + 1.0, run_state.set_shutdown_requested)
     supervisor = Supervisor(
-        run_state_reader=run_state, monotonic_clock=monotonic_clock, logger=logger
+        run_state_reader=run_state,
+        monotonic_clock=monotonic_clock,
+        observability_dispatcher=observability.dispatcher,
+        node_id=_NODE_ID,
+        logger=logger,
     )
     reading = SupervisedWork(work=watcher, time_limit=timedelta(hours=1), function=None)
     amule_client = FakeRestartableBuilder(works_over=lambda _state: [reading])
@@ -550,6 +554,8 @@ class _RebuiltNode:
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=self._monotonic_clock,
+            observability_dispatcher=self.observability.dispatcher,
+            node_id=_NODE_ID,
             logger=FakeLogger(),
         )
 

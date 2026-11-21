@@ -167,9 +167,12 @@ class _Node:
         # The error its supervision ended with, and when it ended.
         self.restart: CrawlerRestartError | None = None
         self.stopped_at: float | None = None
+        self.observability = ObservabilityOverFakes()
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
+            observability_dispatcher=self.observability.dispatcher,
+            node_id=NodeId("n1"),
             logger=self.logger,
         )
 
@@ -204,6 +207,19 @@ class _Node:
     def client_lines(self) -> list[LoggedLine]:
         """The lines that name the client: each rebuild decided, and how it ended."""
         return [line for line in self.logger.lines if "client amuled" in line.message]
+
+    def alerts(self) -> list[str]:
+        """The message of each notification the supervisor dispatched."""
+        notifications = [notification for _, notification in self.observability.notifications]
+        return [n.message for n in notifications if isinstance(n, RelayedLogLine)]
+
+
+def _still_failing(work: str) -> str:
+    """The alert naming the client unrepaired, ``work`` failing."""
+    return (
+        f"client amuled: {work} still failing after 3 rebuilds: a bug of its own, or a shared "
+        "state a crawler restart would renew"
+    )
 
 
 def _one_search(turns: _Turns, *, bugs: _Bugs = _always) -> _ClientWorks:
@@ -279,7 +295,12 @@ def _searches(*bugs: _Bugs) -> _ClientWorks:
 def test_a_bug_at_every_turn_of_one_of_three_searches_rebuilds_their_object_3_times_then_no_more(
     virtual_loop: VirtualLoop,
 ) -> None:
-    node = _Node(virtual_loop, client_works=_searches(_always, _never, _never))
+    works = _works(
+        ("search 'keroro' amuled ed2k", _always, CrawlerFunction.CRAWL),
+        ("search 'titar' amuled ed2k", _never, CrawlerFunction.CRAWL),
+        ("search 'keroro' amuled kad", _never, CrawlerFunction.CRAWL),
+    )
+    node = _Node(virtual_loop, client_works=works)
 
     node.run_for(1500.0)
 
@@ -287,6 +308,7 @@ def test_a_bug_at_every_turn_of_one_of_three_searches_rebuilds_their_object_3_ti
     # in vain, at 904 s, leaves the client unrepaired, its works running on, the crawl not lost.
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0]
     assert node.ended() == (None, 1500.0)
+    assert node.alerts() == [_still_failing("search 'keroro' amuled ed2k")]
     bug_lines = [line for line in node.logger.lines if line.message.startswith("bug in ")]
     assert len(bug_lines) == 21  # its 12th turn over the fourth build at 1444 s
     assert all(isinstance(line.error, KeyError) for line in bug_lines)
@@ -391,6 +413,10 @@ def test_after_three_rebuilds_in_vain_its_work_healthy_again_has_the_next_bugs_r
     # Unrepaired at 904 s, healthy again at 1092 s, under 2 bugs in its last 10 turns: failing
     # again at 1214 s, its count back at zero, it is rebuilt a minute later.
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 1274.0]
+    assert node.alerts() == [
+        _still_failing("status reading amuled"),
+        "client amuled: every work healthy again",
+    ]
 
 
 def test_after_two_rebuilds_in_vain_ten_healthy_turns_then_bugs_rebuild_it_1_min_later(
@@ -519,6 +545,8 @@ def test_three_rebuilds_that_raise_end_the_supervision_once_the_third_has_raised
 
     assert node.client.built_at == [0.0, 181.0, 301.0, 541.0]
     assert turns.taken == [(0, 1.0), (0, 61.0), (0, 121.0)]
+    # Holding no work, the client counts as failing: its alert, then the crawl lost.
+    assert node.alerts() == [_still_failing("search 'keroro' amuled kad")]
     assert node.ended() == (_CRAWL_LOST, 541.0)
 
 
@@ -597,6 +625,8 @@ def test_a_notifier_raising_a_bug_at_every_send_is_rebuilt_after_1_2_then_4_min_
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_id=NodeId("n1"),
         logger=FakeLogger(),
     )
 
@@ -617,6 +647,8 @@ def _supervisor() -> Supervisor:
     return Supervisor(
         run_state_reader=FakeRunStateStore(),
         monotonic_clock=FakeTime().monotonic,
+        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_id=NodeId("n1"),
         logger=FakeLogger(),
     )
 

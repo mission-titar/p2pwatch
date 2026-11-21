@@ -15,11 +15,13 @@ from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
+from p2pwatch.domain.identifiers import NodeId
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
+from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import VirtualLoop
 
 
@@ -91,6 +93,8 @@ class _Webui:
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
+            observability_dispatcher=ObservabilityOverFakes().dispatcher,
+            node_id=NodeId("n1"),
             logger=self.logger,
         )
         self._first_works = self._watch_over(self.first_thread)

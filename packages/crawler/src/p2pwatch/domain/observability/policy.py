@@ -45,6 +45,8 @@ from p2pwatch.domain.observability.events import (
     SourceFirstUseful,
     SourceReappeared,
     TargetTitle,
+    WorksHealthyAgain,
+    WorksStillFailing,
 )
 from p2pwatch.domain.observability.node_metric import (
     ChannelLabels,
@@ -389,6 +391,21 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case NotificationsSavedAgain():
             return _relayed(
                 Severity.INFO, message="notifications saved again", node_id=event.node_id
+            )
+        case WorksStillFailing():
+            own = "its" if len(event.works) == 1 else "their"
+            return _relayed(
+                Severity.WARNING,
+                message=f"{event.object_name}: {', '.join(event.works)} still failing after "
+                f"{event.rebuilds} rebuilds: a bug of {own} own, or a shared state a crawler "
+                "restart would renew",
+                node_id=event.node_id,
+            )
+        case WorksHealthyAgain():
+            return _relayed(
+                Severity.INFO,
+                message=f"{event.object_name}: every work healthy again",
+                node_id=event.node_id,
             )
         case CrawlerFunctionLost():
             return _relayed(

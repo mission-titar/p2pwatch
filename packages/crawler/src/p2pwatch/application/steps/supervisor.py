@@ -2,25 +2,29 @@
 built, until the shutdown is requested, then cancels them all; a turn that raises or outlasts its
 time limit fails alone, the others go on. It judges each work on its own turns, and rebuilds the
 object, such as the aMule client, one of whose works keeps meeting bugs, waiting longer each time;
-its third rebuild in vain leaves it unrepaired, and a function of the crawler wholly lost, such as
-the crawl, every search failing, ends the supervision with a ``CrawlerRestartError``."""
+its third rebuild in vain leaves it unrepaired, with an alert, and a function of the crawler
+wholly lost, such as the crawl, every search failing, ends the supervision with a
+``CrawlerRestartError``."""
 
 import asyncio
 from collections.abc import Sequence
 from contextlib import AsyncExitStack
 from datetime import timedelta
-from typing import NoReturn, Protocol
+from typing import Literal, NoReturn, Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
+from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
+from p2pwatch.domain.identifiers import NodeId
+from p2pwatch.domain.observability.events import WorksHealthyAgain, WorksStillFailing
 
 # A bug that strikes at once would otherwise rerun at full speed, one trace per turn.
 WAIT_AFTER_A_BUG = timedelta(seconds=60)
@@ -46,6 +50,10 @@ class TurnTimeoutError(Exception):
 
 class ShutdownBoundArmer(Protocol):
     def __call__(self) -> None: ...
+
+
+# What one turn of an object's works decided of it, such as its rebuild.
+type _Verdict = Literal["nothing", "rebuild", "unrepaired", "repaired"]
 
 
 class _WorkTurns:
@@ -115,37 +123,40 @@ class SupervisedObject:
             if turns.function is function
         ]
 
-    def record_turn(self, supervised: SupervisedWork, *, met_a_bug: bool) -> bool:
-        """Counts one turn of one of its works, such as a search that met a bug; whether a rebuild
-        is decided, which stops its works."""
+    def record_turn(self, supervised: SupervisedWork, *, met_a_bug: bool) -> _Verdict:
+        """Counts one turn of one of its works, such as a search that met a bug, and returns what
+        it decided, such as a rebuild, which stops its works."""
         turns = self._works[str(supervised.work)]
         previous = turns.record(met_a_bug=met_a_bug)
         if self._works_stopped:
-            return False
-        if previous is HealthState.FAILING and not self._failing():
-            self._rebuilt, self._in_vain = False, 0
-            return False
+            return "nothing"
+        if previous is HealthState.FAILING and not self.failing_works():
+            unrepaired, self._rebuilt, self._in_vain = self.unrepaired, False, 0
+            return "repaired" if unrepaired else "nothing"
         if self.unrepaired:
-            return False
+            return "nothing"
         if not self._rebuilt:
             if turns.bugs is not HealthState.FAILING:
-                return False
+                return "nothing"
             self._rebuilt = self._works_stopped = True
             self._logger.warning("restarting %s: bugs in its works", self.builder)
-            return True
+            return "rebuild"
         if not turns.failing_since_build():
-            return False
+            return "nothing"
         self.count_in_vain()
         if self.unrepaired:
-            return False
+            return "unrepaired"
         self._works_stopped = True
         in_vain = f"{self._in_vain} of {REBUILDS_IN_VAIN_AT_MOST} rebuilds in vain"
         message = "restarting %s again, %s: bugs in its works"
         self._logger.warning(message, self.builder, in_vain)
-        return True
+        return "rebuild"
 
-    def _failing(self) -> bool:
-        return any(turns.bugs is HealthState.FAILING for turns in self._works.values())
+    def failing_works(self) -> tuple[str, ...]:
+        """Its works failing, as the log names them: "search 'keroro' amuled ed2k"."""
+        return tuple(
+            name for name, turns in self._works.items() if turns.bugs is HealthState.FAILING
+        )
 
     def count_in_vain(self) -> None:
         """Counts one rebuild in vain, such as one that raised."""
@@ -183,10 +194,14 @@ class Supervisor:
         *,
         run_state_reader: RunStateReader,
         monotonic_clock: MonotonicClock,
+        observability_dispatcher: ObservabilityDispatcher,
+        node_id: NodeId,
         logger: Logger,
     ) -> None:
         self._run_state_reader = run_state_reader
         self._monotonic_clock = monotonic_clock
+        self._observability_dispatcher = observability_dispatcher
+        self._node_id = node_id
         self._logger = logger
         self._rebuilds_decided: asyncio.Queue[SupervisedObject] = asyncio.Queue()
         # Each work's task while it runs, and the object it is over, which a rebuild stops it with.
@@ -257,8 +272,18 @@ class Supervisor:
                 return
             supervised.count_in_vain()
             if supervised.unrepaired:
+                await self._alert_unrepaired(supervised)
                 self._restart_if_a_function_is_lost()
                 return
+
+    async def _alert_unrepaired(self, supervised: SupervisedObject) -> None:
+        still_failing = WorksStillFailing(
+            object_name=str(supervised.builder),
+            works=supervised.failing_works(),
+            rebuilds=REBUILDS_IN_VAIN_AT_MOST,
+            node_id=self._node_id,
+        )
+        await self._observability_dispatcher.dispatch(still_failing)
 
     def _restart_if_a_function_is_lost(self) -> None:
         """Ends the supervision once a function is wholly lost: every object serving it
@@ -306,8 +331,18 @@ class Supervisor:
             if self._run_state_reader.is_shutdown_requested():
                 return
             met_a_bug = await self._take_turn(supervised)
-            if over.record_turn(supervised, met_a_bug=met_a_bug):
-                self._rebuilds_decided.put_nowait(over)
+            match over.record_turn(supervised, met_a_bug=met_a_bug):
+                case "rebuild":
+                    self._rebuilds_decided.put_nowait(over)
+                case "unrepaired":
+                    await self._alert_unrepaired(over)
+                case "repaired":
+                    healthy = WorksHealthyAgain(
+                        object_name=str(over.builder), node_id=self._node_id
+                    )
+                    await self._observability_dispatcher.dispatch(healthy)
+                case _:  # nothing decided
+                    pass
             if over.unrepaired:
                 self._restart_if_a_function_is_lost()
 
