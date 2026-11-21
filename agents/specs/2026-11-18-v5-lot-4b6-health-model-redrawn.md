@@ -113,8 +113,9 @@ of the node; a save that fails is an outage of the local database, with its aler
 - **D34. Each work serves one of the crawler's functions: the webui, the notifications, the crawl, whose works are
   every P2P client's searches, and on a node that downloads the downloads, whose works are every client's download
   and source tracking; the status reading serves none. The crawler restarts when a function is wholly lost: every object serving it
-  unrepaired, none of its works healthy, one at least failing; an object whose third rebuild raised holds no
-  work and counts as failing.** *The restart is the one answer automated without
+  unrepaired and every one of its works failing, a work that never turned not failing; an object whose third
+  rebuild raised holds no work and counts as failing.** (Corrected: worded as its rows read, a service never sent to
+  keeping the notifications, the lead on 2026-11-21.) *The restart is the one answer automated without
   doubt: a function the node exists for is gone, and no smaller rebuild brought it back. A client whose searches all
   fail is lost to the crawl though its status reading answers; one client lost among others leaves the others
   crawling, which holds with the networks to come. A node that finds its episodes and never downloads them has lost
@@ -216,7 +217,9 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files (Corrected: 1 012 lines, 683 removed, 30 files, past both bounds, the health alerter's cases moving to each domain module's tests and `node_id` given at 16 test sites, accepted by the operator on 2026-11-21) |
 | 60 | `feat/password-refused-outage` | the refused password an outage of amuled, with its alert | ~280 lines, ~6 files |
 | 65 | `feat/login-tried-again` | the login tried again after waits that double | ~300 lines, ~6 files |
-| 70 | `feat/works-judged-alone` | each work judged on its own turns, an object left unrepaired, the crawler restarted when a function is lost (Corrected: added for D32 to D34, 2026-11-21) | estimated at its start, cut along those three if past a bound |
+| 70 | `feat/works-judged-alone` | each work judged on its own turns, kept across a rebuild, the count's reset (Corrected: added for D32, 2026-11-21) | 190 lines, 6 files |
+| 72 | `feat/function-lost-restarts-the-crawler` | an object left unrepaired, each work's function, the crawler restarted when a function is lost (Corrected: added for D33 and D34, cut out of block 70, which came to 686 lines and 29 files) | 334 lines, 28 files, past the file bound, 15 of them the new required function at every site |
+| 74 | `feat/unrepaired-object-alert` | the alert of an object left unrepaired, and its end (Corrected: cut out of block 70) | 205 lines, 13 files |
 | 75 | `fix/one-sending-per-service` | one notifier's work per service, so that a service that never answers holds no other (Corrected: added, the holistic review's finding on block 15's one work) | estimated at its start |
 | 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | |
 | 90 | `docs/lot-4b6-wrap` | closing block | |
@@ -430,6 +433,11 @@ over.record_turn(supervised, met_a_bug=met_a_bug)  # one work failing: rebuild a
   "the crawl lost: every search failing after 3 rebuilds: the crawler restarts" (the webui's and the notifications'
   alike). The glossary gains `unrepaired` and `function`; `SupervisedObject`'s Names row and the model sketch read per
   work.
+- (Corrected: as built in blocks 70 to 74. Each work's turns are kept under its log name, so a work built anew is the
+  same work; while a rebuild is under way the old works' last turns decide nothing. `RebuiltInVain` becomes
+  `CrawlerFunctionLost`, `CrawlerRestartError(function, rebuilds=)` reading "the crawl lost after 3 rebuilds", its
+  alert "the crawl lost: every search failing after 3 rebuilds: the crawler restarts". Commit 2's function and
+  restart came before the alerts, so that no block keeps the object unrepaired with nothing ending the supervision.)
 - 75 (Corrected, added): the notifier's rebuild hands back one sending work per service, each over its own entries.
 
 ### Blocks 60 and 65, the refused password
