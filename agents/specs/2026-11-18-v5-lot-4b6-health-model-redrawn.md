@@ -16,8 +16,8 @@ A bug is our code's: the supervisor counts the bugs of each object it can rebuil
 notifier) and rebuilds the object whose bugs keep coming back, waiting longer each time. When three rebuilds repair
 nothing, the cause lies in something shared, so the crawler stops and Docker starts it again, whole; this goes on
 without end, slowly, an alert at each round. (Corrected: each work is judged on its own turns; a work three rebuilds
-do not repair leaves its object unrepaired, with an alert; the crawler restarts only when one of its three functions
-is wholly lost: the webui, the notifications, or the crawl, every P2P client's searches failing. D32 to D34.)
+do not repair leaves its object unrepaired, with an alert; the crawler restarts only when one of its functions is
+wholly lost: the webui, the notifications, the crawl (every search failing), or the downloads. D32 to D34.)
 
 An outage is outside the program: amuled silent, Kad off its network, the disk full, Discord refusing, a refused
 password. What can have one is an external dependency, and each of its rules carries the alert it sends, or none. The
@@ -110,13 +110,15 @@ of the node; a save that fails is an outage of the local database, with its aler
   count resets. A work turning failing while its object is unrepaired rebuilds nothing.** *Nothing tells a work's own
   bug from a wider shared state but a restart, so the ambiguous case calls a human (the SRE book) rather than
   restarting every network for one keyword.* "Unrepaired", since "degraded" already names an outage.
-- **D34. Each object serves one of the crawler's three functions: the webui, the notifications, or the crawl, whose
-  works are every P2P client's searches. The crawler restarts when a function is wholly lost: every object serving it
+- **D34. Each work serves one of the crawler's functions: the webui, the notifications, the crawl, whose works are
+  every P2P client's searches, and on a node that downloads the downloads, whose works are every client's download
+  and source tracking; the status reading serves none. The crawler restarts when a function is wholly lost: every object serving it
   unrepaired, none of its works healthy, one at least failing; an object whose third rebuild raised holds no
   work and counts as failing.** *The restart is the one answer automated without
   doubt: a function the node exists for is gone, and no smaller rebuild brought it back. A client whose searches all
   fail is lost to the crawl though its status reading answers; one client lost among others leaves the others
-  crawling, which holds with the networks to come.* The operator, 2026-11-21.
+  crawling, which holds with the networks to come. A node that finds its episodes and never downloads them has lost
+  what it exists for.* The operator, 2026-11-21.
 
 ### Notifications
 
@@ -153,6 +155,7 @@ Commands and the output that fails each row: appendix B.
 | A bug at every turn of one keyword's search, the others healthy | nothing rebuilt, each bug logged with its trace (Corrected: the client rebuilt after 1, 2, then 4 min, then unrepaired, its alert naming the search; the crawler not restarted) | the client rebuilt three times, that search's bugs rule failing |
 | Both eD2k searches cut at their time limit at every turn, the status reading healthy | (Corrected, added: the client rebuilt within the third cut) | the client rebuilt, the channel's bugs rule failing |
 | Every search failing after the client's rebuilds, the status reading healthy | (Corrected, added: the client unrepaired, the crawl lost, the crawler restarting with its alert) | the client rebuilt three times in vain, then never again |
+| Download tracking and source tracking failing after the client's rebuilds, the searches healthy | (Corrected, added: the client unrepaired, the downloads lost, the crawler restarting with its alert) | the client rebuilt three times in vain, then never again |
 | One of two notification services failing at every send, the other never sent to | (Corrected, added: the notifier unrepaired, the notifications not lost, the crawler running) | n/a |
 | After three rebuilds in vain, the failing work healthy again | (Corrected, added: the unrepaired alert's end sent, the next bugs rebuilding after 1 min) | n/a |
 | After two rebuilds in vain, ten healthy turns, then bugs again | rebuilt after 1 min, the count back at zero (Corrected: back at zero only under 2 bugs in each work's last 10 turns; three turns not all bugs reset nothing) | the count reset by the parts' bugs rules |
@@ -422,9 +425,8 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
   every work of it that turned failing is healthy again; at the third, the object unrepaired, the supervisor
   dispatching `WorksStillFailing` ("client amuled: search 'keroro' amuled ed2k still failing after 3 rebuilds: a bug
   of its own, or a shared state a crawler restart would renew", `operations`) and, at the reset, `WorksHealthyAgain`
-  ("client amuled: every work healthy again"), the supervisor given the dispatcher for them. `build_first(builder,
-  function=...)` names each object's function (`WEBUI`, `NOTIFICATIONS`, `CRAWL`), the crawl's works being the
-  searches; a function wholly lost ends `supervise()` with `CrawlerRestartError` naming it, the lifecycle's alert
+  ("client amuled: every work healthy again"), the supervisor given the dispatcher for them. Each `SupervisedWork` names its function (`WEBUI`, `NOTIFICATIONS`, `CRAWL`, `DOWNLOADS`, or none for the
+  status reading); a function wholly lost ends `supervise()` with `CrawlerRestartError` naming it, the lifecycle's alert
   "the crawl lost: every search failing after 3 rebuilds: the crawler restarts" (the webui's and the notifications'
   alike). The glossary gains `unrepaired` and `function`; `SupervisedObject`'s Names row and the model sketch read per
   work.
