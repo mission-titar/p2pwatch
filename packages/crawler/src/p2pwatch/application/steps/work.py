@@ -1,9 +1,11 @@
 """``Work``: a task the node repeats, such as reading aMule's status every minute, with its time
-limit."""
+limit and the function it serves."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
+
+from p2pwatch.domain.crawler_function import CrawlerFunction
 
 
 class Work(ABC):
@@ -25,8 +27,9 @@ class Work(ABC):
 
 @dataclass(frozen=True, kw_only=True)
 class SupervisedWork:
-    """A work and its time limit, such as a search and its 25 min: the supervisor cuts a turn still
-    running at its limit."""
+    """A work, its time limit and its function, such as a search, its 25 min and the crawl: the
+    supervisor cuts a turn still running at its limit."""
 
     work: Work
     time_limit: timedelta
+    function: CrawlerFunction | None

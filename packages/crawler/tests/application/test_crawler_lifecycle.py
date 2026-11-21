@@ -23,6 +23,7 @@ from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
+from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
@@ -157,7 +158,7 @@ class _Crawl:
         self._works_started = 0
         self._both_works_started = asyncio.Event()
         self._works = [
-            SupervisedWork(work=work, time_limit=timedelta(days=1))
+            SupervisedWork(work=work, time_limit=timedelta(days=1), function=None)
             for work in (
                 _WorkLeavingACompletion(
                     "search", on_start=self._work_started, dispatcher=self.observability.dispatcher
@@ -224,7 +225,11 @@ class _Crawl:
         """Builds a client whose one work raises at every turn, then runs the crawler, a graceful
         shutdown requested at 2000 s."""
         asyncio.get_running_loop().call_later(2000.0, self.run_state.set_shutdown_requested)
-        works = [SupervisedWork(work=_WorkRaising(), time_limit=timedelta(days=1))]
+        works = [
+            SupervisedWork(
+                work=_WorkRaising(), time_limit=timedelta(days=1), function=CrawlerFunction.CRAWL
+            )
+        ]
         await self._supervisor.build_first(FakeRestartableBuilder(works_over=lambda _: works))
         await self.crawler_lifecycle.run(arm_shutdown_bound=lambda: None)
 
@@ -423,7 +428,7 @@ async def test_the_notifications_left_at_the_shutdown_are_sent_before_the_run_re
     assert crawl.observability.outbox.oldest() is None
 
 
-def test_the_third_rebuild_in_vain_has_its_alert_sent_local_db_refusing_then_raises_its_error(
+def test_a_function_lost_has_its_alert_sent_local_db_refusing_then_raises_its_error(
     virtual_loop: VirtualLoop,
     *,
     observation_store: SqliteObservationStore,
@@ -440,11 +445,11 @@ def test_the_third_rebuild_in_vain_has_its_alert_sent_local_db_refusing_then_rai
     )
     crawl.observability.outbox_store.writes_fail = True
 
-    with pytest.raises(CrawlerRestartError, match="^client amuled rebuilt 3 times in vain$"):
+    with pytest.raises(CrawlerRestartError, match="^the crawl lost after 3 rebuilds$"):
         virtual_loop.run_until_complete(crawl.run_a_client_buggy_at_every_turn())
 
     online = "🟢 node online (download off)"
-    alert = "client amuled rebuilt 3 times in vain: the crawler restarts"
+    alert = "the crawl lost: every search failing after 3 rebuilds: the crawler restarts"
     # Sent before the exit from memory, no save of the outbox ever having gone through.
     assert crawl.notifier.calls == [
         (Audience.OPERATIONS, RelayedLogLine(message=m, severity=s, node_id=_NODE_ID))

@@ -181,7 +181,7 @@ class _WorkStoppingTheNode(Work):
 
 def _supervised(*works: Work, time_limit: timedelta = _DAY) -> list[SupervisedWork]:
     """Each of ``works`` with ``time_limit``."""
-    return [SupervisedWork(work=work, time_limit=time_limit) for work in works]
+    return [SupervisedWork(work=work, time_limit=time_limit, function=None) for work in works]
 
 
 def _supervisor(run_state: FakeRunStateStore) -> Supervisor:

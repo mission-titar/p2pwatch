@@ -483,7 +483,7 @@ def test_a_password_refused_at_every_reading_alerts_once_and_the_node_runs_on(
     supervisor = Supervisor(
         run_state_reader=run_state, monotonic_clock=monotonic_clock, logger=logger
     )
-    reading = SupervisedWork(work=watcher, time_limit=timedelta(hours=1))
+    reading = SupervisedWork(work=watcher, time_limit=timedelta(hours=1), function=None)
     amule_client = FakeRestartableBuilder(works_over=lambda _state: [reading])
 
     async def supervise() -> None:
@@ -542,7 +542,9 @@ class _RebuiltNode:
         self.amule_client = FakeRestartableBuilder(works_over=self._works_over)
         self._works = [self._status_reading()]
         if three_bugs_at is not None:
-            bug = SupervisedWork(work=_BugAt(seconds=three_bugs_at), time_limit=_HOUR)
+            bug = SupervisedWork(
+                work=_BugAt(seconds=three_bugs_at), time_limit=_HOUR, function=None
+            )
             self._works.extend([bug] * 3)
         self._run_state = FakeRunStateStore()
         self._supervisor = Supervisor(
@@ -567,7 +569,7 @@ class _RebuiltNode:
             client_dependency=self.client_part,
             channel_dependencies=self._channel_parts,
         )
-        return SupervisedWork(work=watcher, time_limit=_HOUR)
+        return SupervisedWork(work=watcher, time_limit=_HOUR, function=None)
 
     def run_for(self, seconds: float) -> None:
         self._loop.call_later(seconds, self._run_state.set_shutdown_requested)
