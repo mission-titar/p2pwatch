@@ -10,6 +10,8 @@ from p2pwatch.domain.observability.events import (
     ChannelDegraded,
     ChannelField,
     ChannelRecovered,
+    ClientPasswordAcceptedAgain,
+    ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachableLasting,
 )
@@ -18,6 +20,7 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
     CONNECTED_TO_NO_NETWORK,
+    PASSWORD_REFUSED,
     SEARCHES_FAILED,
     STATUS_PERIOD,
     ChannelStatus,
@@ -91,6 +94,18 @@ def test_the_client_fails_at_6_readings_on_no_network_and_heals_under_2_in_the_l
     assert [t and t.current for t in online] == [*[None] * 8, HealthState.HEALTHY]
 
 
+def test_the_client_fails_at_one_refused_password_and_heals_at_the_first_answer() -> None:
+    client = client_dependency(_AMULED, node_id=_NODE_ID)
+
+    refused = client.record(rule=PASSWORD_REFUSED, detected=True)
+    answered = client.record(rule=PASSWORD_REFUSED, detected=False)
+
+    assert [t and t.current for t in (refused, answered)] == [
+        HealthState.FAILING,
+        HealthState.HEALTHY,
+    ]
+
+
 def test_a_channel_s_dependency_is_named_after_it_and_holds_both_channel_rules() -> None:
     kad = channel_dependency(client_name=_AMULED, channel=_KAD, node_id=_NODE_ID)
     assert (kad.name, kad.client_name, kad.channel) == ("channel amuled kad", "amuled", "kad")
@@ -117,6 +132,14 @@ def test_the_client_unreachable_alerts_at_2_min_and_ends_once_reachable_again() 
             client_name=_AMULED, unreachable_for_seconds=120.0, node_id=_NODE_ID
         ),
         when_healthy_again=ClientReachableAgain(client_name=_AMULED, node_id=_NODE_ID),
+    )
+
+
+def test_a_refused_password_alerts_at_once_and_ends_once_accepted_again() -> None:
+    client = client_dependency(_AMULED, node_id=_NODE_ID)
+    assert _alert_of(client, rule=PASSWORD_REFUSED) == HealthAlert(
+        when_failing=ClientPasswordRefused(client_name=_AMULED, node_id=_NODE_ID),
+        when_healthy_again=ClientPasswordAcceptedAgain(client_name=_AMULED, node_id=_NODE_ID),
     )
 
 

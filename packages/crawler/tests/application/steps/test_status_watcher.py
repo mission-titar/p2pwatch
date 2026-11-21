@@ -2,6 +2,7 @@
 client and of each channel, whose rules send today's alerts, boot included."""
 
 import asyncio
+import contextlib
 from collections.abc import Sequence
 from datetime import timedelta
 
@@ -143,6 +144,18 @@ async def _alerts(*readings: _Reading) -> list[tuple[float, Notification]]:
     return (await _run(*readings)).notifications
 
 
+async def _alerts_past_refusals(*readings: _Reading) -> list[tuple[float, Notification]]:
+    """``_alerts``, each refused password raised out of its turn, as the supervisor takes it."""
+    fake_time = FakeTime()
+    observability = _Observability(fake_time)
+    watcher = _watcher_over(fake_time, *readings, observability=observability)
+    for _ in readings:
+        await watcher.wait_for_next_turn()
+        with contextlib.suppress(ClientAuthError):
+            await watcher.run_once()
+    return observability.notifications
+
+
 def _warning(message: str) -> RelayedLogLine:
     return RelayedLogLine(message=message, severity=Severity.WARNING, node_id=_NODE_ID)
 
@@ -269,6 +282,32 @@ async def test_a_refused_password_raises_out_of_the_turn() -> None:
         await _run(ClientAuthError("amuleapi refused the admin password"), _status(ed2k=_UP))
 
 
+_REFUSED = ClientAuthError("amuleapi refused the admin password")
+_PASSWORD_REFUSED = "amuled refuses the password: check the configuration"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_password_alerts_at_the_first_refused_reading_once() -> None:
+    alerts = await _alerts_past_refusals(_status(ed2k=_UP), _REFUSED, _REFUSED)
+    assert alerts == [(60.0, _warning(_PASSWORD_REFUSED))]
+
+
+@pytest.mark.asyncio
+async def test_a_refused_password_ends_at_the_first_answered_reading() -> None:
+    alerts = await _alerts_past_refusals(_REFUSED, _REFUSED, _status(ed2k=_UP))
+    assert alerts == [
+        (0.0, _warning(_PASSWORD_REFUSED)),
+        (120.0, _info("amuled accepts the password again")),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_unreachable_reading_tells_nothing_of_the_password() -> None:
+    # Neither an end nor a second alert: amuled did not answer, so it refused nothing.
+    alerts = await _alerts_past_refusals(_REFUSED, _DOWN, _REFUSED)
+    assert alerts == [(0.0, _warning(_PASSWORD_REFUSED))]
+
+
 _NO_NETWORK = _status(ed2k=(False, None), kad=(False, None))
 
 
@@ -372,12 +411,14 @@ async def test_each_reading_is_published_with_its_wall_and_monotonic_instants(
     }
 
 
-def _watcher_over(fake_time: FakeTime, *readings: _Reading) -> StatusWatcher:
+def _watcher_over(
+    fake_time: FakeTime, *readings: _Reading, observability: _Observability | None = None
+) -> StatusWatcher:
     return _status_watcher(
         _AMULED,
         client=FakeStatusClient(list(readings)),
         fake_time=fake_time,
-        observability=_Observability(fake_time),
+        observability=observability or _Observability(fake_time),
     )
 
 
@@ -420,7 +461,7 @@ async def test_a_reading_that_raised_waits_a_full_minute_before_the_next() -> No
     assert fake_time.sleeps == [timedelta(seconds=60)]
 
 
-def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_on(
+def test_a_password_refused_at_every_reading_alerts_once_and_the_node_runs_on(
     virtual_loop: VirtualLoop,
 ) -> None:
     refused = ClientAuthError("amuleapi refused the admin password")
@@ -456,6 +497,9 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
     assert logger.lines == [LoggedLine(level="warning", message=message)] * 5
     # A refused password is an expected error: no turn met a bug, and nothing was rebuilt.
     assert amule_client.rebuilds() == 0
+    assert [notification for _, notification in observability.notifications] == [
+        _warning(_PASSWORD_REFUSED)
+    ]
 
 
 def test_the_status_reading_is_named_after_its_client() -> None:
