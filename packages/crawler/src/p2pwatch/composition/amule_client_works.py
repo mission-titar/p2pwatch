@@ -114,7 +114,9 @@ class DownloadSteps:
             wall_clock=wall_clock,
             observability_dispatcher=observability_dispatcher,
             node_health=node_health,
-            download_disk_dependency=download_disk_dependency(),
+            download_disk_dependency=download_disk_dependency(
+                min_free_bytes=download_config.min_free_bytes, node_id=node_id
+            ),
             logger=StdlibLogger(DownloadDecider.__module__),
         )
 
@@ -183,6 +185,7 @@ class AmuleClientWorks:
         wall_clock: WallClock,
         monotonic_clock: MonotonicClock,
         time_limits: AmuleWorkTimeLimits,
+        node_id: NodeId,
     ) -> None:
         self._client_name = client_name
         self._keywords = keywords
@@ -196,10 +199,10 @@ class AmuleClientWorks:
         self._wall_clock = wall_clock
         self._monotonic_clock = monotonic_clock
         self._time_limits = time_limits
-        self._client_dependency = client_dependency(client_name)
+        self._client_dependency = client_dependency(client_name, node_id=node_id)
         # Each channel's readings and the refusals of its searches are recorded on one part.
         self._channel_dependencies = {
-            channel: channel_dependency(client_name=client_name, channel=channel)
+            channel: channel_dependency(client_name=client_name, channel=channel, node_id=node_id)
             for channel in channels
         }
 

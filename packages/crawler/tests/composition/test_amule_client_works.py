@@ -25,9 +25,8 @@ from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
-from p2pwatch.domain.health.external_dependency import HealthTransition
 from p2pwatch.domain.health.health_rule import HealthRule
-from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
+from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTED,
@@ -80,7 +79,7 @@ def local_connection(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 
 class _Node:
-    """The parts a node builds once, and every change of health its works record."""
+    """The parts a node builds once, and the log of every change of health its works record."""
 
     def __init__(
         self,
@@ -90,9 +89,11 @@ class _Node:
         local_connection: sqlite3.Connection,
     ) -> None:
         self.time = FakeTime()
-        self.transitions: list[HealthTransition] = []
-        self.node_health = NodeHealth(logger=FakeLogger(), subscribers=(self._keep,))
         self.observability = ObservabilityOverFakes()
+        self.health_logger = FakeLogger()
+        self.node_health = NodeHealth(
+            logger=self.health_logger, observability_dispatcher=self.observability.dispatcher
+        )
         self.observation_store = SqliteObservationStore(catalog_connection)
         self.decision_store = SqliteDecisionStore(catalog_connection)
         self.backoff_state_store = FakeBackoffStateStore()
@@ -106,9 +107,6 @@ class _Node:
         self.tmp_path = tmp_path
         self.catalog_connection = catalog_connection
         self.local_connection = local_connection
-
-    async def _keep(self, transition: HealthTransition) -> None:
-        self.transitions.append(transition)
 
     def client_works(self, *, downloading: bool) -> AmuleClientWorks:
         """The works over the client as the composition builds them, downloading or not."""
@@ -134,6 +132,7 @@ class _Node:
                 search_budget=timedelta(seconds=120),
                 keywords=[Keyword(keyword) for keyword in _KEYWORDS],
             ),
+            node_id=_NODE_ID,
         )
 
     def client(self, api: FakeAmuleApi) -> AmuleApiClient:
@@ -202,9 +201,11 @@ class _Node:
             logger=FakeLogger(),
         )
 
-    def changes_under(self, rule: HealthRule) -> list[HealthTransition]:
-        """Every change of health its works recorded under ``rule``."""
-        return [transition for transition in self.transitions if transition.rule is rule]
+    def parts_changed_under(self, rule: HealthRule) -> list[str]:
+        """The part of each change of health its works recorded under ``rule``, as the log names
+        it: "channel amuled kad"."""
+        changes = [line.message for line in self.health_logger.lines]
+        return [change.split(", ")[0] for change in changes if f", {rule.name}: " in change]
 
 
 @pytest.fixture
@@ -267,8 +268,7 @@ async def test_the_works_over_a_client_built_anew_record_on_the_parts_built_once
         *_SEARCHES,
     ]
     # Three readings over each client: failing only on one part per channel, built once.
-    not_connected = node.changes_under(CHANNEL_NOT_CONNECTED)
-    assert [transition.dependency.name for transition in not_connected] == [
+    assert node.parts_changed_under(CHANNEL_NOT_CONNECTED) == [
         "channel amuled ed2k",
         "channel amuled kad",
     ]
@@ -284,8 +284,7 @@ async def test_the_status_reading_records_no_network_on_the_client_s_part_downlo
     for _ in range(6):
         await _named(works, name="status reading amuled").work.run_once()
 
-    [no_network] = node.changes_under(CONNECTED_TO_NO_NETWORK)
-    assert no_network.dependency.name == "client amuled"
+    assert node.parts_changed_under(CONNECTED_TO_NO_NETWORK) == ["client amuled"]
 
 
 async def test_the_status_reading_records_a_channel_on_the_part_its_searches_record_on(
@@ -299,10 +298,5 @@ async def test_the_status_reading_records_a_channel_on_the_part_its_searches_rec
     for _ in range(6):
         await _named(works, name="status reading amuled").work.run_once()
 
-    [kad_searches_ran] = node.changes_under(SEARCHES_FAILED)
-    [kad_not_connected] = [
-        transition
-        for transition in node.changes_under(CHANNEL_NOT_CONNECTED)
-        if transition.dependency.channel == Channel("kad")
-    ]
-    assert kad_not_connected.dependency is kad_searches_ran.dependency
+    assert node.parts_changed_under(SEARCHES_FAILED) == ["channel amuled kad"]
+    assert "channel amuled kad" in node.parts_changed_under(CHANNEL_NOT_CONNECTED)

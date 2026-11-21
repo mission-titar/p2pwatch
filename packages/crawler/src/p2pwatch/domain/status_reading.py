@@ -3,10 +3,17 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from p2pwatch.domain.health.external_dependency import ExternalDependency
+from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthAlert
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
-from p2pwatch.domain.identifiers import Channel, ClientName
+from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.domain.observability.events import (
+    ChannelDegraded,
+    ChannelField,
+    ChannelRecovered,
+    ClientReachableAgain,
+    ClientUnreachableLasting,
+)
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
 STATUS_PERIOD = timedelta(minutes=1)
@@ -51,24 +58,55 @@ SEARCHES_FAILED = HealthRule(
 )
 
 
-def client_dependency(client_name: ClientName) -> ExternalDependency:
+def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDependency:
     """The client, judged by whether its API answers and whether any of its channels is
     connected: "client amuled"."""
     return ExternalDependency(
         name=f"client {client_name}",
         client_name=client_name,
-        rules=(CLIENT_UNREACHABLE, CONNECTED_TO_NO_NETWORK),
+        rules={
+            CLIENT_UNREACHABLE: HealthAlert(
+                when_failing=ClientUnreachableLasting(
+                    client_name=client_name,
+                    unreachable_for_seconds=UNREACHABLE_ALERT_AFTER.total_seconds(),
+                    node_id=node_id,
+                ),
+                when_healthy_again=ClientReachableAgain(client_name=client_name, node_id=node_id),
+            ),
+            CONNECTED_TO_NO_NETWORK: None,
+        },
     )
 
 
-def channel_dependency(*, client_name: ClientName, channel: Channel) -> ExternalDependency:
+def channel_dependency(
+    *, client_name: ClientName, channel: Channel, node_id: NodeId
+) -> ExternalDependency:
     """One of the client's channels, judged by whether it is connected and connectable and whether
     the network refuses its searches: "channel amuled kad"."""
+
+    def alert(field: ChannelField) -> HealthAlert:
+        return HealthAlert(
+            when_failing=ChannelDegraded(
+                client_name=client_name,
+                channel=channel,
+                field=field,
+                degraded_for_seconds=CHANNEL_ALERT_AFTER.total_seconds(),
+                node_id=node_id,
+            ),
+            when_healthy_again=ChannelRecovered(
+                client_name=client_name, channel=channel, field=field, node_id=node_id
+            ),
+        )
+
     return ExternalDependency(
         name=f"channel {client_name} {channel}",
         client_name=client_name,
         channel=channel,
-        rules=(CHANNEL_NOT_CONNECTED, CHANNEL_NOT_CONNECTABLE, SEARCHES_FAILED),
+        rules={
+            CHANNEL_NOT_CONNECTED: alert("connected"),
+            CHANNEL_NOT_CONNECTABLE: alert("connectable"),
+            SEARCHES_FAILED: None,
+        },
     )
 
 

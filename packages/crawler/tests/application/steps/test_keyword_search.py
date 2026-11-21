@@ -89,7 +89,9 @@ class _Searches:
         self.run_state = FakeRunStateStore()
         self.supervisor_logger = FakeLogger()
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(logger=self.health_logger, subscribers=())
+        self.node_health = NodeHealth(
+            logger=self.health_logger, observability_dispatcher=ObservabilityOverFakes().dispatcher
+        )
 
     def works(
         self,
@@ -136,7 +138,9 @@ class _Searches:
             time_limit_of=time_limit_of,
             node_health=self.node_health,
             channel_dependencies=[
-                channel_dependency(client_name=worker.client_name, channel=channel)
+                channel_dependency(
+                    client_name=worker.client_name, channel=channel, node_id=_NODE_ID
+                )
                 for channel in worker.channels
             ],
         )

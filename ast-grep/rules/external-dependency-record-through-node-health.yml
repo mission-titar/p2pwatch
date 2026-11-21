@@ -1,7 +1,7 @@
 id: external-dependency-record-through-node-health
 language: python
 severity: error
-message: A check is recorded through `NodeHealth.record(on=..., rule=..., detected=...)`, which logs each change of health and passes it to the alerts; only `NodeHealth` and the domain's tests call `ExternalDependency.record`.
+message: A check is recorded through `NodeHealth.record(on=..., rule=..., detected=...)`, which logs each change of health and dispatches its rule's alert; only `NodeHealth` and the domain's tests call `ExternalDependency.record`.
 files: ["packages/crawler/**/*.py"]
 ignores:
   - "packages/crawler/src/p2pwatch/application/steps/node_health.py"

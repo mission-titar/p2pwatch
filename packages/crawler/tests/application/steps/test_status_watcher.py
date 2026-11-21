@@ -9,7 +9,6 @@ import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
-from p2pwatch.application.steps.health_alerter import HealthAlerter
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
@@ -67,11 +66,10 @@ class _Observability:
             leave_notification=self._leave,
             services=ONE_SERVICE_PER_AUDIENCE,
         )
-        alerter = HealthAlerter(
-            observability_dispatcher=self.dispatcher, node_id=_NODE_ID, min_free_bytes=None
-        )
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(logger=self.health_logger, subscribers=(alerter.send,))
+        self.node_health = NodeHealth(
+            logger=self.health_logger, observability_dispatcher=self.dispatcher
+        )
 
     def _leave(
         self, notification: Notification, *, services: Sequence[NotificationService]
@@ -109,9 +107,9 @@ def _status_watcher(
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=status_reading_writer or FakeStatusReadingStore((client_name,)),
         node_health=observability.node_health,
-        client_dependency=client_dependency(client_name),
+        client_dependency=client_dependency(client_name, node_id=_NODE_ID),
         channel_dependencies={
-            channel: channel_dependency(client_name=client_name, channel=channel)
+            channel: channel_dependency(client_name=client_name, channel=channel, node_id=_NODE_ID)
             for channel in channels
         },
     )
@@ -436,7 +434,7 @@ def test_a_password_refused_at_every_reading_fails_each_turn_and_the_node_runs_o
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=FakeStatusReadingStore((_AMULED,)),
         node_health=observability.node_health,
-        client_dependency=client_dependency(_AMULED),
+        client_dependency=client_dependency(_AMULED, node_id=_NODE_ID),
         channel_dependencies={},
     )
     run_state, logger = FakeRunStateStore(), FakeLogger()
@@ -491,9 +489,9 @@ class _RebuiltNode:
         self._loop = loop
         self._client = FakeStatusClient(list(readings))
         self._monotonic_clock = FakeLoopMonotonicClock(loop)
-        self.client_part = client_dependency(_AMULED)
+        self.client_part = client_dependency(_AMULED, node_id=_NODE_ID)
         self._channel_parts = {
-            channel: channel_dependency(client_name=_AMULED, channel=channel)
+            channel: channel_dependency(client_name=_AMULED, channel=channel, node_id=_NODE_ID)
             for channel in _CHANNELS
         }
         self.observability = _Observability(FakeTime())
