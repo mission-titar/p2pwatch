@@ -1,8 +1,8 @@
-"""The notifier's work: sends each notification left in the outbox, the oldest first, such as a
-tier rise to the community's Discord webhook, and records whether its send and its save failed."""
+"""The notifier's work, one per service: sends each notification left for it in the outbox, the
+oldest first, such as a tier rise to the community's Discord webhook, and records how it went."""
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Literal, Protocol
 
 from p2pwatch.application.ports.driven.logger import Logger
@@ -32,12 +32,13 @@ type _SendEnd = Literal["sent", "failed"]
 
 
 class NotificationSender(Work):
-    """Sends the oldest notification left at each turn, a turn waiting until the outbox holds one;
-    a send cancelled, by a rebuild or the shutdown, keeps its entry for the next."""
+    """Sends the oldest notification left for its service at each turn, such as the community's
+    Discord webhook, a turn waiting until the outbox holds one; a cancelled send keeps its entry."""
 
     def __init__(
         self,
         *,
+        service: NotificationService,
         outbox: NotificationOutbox,
         notifier: Notifier,
         notification_timeout_seconds: float,
@@ -46,25 +47,26 @@ class NotificationSender(Work):
         local_database: ExternalDependency,
         logger: Logger,
     ) -> None:
+        self._service = service
         self._outbox = outbox
         self._notifier = notifier
         self._notification_timeout_seconds = notification_timeout_seconds
         self._record_check = record_check
-        self._service_dependencies = service_dependencies
+        self._service_dependency = service_dependencies[service]
         self._local_database = local_database
         self._logger = logger
 
     def __str__(self) -> str:
-        return "notification sending"
+        return f"notification sending {self._service}"
 
     async def wait_for_next_turn(self) -> None:
-        """Returns once the outbox holds a notification."""
-        await self._outbox.wait_for_an_entry()
+        """Returns once the outbox holds a notification for its service."""
+        await self._outbox.wait_for_an_entry(self._service)
 
     async def run_once(self) -> None:
-        """Sends the oldest notification left within the notification timeout, then removes it: a
-        failed save recorded on the local database, a refusal on its service, a bug raised."""
-        entry = self._outbox.oldest()
+        """Sends its service's oldest notification within the notification timeout, then removes
+        it: a failed save recorded on the local database, a refusal on its service, a bug raised."""
+        entry = self._outbox.oldest(self._service)
         if entry is None:
             return
         end = await self._end_of_send(entry)  # a cancellation keeps the entry for the next turn
@@ -73,21 +75,23 @@ class NotificationSender(Work):
         await self._record_check(on=self._local_database, rule=SAVES_FAILED, detected=saves_failed)
         if isinstance(end, Exception):
             raise end
-        part = self._service_dependencies[entry.service]
-        await self._record_check(on=part, rule=SENDS_FAILED, detected=end == "failed")
+        detected = end == "failed"
+        await self._record_check(on=self._service_dependency, rule=SENDS_FAILED, detected=detected)
 
-    async def send_what_is_left(self) -> None:
-        """Sends every notification left, the oldest first, as its turns do, a bug logged with its
-        trace: at the shutdown, once every work has stopped."""
-        while self._outbox.oldest() is not None:
+    async def send_what_is_left(self) -> bool:
+        """Sends every notification left for its service, the oldest first, as its turns do, a bug
+        logged with its trace; whether it took a turn, which may have left another."""
+        took_a_turn = self._outbox.oldest(self._service) is not None
+        while self._outbox.oldest(self._service) is not None:
             try:
                 await self.run_once()
             except Exception as error:  # the boundary of a turn, the supervisor gone by now
                 self._logger.exception("bug in %s", self, error=error)
+        return took_a_turn
 
     async def _end_of_send(self, entry: PendingNotification) -> _SendEnd | Exception:
         """How the send of ``entry`` ended, a failed one logged in one line, a bug returned."""
-        part_name = self._service_dependencies[entry.service].name
+        part_name = self._service_dependency.name
         try:
             raised = await asyncio.wait_for(
                 self._raised_by(entry), timeout=self._notification_timeout_seconds
@@ -112,3 +116,13 @@ class NotificationSender(Work):
         except Exception as error:  # the boundary of a send, by design
             return error
         return None
+
+
+async def empty_the_outbox(senders: Sequence[NotificationSender]) -> None:
+    """Has each of ``senders`` send what is left for its service, all at once, again while a send
+    left another, such as the local database's alert: at the shutdown, once every work stopped."""
+    took_a_turn = True
+    while took_a_turn:
+        async with asyncio.TaskGroup() as each_service:
+            sending = [each_service.create_task(s.send_what_is_left()) for s in senders]
+        took_a_turn = any(task.result() for task in sending)

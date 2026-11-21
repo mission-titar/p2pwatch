@@ -1,6 +1,7 @@
-"""The notifier's work: each turn sends the oldest notification left within the notification
-timeout and removes it, a refusal or a timeout a failed send recorded on its service's part, any
-other error a bug of the turn; a cancelled send keeps its entry."""
+"""The notifier's work, one per service: each turn sends the oldest notification left for its
+service within the notification timeout and removes it, a refusal or a timeout a failed send
+recorded on its service's part, any other error a bug of the turn; a cancelled send keeps its
+entry. At the shutdown, every service's is sent at once."""
 
 import asyncio
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ import pytest
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
-from p2pwatch.application.steps.notification_sender import NotificationSender
+from p2pwatch.application.steps.notification_sender import NotificationSender, empty_the_outbox
 from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.identifiers import NodeId
@@ -73,11 +74,13 @@ def _sender(
     notifier: Notifier,
     *,
     outbox: NotificationOutbox,
+    service: NotificationService = _COMMUNITY,
     logger: FakeLogger | None = None,
     timeout: float = 5.0,
     checks: _Checks | None = None,
 ) -> NotificationSender:
     return NotificationSender(
+        service=service,
         outbox=outbox,
         notifier=notifier,
         notification_timeout_seconds=timeout,
@@ -105,10 +108,10 @@ def _completed_left() -> NotificationOutbox:
     return outbox
 
 
-async def test_it_is_named_in_the_log_by_what_it_does() -> None:
+async def test_it_is_named_in_the_log_by_what_it_does_and_its_service() -> None:
     sender = _sender(FakeNotifier(), outbox=_completed_left())
 
-    assert str(sender) == "notification sending"
+    assert str(sender) == "notification sending fake community"
 
 
 async def test_its_wait_returns_once_a_notification_is_left() -> None:
@@ -124,14 +127,20 @@ async def test_its_wait_returns_once_a_notification_is_left() -> None:
     assert waited_while_empty
 
 
-async def test_a_turn_sends_the_oldest_notification_left_then_removes_it() -> None:
-    notifier, outbox = FakeNotifier(), _completed_left()
+async def test_a_turn_sends_the_oldest_left_for_its_service_then_removes_it_another_s_kept() -> (
+    None
+):
+    notifier, outbox = FakeNotifier(), _empty_outbox()
     outbox.leave(_ONLINE, services=[_OPERATIONS])
+    outbox.leave(_COMPLETED, services=[_COMMUNITY])
 
     await _sender(notifier, outbox=outbox).run_once()
 
     assert notifier.calls == [(Audience.COMMUNITY, _COMPLETED)]
-    assert outbox.oldest() == PendingNotification(notification=_ONLINE, service=_OPERATIONS)
+    assert (outbox.oldest(_COMMUNITY), outbox.oldest(_OPERATIONS)) == (
+        None,
+        PendingNotification(notification=_ONLINE, service=_OPERATIONS),
+    )
 
 
 async def test_a_send_that_worked_records_its_service_s_sends_as_not_failed() -> None:
@@ -184,7 +193,7 @@ async def test_a_refused_send_is_a_failed_send_logged_in_one_line_and_removed() 
         _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False),
         _Check(part="notifier fake community", rule=SENDS_FAILED, detected=True),
     ]
-    assert outbox.oldest() is None
+    assert outbox.oldest(_COMMUNITY) is None
 
 
 async def test_a_send_past_its_timeout_is_a_failed_send_logged_in_one_line_and_removed() -> None:
@@ -205,7 +214,7 @@ async def test_a_send_past_its_timeout_is_a_failed_send_logged_in_one_line_and_r
         _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False),
         _Check(part="notifier fake community", rule=SENDS_FAILED, detected=True),
     ]
-    assert outbox.oldest() is None
+    assert outbox.oldest(_COMMUNITY) is None
 
 
 async def test_any_other_exception_of_the_notifier_is_a_bug_of_the_turn_its_entry_removed() -> None:
@@ -217,7 +226,7 @@ async def test_any_other_exception_of_the_notifier_is_a_bug_of_the_turn_its_entr
 
     # A bug tells nothing of whether the service takes the sends, but the removal was saved.
     saved = _Check(part=_LOCAL_DATABASE, rule=SAVES_FAILED, detected=False)
-    assert (raised.value, checks.recorded, outbox.oldest()) == (bug, [saved], None)
+    assert (raised.value, checks.recorded, outbox.oldest(_COMMUNITY)) == (bug, [saved], None)
 
 
 async def test_a_timeout_error_the_notifier_raises_itself_is_a_bug_not_a_timeout() -> None:
@@ -236,7 +245,9 @@ async def test_a_send_cancelled_mid_send_keeps_its_entry() -> None:
     with pytest.raises(asyncio.CancelledError):
         await turn
 
-    assert outbox.oldest() == PendingNotification(notification=_COMPLETED, service=_COMMUNITY)
+    assert outbox.oldest(_COMMUNITY) == PendingNotification(
+        notification=_COMPLETED, service=_COMMUNITY
+    )
 
 
 async def test_a_turn_with_nothing_left_sends_and_records_nothing() -> None:
@@ -248,20 +259,83 @@ async def test_a_turn_with_nothing_left_sends_and_records_nothing() -> None:
     assert (notifier.calls, checks.recorded) == ([], [])
 
 
-async def test_what_is_left_is_sent_oldest_first_a_bug_logged_with_its_trace() -> None:
+async def test_what_is_left_for_each_service_is_sent_a_bug_logged_with_its_trace() -> None:
     logger, bug = FakeLogger(), RuntimeError("an embed apprise cannot build")
     notifier = FakeRaisingNotifier(bug)
     outbox = _completed_left()
     outbox.leave(_ONLINE, services=[_OPERATIONS])
 
-    await _sender(notifier, outbox=outbox, logger=logger).send_what_is_left()
+    await empty_the_outbox(
+        [
+            _sender(notifier, outbox=outbox, service=service, logger=logger)
+            for service in ONE_SERVICE_PER_AUDIENCE
+        ]
+    )
 
     assert notifier.sends == 2
-    assert (
-        logger.lines
-        == [LoggedLine(level="error", message="bug in notification sending", error=bug)] * 2
+    assert logger.lines == [
+        LoggedLine(level="error", message=f"bug in notification sending fake {audience}", error=bug)
+        for audience in ("community", "operations")
+    ]
+    assert (outbox.oldest(_COMMUNITY), outbox.oldest(_OPERATIONS)) == (None, None)
+
+
+async def test_emptying_the_outbox_sends_each_service_s_at_once_a_held_send_holding_no_other() -> (
+    None
+):
+    held, notifier, outbox = FakeHeldNotifier(), FakeNotifier(), _completed_left()
+    outbox.leave(_ONLINE, services=[_OPERATIONS])
+    emptying = asyncio.create_task(
+        empty_the_outbox(
+            [
+                _sender(held, outbox=outbox, service=_COMMUNITY),
+                _sender(notifier, outbox=outbox, service=_OPERATIONS),
+            ]
+        )
     )
-    assert outbox.oldest() is None
+    await asyncio.wait_for(held.reached.wait(), 1.0)
+    for _ in range(3):
+        await asyncio.sleep(0)  # noqa: TID251
+
+    # Its community send still held, the operations' already went out.
+    assert notifier.calls == [(Audience.OPERATIONS, _ONLINE)]
+    emptying.cancel()
+
+
+async def test_emptying_the_outbox_sends_what_a_send_left_for_a_service_already_emptied() -> None:
+    observability, notifier = ObservabilityOverFakes(), FakeNotifier()
+    observability.outbox_store.writes_fail = True
+    record_check = NodeHealth(
+        logger=FakeLogger(), observability_dispatcher=observability.dispatcher
+    ).record
+    local_database = local_database_dependency(node_id=_NODE_ID)
+    senders = [
+        NotificationSender(
+            service=service,
+            outbox=observability.outbox,
+            notifier=notifier,
+            notification_timeout_seconds=5.0,
+            record_check=record_check,
+            service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+            local_database=local_database,
+            logger=FakeLogger(),
+        )
+        for service in (_OPERATIONS, _COMMUNITY)
+    ]
+    for _ in range(3):
+        observability.outbox.leave(_COMPLETED, services=[_COMMUNITY])
+
+    await empty_the_outbox(senders)
+
+    # The third community send records the third save refused, once the operations' had none.
+    not_saved = RelayedLogLine(
+        message="notifications not saved in local.db: lost at the next restart",
+        severity=Severity.WARNING,
+        node_id=_NODE_ID,
+    )
+    assert notifier.calls == [(Audience.COMMUNITY, _COMPLETED)] * 3 + [
+        (Audience.OPERATIONS, not_saved)
+    ]
 
 
 async def test_two_services_one_refusing_the_other_sent_once_the_refused_tried_once() -> None:
@@ -270,20 +344,25 @@ async def test_two_services_one_refusing_the_other_sent_once_the_refused_tried_o
     notifier, logger = FakeNotifier((refused, taking), refusing=[refused]), FakeLogger()
     outbox = _empty_outbox()
     outbox.leave(_ONLINE, services=[refused, taking])
-    sender = _sender(notifier, outbox=outbox, logger=logger)
 
-    await sender.send_what_is_left()
+    await empty_the_outbox(
+        [
+            _sender(notifier, outbox=outbox, service=service, logger=logger)
+            for service in (refused, taking)
+        ]
+    )
 
     assert notifier.calls == [(Audience.OPERATIONS, _ONLINE)]
     assert [line.message for line in logger.lines] == [
         "notifier discord operations: notification not sent: the service refused it (FAILURE)"
     ]
-    assert outbox.oldest() is None
+    assert (outbox.oldest(refused), outbox.oldest(taking)) == (None, None)
 
 
 async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_alerts_no_one() -> None:
     observability, health_logger = ObservabilityOverFakes(), FakeLogger()
     sender = NotificationSender(
+        service=_OPERATIONS,
         outbox=observability.outbox,
         notifier=FakeNotifier(refusing=[_OPERATIONS]),
         notification_timeout_seconds=5.0,
@@ -306,13 +385,14 @@ async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_aler
         ),
     ]
     # An alert would go through the service that refuses it: none is left.
-    assert (observability.notifications, observability.outbox.oldest()) == ([], None)
+    assert (observability.notifications, observability.outbox.oldest(_OPERATIONS)) == ([], None)
 
 
 async def test_a_local_database_refusing_every_save_still_sends_every_entry_and_its_alert() -> None:
     observability, health_logger, notifier = ObservabilityOverFakes(), FakeLogger(), FakeNotifier()
     observability.outbox_store.writes_fail = True
     sender = NotificationSender(
+        service=_OPERATIONS,
         outbox=observability.outbox,
         notifier=notifier,
         notification_timeout_seconds=5.0,

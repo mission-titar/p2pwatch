@@ -1,5 +1,5 @@
-"""The notifier as the node builds it, at its start and at each rebuild: built anew with the work
-sending the outbox's notifications through it."""
+"""The notifier as the node builds it, at its start and at each rebuild: built anew with the works
+sending the outbox's notifications through it, one per service."""
 
 from collections.abc import Sequence
 from datetime import timedelta
@@ -12,7 +12,6 @@ from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN
 from p2pwatch.domain.crawler_function import CrawlerFunction
-from p2pwatch.domain.observability.notification_sends import NotificationService
 
 
 class AppriseNotifierBuilder(Protocol):
@@ -25,24 +24,20 @@ class WorksOverNotifier(Protocol):
 
 
 def notification_sending(
-    sender: NotificationSender,
-    *,
-    notification_timeout_seconds: float,
-    services: Sequence[NotificationService],
+    senders: Sequence[NotificationSender], *, notification_timeout_seconds: float
 ) -> Sequence[SupervisedWork]:
-    """``sender``'s turns, each a send to one of ``services``, such as ``discord community``; none
-    without a service, since nothing is then left to send."""
-    if not services:
-        return ()
+    """The turns of each of ``senders``, one per service, such as ``notification sending discord
+    community``, each a work of its own, so that a service that never answers holds no other."""
     # One send per turn: its timeout, then the margin.
     time_limit = timedelta(seconds=notification_timeout_seconds) + TIME_LIMIT_MARGIN
     return [
         SupervisedWork(work=sender, time_limit=time_limit, function=CrawlerFunction.NOTIFICATIONS)
+        for sender in senders
     ]
 
 
 class NotifierRestartable(Restartable[SupervisedWork]):
-    """The notifier the outbox's notifications go through, and the work sending them."""
+    """The notifier the outbox's notifications go through, and the works sending them."""
 
     def __init__(self, notifier: AppriseNotifier, *, works: Sequence[SupervisedWork]) -> None:
         self.notifier = notifier
@@ -56,8 +51,8 @@ class NotifierRestartable(Restartable[SupervisedWork]):
 
 
 class NotifierRestartableBuilder(RestartableBuilder[SupervisedWork]):
-    """Builds the notifier anew with the work sending through it: a send under way at a rebuild
-    keeps its entry for the new one."""
+    """Builds the notifier anew with the works sending through it: a send under way at a rebuild
+    keeps its entry for the new ones."""
 
     def __init__(
         self, *, build_notifier: AppriseNotifierBuilder, works_over: WorksOverNotifier
