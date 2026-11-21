@@ -21,7 +21,7 @@ from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.composition.notifier_restartable import notification_sending
-from p2pwatch.domain.client_errors import ClientAuthError
+from p2pwatch.domain.client_errors import ClientUnreachableError
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.identifiers import NodeId
@@ -552,23 +552,24 @@ def test_three_rebuilds_that_raise_end_the_supervision_once_the_third_has_raised
     assert node.ended() == (_CRAWL_LOST, 541.0)
 
 
-def test_a_rebuild_refused_by_amule_is_logged_in_one_line_and_tried_again(
+def test_a_rebuild_meeting_amuled_unreachable_is_logged_in_one_line_and_counts_in_vain(
     virtual_loop: VirtualLoop,
 ) -> None:
-    refused = ClientAuthError("amuleapi refused the admin password")
+    unreachable = ClientUnreachableError("POST /api/v1/auth/login: connection refused")
     node = _Node(
         virtual_loop,
         client_works=_one_search(_Turns(), bugs=_first_build_buggy),
-        rebuild_errors=[refused],
+        rebuild_errors=[unreachable],
     )
 
     node.run_for(400.0)
 
+    # An outage, no bug, yet in vain: the next rebuild waits 2 min.
     assert node.client.built_at == [0.0, 181.0, 301.0]
     assert node.client_lines()[1:] == [
         LoggedLine(
             level="warning",
-            message="rebuild of client amuled: amuleapi refused the admin password",
+            message="rebuild of client amuled: POST /api/v1/auth/login: connection refused",
         ),
         LoggedLine(level="info", message="client amuled rebuilt"),
     ]
