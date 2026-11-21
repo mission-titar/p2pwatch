@@ -172,6 +172,8 @@ class _Crawl:
             run_state_reader=self.run_state,
             # Its sleeps never end: with instant ones, every time limit would expire at once.
             monotonic_clock=supervisor_clock or FakeBlockingMonotonicClock(),
+            observability_dispatcher=self.observability.dispatcher,
+            node_id=_NODE_ID,
             logger=FakeLogger(),
         )
         self.crawler_lifecycle = CrawlerLifecycle(
@@ -449,10 +451,21 @@ def test_a_function_lost_has_its_alert_sent_local_db_refusing_then_raises_its_er
         virtual_loop.run_until_complete(crawl.run_a_client_buggy_at_every_turn())
 
     online = "🟢 node online (download off)"
-    alert = "the crawl lost: every search failing after 3 rebuilds: the crawler restarts"
-    # Sent before the exit from memory, no save of the outbox ever having gone through.
+    unrepaired = (
+        "client amuled: search 'keroro' amuled kad still failing after 3 rebuilds: a bug of its "
+        "own, or a shared state a crawler restart would renew"
+    )
+    lost = "the crawl lost: every search failing after 3 rebuilds: the crawler restarts"
+    not_saved = "notifications not saved in local.db: lost at the next restart"
+    # Sent before the exit from memory, no save of the outbox ever having gone through: the
+    # third send records the third save refused.
     assert crawl.notifier.calls == [
         (Audience.OPERATIONS, RelayedLogLine(message=m, severity=s, node_id=_NODE_ID))
-        for m, s in [(online, Severity.INFO), (alert, Severity.WARNING)]
+        for m, s in [
+            (online, Severity.INFO),
+            (unrepaired, Severity.WARNING),
+            (lost, Severity.WARNING),
+            (not_saved, Severity.WARNING),
+        ]
     ]
     assert crawl.observability.outbox_store.read_pending_notifications() == ()

@@ -896,7 +896,10 @@ de zéro une fois sain chaque `Work` passé en échec, moins de 2 bugs sur ses 1
 tour sain parmi des bugs ne le remet pas à zéro. Après trois, rien ne distingue un bug propre au
 `Work` d'un état partagé (les connexions aux bases, le moteur de matching) qu'un processus neuf
 renouvellerait : l'objet reste non réparé, plus reconstruit avant que son compte reparte de zéro,
-ses `Work` tournant toujours, ceux en échec échouant seuls. Chaque `Work` sert une fonction du
+ses `Work` tournant toujours, ceux en échec échouant seuls. Le `Supervisor` envoie l'alerte
+`client amuled: search 'keroro' amuled ed2k still failing after 3 rebuilds: a bug of its own, or a
+shared state a crawler restart would renew`, puis sa fin, `client amuled: every work healthy
+again`, quand le compte repart de zéro. Chaque `Work` sert une fonction du
 crawler (`CrawlerFunction`) : la webui, les notifications, le crawl (les recherches de chaque client
 P2P) et, sur un nœud qui télécharge, les téléchargements (le suivi des téléchargements et des
 sources) ; la lecture du statut n'en sert aucune. Une fonction est perdue quand chaque objet qui la

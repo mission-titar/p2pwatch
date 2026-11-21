@@ -241,6 +241,30 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     *[
         (
+            ev.WorksStillFailing(
+                object_name="client amuled", works=works, rebuilds=3, node_id=_NODE_ID
+            ),
+            _relayed(
+                Severity.WARNING,
+                message=f"client amuled: {failing} still failing after 3 rebuilds: a bug of {own} "
+                "own, or a shared state a crawler restart would renew",
+            ),
+        )
+        for works, failing, own in [
+            (("search 'keroro' amuled ed2k",), "search 'keroro' amuled ed2k", "its"),
+            (
+                ("search 'keroro' amuled ed2k", "search 'titar' amuled ed2k"),
+                "search 'keroro' amuled ed2k, search 'titar' amuled ed2k",
+                "their",
+            ),
+        ]
+    ],
+    (
+        ev.WorksHealthyAgain(object_name="client amuled", node_id=_NODE_ID),
+        _relayed(Severity.INFO, message="client amuled: every work healthy again"),
+    ),
+    *[
+        (
             ev.CrawlerFunctionLost(function=function, rebuilds=3, node_id=_NODE_ID),
             _relayed(
                 Severity.WARNING,

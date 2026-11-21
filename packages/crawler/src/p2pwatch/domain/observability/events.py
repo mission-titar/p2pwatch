@@ -167,6 +167,22 @@ class CrawlerFunctionLost:
 
 
 @dataclass(kw_only=True, frozen=True)
+class WorksStillFailing:
+    # An object, such as the aMule client, left unrepaired, ``works`` failing after ``rebuilds``.
+    object_name: str
+    works: tuple[str, ...]  # as the log names them: "search 'keroro' amuled ed2k"
+    rebuilds: int
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class WorksHealthyAgain:
+    # An unrepaired object's works all healthy again: its count reset, it is rebuilt again.
+    object_name: str
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class SourceFirstUseful:
     # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
@@ -215,6 +231,8 @@ type Event = (
     | NotificationsNotSaved
     | NotificationsSavedAgain
     | CrawlerFunctionLost
+    | WorksStillFailing
+    | WorksHealthyAgain
     | SourceFirstUseful
     | SourceReappeared
     | CrawlerStarted
