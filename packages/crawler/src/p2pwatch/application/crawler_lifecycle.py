@@ -1,5 +1,6 @@
 """``CrawlerLifecycle``: the root of the crawler's graph, which the composition runs once built."""
 
+import asyncio
 from collections.abc import Sequence
 
 from p2pwatch.application.ports.driven.logger import Logger
@@ -40,9 +41,8 @@ class CrawlerLifecycle:
         self._logger = logger
 
     async def run(self, *, arm_shutdown_bound: ShutdownBoundArmer) -> None:
-        """Runs until the shutdown is requested, arming the bound before the works are cancelled;
-        returns once the notifications left in the outbox are sent, within that bound, or raises
-        the ``CrawlerRestartError`` of a function lost once its alert is sent with them."""
+        """Runs until the shutdown is requested, then sends what the outbox holds within the bound
+        it arms; a function lost raises its ``CrawlerRestartError``, its alert sent or cut."""
         self._backoff.resume_waits()
         self._logger.info("crawler started: node_id=%s", self._node_id)
         if self._download_enabled:
@@ -63,6 +63,9 @@ class CrawlerLifecycle:
                     node_id=self._node_id,
                 )
             )
-            await empty_the_outbox(self._notification_senders)
+            try:
+                await empty_the_outbox(self._notification_senders)
+            except asyncio.CancelledError as cut:  # by the shutdown deadline: a restart still
+                raise restart from cut
             raise
         await empty_the_outbox(self._notification_senders)
