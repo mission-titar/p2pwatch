@@ -180,7 +180,8 @@ One stack from `main`, its blocks numbered by fives; each block's size is estima
 | 40 | `refactor/supervisor-counts-the-bugs` | the bugs counted per object and each rebuild decided by the supervisor; the restart policy and the bugs rule removed | ~1 200 lines (~700 removed), ~30 files, past both bounds (Corrected: 1 846 lines, about 1 100 removed, 40 files, accepted by the operator on 2026-11-20) |
 | 45 | `feat/rebuild-waits` | the rebuilds after 1, 2, then 4 min | ~280 lines, ~4 files |
 | 50 | `feat/crawler-restart-past-three` | the crawler stopped with an error at the third rebuild in vain, its alert | ~300 lines, ~16 files |
-| 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files |
+| 53 | `refactor/download-tracking-split` | download tracking split | 161 lines, 17 files (Corrected: cut out of block 55, the lead on 2026-11-21) |
+| 55 | `refactor/rules-carry-their-alerts` | each rule carrying its alert, download tracking split | ~350 lines, ~12 files (Corrected: 1 012 lines, 683 removed, 30 files, past both bounds, the health alerter's cases moving to each domain module's tests and `node_id` given at 16 test sites, accepted by the operator on 2026-11-21) |
 | 60 | `feat/password-refused-outage` | the refused password an outage of amuled, with its alert | ~280 lines, ~6 files |
 | 65 | `feat/login-tried-again` | the login tried again after waits that double | ~300 lines, ~6 files |
 | 80 | `fix/lot-4b6-review-fixes` | the holistic review's fixes | |
@@ -371,6 +372,10 @@ self._objects[builder].record_turn(met_a_bug=met_a_bug)  # failing: rebuild afte
 - Download tracking's dependency split: `DISK_SPACE_LOW` on the download disk, `CONNECTED_TO_NO_NETWORK` on amuled,
   recorded whether or not the node downloads.
 - The glossary gains `health alert`; its `health alerter` line goes.
+- (Corrected: as built, 53 splits download tracking alone. In 55, the test holding today's alerts changes only its
+  setup, which built the health alerter the spec removes; its cases and assertions stay. The composition test that
+  the status reading and the searches record on one channel dependency compares their names in the node's health's
+  log, the subscriber that kept the transitions gone; the count of dependencies built still proves the sharing.)
 
 ### Blocks 60 and 65, the refused password
 
