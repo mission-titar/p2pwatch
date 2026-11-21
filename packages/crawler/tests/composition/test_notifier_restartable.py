@@ -114,9 +114,9 @@ def _sender(
         outbox=outbox,
         notifier=notifier,
         notification_timeout_seconds=5.0,
-        record_check=NodeHealth(
+        node_health=NodeHealth(
             logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
-        ).record,
+        ),
         service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
         local_database=local_database_dependency(node_id=NodeId("n1")),
         logger=FakeLogger(),

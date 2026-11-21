@@ -83,7 +83,7 @@ class _WorkTurns:
         self._since_build = ()
 
 
-class SupervisedObject:
+class _SupervisedObject:
     """The supervisor's record of one object it rebuilds, such as the aMule client: its builder, the
     latest object built, whether each latest turn of each of its works met a bug, its rebuilds in
     vain, the third leaving it unrepaired."""
@@ -203,10 +203,10 @@ class Supervisor:
         self._observability_dispatcher = observability_dispatcher
         self._node_id = node_id
         self._logger = logger
-        self._rebuilds_decided: asyncio.Queue[SupervisedObject] = asyncio.Queue()
+        self._rebuilds_decided: asyncio.Queue[_SupervisedObject] = asyncio.Queue()
         # Each work's task while it runs, and the object it is over, which a rebuild stops it with.
-        self._running: dict[asyncio.Task[None], SupervisedObject] = {}
-        self._objects: dict[RestartableBuilder[SupervisedWork], SupervisedObject] = {}
+        self._running: dict[asyncio.Task[None], _SupervisedObject] = {}
+        self._objects: dict[RestartableBuilder[SupervisedWork], _SupervisedObject] = {}
         # A function of the crawler wholly lost, which ends the supervision.
         self._restarts_decided: asyncio.Queue[CrawlerRestartError] = asyncio.Queue()
 
@@ -216,7 +216,7 @@ class Supervisor:
         """Has ``builder`` build its first object, such as the webui serving on its thread, holds
         it until a rebuild or the shutdown, and returns the works ``supervise`` runs over it."""
         first = await builder.build()
-        self._objects[builder] = SupervisedObject(builder, first=first, logger=self._logger)
+        self._objects[builder] = _SupervisedObject(builder, first=first, logger=self._logger)
         return first.works()
 
     async def close(self) -> None:
@@ -249,7 +249,7 @@ class Supervisor:
             raise restart.result()
 
     def _add(
-        self, supervised: SupervisedWork, *, over: SupervisedObject, group: asyncio.TaskGroup
+        self, supervised: SupervisedWork, *, over: _SupervisedObject, group: asyncio.TaskGroup
     ) -> None:
         task = group.create_task(self._take_turns(supervised, over=over))
         self._running[task] = over
@@ -262,7 +262,7 @@ class Supervisor:
                 supervised = await self._rebuilds_decided.get()
                 rebuilds.create_task(self._rebuild(supervised, group=group))
 
-    async def _rebuild(self, supervised: SupervisedObject, *, group: asyncio.TaskGroup) -> None:
+    async def _rebuild(self, supervised: _SupervisedObject, *, group: asyncio.TaskGroup) -> None:
         """Stops the works over the object, then has it rebuilt after 1, 2, then 4 min, a rebuild
         that raised counting in vain; the third leaves it unrepaired, holding no work."""
         await self._stop_works_over(supervised)
@@ -276,7 +276,7 @@ class Supervisor:
                 self._restart_if_a_function_is_lost()
                 return
 
-    async def _alert_unrepaired(self, supervised: SupervisedObject) -> None:
+    async def _alert_unrepaired(self, supervised: _SupervisedObject) -> None:
         still_failing = WorksStillFailing(
             object_name=str(supervised.builder),
             works=supervised.failing_works(),
@@ -300,14 +300,14 @@ class Supervisor:
                 self._restarts_decided.put_nowait(restart)
                 return
 
-    async def _stop_works_over(self, supervised: SupervisedObject) -> None:
+    async def _stop_works_over(self, supervised: _SupervisedObject) -> None:
         stopping = [task for task, over in self._running.items() if over is supervised]
         for task in stopping:
             task.cancel()
         for task in stopping:  # awaited, so no turn runs on the old object once it is rebuilt
             await asyncio.wait((task,))
 
-    async def _rebuilt(self, supervised: SupervisedObject, *, group: asyncio.TaskGroup) -> bool:
+    async def _rebuilt(self, supervised: _SupervisedObject, *, group: asyncio.TaskGroup) -> bool:
         """Has the object rebuilt and runs the works over the new one; whether it was."""
         builder = supervised.builder
         try:
@@ -323,7 +323,7 @@ class Supervisor:
             self._add(work, over=supervised, group=group)
         return True
 
-    async def _take_turns(self, supervised: SupervisedWork, *, over: SupervisedObject) -> None:
+    async def _take_turns(self, supervised: SupervisedWork, *, over: _SupervisedObject) -> None:
         met_a_bug = False
         while True:
             await self._wait(supervised.work, after_a_bug=met_a_bug)

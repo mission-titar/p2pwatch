@@ -170,9 +170,9 @@ class _Crawl:
                 _WorkWaitingForTheStop("status", on_start=self._work_started),
             )
         ]
-        record_check = NodeHealth(
+        node_health = NodeHealth(
             logger=FakeLogger(), observability_dispatcher=self.observability.dispatcher
-        ).record
+        )
         local_database = local_database_dependency(node_id=_NODE_ID)
         self._supervisor = Supervisor(
             run_state_reader=self.run_state,
@@ -214,7 +214,7 @@ class _Crawl:
                     outbox=self.observability.outbox,
                     notifier=self.notifier,
                     notification_timeout_seconds=5.0,
-                    record_check=record_check,
+                    node_health=node_health,
                     service_dependencies=notification_service_dependencies(
                         self.notifier.services()
                     ),

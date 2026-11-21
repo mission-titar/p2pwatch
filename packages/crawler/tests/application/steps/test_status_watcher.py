@@ -16,13 +16,11 @@ from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.client_errors import ClientAuthError, ClientError, ReadRejectedError
-from p2pwatch.domain.health.health_rule import HealthState
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import NotificationService
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import (
-    CLIENT_UNREACHABLE,
     ChannelStatus,
     ClientStatus,
     PublishedReading,
@@ -594,7 +592,8 @@ def test_amule_unreachable_fails_the_client_s_rule_and_rebuilds_nothing(
     node.run_for(19 * 60.0 + 1.0)
 
     assert node.amule_client.rebuilds() == 0
-    assert node.client_part.state(CLIENT_UNREACHABLE) is HealthState.FAILING
+    health = [line.message for line in node.observability.health_logger.lines]
+    assert "client amuled, unreachable: unknown to failing" in health
 
 
 def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_ends_it(

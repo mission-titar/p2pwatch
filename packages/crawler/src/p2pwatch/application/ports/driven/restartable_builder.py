@@ -1,4 +1,4 @@
-"""``RestartableBuilder``: builds a new object the node can restart at each call, such as a client
+"""``RestartableBuilder``: builds a new object the node can rebuild at each call, such as a client
 logged in to aMule."""
 
 from abc import ABC, abstractmethod
