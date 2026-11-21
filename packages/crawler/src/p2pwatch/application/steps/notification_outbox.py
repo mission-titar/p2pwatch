@@ -12,6 +12,7 @@ from p2pwatch.domain.observability.notification import Notification
 from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
     PendingNotification,
+    UnreadableNotification,
 )
 from p2pwatch.domain.store_error import StoreError
 from p2pwatch.domain.wake_subject import WakeSubject
@@ -30,23 +31,31 @@ class NotificationOutbox:
         waker: Waker,
         logger: Logger,
     ) -> None:
-        """Reads back the entries saved last, such as a tier rise a stop left unsent, those for a
-        service of none of ``services`` dropped."""
+        """Reads back the entries saved last, such as a tier rise a stop left unsent, those it
+        cannot read or for a service of none of ``services`` dropped."""
         self._writer = writer
         self._waker = waker
         self._logger = logger
         self._latest_save_failed = False
-        saved = reader.read_pending_notifications()
+        read = reader.read_pending_notifications()
+        saved = [entry for entry in read if isinstance(entry, PendingNotification)]
         self._entries = [entry for entry in saved if entry.service in services]
+        if unreadable := [e.reason for e in read if isinstance(e, UnreadableNotification)]:
+            reasons = "; ".join(sorted(set(unreadable)))
+            message = "%d notification(s) dropped, unreadable: %s"
+            self._logger.warning(message, len(unreadable), reasons)
         if dropped := [entry.service for entry in saved if entry.service not in services]:
             gone = ", ".join(sorted({str(service) for service in dropped}))
             message = "%d notification(s) dropped, their service no longer configured: %s"
             self._logger.warning(message, len(dropped), gone)
+        if unreadable or dropped:
             self._save()
 
     def leave(self, notification: Notification, *, services: Sequence[NotificationService]) -> None:
         """Adds an entry for each of ``services``, such as the community's Discord webhook, and
-        wakes the notifier's work."""
+        wakes the notifier's work; none for none, as on a node without notifications."""
+        if not services:
+            return
         self._entries.extend(
             PendingNotification(notification=notification, service=service) for service in services
         )
@@ -75,6 +84,7 @@ class NotificationOutbox:
             await self._waker.wait(WakeSubject.NOTIFICATION)
 
     def _save(self) -> None:
+        # The whole table at each change: a burst of n entries, a re-evaluation's, writes n²/2 rows.
         try:
             self._writer.set_pending_notifications(self._entries)
         except StoreError as error:

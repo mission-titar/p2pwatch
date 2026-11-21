@@ -227,6 +227,41 @@ async def test_an_entry_for_a_service_no_longer_configured_is_dropped_in_one_lin
     assert (store.read_pending_notifications(), outbox.oldest(_DISCORD)) == (kept, kept[0])
 
 
+async def test_an_entry_it_cannot_read_back_is_dropped_in_one_line(tmp_path: Path) -> None:
+    logger = FakeLogger()
+    with closing(open_local(tmp_path / "local.db")) as local:
+        store = SqliteNotificationOutboxStore(local)
+        _outbox(store=store).leave(_ONLINE, services=[_DISCORD])
+        # Left by an earlier version, without a field a later one added.
+        local.execute(
+            "INSERT INTO pending_notifications VALUES "
+            "(2, 'discord', 'operations', 1, 'completed_download', '{}')"
+        )
+
+        outbox = _outbox(store=store, logger=logger)
+
+        assert logger.lines == [
+            LoggedLine(
+                level="warning",
+                message="1 notification(s) dropped, unreadable: a stored value cannot be read: "
+                "a stored notification is malformed: KeyError('target_titles')",
+            )
+        ]
+        kept = (PendingNotification(notification=_ONLINE, service=_DISCORD),)
+        assert (store.read_pending_notifications(), outbox.oldest(_DISCORD)) == (kept, kept[0])
+
+
+async def test_a_notification_for_no_service_is_neither_saved_nor_woken_for() -> None:
+    store, waker = FakeNotificationOutboxStore(), FakeWaker()
+    store.writes_fail = True
+    outbox = _outbox(store=store, waker=waker)
+
+    outbox.leave(_ONLINE, services=[])
+
+    # A node without notifications opens no write of local.db for each of its events.
+    assert (outbox.latest_save_failed, waker.woken_subjects) == (False, [])
+
+
 async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_path: Path) -> None:
     services = (_DISCORD,)
     with closing(open_local(tmp_path / "local.db")) as before_the_stop:

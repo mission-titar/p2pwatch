@@ -21,7 +21,7 @@ from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
-from p2pwatch.application.steps.supervisor import Supervisor
+from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
@@ -44,6 +44,7 @@ from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
+from tests.fakes.adapters.driven.fake_held_notifier import FakeHeldNotifier
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
@@ -137,11 +138,12 @@ class _Crawl:
         download_enabled: bool = False,
         search_leaves_a_completion: bool = False,
         supervisor_clock: MonotonicClock | None = None,
+        notifier: FakeNotifier | None = None,
     ) -> None:
         self.steps: list[str] = []
         self.backoff_states_seen_by_works: list[dict[BackoffKey, BackoffState]] = []
         self.observability = ObservabilityOverFakes()
-        self.notifier = FakeNotifier()
+        self.notifier = notifier or FakeNotifier()
         self.fingerprints = FakePolicyFingerprintStore(stored_fingerprint=stored_fingerprint)
         self.logger = FakeLogger()
         self.catalog_reevaluator_logger = FakeLogger()
@@ -231,7 +233,9 @@ class _Crawl:
         if self._works_started == 2:
             self._both_works_started.set()
 
-    async def run_a_client_buggy_at_every_turn(self) -> None:
+    async def run_a_client_buggy_at_every_turn(
+        self, *, arm_shutdown_bound: ShutdownBoundArmer = lambda: None
+    ) -> None:
         """Builds a client whose one work raises at every turn, then runs the crawler, a graceful
         shutdown requested at 2000 s."""
         asyncio.get_running_loop().call_later(2000.0, self.run_state.set_shutdown_requested)
@@ -241,7 +245,7 @@ class _Crawl:
             )
         ]
         await self._supervisor.build_first(FakeRestartableBuilder(works_over=lambda _: works))
-        await self.crawler_lifecycle.run(arm_shutdown_bound=lambda: None)
+        await self.crawler_lifecycle.run(arm_shutdown_bound=arm_shutdown_bound)
 
     async def run_until_both_works_start_then_stop(self) -> None:
         """Builds the one object the two works are over, runs the crawler until both have started,
@@ -478,3 +482,33 @@ def test_a_function_lost_has_its_alert_sent_local_db_refusing_then_raises_its_er
         ]
     ]
     assert crawl.observability.outbox_store.read_pending_notifications() == ()
+
+
+def test_a_deadline_cutting_the_drain_of_a_function_lost_keeps_its_error(
+    virtual_loop: VirtualLoop,
+    *,
+    observation_store: SqliteObservationStore,
+    decision_store: SqliteDecisionStore,
+    catalog_scan_reader: SqliteCatalogScanReader,
+    engine: MatchingEngine,
+) -> None:
+    crawl = _Crawl(
+        observation_store,
+        decision_store=decision_store,
+        catalog_scan_reader=catalog_scan_reader,
+        engine=engine,
+        supervisor_clock=FakeLoopMonotonicClock(virtual_loop),
+        notifier=FakeHeldNotifier(),
+    )
+
+    async def run_within_a_bound() -> None:
+        # As the composition's: armed when the supervision ends, it cuts the held send 1 s later.
+        async with asyncio.timeout(None) as bound:
+            await crawl.run_a_client_buggy_at_every_turn(
+                arm_shutdown_bound=lambda: bound.reschedule(virtual_loop.time() + 1.0)
+            )
+
+    with pytest.raises((CrawlerRestartError, TimeoutError)) as raised:
+        virtual_loop.run_until_complete(run_within_a_bound())
+
+    assert str(raised.value) == "the crawl lost after 3 rebuilds"

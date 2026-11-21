@@ -436,7 +436,7 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
 async def test_a_reading_of_both_channels_connected_and_connectable_records_every_rule(
     *, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # A rule its dependency lacks raises at its first record, which stops the node.
+    # A rule its dependency lacks raises at its first record: a bug of the status reading, logged.
     status = {
         "ec_connected": True,
         "ed2k": {"state": "connected", "high_id": True},
@@ -460,6 +460,7 @@ async def test_a_reading_of_both_channels_connected_and_connectable_records_ever
         dispatcher_logger.removeHandler(sigterm)
 
     assert "status amuled ed2k: connected yes, connectable yes" in caplog.messages
+    assert [message for message in caplog.messages if message.startswith("bug in ")] == []
 
 
 @pytest.mark.asyncio
@@ -482,12 +483,18 @@ async def test_the_nodes_notifications_carry_its_id_in_their_username_and_title(
         assert await asyncio.to_thread(
             server.wait_for, lambda seen: _searches_read(seen) >= 1, timeout_seconds=_WAIT_SECONDS
         )
+        # The node online, sent by the notifier's work while it runs, before any stop.
+        sent_running = await asyncio.to_thread(
+            FakeNotificationSink.wait_for,
+            ("p2pwatch - wired-node", "[wired-node]"),
+            timeout_seconds=_WAIT_SECONDS,
+        )
         _send_sigterm(default_sigterm)
         await asyncio.wait_for(run, _WAIT_SECONDS)
     sink.shutdown()
     sink.server_close()
 
-    assert ("p2pwatch - wired-node", "[wired-node]") in FakeNotificationSink.received
+    assert sent_running
 
 
 @pytest.mark.asyncio

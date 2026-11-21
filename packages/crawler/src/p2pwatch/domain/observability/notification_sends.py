@@ -1,6 +1,6 @@
 """The sends of the notifications: the services the notifier sends to, a notification left to send
-to one, the error a refused send raises, each service's part, judged on its sends that failed, and
-the local database's, judged on the saves of the notifications left."""
+to one or saved unreadable, the error a refused send raises, each service's part, judged on its
+sends that failed, and the local database's, judged on the saves of the notifications left."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -39,6 +39,14 @@ class PendingNotification:
 
     notification: Notification
     service: NotificationService
+
+
+@dataclass(kw_only=True, frozen=True)
+class UnreadableNotification:
+    """An entry saved last that this version cannot read back, such as one an earlier version
+    left without a field added since: dropped at the start."""
+
+    reason: str  # "a stored value cannot be read: ..."
 
 
 # A send refused or past the notification timeout is detected; a bug of the notifier is not.
