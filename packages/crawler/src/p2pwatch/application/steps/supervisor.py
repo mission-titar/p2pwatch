@@ -209,7 +209,7 @@ class Supervisor:
         builder = supervised.builder
         try:
             works = await supervised.rebuild()
-        except ExpectedError as error:  # aMule refusing the new login's password
+        except ExpectedError as error:  # an outage met by the close or the build: no bug
             self._logger.warning("rebuild of %s: %s", builder, error)
             return False
         except Exception as error:  # the boundary of a rebuild, by design

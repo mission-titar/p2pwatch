@@ -120,17 +120,15 @@ async def test_a_close_logs_its_session_out() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_refused_login_raises_and_the_next_build_logs_a_client_in() -> None:
+async def test_a_refused_login_builds_a_client_all_the_same() -> None:
     clients = _Clients()
-    builder = clients.builder()
     clients.password = "wrong"
+
+    restartable = await clients.builder().build()
+
+    # No rebuild in vain: the status reading alerts on the refusal, which no rebuild repairs.
     with pytest.raises(ClientAuthError):
-        await builder.build()
-
-    clients.password = PASSWORD
-    await builder.build()
-
-    assert clients.api.logins == 1
+        await restartable.client.status()
 
 
 @pytest.mark.asyncio

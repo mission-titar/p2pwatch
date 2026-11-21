@@ -403,7 +403,6 @@ class CrawlerComposition(CrawlerRunner):
                 return
 
             node_id_store = SqliteNodeIdStore(local_connection)
-            # Before the client logs in: a node whose password amuled refuses keeps its id.
             node_id = NodeIdResolver(
                 node_id_reader=node_id_store,
                 node_id_writer=node_id_store,
