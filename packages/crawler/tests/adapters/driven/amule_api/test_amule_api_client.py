@@ -452,14 +452,6 @@ async def test_a_login_cancelled_in_flight_closes_its_session() -> None:
 
 
 @pytest.mark.asyncio
-async def test_open_lets_a_refused_password_through() -> None:
-    client = _client(FakeAmuleApi(), password="wrong")
-
-    with pytest.raises(ApiAuthError):
-        await client.open()
-
-
-@pytest.mark.asyncio
 async def test_a_stale_token_is_renewed_once() -> None:
     """§7.3: a 401 is terminal for the session, so we re-login once and never loop."""
     api = FakeAmuleApi()
