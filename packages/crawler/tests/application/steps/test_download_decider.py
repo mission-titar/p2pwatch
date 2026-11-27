@@ -335,10 +335,14 @@ async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_spa
         await cycle.run_once()
         alerts_per_cycle.append(len(observability.notifications) - before)
     assert alerts_per_cycle == [1, 0, 0, 1, 0]
-    low = "download disk low: under the 10.0 GiB floor (no new download)"
     relayed = (
         Audience.OPERATIONS,
-        RelayedLogLine(message=low, severity=Severity.WARNING, node_id=NODE_ID),
+        RelayedLogLine(
+            message="download disk low: under the 10.0 GiB floor",
+            detail="impact: no new download",
+            severity=Severity.WARNING,
+            node_id=NODE_ID,
+        ),
     )
     assert observability.notifications == [relayed, relayed]
     changes = ("unknown to failing", "failing to healthy", "healthy to failing")

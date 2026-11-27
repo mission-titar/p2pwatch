@@ -210,18 +210,18 @@ class _Node:
         """The lines that name the client: each rebuild decided, and how it ended."""
         return [line for line in self.logger.lines if "client amuled" in line.message]
 
-    def alerts(self) -> list[str]:
-        """The message of each notification the supervisor dispatched."""
+    def alerts(self) -> list[tuple[str, str | None]]:
+        """The two lines of each notification the supervisor dispatched."""
         notifications = [notification for _, notification in self.observability.notifications]
-        return [n.message for n in notifications if isinstance(n, RelayedLogLine)]
+        return [(n.message, n.detail) for n in notifications if isinstance(n, RelayedLogLine)]
 
 
-def _still_failing(work: str) -> str:
+_A_BUG_OF_ITS_OWN = "cause: a bug of its own, or a shared state a crawler restart would renew"
+
+
+def _still_failing(work: str) -> tuple[str, str]:
     """The alert naming the client unrepaired, ``work`` failing."""
-    return (
-        f"client amuled: {work} still failing after 3 rebuilds: a bug of its own, or a shared "
-        "state a crawler restart would renew"
-    )
+    return f"client amuled: {work} still failing after 3 rebuilds", _A_BUG_OF_ITS_OWN
 
 
 def _one_search(turns: _Turns, *, bugs: _Bugs = _always) -> _ClientWorks:
@@ -417,7 +417,7 @@ def test_after_three_rebuilds_in_vain_its_work_healthy_again_has_the_next_bugs_r
     assert node.client.built_at == [0.0, 181.0, 422.0, 783.0, 1274.0]
     assert node.alerts() == [
         _still_failing("status reading amuled"),
-        "client amuled: every work healthy again",
+        ("client amuled: every work healthy again", None),
     ]
 
 
@@ -688,9 +688,11 @@ def test_one_of_two_services_failing_at_every_send_the_other_never_sent_to_leave
     # The community's sending never turned: the notifications are not lost, the crawler runs on.
     assert (restart, notifier.built_at) == (None, [0.0, 180.0, 420.0, 780.0])
     notifications = [notification for _, notification in observability.notifications]
-    assert [n.message for n in notifications if isinstance(n, RelayedLogLine)] == [
-        "notifier: notification sending fake operations still failing after 3 rebuilds: a bug of "
-        "its own, or a shared state a crawler restart would renew"
+    assert [(n.message, n.detail) for n in notifications if isinstance(n, RelayedLogLine)] == [
+        (
+            "notifier: notification sending fake operations still failing after 3 rebuilds",
+            _A_BUG_OF_ITS_OWN,
+        )
     ]
 
 

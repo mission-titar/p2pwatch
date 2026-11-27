@@ -54,14 +54,17 @@ def _relayed(
     severity: Severity,
     *,
     message: str,
+    detail: str | None = None,
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
 ) -> ObservabilityPlan:
-    """An operations plan: its log line relayed under the event's node."""
+    """An operations plan: its log line relayed under the event's node, its two lines joined."""
     return ObservabilityPlan(
         severity=severity,
-        message=message,
+        message=message if detail is None else f"{message}: {detail}",
         node_metrics=node_metrics,
-        notification=RelayedLogLine(message=message, severity=severity, node_id=_NODE_ID),
+        notification=RelayedLogLine(
+            message=message, detail=detail, severity=severity, node_id=_NODE_ID
+        ),
     )
 
 
@@ -163,7 +166,11 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             degraded_for_seconds=300.0,
             node_id=_NODE_ID,
         ),
-        _relayed(Severity.WARNING, message="amuled ed2k: off its network for 5 min"),
+        _relayed(
+            Severity.WARNING,
+            message="amuled ed2k: off its network for 5 min",
+            detail="impact: no search on ed2k, fewer sources for our downloads",
+        ),
     ),
     (
         ev.ChannelDegraded(
@@ -173,7 +180,11 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             degraded_for_seconds=300.0,
             node_id=_NODE_ID,
         ),
-        _relayed(Severity.WARNING, message="amuled kad: not connectable for 5 min"),
+        _relayed(
+            Severity.WARNING,
+            message="amuled kad: not connectable for 5 min",
+            detail="impact: fewer sources can reach our downloads",
+        ),
     ),
     (
         ev.ChannelRecovered(
@@ -197,7 +208,11 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ev.ClientUnreachableLasting(
             client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE_ID
         ),
-        _relayed(Severity.WARNING, message="amuled unreachable for 2 min"),
+        _relayed(
+            Severity.WARNING,
+            message="amuled unreachable for 2 min",
+            detail="impact: no search, no download",
+        ),
     ),
     (
         ev.ClientReachableAgain(client_name=ClientName("amuled"), node_id=_NODE_ID),
@@ -205,7 +220,11 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     ),
     (
         ev.ClientPasswordRefused(client_name=ClientName("amuled"), node_id=_NODE_ID),
-        _relayed(Severity.WARNING, message="amuled refuses the password: check the configuration"),
+        _relayed(
+            Severity.WARNING,
+            message="amuled refuses the password: check the configuration",
+            detail="impact: no search, no download",
+        ),
     ),
     (
         ev.ClientPasswordAcceptedAgain(client_name=ClientName("amuled"), node_id=_NODE_ID),
@@ -225,14 +244,16 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ev.DiskSpaceLow(min_free_bytes=10 * 2**30, node_id=_NODE_ID),
         _relayed(
             Severity.WARNING,
-            message="download disk low: under the 10.0 GiB floor (no new download)",
+            message="download disk low: under the 10.0 GiB floor",
+            detail="impact: no new download",
         ),
     ),
     (
         ev.NotificationsNotSaved(node_id=_NODE_ID),
         _relayed(
             Severity.WARNING,
-            message="notifications not saved in local.db: lost at the next restart",
+            message="notifications not saved in local.db",
+            detail="impact: lost at the next restart",
         ),
     ),
     (
@@ -246,8 +267,9 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             ),
             _relayed(
                 Severity.WARNING,
-                message=f"client amuled: {failing} still failing after 3 rebuilds: a bug of {own} "
-                "own, or a shared state a crawler restart would renew",
+                message=f"client amuled: {failing} still failing after 3 rebuilds",
+                detail=f"cause: a bug of {own} own, "
+                "or a shared state a crawler restart would renew",
             ),
         )
         for works, failing, own in [
@@ -268,7 +290,8 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
             ev.CrawlerFunctionLost(function=function, rebuilds=3, node_id=_NODE_ID),
             _relayed(
                 Severity.WARNING,
-                message=f"{lost}: {works} failing after 3 rebuilds: the crawler restarts",
+                message=f"{lost}: {works} failing after 3 rebuilds",
+                detail="impact: the crawler restarts",
             ),
         )
         for function, lost, works in [

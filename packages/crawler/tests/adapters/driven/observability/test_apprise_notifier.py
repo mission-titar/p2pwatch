@@ -225,6 +225,22 @@ async def test_every_message_is_sent_as_markdown() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_relayed_log_line_s_second_line_is_sent_on_its_own_line() -> None:
+    notifier, built = _notifier()
+    alert = RelayedLogLine(
+        message="amuled unreachable for 2 min",
+        detail="impact: no search, no download",
+        severity=Severity.WARNING,
+        node_id=_NODE_ID,
+    )
+
+    await notifier.notify(_NTFY, notification=alert)
+
+    [call] = built[0].sent
+    assert call["body"] == "amuled unreachable for 2 min\nimpact: no search, no download"
+
+
+@pytest.mark.asyncio
 async def test_no_mention_reaches_apprise() -> None:
     hostile = "@everyone @here <@123> <@&456>"
     notifier, built = _notifier()

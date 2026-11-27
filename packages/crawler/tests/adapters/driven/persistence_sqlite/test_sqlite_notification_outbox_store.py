@@ -11,13 +11,14 @@ from p2pwatch.adapters.driven.persistence_sqlite.sqlite_notification_outbox_stor
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
-from p2pwatch.domain.observability.notification import CompletedDownload
+from p2pwatch.domain.observability.notification import CompletedDownload, RelayedLogLine
 from p2pwatch.domain.observability.notification_sends import (
     NotificationService,
     PendingNotification,
     UnreadableNotification,
 )
 from p2pwatch.domain.observability.policy import Audience
+from p2pwatch.domain.observability.severity import Severity
 from tests.contracts.application.ports.driven.notification_outbox_store_contract import (
     NotificationOutboxStoreContract,
 )
@@ -97,6 +98,26 @@ def test_an_entry_is_one_row_its_service_in_columns_its_notification_a_json_obje
             },
         }
     ]
+
+
+def test_a_relayed_log_line_saved_without_a_second_line_is_read_back_with_none(
+    *, outbox_store: SqliteNotificationOutboxStore, connection: sqlite3.Connection
+) -> None:
+    # As the version before the second line saved it.
+    fields = '{"message": "amuled reachable again", "severity": "INFO", "node_id": "n1"}'
+    connection.execute(
+        "INSERT INTO pending_notifications VALUES (1, 'ntfy', 'operations', 1, ?, ?)",
+        ("relayed_log_line", fields),
+    )
+
+    assert outbox_store.read_pending_notifications() == (
+        PendingNotification(
+            notification=RelayedLogLine(
+                message="amuled reachable again", severity=Severity.INFO, node_id=NodeId("n1")
+            ),
+            service=NotificationService(scheme="ntfy", audience=Audience.OPERATIONS),
+        ),
+    )
 
 
 @pytest.mark.parametrize(

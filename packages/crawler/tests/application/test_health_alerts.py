@@ -50,13 +50,15 @@ class _Alert:
     sent: tuple[Audience, Notification]
 
 
-def _warning(message: str, *, at: int) -> _Alert:
+def _warning(message: str, *, detail: str, at: int) -> _Alert:
     return _Alert(
         reading=at,
-        lines=(LoggedLine(level="warning", message=message),),
+        lines=(LoggedLine(level="warning", message=f"{message}: {detail}"),),
         sent=(
             Audience.OPERATIONS,
-            RelayedLogLine(message=message, severity=Severity.WARNING, node_id=NODE_ID),
+            RelayedLogLine(
+                message=message, detail=detail, severity=Severity.WARNING, node_id=NODE_ID
+            ),
         ),
     )
 
@@ -82,6 +84,7 @@ def _status(*, ed2k: tuple[bool, bool | None], kad: tuple[bool, bool | None]) ->
     )
 
 
+_FEWER_SOURCES = "impact: fewer sources can reach our downloads"
 _UP = (True, True)
 _OFF = (False, None)  # off its network, so aMule cannot tell whether it is connectable
 _LOW_ID = (True, False)
@@ -115,7 +118,12 @@ async def _alerts(
 
 
 def _text_of(notification: Notification) -> str | None:
-    return notification.message if isinstance(notification, RelayedLogLine) else None
+    """The log line ``notification`` relays, its two lines joined."""
+    if not isinstance(notification, RelayedLogLine):
+        return None
+    if notification.detail is None:
+        return notification.message
+    return f"{notification.message}: {notification.detail}"
 
 
 async def _status_alerts(*readings: _StatusReading) -> list[_Alert]:
@@ -163,7 +171,9 @@ async def _disk_alerts(*free_readings: int) -> list[_Alert]:
         pytest.param(
             [make_unreachable()] * 3 + [_ALL_UP] * 9,
             [
-                _warning("amuled unreachable for 2 min", at=3),
+                _warning(
+                    "amuled unreachable for 2 min", detail="impact: no search, no download", at=3
+                ),
                 _info("amuled reachable again", at=12),
             ],
             id="amuled unreachable",
@@ -171,7 +181,11 @@ async def _disk_alerts(*free_readings: int) -> list[_Alert]:
         pytest.param(
             [_status(ed2k=_OFF, kad=_UP)] * 6 + [_ALL_UP] * 9,
             [
-                _warning("amuled ed2k: off its network for 5 min", at=6),
+                _warning(
+                    "amuled ed2k: off its network for 5 min",
+                    detail="impact: no search on ed2k, fewer sources for our downloads",
+                    at=6,
+                ),
                 _info("amuled ed2k: back on its network", at=15),
             ],
             id="ed2k off its network",
@@ -179,7 +193,11 @@ async def _disk_alerts(*free_readings: int) -> list[_Alert]:
         pytest.param(
             [_status(ed2k=_UP, kad=_OFF)] * 6 + [_ALL_UP] * 9,
             [
-                _warning("amuled kad: off its network for 5 min", at=6),
+                _warning(
+                    "amuled kad: off its network for 5 min",
+                    detail="impact: no search on kad, fewer sources for our downloads",
+                    at=6,
+                ),
                 _info("amuled kad: back on its network", at=15),
             ],
             id="kad off its network",
@@ -187,7 +205,7 @@ async def _disk_alerts(*free_readings: int) -> list[_Alert]:
         pytest.param(
             [_status(ed2k=_LOW_ID, kad=_UP)] * 6 + [_ALL_UP] * 9,
             [
-                _warning("amuled ed2k: not connectable for 5 min", at=6),
+                _warning("amuled ed2k: not connectable for 5 min", detail=_FEWER_SOURCES, at=6),
                 _info("amuled ed2k: connectable again", at=15),
             ],
             id="ed2k not connectable",
@@ -195,7 +213,7 @@ async def _disk_alerts(*free_readings: int) -> list[_Alert]:
         pytest.param(
             [_status(ed2k=_UP, kad=_LOW_ID)] * 6 + [_ALL_UP] * 9,
             [
-                _warning("amuled kad: not connectable for 5 min", at=6),
+                _warning("amuled kad: not connectable for 5 min", detail=_FEWER_SOURCES, at=6),
                 _info("amuled kad: connectable again", at=15),
             ],
             id="kad not connectable",
@@ -212,5 +230,5 @@ async def test_each_status_alert_starts_and_ends_at_its_reading(
 async def test_the_disk_alert_starts_at_each_dip_under_its_floor_and_has_no_end() -> None:
     # Two dips, one reading exactly at the floor between them.
     alerts = await _disk_alerts(5 * _GIB, 4 * _GIB, _FLOOR, _FLOOR - 1)
-    disk_low = "download disk low: under the 10.0 GiB floor (no new download)"
-    assert alerts == [_warning(disk_low, at=1), _warning(disk_low, at=4)]
+    low, impact = "download disk low: under the 10.0 GiB floor", "impact: no new download"
+    assert alerts == [_warning(low, detail=impact, at=1), _warning(low, detail=impact, at=4)]

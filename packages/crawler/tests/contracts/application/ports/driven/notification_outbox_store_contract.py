@@ -57,14 +57,21 @@ def _draw_source_alert(randomness: Random, *, first: bool) -> SourceAlert:
     )
 
 
+def _draw_relayed_log_line(randomness: Random, *, detailed: bool) -> RelayedLogLine:
+    """A relayed log line, with a second line or without."""
+    return RelayedLogLine(
+        message=draw_text(randomness),
+        detail=draw_text(randomness) if detailed else None,
+        severity=randomness.choice(list(Severity)),
+        node_id=NodeId(draw_text(randomness)),
+    )
+
+
 def _draw_notifications(randomness: Random) -> tuple[Notification, ...]:
-    """One notification of each kind, a source alert of each kind."""
+    """One notification of each kind, a relayed log line and a source alert of each kind."""
     return (
-        RelayedLogLine(
-            message=draw_text(randomness),
-            severity=randomness.choice(list(Severity)),
-            node_id=NodeId(draw_text(randomness)),
-        ),
+        _draw_relayed_log_line(randomness, detailed=False),
+        _draw_relayed_log_line(randomness, detailed=True),
         TierRise(
             tier=randomness.choice(list(DecisionTier)),
             target_titles=_draw_target_titles(randomness),

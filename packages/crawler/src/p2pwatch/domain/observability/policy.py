@@ -168,26 +168,44 @@ def _relayed(
     severity: Severity,
     *,
     message: str,
+    detail: str | None = None,
     node_id: NodeId,
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
 ) -> ObservabilityPlan:
-    """An operations plan: its log line relayed under ``node_id``."""
+    """An operations plan: its log line relayed under ``node_id``, its two lines joined."""
     return ObservabilityPlan(
         severity=severity,
-        message=message,
+        message=message if detail is None else f"{message}: {detail}",
         node_metrics=node_metrics,
-        notification=RelayedLogLine(message=message, severity=severity, node_id=node_id),
+        notification=RelayedLogLine(
+            message=message, detail=detail, severity=severity, node_id=node_id
+        ),
     )
 
 
 def _channel_alert(
-    severity: Severity, *, event: ChannelDegraded | ChannelRecovered, state_phrase: str
+    severity: Severity,
+    *,
+    event: ChannelDegraded | ChannelRecovered,
+    state_phrase: str,
+    detail: str | None = None,
 ) -> ObservabilityPlan:
     return _relayed(
         severity,
         message=f"{event.client_name} {event.channel}: {state_phrase}",
+        detail=detail,
         node_id=event.node_id,
     )
+
+
+def _degraded_impact(event: ChannelDegraded) -> str:
+    match event.field:
+        case "connected":
+            return f"impact: no search on {event.channel}, fewer sources for our downloads"
+        case "connectable":
+            return "impact: fewer sources can reach our downloads"
+        case _:  # pragma: no cover
+            assert_never(event.field)
 
 
 def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
@@ -337,6 +355,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 event=event,
                 state_phrase=f"{_DEGRADED_PHRASE_BY_FIELD[event.field]} "
                 f"for {event.degraded_for_seconds / 60:.0f} min",
+                detail=_degraded_impact(event),
             )
         case ChannelRecovered():
             return _channel_alert(
@@ -347,6 +366,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 Severity.WARNING,
                 message=f"{event.client_name} unreachable "
                 f"for {event.unreachable_for_seconds / 60:.0f} min",
+                detail="impact: no search, no download",
                 node_id=event.node_id,
             )
         case ClientReachableAgain():
@@ -357,6 +377,7 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return _relayed(
                 Severity.WARNING,
                 message=f"{event.client_name} refuses the password: check the configuration",
+                detail="impact: no search, no download",
                 node_id=event.node_id,
             )
         case ClientPasswordAcceptedAgain():
@@ -378,14 +399,16 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case DiskSpaceLow():
             return _relayed(
                 Severity.WARNING,
-                message=f"download disk low: under the {event.min_free_bytes / 2**30:.1f} GiB "
-                "floor (no new download)",
+                message="download disk low: "
+                f"under the {event.min_free_bytes / 2**30:.1f} GiB floor",
+                detail="impact: no new download",
                 node_id=event.node_id,
             )
         case NotificationsNotSaved():
             return _relayed(
                 Severity.WARNING,
-                message="notifications not saved in local.db: lost at the next restart",
+                message="notifications not saved in local.db",
+                detail="impact: lost at the next restart",
                 node_id=event.node_id,
             )
         case NotificationsSavedAgain():
@@ -397,8 +420,9 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return _relayed(
                 Severity.WARNING,
                 message=f"{event.object_name}: {', '.join(event.works)} still failing after "
-                f"{event.rebuilds} rebuilds: a bug of {own} own, or a shared state a crawler "
-                "restart would renew",
+                f"{event.rebuilds} rebuilds",
+                detail=f"cause: a bug of {own} own, "
+                "or a shared state a crawler restart would renew",
                 node_id=event.node_id,
             )
         case WorksHealthyAgain():
@@ -411,7 +435,8 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return _relayed(
                 Severity.WARNING,
                 message=f"{event.function.value} lost: {_WORKS_OF[event.function]} failing "
-                f"after {event.rebuilds} rebuilds: the crawler restarts",
+                f"after {event.rebuilds} rebuilds",
+                detail="impact: the crawler restarts",
                 node_id=event.node_id,
             )
         case SourceFirstUseful():

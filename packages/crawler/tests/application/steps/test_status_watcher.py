@@ -154,21 +154,30 @@ async def _alerts_past_refusals(*readings: _Reading) -> list[tuple[float, Notifi
     return observability.notifications
 
 
-def _warning(message: str) -> RelayedLogLine:
-    return RelayedLogLine(message=message, severity=Severity.WARNING, node_id=_NODE_ID)
+def _warning(message: str, *, detail: str) -> RelayedLogLine:
+    return RelayedLogLine(
+        message=message, detail=detail, severity=Severity.WARNING, node_id=_NODE_ID
+    )
 
 
 def _info(message: str) -> RelayedLogLine:
     return RelayedLogLine(message=message, severity=Severity.INFO, node_id=_NODE_ID)
 
 
-_NOT_CONNECTABLE = "not connectable for 5 min"
+_FEWER_SOURCES = "impact: fewer sources can reach our downloads"
+_NO_SEARCH_NO_DOWNLOAD = "impact: no search, no download"
+_KAD_NOT_CONNECTABLE = _warning("amuled kad: not connectable for 5 min", detail=_FEWER_SOURCES)
+_KAD_OFF = _warning(
+    "amuled kad: off its network for 5 min",
+    detail="impact: no search on kad, fewer sources for our downloads",
+)
+_UNREACHABLE = _warning("amuled unreachable for 2 min", detail=_NO_SEARCH_NO_DOWNLOAD)
 
 
 @pytest.mark.asyncio
 async def test_not_connectable_from_the_first_reading_alerts_at_five_minutes_once() -> None:
     observability = await _run(*[_status(kad=_LOW_ID)] * 10)
-    assert observability.notifications == [(300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
+    assert observability.notifications == [(300.0, _KAD_NOT_CONNECTABLE)]
     assert (
         LoggedLine(
             level="warning", message="channel amuled kad, not connectable: unknown to failing"
@@ -188,7 +197,15 @@ async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
     observability = await _run(
         *[_status(x=(False, None))] * 6, client=ClientName("fake"), channels=(Channel("x"),)
     )
-    assert observability.notifications == [(300.0, _warning("fake x: off its network for 5 min"))]
+    assert observability.notifications == [
+        (
+            300.0,
+            _warning(
+                "fake x: off its network for 5 min",
+                detail="impact: no search on x, fewer sources for our downloads",
+            ),
+        )
+    ]
     assert (
         LoggedLine(level="warning", message="channel fake x, not connected: unknown to failing")
         in observability.health_logger.lines
@@ -199,10 +216,7 @@ async def test_off_the_network_alerts_whatever_the_client_and_channel() -> None:
 async def test_off_the_network_ends_at_the_ninth_reading_back_on_it() -> None:
     # It ends under 2 readings off among the channel's last 10: the eighth back on still sees two.
     alerts = await _alerts(*[_status(kad=(False, None))] * 6, *[_status(kad=_UP)] * 9)
-    assert alerts == [
-        (300.0, _warning("amuled kad: off its network for 5 min")),
-        (840.0, _info("amuled kad: back on its network")),
-    ]
+    assert alerts == [(300.0, _KAD_OFF), (840.0, _info("amuled kad: back on its network"))]
 
 
 @pytest.mark.asyncio
@@ -210,7 +224,7 @@ async def test_an_unreachable_reading_between_two_runs_off_the_network_ends_noth
     # The unknown reading records nothing: the channel stays failing, so no end, no second alert.
     off = _status(kad=(False, None))
     alerts = await _alerts(*[off] * 6, _DOWN, *[off] * 6)
-    assert alerts == [(300.0, _warning("amuled kad: off its network for 5 min"))]
+    assert alerts == [(300.0, _KAD_OFF)]
 
 
 @pytest.mark.asyncio
@@ -218,7 +232,7 @@ async def test_not_connectable_ends_at_the_ninth_connectable_reading() -> None:
     # It ends under 2 readings not connectable among the channel's last 10.
     alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, *[_status(kad=_UP)] * 9)
     assert alerts == [
-        (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
+        (300.0, _KAD_NOT_CONNECTABLE),
         (840.0, _info("amuled kad: connectable again")),
     ]
 
@@ -230,7 +244,7 @@ async def test_an_unknown_connectable_field_between_two_runs_not_connectable_rec
     # aMule could not tell: the sixth reading not connectable is the seventh reading.
     unknown = _status(kad=(True, None))
     alerts = await _alerts(*[_status(kad=_LOW_ID)] * 3, unknown, *[_status(kad=_LOW_ID)] * 3)
-    assert alerts == [(360.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}"))]
+    assert alerts == [(360.0, _KAD_NOT_CONNECTABLE)]
 
 
 @pytest.mark.asyncio
@@ -238,7 +252,7 @@ async def test_an_unknown_connectable_field_after_an_alert_ends_nothing() -> Non
     unknown = _status(kad=(True, None))
     alerts = await _alerts(*[_status(kad=_LOW_ID)] * 6, unknown, *[_status(kad=_UP)] * 9)
     assert alerts == [
-        (300.0, _warning(f"amuled kad: {_NOT_CONNECTABLE}")),
+        (300.0, _KAD_NOT_CONNECTABLE),
         (900.0, _info("amuled kad: connectable again")),
     ]
 
@@ -248,7 +262,7 @@ async def test_unreachable_alerts_at_two_minutes_and_ends_at_the_ninth_answer() 
     # It ends under 2 unanswered among the last 10 readings: the eighth answer still sees two.
     observability = await _run(_DOWN, _DOWN, _DOWN, *[_status(ed2k=_UP)] * 9)
     assert observability.notifications == [
-        (120.0, _warning("amuled unreachable for 2 min")),
+        (120.0, _UNREACHABLE),
         (660.0, _info("amuled reachable again")),
     ]
     assert (
@@ -271,7 +285,7 @@ async def test_an_operation_the_api_refuses_reads_as_unreachable() -> None:
     # A route a weekly aMule bump renamed: /version answers 404 not_found.
     refused = ReadRejectedError("GET /api/v1/version: 404 not_found: no route")
     alerts = await _alerts(refused, refused, refused)
-    assert alerts == [(120.0, _warning("amuled unreachable for 2 min"))]
+    assert alerts == [(120.0, _UNREACHABLE)]
 
 
 @pytest.mark.asyncio
@@ -281,20 +295,22 @@ async def test_a_refused_password_raises_out_of_the_turn() -> None:
 
 
 _REFUSED = ClientAuthError("amuleapi refused the admin password")
-_PASSWORD_REFUSED = "amuled refuses the password: check the configuration"
+_PASSWORD_REFUSED = _warning(
+    "amuled refuses the password: check the configuration", detail=_NO_SEARCH_NO_DOWNLOAD
+)
 
 
 @pytest.mark.asyncio
 async def test_a_refused_password_alerts_at_the_first_refused_reading_once() -> None:
     alerts = await _alerts_past_refusals(_status(ed2k=_UP), _REFUSED, _REFUSED)
-    assert alerts == [(60.0, _warning(_PASSWORD_REFUSED))]
+    assert alerts == [(60.0, _PASSWORD_REFUSED)]
 
 
 @pytest.mark.asyncio
 async def test_a_refused_password_ends_at_the_first_answered_reading() -> None:
     alerts = await _alerts_past_refusals(_REFUSED, _REFUSED, _status(ed2k=_UP))
     assert alerts == [
-        (0.0, _warning(_PASSWORD_REFUSED)),
+        (0.0, _PASSWORD_REFUSED),
         (120.0, _info("amuled accepts the password again")),
     ]
 
@@ -303,7 +319,7 @@ async def test_a_refused_password_ends_at_the_first_answered_reading() -> None:
 async def test_an_unreachable_reading_tells_nothing_of_the_password() -> None:
     # Neither an end nor a second alert: amuled did not answer, so it refused nothing.
     alerts = await _alerts_past_refusals(_REFUSED, _DOWN, _REFUSED)
-    assert alerts == [(0.0, _warning(_PASSWORD_REFUSED))]
+    assert alerts == [(0.0, _PASSWORD_REFUSED)]
 
 
 _NO_NETWORK = _status(ed2k=(False, None), kad=(False, None))
@@ -358,8 +374,8 @@ async def test_while_unreachable_the_channels_keep_their_latest_readings() -> No
     low = _status(ed2k=_LOW_ID)
     alerts = await _alerts(*[low] * 4, *[_DOWN] * 5, *[low] * 6)
     assert alerts == [
-        (360.0, _warning("amuled unreachable for 2 min")),
-        (600.0, _warning(f"amuled ed2k: {_NOT_CONNECTABLE}")),
+        (360.0, _UNREACHABLE),
+        (600.0, _warning("amuled ed2k: not connectable for 5 min", detail=_FEWER_SOURCES)),
     ]
 
 
@@ -499,9 +515,7 @@ def test_a_password_refused_at_every_reading_alerts_once_and_the_node_runs_on(
     assert logger.lines == [LoggedLine(level="warning", message=message)] * 5
     # A refused password is an expected error: no turn met a bug, and nothing was rebuilt.
     assert amule_client.rebuilds() == 0
-    assert [notification for _, notification in observability.notifications] == [
-        _warning(_PASSWORD_REFUSED)
-    ]
+    assert [notification for _, notification in observability.notifications] == [_PASSWORD_REFUSED]
 
 
 def test_the_status_reading_is_named_after_its_client() -> None:
@@ -608,6 +622,4 @@ def test_a_rebuild_of_the_client_under_an_open_alert_neither_sends_it_again_nor_
 
     assert node.amule_client.built_at == [0.0, 650.0]
     notifications = node.observability.notifications
-    assert [notification for _, notification in notifications] == [
-        _warning("amuled kad: off its network for 5 min")
-    ]
+    assert [notification for _, notification in notifications] == [_KAD_OFF]

@@ -5,12 +5,12 @@ never by its URL, which carries a webhook's token. On a ``node_id``'s first noti
 service, one apprise object is built holding that service's URL alone, so each send has its own
 answer. A ``node_prefix`` service's title is PREFIXED with the ``node_id`` (distributed
 network). A community kind's title, Markdown body and notify type are written here; a relayed log
-line is sent untitled, its severity mapped. Every message is markdown (a Discord embed) with
-every ``@`` neutralised, and each apprise object's asset names the node (spec
-discord-embed-notifications §4). Any answer but a success raises ``NotificationRefusedError``, a
-URL apprise could not load included. ``apprise_factory`` builds an apprise object:
-``apprise.Apprise`` from the composition. The timeout lives in the dispatch step, which absorbs a
-failed send.
+line is sent untitled, its second line under its first, its severity mapped. Every message is
+markdown (a Discord embed) with every ``@`` neutralised, and each apprise object's asset names the
+node (spec discord-embed-notifications §4). Any answer but a success raises
+``NotificationRefusedError``, a URL apprise could not load included. ``apprise_factory`` builds
+an apprise object: ``apprise.Apprise`` from the composition. The timeout lives in the dispatch
+step, which absorbs a failed send.
 
 DECISION (audit 2026-06-23 / security-network#2): the apprise egress (Slack, Discord, SMTP,
 etc. webhooks) traverses the crawler's HOST network, not the VPN. The packaging spec accepts this
@@ -125,7 +125,9 @@ def _message(notification: Notification) -> tuple[str, str, object]:
             body = _completed_download_body(notification)
             return "✅ Downloaded", body, apprise.NotifyType.SUCCESS
         case RelayedLogLine():  # untitled: the log line is the whole message
-            return "", notification.message, _NOTIFY_TYPES[notification.severity]
+            lines = (notification.message, notification.detail)
+            body = "\n".join(line for line in lines if line is not None)
+            return "", body, _NOTIFY_TYPES[notification.severity]
         case _:  # pragma: no cover
             assert_never(notification)
 
