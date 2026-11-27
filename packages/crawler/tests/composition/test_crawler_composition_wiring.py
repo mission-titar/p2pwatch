@@ -389,7 +389,7 @@ async def test_a_disk_under_its_floor_alerts_with_the_floor_from_the_config(
         await asyncio.wait_for(run, _WAIT_SECONDS)
 
     assert "download disk, disk space low: unknown to failing" in caplog.messages
-    low = "download disk low: under the 1073741824.0 GiB floor (no new download)"
+    low = "download disk low: under the 1073741824.0 GiB floor: impact: no new download"
     assert caplog.messages.count(low) == 1
 
 
@@ -546,7 +546,7 @@ async def test_a_node_whose_password_amuled_refuses_runs_alerts_and_logs_in_once
 ) -> None:
     config_path = _write(tmp_path / "crawler.yml", config=_config(tmp_path))
     api = FakeAmuleApi(password="another")
-    alert = "amuled refuses the password: check the configuration"
+    alert = "amuled refuses the password: check the configuration: impact: no search, no download"
     dispatcher_logger = logging.getLogger(ObservabilityDispatcher.__module__)
     sigterm = _SigtermAtRecord(alert, default_handler=signal.getsignal(signal.SIGTERM))
     dispatcher_logger.addHandler(sigterm)

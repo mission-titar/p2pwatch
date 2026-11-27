@@ -310,7 +310,8 @@ async def test_emptying_the_outbox_sends_what_a_send_left_for_a_service_already_
 
     # The third community send records the third save refused, once the operations' had none.
     not_saved = RelayedLogLine(
-        message="notifications not saved in local.db: lost at the next restart",
+        message="notifications not saved in local.db",
+        detail="impact: lost at the next restart",
         severity=Severity.WARNING,
         node_id=_NODE_ID,
     )
@@ -390,7 +391,8 @@ async def test_a_local_database_refusing_every_save_still_sends_every_entry_and_
     await sender.send_what_is_left()
 
     not_saved = RelayedLogLine(
-        message="notifications not saved in local.db: lost at the next restart",
+        message="notifications not saved in local.db",
+        detail="impact: lost at the next restart",
         severity=Severity.WARNING,
         node_id=_NODE_ID,
     )

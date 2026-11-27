@@ -57,9 +57,11 @@ class CompletedDownload:
 
 @dataclass(kw_only=True, frozen=True)
 class RelayedLogLine:
-    """An event's log line, relayed unchanged: it has no text of its own."""
+    """An event's log line, relayed unchanged: ``message``, then an alert's second line, ``detail``,
+    such as "impact: no search, no download", which the log joins to it with ``: ``."""
 
     message: str
+    detail: str | None = None
     severity: Severity
     node_id: NodeId
 

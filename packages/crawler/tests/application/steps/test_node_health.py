@@ -17,7 +17,10 @@ pytestmark = pytest.mark.asyncio
 
 _NODE_ID = NodeId("titar-node-1")
 _UNREACHABLE = RelayedLogLine(
-    message="amuled unreachable for 2 min", severity=Severity.WARNING, node_id=_NODE_ID
+    message="amuled unreachable for 2 min",
+    detail="impact: no search, no download",
+    severity=Severity.WARNING,
+    node_id=_NODE_ID,
 )
 _REACHABLE_AGAIN = RelayedLogLine(
     message="amuled reachable again", severity=Severity.INFO, node_id=_NODE_ID

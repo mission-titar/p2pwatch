@@ -463,18 +463,21 @@ def test_a_function_lost_has_its_alert_sent_local_db_refusing_then_raises_its_er
     with pytest.raises(CrawlerRestartError, match="^the crawl lost after 3 rebuilds$"):
         virtual_loop.run_until_complete(crawl.run_a_client_buggy_at_every_turn())
 
-    online = "🟢 node online (download off)"
+    online = ("🟢 node online (download off)", None)
     unrepaired = (
-        "client amuled: search 'keroro' amuled kad still failing after 3 rebuilds: a bug of its "
-        "own, or a shared state a crawler restart would renew"
+        "client amuled: search 'keroro' amuled kad still failing after 3 rebuilds",
+        "cause: a bug of its own, or a shared state a crawler restart would renew",
     )
-    lost = "the crawl lost: every search failing after 3 rebuilds: the crawler restarts"
-    not_saved = "notifications not saved in local.db: lost at the next restart"
+    lost = ("the crawl lost: every search failing after 3 rebuilds", "impact: the crawler restarts")
+    not_saved = ("notifications not saved in local.db", "impact: lost at the next restart")
     # Sent before the exit from memory, no save of the outbox ever having gone through: the
     # third send records the third save refused.
     assert crawl.notifier.calls == [
-        (Audience.OPERATIONS, RelayedLogLine(message=m, severity=s, node_id=_NODE_ID))
-        for m, s in [
+        (
+            Audience.OPERATIONS,
+            RelayedLogLine(message=message, detail=detail, severity=s, node_id=_NODE_ID),
+        )
+        for (message, detail), s in [
             (online, Severity.INFO),
             (unrepaired, Severity.WARNING),
             (lost, Severity.WARNING),

@@ -90,6 +90,7 @@ def _kind_and_fields(notification: Notification) -> tuple[str, str]:
             kind = "relayed_log_line"
             fields: _Fields = {
                 "message": notification.message,
+                "detail": notification.detail,
                 "severity": notification.severity.name,
             }
         case TierRise():
@@ -139,6 +140,7 @@ def _target_titles(fields: _Fields) -> tuple[TargetTitle, ...]:
 def _relayed_log_line(fields: _Fields) -> RelayedLogLine:
     return RelayedLogLine(
         message=fields["message"],
+        detail=fields.get("detail"),  # absent from an entry saved before the second line
         severity=Severity[fields["severity"]],
         node_id=NodeId(fields["node_id"]),
     )

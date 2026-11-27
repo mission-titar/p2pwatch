@@ -785,8 +785,10 @@ retire ; un envoi annulé garde son entrée. Un service qui ne répond plus ne r
 siennes.
 Une notification à la communauté y est une valeur typée (`TierRise`, `SourceAlert`,
 `CompletedDownload`) : le domaine n'écrit que du texte brut, l'adaptateur `AppriseNotifier` en écrit
-le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLogLine`). Un événement
-qui notifie porte son `node_id`, que sa notification reprend.
+le Markdown. Aux opérations, la notification relaie la ligne de log (`RelayedLogLine`). Celle d'une
+alerte a deux lignes : ce qui échoue, puis un texte fixe, ce que la panne coûte (`impact: ...`) ou
+où chercher sa cause (`cause: ...`) ; le journal les joint par `: `, apprise écrit la seconde sous
+la première. Un événement qui notifie porte son `node_id`, que sa notification reprend.
 Une notification déjà décidée part même quand son tour est coupé : le juge des fichiers, après
 l'écriture d'une décision, le suivi des téléchargements, après celle d'une complétion, le suivi des
 sources, après celle de ses points, et `NodeHealth`, une fois l'état de sa règle changé, la laissent
@@ -855,8 +857,9 @@ une IP 300 s après 5 connexions refusées en 60 s, et 30 minutes bornent l'atte
 corrigé.
 Le disque des téléchargements est une partie aussi (`download disk`) : à chaque mesure de l'espace
 libre, la décision de téléchargement enregistre s'il est sous son plancher. Une mesure basse suffit
-pour l'échec (« download disk low: under the 10.0 GiB floor (no new download) »), une bonne pour
-redevenir sain, et cette alerte n'a pas de fin. Un nœud sans `download:` n'a pas cette partie.
+pour l'échec (« download disk low: under the 10.0 GiB floor », puis « impact: no new download »),
+une bonne pour redevenir sain, et cette alerte n'a pas de fin. Un nœud sans `download:` n'a pas
+cette partie.
 Un bug n'est pas une panne : c'est notre code, jamais une partie, qui l'a ; le
 `Supervisor` compte les bugs de chaque objet qu'il reconstruit (§10.2), et aucune ligne ne dit
 qu'un canal a des bugs. Chaque service de notification, une URL configurée, est une partie aussi,
@@ -869,9 +872,10 @@ qu'apprise ne sait pas charger est un refus, écrit à chaque envoi. Aucune aler
 règles d'un service : elle passerait par ce service. La base locale est une partie aussi
 (`local database`) : à chaque tour, le travail du notifieur y enregistre si la dernière sauvegarde
 de la boîte d'envoi a échoué (« saves failed »), aux mêmes seuils. En échec, « notifications not
-saved in local.db: lost at the next restart » part, depuis la mémoire comme toute notification, et
-« notifications saved again » à son retour. Chaque règle d'une partie porte l'alerte qu'elle
-envoie, et sa fin (`HealthAlert`), ou aucune, si bien qu'une alerte sans règle ne peut exister.
+saved in local.db », puis « impact: lost at the next restart », part, depuis la mémoire comme toute
+notification, et « notifications saved again » à son retour. Chaque règle d'une partie porte
+l'alerte qu'elle envoie, et sa fin (`HealthAlert`), ou aucune, si bien qu'une alerte sans règle ne
+peut exister.
 `NodeHealth` journalise chaque changement d'état et envoie l'alerte de sa règle par le
 dispatcher, comme tout autre événement.
 
@@ -900,9 +904,9 @@ tour sain parmi des bugs ne le remet pas à zéro. Après trois, rien ne disting
 `Work` d'un état partagé (les connexions aux bases, le moteur de matching) qu'un processus neuf
 renouvellerait : l'objet reste non réparé, plus reconstruit avant que son compte reparte de zéro,
 ses `Work` tournant toujours, ceux en échec échouant seuls. Le `Supervisor` envoie l'alerte
-`client amuled: search 'keroro' amuled ed2k still failing after 3 rebuilds: a bug of its own, or a
-shared state a crawler restart would renew`, puis sa fin, `client amuled: every work healthy
-again`, quand le compte repart de zéro. Chaque `Work` sert une fonction du
+`client amuled: search 'keroro' amuled ed2k still failing after 3 rebuilds`, puis `cause: a bug of
+its own, or a shared state a crawler restart would renew`, et sa fin, `client amuled: every work
+healthy again`, quand le compte repart de zéro. Chaque `Work` sert une fonction du
 crawler (`CrawlerFunction`) : la webui, les notifications, le crawl (les recherches de chaque client
 P2P) et, sur un nœud qui télécharge, les téléchargements (le suivi des téléchargements et des
 sources) ; la lecture du statut n'en sert aucune. Une fonction est perdue quand chaque objet qui la
@@ -911,9 +915,9 @@ l'étant pas, et un objet dont la troisième reconstruction a levé, qui ne tien
 comptant comme en échec :
 comme un superviseur OTP au-delà de sa borne, le `Supervisor` arrête alors tous les `Work` et finit
 sa supervision par une `CrawlerRestartError`. Le `CrawlerLifecycle` envoie l'alerte
-`the crawl lost: every search failing after 3 rebuilds: the crawler restarts` avec ce qui reste dans
-la boîte d'envoi, puis lève l'erreur : la ligne de commande sort en 1 et Docker relance le crawler
-entier, `amuled` intact. Un nœud qui échoue toujours redémarre ainsi sans fin, 7 minutes et son
+`the crawl lost: every search failing after 3 rebuilds`, puis `impact: the crawler restarts`, avec
+ce qui reste dans la boîte d'envoi, puis lève l'erreur : la ligne de commande sort en 1 et Docker
+relance le crawler entier, `amuled` intact. Un nœud qui échoue toujours redémarre ainsi sans fin, 7 minutes et son
 démarrage au moins entre deux fois.
 Un bug qui revient sur un seul mot-clé, entre les tours sains des autres `Work`, reconstruit le
 client, puis le laisse non réparé, le crawl que servent ses autres recherches n'étant pas perdu :
