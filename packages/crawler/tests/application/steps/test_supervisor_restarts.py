@@ -15,7 +15,6 @@ from typing import Protocol
 import pytest
 
 from p2pwatch.application.ports.driven.notifier import Notifier
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
@@ -40,6 +39,7 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import VirtualLoop
 
@@ -610,9 +610,7 @@ def _supervise_the_notifier(
     ``notifier`` until 1500 s at most; its builder, and the error a function lost ended it with."""
 
     def sending(_state: object, /) -> Sequence[SupervisedWork]:
-        node_health = NodeHealth(
-            logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
-        )
+        node_health = build_node_health()
         senders = [
             NotificationSender(
                 service=service,

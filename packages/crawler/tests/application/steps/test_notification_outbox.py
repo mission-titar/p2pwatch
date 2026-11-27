@@ -11,7 +11,6 @@ import pytest
 from p2pwatch.adapters.driven.persistence_sqlite.sqlite_notification_outbox_store import (
     SqliteNotificationOutboxStore,
 )
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.domain.identifiers import NodeId
@@ -30,7 +29,7 @@ from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotif
 from tests.fakes.adapters.driven.fake_notifier import FakeNotifier
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import open_local
-from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
+from tests.support.application.steps.node_health import build_node_health
 
 pytestmark = pytest.mark.asyncio
 
@@ -276,9 +275,7 @@ async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_pat
             outbox=_outbox(store=store, services=services),
             notifier=notifier,
             notification_timeout_seconds=5.0,
-            node_health=NodeHealth(
-                logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
-            ),
+            node_health=build_node_health(),
             service_dependencies=notification_service_dependencies(services, node_id=NodeId("n1")),
             local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),

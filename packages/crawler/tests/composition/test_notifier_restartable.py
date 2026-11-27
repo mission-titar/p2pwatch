@@ -10,7 +10,6 @@ import pytest
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.ports.driven.restartable import Restartable
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.supervisor import Supervisor
@@ -42,6 +41,7 @@ from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, 
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import VirtualLoop
 
@@ -114,9 +114,7 @@ def _sender(
         outbox=outbox,
         notifier=notifier,
         notification_timeout_seconds=5.0,
-        node_health=NodeHealth(
-            logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
-        ),
+        node_health=build_node_health(),
         service_dependencies=notification_service_dependencies(
             ONE_SERVICE_PER_AUDIENCE, node_id=NodeId("n1")
         ),

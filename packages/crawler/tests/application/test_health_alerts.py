@@ -9,7 +9,6 @@ from typing import Protocol
 import pytest
 
 from p2pwatch.application.steps.download_cycle import DownloadCycle
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.domain.client_errors import ClientError
 from p2pwatch.domain.identifiers import Channel, ClientName
@@ -24,13 +23,14 @@ from p2pwatch.domain.status_reading import (
 )
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
-from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_logger import LoggedLine
 from tests.fakes.adapters.driven.fake_search_client import make_unreachable
 from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.support.application.steps.download_cycle import NODE_ID, build_cycle
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 pytestmark = pytest.mark.asyncio
@@ -135,9 +135,7 @@ async def _status_alerts(*readings: _StatusReading) -> list[_Alert]:
         monotonic_clock=fake_time.monotonic,
         observability_dispatcher=observability.dispatcher,
         status_reading_writer=FakeStatusReadingStore((_AMULED,)),
-        node_health=NodeHealth(
-            logger=FakeLogger(), observability_dispatcher=observability.dispatcher
-        ),
+        node_health=build_node_health(observability_dispatcher=observability.dispatcher),
         client_dependency=client_dependency(_AMULED, node_id=NODE_ID),
         channel_dependencies={
             channel: channel_dependency(client_name=_AMULED, channel=channel, node_id=NODE_ID)
