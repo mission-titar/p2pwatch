@@ -316,7 +316,7 @@ _GIB = 2**30
 
 
 @pytest.mark.asyncio
-async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_space() -> None:
+async def test_the_disk_alerts_once_per_dip_under_its_floor_and_ends_back_at_it() -> None:
     observability, health_logger = ObservabilityOverFakes(), FakeLogger()
     free_space_meter = FakeFreeSpaceMeter(5 * _GIB)
     cycle = build_cycle(
@@ -334,8 +334,8 @@ async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_spa
         before = len(observability.notifications)
         await cycle.run_once()
         alerts_per_cycle.append(len(observability.notifications) - before)
-    assert alerts_per_cycle == [1, 0, 0, 1, 0]
-    relayed = (
+    assert alerts_per_cycle == [1, 0, 1, 1, 0]
+    low = (
         Audience.OPERATIONS,
         RelayedLogLine(
             message="download disk low: under the 10.0 GiB floor",
@@ -344,7 +344,13 @@ async def test_the_disk_alerts_once_per_dip_under_its_floor_without_the_free_spa
             node_id=NODE_ID,
         ),
     )
-    assert observability.notifications == [relayed, relayed]
+    above_again = (
+        Audience.OPERATIONS,
+        RelayedLogLine(
+            message="download disk above its floor again", severity=Severity.INFO, node_id=NODE_ID
+        ),
+    )
+    assert observability.notifications == [low, above_again, low]
     changes = ("unknown to failing", "failing to healthy", "healthy to failing")
     assert health_logger.lines == [
         LoggedLine(

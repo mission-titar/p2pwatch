@@ -1,8 +1,6 @@
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.domain.health.external_dependency import ExternalDependency
-from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
@@ -27,19 +25,19 @@ _REACHABLE_AGAIN = RelayedLogLine(
 class _AmuleHealth:
     """The node's health over the aMule client, its log and the alerts it dispatches."""
 
-    def __init__(self, amule: ExternalDependency | None = None) -> None:
+    def __init__(self) -> None:
         self.logger = FakeLogger()
         self.observability = ObservabilityOverFakes()
-        self.amule = amule or client_dependency(ClientName("amuled"), node_id=_NODE_ID)
+        self.amule = client_dependency(ClientName("amuled"), node_id=_NODE_ID)
         self._node_health = NodeHealth(
             logger=self.logger, observability_dispatcher=self.observability.dispatcher
         )
 
-    async def check(
-        self, *, detected: bool, times: int, rule: HealthRule = CLIENT_UNREACHABLE
-    ) -> None:
+    async def check(self, *, detected: bool, times: int) -> None:
         for _ in range(times):
-            await self._node_health.record(on=self.amule, rule=rule, detected=detected)
+            await self._node_health.record(
+                on=self.amule, rule=CLIENT_UNREACHABLE, detected=detected
+            )
 
     def alerts(self) -> list[Notification]:
         return [notification for _, notification in self.observability.notifications]
@@ -66,22 +64,6 @@ async def test_the_client_turning_failing_then_healthy_again_sends_its_alert_the
     await amule_health.check(detected=True, times=3)
     await amule_health.check(detected=False, times=9)
     assert amule_health.alerts() == [_UNREACHABLE, _REACHABLE_AGAIN]
-
-
-async def test_a_change_under_a_rule_without_an_alert_is_logged_and_sends_nothing() -> None:
-    silent = HealthRule(
-        name="silent",
-        fails_at=Detections(times=1, among_last=1),
-        recovers_under=Detections(times=1, among_last=1),
-    )
-    amule = ExternalDependency(
-        name="client amuled", client_name=ClientName("amuled"), rules={silent: None}
-    )
-    amule_health = _AmuleHealth(amule)
-    await amule_health.check(detected=True, times=1, rule=silent)
-    message = "client amuled, silent: unknown to failing"
-    assert amule_health.logger.lines == [LoggedLine(level="warning", message=message)]
-    assert amule_health.alerts() == []
 
 
 async def test_a_check_that_changes_nothing_is_neither_logged_nor_alerted() -> None:

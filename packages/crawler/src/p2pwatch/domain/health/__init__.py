@@ -3,7 +3,7 @@
 The node tracks the health of what it depends on and does not control, its external dependencies
 (an ``ExternalDependency``), such as the aMule client; a part is their plain word.
 Each part has rules (a ``HealthRule``), such as "aMule does not answer", each with the alert it
-sends, or none (a ``HealthAlert``).
+sends and its end (a ``HealthAlert``).
 At each check, the code records in ``NodeHealth`` whether the rule detected its case.
 From its latest checks, the rule says whether the part is healthy or failing (a ``HealthState``).
 For example, the status reading asks aMule for its status every minute.

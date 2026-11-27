@@ -157,8 +157,13 @@ class FreeSpaceSampled:
 
 @dataclass(kw_only=True, frozen=True)
 class DiskSpaceLow:
-    # Sent once per dip: when the disk's health rule turns failing.
+    # Sent once per dip: when the disk's health rule turns failing, until above its floor again.
     min_free_bytes: int
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class DiskSpaceSufficientAgain:
     node_id: NodeId
 
 
@@ -258,6 +263,7 @@ type Event = (
     | ClientPasswordAcceptedAgain
     | FreeSpaceSampled
     | DiskSpaceLow
+    | DiskSpaceSufficientAgain
     | NotificationsNotSaved
     | NotificationsSavedAgain
     | NotificationServiceSendsFailing

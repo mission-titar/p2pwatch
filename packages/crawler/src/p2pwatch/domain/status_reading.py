@@ -65,11 +65,13 @@ SEARCHES_FAILED = HealthRule(
 def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDependency:
     """The client, judged by whether its API answers and accepts our password: "client
     amuled"."""
+    name = f"client {client_name}"
     return ExternalDependency(
-        name=f"client {client_name}",
+        name=name,
         client_name=client_name,
         rules={
             CLIENT_UNREACHABLE: HealthAlert(
+                about=f"{name}, {CLIENT_UNREACHABLE.name}",
                 when_failing=ClientUnreachableLasting(
                     client_name=client_name,
                     unreachable_for_seconds=UNREACHABLE_ALERT_AFTER.total_seconds(),
@@ -78,6 +80,7 @@ def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDe
                 when_healthy_again=ClientReachableAgain(client_name=client_name, node_id=node_id),
             ),
             PASSWORD_REFUSED: HealthAlert(
+                about=f"{name}, {PASSWORD_REFUSED.name}",
                 when_failing=ClientPasswordRefused(client_name=client_name, node_id=node_id),
                 when_healthy_again=ClientPasswordAcceptedAgain(
                     client_name=client_name, node_id=node_id
@@ -92,9 +95,11 @@ def channel_dependency(
 ) -> ExternalDependency:
     """One of the client's channels, judged by whether it is connected and connectable and whether
     the network refuses its searches: "channel amuled kad"."""
+    name = f"channel {client_name} {channel}"
 
-    def alert(field: ChannelField) -> HealthAlert:
+    def alert(rule: HealthRule, *, field: ChannelField) -> HealthAlert:
         return HealthAlert(
+            about=f"{name}, {rule.name}",
             when_failing=ChannelDegraded(
                 client_name=client_name,
                 channel=channel,
@@ -108,13 +113,14 @@ def channel_dependency(
         )
 
     return ExternalDependency(
-        name=f"channel {client_name} {channel}",
+        name=name,
         client_name=client_name,
         channel=channel,
         rules={
-            CHANNEL_NOT_CONNECTED: alert("connected"),
-            CHANNEL_NOT_CONNECTABLE: alert("connectable"),
+            CHANNEL_NOT_CONNECTED: alert(CHANNEL_NOT_CONNECTED, field="connected"),
+            CHANNEL_NOT_CONNECTABLE: alert(CHANNEL_NOT_CONNECTABLE, field="connectable"),
             SEARCHES_FAILED: HealthAlert(
+                about=f"{name}, {SEARCHES_FAILED.name}",
                 when_failing=SearchesRefused(
                     client_name=client_name, channel=channel, node_id=node_id
                 ),
