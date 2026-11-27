@@ -14,6 +14,9 @@ under `agents/reference/2026-11-09-v5-lot4-instruments/`.
 part of this spec about lot 4b, its first stack #718 to #754 left unmerged; lot 4c is to be rewritten on that spec's
 names before it starts. This spec keeps lot 4a's record and appendix C's facts.)
 
+(Corrected 2026-11-27: lot 4c moved to `agents/specs/2026-11-25-v5-lot-4c-what-the-operator-sees.md`, which replaces
+every part of this spec about lot 4c, D11 to D18, its rows, blocks and appendix included.)
+
 ## 1. In short
 
 Today every loop of the crawler runs in one task group with no restart: an unexpected error anywhere (a bug on the
