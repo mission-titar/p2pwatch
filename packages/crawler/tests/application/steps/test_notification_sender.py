@@ -4,6 +4,7 @@ recorded on its service's part, any other error a bug of the turn; a cancelled s
 entry. At the shutdown, every service's is sent at once."""
 
 import asyncio
+from collections.abc import Mapping
 
 import pytest
 
@@ -11,6 +12,7 @@ from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender, empty_the_outbox
+from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.observability.events import TargetTitle
@@ -70,9 +72,41 @@ def _sender(
             logger=health_logger or FakeLogger(),
             observability_dispatcher=ObservabilityOverFakes().dispatcher,
         ),
-        service_dependencies=notification_service_dependencies(notifier.services()),
+        service_dependencies=notification_service_dependencies(
+            notifier.services(), node_id=_NODE_ID
+        ),
         local_database=local_database_dependency(node_id=_NODE_ID),
         logger=logger or FakeLogger(),
+    )
+
+
+def _sender_over(
+    observability: ObservabilityOverFakes,
+    *,
+    notifier: Notifier,
+    service: NotificationService,
+    node_health: NodeHealth,
+    service_parts: Mapping[NotificationService, ExternalDependency],
+) -> NotificationSender:
+    """A sender over ``observability``'s outbox, whose alerts ``node_health`` dispatches."""
+    return NotificationSender(
+        service=service,
+        outbox=observability.outbox,
+        notifier=notifier,
+        notification_timeout_seconds=5.0,
+        node_health=node_health,
+        service_dependencies=service_parts,
+        local_database=local_database_dependency(node_id=_NODE_ID),
+        logger=FakeLogger(),
+    )
+
+
+def _refusal_alert(service: NotificationService) -> RelayedLogLine:
+    return RelayedLogLine(
+        message=f"{service} refuses our notifications",
+        detail="impact: the notifications sent to it are lost",
+        severity=Severity.WARNING,
+        node_id=_NODE_ID,
     )
 
 
@@ -290,6 +324,7 @@ async def test_emptying_the_outbox_sends_what_a_send_left_for_a_service_already_
     observability.outbox_store.writes_fail = True
     node_health = NodeHealth(logger=FakeLogger(), observability_dispatcher=observability.dispatcher)
     local_database = local_database_dependency(node_id=_NODE_ID)
+    parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID)
     senders = [
         NotificationSender(
             service=service,
@@ -297,7 +332,7 @@ async def test_emptying_the_outbox_sends_what_a_send_left_for_a_service_already_
             notifier=notifier,
             notification_timeout_seconds=5.0,
             node_health=node_health,
-            service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+            service_dependencies=parts,
             local_database=local_database,
             logger=FakeLogger(),
         )
@@ -341,19 +376,74 @@ async def test_two_services_one_refusing_the_other_sent_once_the_refused_tried_o
     assert (outbox.oldest(refused), outbox.oldest(taking)) == (None, None)
 
 
-async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_alerts_no_one() -> None:
+async def test_a_community_service_refusing_is_alerted_through_the_operations_one_then_ended() -> (
+    None
+):
+    observability = ObservabilityOverFakes()
+    node_health = NodeHealth(logger=FakeLogger(), observability_dispatcher=observability.dispatcher)
+    parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID)
+    refusing, taking = (
+        _sender_over(
+            observability,
+            notifier=notifier,
+            service=_COMMUNITY,
+            node_health=node_health,
+            service_parts=parts,
+        )
+        for notifier in (FakeNotifier(refusing=[_COMMUNITY]), FakeNotifier())
+    )
+    for sender, sends in ((refusing, 3), (taking, 9)):
+        for _ in range(sends):
+            observability.outbox.leave(_COMPLETED, services=[_COMMUNITY])
+        await sender.send_what_is_left()
+
+    accepting = RelayedLogLine(
+        message="fake community accepts our notifications again",
+        severity=Severity.INFO,
+        node_id=_NODE_ID,
+    )
+    assert observability.notifications == [
+        (Audience.OPERATIONS, _refusal_alert(_COMMUNITY)),
+        (Audience.OPERATIONS, accepting),
+    ]
+
+
+async def test_two_operations_services_one_refusing_its_alert_is_left_for_the_other_alone() -> None:
+    refused = NotificationService(scheme="discord", audience=Audience.OPERATIONS)
+    taking = NotificationService(scheme="ntfy", audience=Audience.OPERATIONS)
+    observability = ObservabilityOverFakes((refused, taking))
+    sender = _sender_over(
+        observability,
+        notifier=FakeNotifier((refused, taking), refusing=[refused]),
+        service=refused,
+        node_health=NodeHealth(
+            logger=FakeLogger(), observability_dispatcher=observability.dispatcher
+        ),
+        service_parts=notification_service_dependencies((refused, taking), node_id=_NODE_ID),
+    )
+    for _ in range(3):
+        observability.outbox.leave(_ONLINE, services=[refused])
+
+    for _ in range(3):  # one turn per send, so that an alert left for it stays left
+        await sender.run_once()
+
+    left = PendingNotification(notification=_refusal_alert(refused), service=taking)
+    assert (observability.outbox.oldest(refused), observability.outbox.oldest(taking)) == (
+        None,
+        left,
+    )
+
+
+async def test_the_one_operations_service_refusing_every_send_is_alerted_in_the_log_alone() -> None:
     observability, health_logger = ObservabilityOverFakes(), FakeLogger()
-    sender = NotificationSender(
-        service=_OPERATIONS,
-        outbox=observability.outbox,
+    sender = _sender_over(
+        observability,
         notifier=FakeNotifier(refusing=[_OPERATIONS]),
-        notification_timeout_seconds=5.0,
+        service=_OPERATIONS,
         node_health=NodeHealth(
             logger=health_logger, observability_dispatcher=observability.dispatcher
         ),
-        service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
-        local_database=local_database_dependency(node_id=_NODE_ID),
-        logger=FakeLogger(),
+        service_parts=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID),
     )
     for _ in range(3):
         observability.outbox.leave(_ONLINE, services=[_OPERATIONS])
@@ -366,24 +456,24 @@ async def test_a_service_refusing_every_send_fails_its_sends_in_the_log_and_aler
             level="warning", message="notifier fake operations, sends failed: unknown to failing"
         ),
     ]
-    # An alert would go through the service that refuses it: none is left.
+    refusal = _refusal_alert(_OPERATIONS)
+    assert observability.logger.lines == [
+        LoggedLine(level="warning", message=f"{refusal.message}: {refusal.detail}")
+    ]
     assert (observability.notifications, observability.outbox.oldest(_OPERATIONS)) == ([], None)
 
 
 async def test_a_local_database_refusing_every_save_still_sends_every_entry_and_its_alert() -> None:
     observability, health_logger, notifier = ObservabilityOverFakes(), FakeLogger(), FakeNotifier()
     observability.outbox_store.writes_fail = True
-    sender = NotificationSender(
-        service=_OPERATIONS,
-        outbox=observability.outbox,
+    sender = _sender_over(
+        observability,
         notifier=notifier,
-        notification_timeout_seconds=5.0,
+        service=_OPERATIONS,
         node_health=NodeHealth(
             logger=health_logger, observability_dispatcher=observability.dispatcher
         ),
-        service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
-        local_database=local_database_dependency(node_id=_NODE_ID),
-        logger=FakeLogger(),
+        service_parts=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID),
     )
     for _ in range(3):
         observability.outbox.leave(_ONLINE, services=[_OPERATIONS])

@@ -279,7 +279,7 @@ async def test_a_notification_left_before_a_stop_is_sent_after_the_start(tmp_pat
             node_health=NodeHealth(
                 logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
             ),
-            service_dependencies=notification_service_dependencies(services),
+            service_dependencies=notification_service_dependencies(services, node_id=NodeId("n1")),
             local_database=local_database_dependency(node_id=NodeId("n1")),
             logger=FakeLogger(),
         ).run_once()

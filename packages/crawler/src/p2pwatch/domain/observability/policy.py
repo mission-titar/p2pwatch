@@ -37,6 +37,8 @@ from p2pwatch.domain.observability.events import (
     DownloadQueued,
     Event,
     FreeSpaceSampled,
+    NotificationServiceSendsFailing,
+    NotificationServiceSendsPassingAgain,
     NotificationsNotSaved,
     NotificationsSavedAgain,
     ObservationRecorded,
@@ -97,6 +99,7 @@ class ObservabilityPlan:
     message: str
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = ()
     notification: Notification | None = None
+    skipped_service: str | None = None  # "discord community", which cannot carry its own refusals
 
 
 def audience_of(notification: Notification) -> Audience:
@@ -171,6 +174,7 @@ def _relayed(
     detail: str | None = None,
     node_id: NodeId,
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
+    skipped_service: str | None = None,
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under ``node_id``, its two lines joined."""
     return ObservabilityPlan(
@@ -180,6 +184,7 @@ def _relayed(
         notification=RelayedLogLine(
             message=message, detail=detail, severity=severity, node_id=node_id
         ),
+        skipped_service=skipped_service,
     )
 
 
@@ -414,6 +419,21 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case NotificationsSavedAgain():
             return _relayed(
                 Severity.INFO, message="notifications saved again", node_id=event.node_id
+            )
+        case NotificationServiceSendsFailing():
+            return _relayed(
+                Severity.WARNING,
+                message=f"{event.service_name} refuses our notifications",
+                detail="impact: the notifications sent to it are lost",
+                node_id=event.node_id,
+                skipped_service=event.service_name,
+            )
+        case NotificationServiceSendsPassingAgain():
+            return _relayed(
+                Severity.INFO,
+                message=f"{event.service_name} accepts our notifications again",
+                node_id=event.node_id,
+                skipped_service=event.service_name,
             )
         case WorksStillFailing():
             own = "its" if len(event.works) == 1 else "their"

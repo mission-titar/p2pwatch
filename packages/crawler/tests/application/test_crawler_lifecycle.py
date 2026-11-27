@@ -216,7 +216,7 @@ class _Crawl:
                     notification_timeout_seconds=5.0,
                     node_health=node_health,
                     service_dependencies=notification_service_dependencies(
-                        self.notifier.services()
+                        self.notifier.services(), node_id=_NODE_ID
                     ),
                     local_database=local_database,
                     logger=FakeLogger(),

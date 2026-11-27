@@ -215,6 +215,20 @@ async def test_a_notification_is_left_for_each_service_of_its_audience() -> None
 
 
 @pytest.mark.asyncio
+async def test_a_notification_is_left_for_every_service_of_its_audience_but_the_one_skipped() -> (
+    None
+):
+    left, slack = _Left(), NotificationService(scheme="slack", audience=Audience.OPERATIONS)
+    dispatcher = _dispatcher(FakeNodeMetricStore(), left=left, services=(_DISCORD, _NTFY, slack))
+
+    await dispatcher.dispatch(
+        ev.NotificationServiceSendsFailing(service_name="ntfy operations", node_id=_NODE_ID)
+    )
+
+    assert [services for _, services in left.notifications] == [(slack,)]
+
+
+@pytest.mark.asyncio
 async def test_a_notification_whose_audience_has_no_service_is_left_for_none() -> None:
     left = _Left()
 

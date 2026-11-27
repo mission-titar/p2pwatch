@@ -18,16 +18,16 @@ from tests.fakes.adapters.driven.fake_waker import FakeWaker
 
 class ObservabilityOverFakes:
     """An ``ObservabilityDispatcher`` whose log lines, node metrics and notifications a test
-    reads, each notification left in ``outbox`` for the one service of its audience."""
+    reads, each notification left in ``outbox`` for the services of its audience."""
 
-    def __init__(self) -> None:
+    def __init__(self, services: Sequence[NotificationService] = ONE_SERVICE_PER_AUDIENCE) -> None:
         self.logger = FakeLogger()
         self.node_metric_store = FakeNodeMetricStore()
         self.outbox_store = FakeNotificationOutboxStore()
         self.outbox = NotificationOutbox(
             writer=self.outbox_store,
             reader=self.outbox_store,
-            services=ONE_SERVICE_PER_AUDIENCE,
+            services=services,
             waker=FakeWaker(),
             logger=FakeLogger(),
         )
@@ -39,7 +39,7 @@ class ObservabilityOverFakes:
             logger=self.logger,
             node_metric_writer=self.node_metric_store,
             leave_notification=self._leave,
-            services=ONE_SERVICE_PER_AUDIENCE,
+            services=services,
         )
 
     @property

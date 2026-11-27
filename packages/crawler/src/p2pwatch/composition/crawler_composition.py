@@ -437,7 +437,9 @@ class CrawlerComposition(CrawlerRunner):
                 )
 
             # Built once: a notifier rebuilt on the same configuration lists the same services.
-            service_parts = notification_service_dependencies(build_notifier().services())
+            service_parts = notification_service_dependencies(
+                build_notifier().services(), node_id=node_id
+            )
             local_database = local_database_dependency(node_id=node_id)
             outbox_store = SqliteNotificationOutboxStore(local_connection)
             outbox = NotificationOutbox(

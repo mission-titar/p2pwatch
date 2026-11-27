@@ -159,6 +159,19 @@ class NotificationsSavedAgain:
 
 
 @dataclass(kw_only=True, frozen=True)
+class NotificationServiceSendsFailing:
+    # A service refusing our sends, such as "discord community": told through the others.
+    service_name: str  # a NotificationService's str: its module imports this one
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class NotificationServiceSendsPassingAgain:
+    service_name: str
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class CrawlerFunctionLost:
     # A function, such as the crawl, lost after ``rebuilds`` rebuilds in vain: the crawler restarts.
     function: CrawlerFunction
@@ -230,6 +243,8 @@ type Event = (
     | DiskSpaceLow
     | NotificationsNotSaved
     | NotificationsSavedAgain
+    | NotificationServiceSendsFailing
+    | NotificationServiceSendsPassingAgain
     | CrawlerFunctionLost
     | WorksStillFailing
     | WorksHealthyAgain

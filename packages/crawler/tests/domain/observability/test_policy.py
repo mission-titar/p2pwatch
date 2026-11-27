@@ -56,6 +56,7 @@ def _relayed(
     message: str,
     detail: str | None = None,
     node_metrics: tuple[CounterIncrement | GaugeSetting, ...] = (),
+    skipped_service: str | None = None,
 ) -> ObservabilityPlan:
     """An operations plan: its log line relayed under the event's node, its two lines joined."""
     return ObservabilityPlan(
@@ -65,6 +66,7 @@ def _relayed(
         notification=RelayedLogLine(
             message=message, detail=detail, severity=severity, node_id=_NODE_ID
         ),
+        skipped_service=skipped_service,
     )
 
 
@@ -259,6 +261,23 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     (
         ev.NotificationsSavedAgain(node_id=_NODE_ID),
         _relayed(Severity.INFO, message="notifications saved again"),
+    ),
+    (
+        ev.NotificationServiceSendsFailing(service_name="discord community", node_id=_NODE_ID),
+        _relayed(
+            Severity.WARNING,
+            message="discord community refuses our notifications",
+            detail="impact: the notifications sent to it are lost",
+            skipped_service="discord community",
+        ),
+    ),
+    (
+        ev.NotificationServiceSendsPassingAgain(service_name="discord community", node_id=_NODE_ID),
+        _relayed(
+            Severity.INFO,
+            message="discord community accepts our notifications again",
+            skipped_service="discord community",
+        ),
     ),
     *[
         (
