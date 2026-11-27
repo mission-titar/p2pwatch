@@ -37,7 +37,7 @@ _KAD = Channel("kad")
 _NODE_ID = NodeId("titar-node-1")
 
 
-def _alert_of(dependency: ExternalDependency, *, rule: HealthRule) -> HealthAlert | None:
+def _alert_of(dependency: ExternalDependency, *, rule: HealthRule) -> HealthAlert:
     """The alert ``rule`` carries on ``dependency``, read off its first change to failing."""
     *_, failing = [
         dependency.record(rule=rule, detected=True) for _ in range(rule.fails_at.among_last)

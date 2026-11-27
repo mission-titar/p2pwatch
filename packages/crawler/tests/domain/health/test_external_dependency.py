@@ -8,6 +8,8 @@ from p2pwatch.domain.health.external_dependency import (
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.events import (
+    ClientPasswordAcceptedAgain,
+    ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachableLasting,
     Event,
@@ -23,22 +25,33 @@ def _rule(name: str) -> HealthRule:
 
 
 _UNREACHABLE = _rule("unreachable")
-_NOT_CONNECTED = _rule("not connected")
+_PASSWORD_REFUSED = _rule("password refused")
 _NODE_ID = NodeId("titar-node-1")
+_AMULED = ClientName("amuled")
 _UNREACHABLE_ALERT = HealthAlert(
     when_failing=ClientUnreachableLasting(
-        client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE_ID
+        client_name=_AMULED, unreachable_for_seconds=120.0, node_id=_NODE_ID
     ),
-    when_healthy_again=ClientReachableAgain(client_name=ClientName("amuled"), node_id=_NODE_ID),
+    when_healthy_again=ClientReachableAgain(client_name=_AMULED, node_id=_NODE_ID),
+)
+_PASSWORD_ALERT = HealthAlert(
+    when_failing=ClientPasswordRefused(client_name=_AMULED, node_id=_NODE_ID),
+    when_healthy_again=ClientPasswordAcceptedAgain(client_name=_AMULED, node_id=_NODE_ID),
 )
 
 
 def _amule() -> ExternalDependency:
     return ExternalDependency(
         name="client amuled",
-        client_name=ClientName("amuled"),
-        rules={_UNREACHABLE: _UNREACHABLE_ALERT, _NOT_CONNECTED: None},
+        client_name=_AMULED,
+        rules={_UNREACHABLE: _UNREACHABLE_ALERT, _PASSWORD_REFUSED: _PASSWORD_ALERT},
     )
+
+
+def test_the_type_refuses_a_rule_without_an_alert_and_an_alert_without_an_end() -> None:
+    # mypy fails the gate on an unused ignore, the day the type accepts either again.
+    ExternalDependency(name="client amuled", client_name=_AMULED, rules={_UNREACHABLE: None})  # type: ignore[dict-item]
+    HealthAlert(when_failing=_UNREACHABLE_ALERT.when_failing, when_healthy_again=None)  # type: ignore[arg-type]
 
 
 def test_the_third_detection_in_a_row_returns_the_change_to_failing() -> None:
@@ -66,17 +79,10 @@ def test_3_checks_not_detected_return_the_change_to_healthy() -> None:
     )
 
 
-def test_a_change_under_a_rule_without_an_alert_carries_none() -> None:
-    amule = _amule()
-    *_, change = [amule.record(rule=_NOT_CONNECTED, detected=True) for _ in range(3)]
-    assert change is not None
-    assert change.alert is None
-
-
 def test_a_check_counts_only_for_the_rule_it_is_recorded_for() -> None:
     amule = _amule()
     for _ in range(3):
-        amule.record(rule=_NOT_CONNECTED, detected=False)
+        amule.record(rule=_PASSWORD_REFUSED, detected=False)
     # "unreachable" has seen nothing yet: one check leaves it unknown.
     assert amule.record(rule=_UNREACHABLE, detected=False) is None
 
@@ -106,11 +112,10 @@ def test_after_failing_it_turns_healthy_at_the_ninth_check_not_detected() -> Non
     ]
 
 
-def _sent_at(
-    *, previous: HealthState, current: HealthState, alert: HealthAlert | None = _UNREACHABLE_ALERT
-) -> Event | None:
+def _sent_at(*, previous: HealthState, current: HealthState) -> Event | None:
     """What the alert sends at a change from ``previous`` to ``current``."""
-    return HealthTransition(alert=alert, previous=previous, current=current).alert_event()
+    transition = HealthTransition(alert=_UNREACHABLE_ALERT, previous=previous, current=current)
+    return transition.alert_event()
 
 
 @pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
@@ -126,19 +131,3 @@ def test_a_rule_healthy_again_after_failing_sends_its_alert_s_end() -> None:
 
 def test_a_rule_healthy_from_its_first_checks_sends_nothing() -> None:
     assert _sent_at(previous=HealthState.UNKNOWN, current=HealthState.HEALTHY) is None
-
-
-def test_an_alert_without_an_end_sends_nothing_once_healthy_again() -> None:
-    no_end = HealthAlert(when_failing=_UNREACHABLE_ALERT.when_failing, when_healthy_again=None)
-    sent = _sent_at(previous=HealthState.FAILING, current=HealthState.HEALTHY, alert=no_end)
-    assert sent is None
-
-
-@pytest.mark.parametrize(
-    ("previous", "current"),
-    [(HealthState.HEALTHY, HealthState.FAILING), (HealthState.FAILING, HealthState.HEALTHY)],
-)
-def test_a_rule_without_an_alert_sends_nothing(
-    *, previous: HealthState, current: HealthState
-) -> None:
-    assert _sent_at(previous=previous, current=current, alert=None) is None

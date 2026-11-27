@@ -877,8 +877,8 @@ service des opérations en échec n'alerte que le journal. La base locale est un
 de la boîte d'envoi a échoué (« saves failed »), aux mêmes seuils. En échec, « notifications not
 saved in local.db », puis « impact: lost at the next restart », part, depuis la mémoire comme toute
 notification, et « notifications saved again » à son retour. Chaque règle d'une partie porte
-l'alerte qu'elle envoie, et sa fin (`HealthAlert`), ou aucune, si bien qu'une alerte sans règle ne
-peut exister.
+l'alerte qu'elle envoie et sa fin (`HealthAlert`), que le type exige : mypy refuse une règle sans
+alerte comme une alerte sans fin.
 `NodeHealth` journalise chaque changement d'état et envoie l'alerte de sa règle par le
 dispatcher, comme tout autre événement.
 

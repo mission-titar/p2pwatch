@@ -1,5 +1,5 @@
 """What the node depends on and does not control, its health tracked, each rule with the alert it
-sends, or none."""
+sends and its end."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -15,7 +15,7 @@ class HealthAlert:
     again, such as Kad's "off its network for 5 min", then "back on its network"."""
 
     when_failing: Event
-    when_healthy_again: Event | None  # None: an alert with no end, such as the disk's
+    when_healthy_again: Event
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -23,15 +23,13 @@ class HealthTransition:
     """A change of one part's state under one rule, such as the aMule client going from healthy to
     failing, with that rule's alert."""
 
-    alert: HealthAlert | None  # None: the change's log line alone tells it
+    alert: HealthAlert
     previous: HealthState
     current: HealthState
 
     def alert_event(self) -> Event | None:
         """What its rule's alert sends at this change: the alert turning failing, its end turning
         healthy from failing, nothing healthy from the start."""
-        if self.alert is None:
-            return None
         if self.current is HealthState.FAILING:
             return self.alert.when_failing
         if self.previous is HealthState.FAILING:
@@ -49,7 +47,7 @@ class ExternalDependency:
         name: str,
         client_name: ClientName | None,
         channel: Channel | None = None,
-        rules: Mapping[HealthRule, HealthAlert | None],
+        rules: Mapping[HealthRule, HealthAlert],
     ) -> None:
         self.name = name  # "client amuled", as the log names it
         self.client_name = client_name  # "amuled"; None for the disk, the services, local.db
