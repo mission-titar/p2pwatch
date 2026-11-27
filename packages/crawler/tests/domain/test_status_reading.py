@@ -118,6 +118,7 @@ def test_a_channel_s_searches_fail_at_3_refused_in_a_row_and_heal_under_2_in_the
 def test_the_client_unreachable_alerts_at_2_min_and_ends_once_reachable_again() -> None:
     client = client_dependency(_AMULED, node_id=_NODE_ID)
     assert _alert_of(client, rule=CLIENT_UNREACHABLE) == HealthAlert(
+        about="client amuled, unreachable",
         when_failing=ClientUnreachableLasting(
             client_name=_AMULED, unreachable_for_seconds=120.0, node_id=_NODE_ID
         ),
@@ -128,20 +129,25 @@ def test_the_client_unreachable_alerts_at_2_min_and_ends_once_reachable_again() 
 def test_a_refused_password_alerts_at_once_and_ends_once_accepted_again() -> None:
     client = client_dependency(_AMULED, node_id=_NODE_ID)
     assert _alert_of(client, rule=PASSWORD_REFUSED) == HealthAlert(
+        about="client amuled, password refused",
         when_failing=ClientPasswordRefused(client_name=_AMULED, node_id=_NODE_ID),
         when_healthy_again=ClientPasswordAcceptedAgain(client_name=_AMULED, node_id=_NODE_ID),
     )
 
 
 @pytest.mark.parametrize(
-    ("rule", "field"),
-    [(CHANNEL_NOT_CONNECTED, "connected"), (CHANNEL_NOT_CONNECTABLE, "connectable")],
+    ("rule", "field", "about"),
+    [
+        (CHANNEL_NOT_CONNECTED, "connected", "channel amuled kad, not connected"),
+        (CHANNEL_NOT_CONNECTABLE, "connectable", "channel amuled kad, not connectable"),
+    ],
 )
 def test_a_channel_alerts_at_5_min_on_each_rule_of_its_readings_and_ends_once_healthy(
-    *, rule: HealthRule, field: ChannelField
+    *, rule: HealthRule, field: ChannelField, about: str
 ) -> None:
     kad = channel_dependency(client_name=_AMULED, channel=_KAD, node_id=_NODE_ID)
     assert _alert_of(kad, rule=rule) == HealthAlert(
+        about=about,
         when_failing=ChannelDegraded(
             client_name=_AMULED,
             channel=_KAD,
@@ -158,6 +164,7 @@ def test_a_channel_alerts_at_5_min_on_each_rule_of_its_readings_and_ends_once_he
 def test_a_channel_s_searches_refused_alert_at_the_third_and_end_once_accepted_again() -> None:
     kad = channel_dependency(client_name=_AMULED, channel=_KAD, node_id=_NODE_ID)
     assert _alert_of(kad, rule=SEARCHES_FAILED) == HealthAlert(
+        about="channel amuled kad, searches failed",
         when_failing=SearchesRefused(client_name=_AMULED, channel=_KAD, node_id=_NODE_ID),
         when_healthy_again=SearchesAcceptedAgain(
             client_name=_AMULED, channel=_KAD, node_id=_NODE_ID

@@ -29,12 +29,14 @@ _PASSWORD_REFUSED = _rule("password refused")
 _NODE_ID = NodeId("titar-node-1")
 _AMULED = ClientName("amuled")
 _UNREACHABLE_ALERT = HealthAlert(
+    about="client amuled, unreachable",
     when_failing=ClientUnreachableLasting(
         client_name=_AMULED, unreachable_for_seconds=120.0, node_id=_NODE_ID
     ),
     when_healthy_again=ClientReachableAgain(client_name=_AMULED, node_id=_NODE_ID),
 )
 _PASSWORD_ALERT = HealthAlert(
+    about="client amuled, password refused",
     when_failing=ClientPasswordRefused(client_name=_AMULED, node_id=_NODE_ID),
     when_healthy_again=ClientPasswordAcceptedAgain(client_name=_AMULED, node_id=_NODE_ID),
 )
@@ -51,7 +53,7 @@ def _amule() -> ExternalDependency:
 def test_the_type_refuses_a_rule_without_an_alert_and_an_alert_without_an_end() -> None:
     # mypy fails the gate on an unused ignore, the day the type accepts either again.
     ExternalDependency(name="client amuled", client_name=_AMULED, rules={_UNREACHABLE: None})  # type: ignore[dict-item]
-    HealthAlert(when_failing=_UNREACHABLE_ALERT.when_failing, when_healthy_again=None)  # type: ignore[arg-type]
+    HealthAlert(about="", when_failing=_UNREACHABLE_ALERT.when_failing, when_healthy_again=None)  # type: ignore[arg-type]
 
 
 def test_the_third_detection_in_a_row_returns_the_change_to_failing() -> None:

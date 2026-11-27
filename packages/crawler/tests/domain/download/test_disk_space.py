@@ -40,6 +40,7 @@ def test_the_disk_alerts_under_its_floor_and_ends_above_it_again() -> None:
     )
     assert failing is not None
     assert failing.alert == HealthAlert(
+        about="download disk, disk space low",
         when_failing=DiskSpaceLow(min_free_bytes=_FLOOR, node_id=_NODE_ID),
         when_healthy_again=DiskSpaceSufficientAgain(node_id=_NODE_ID),
     )

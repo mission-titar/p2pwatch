@@ -83,6 +83,7 @@ def test_the_local_database_alerts_notifications_not_saved_and_ends_once_saved_a
     *_, failing = [part.record(rule=SAVES_FAILED, detected=True) for _ in range(3)]
     assert failing is not None
     assert failing.alert == HealthAlert(
+        about="local database, saves failed",
         when_failing=NotificationsNotSaved(node_id=_NODE_ID),
         when_healthy_again=NotificationsSavedAgain(node_id=_NODE_ID),
     )
@@ -93,6 +94,7 @@ def test_a_service_alerts_its_sends_failed_and_ends_once_they_pass_again() -> No
     *_, failing = [part.record(rule=SENDS_FAILED, detected=True) for _ in range(3)]
     assert failing is not None
     assert failing.alert == HealthAlert(
+        about="notifier discord community, sends failed",
         when_failing=NotificationServiceSendsFailing(
             service_name="discord community", node_id=_NODE_ID
         ),

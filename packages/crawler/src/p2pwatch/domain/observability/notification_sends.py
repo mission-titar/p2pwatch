@@ -72,31 +72,29 @@ SAVES_FAILED = HealthRule(
 
 def local_database_dependency(*, node_id: NodeId) -> ExternalDependency:
     """The local database, judged on the saves of the notifications left: "local database"."""
+    name = "local database"
     alert = HealthAlert(
+        about=f"{name}, {SAVES_FAILED.name}",
         when_failing=NotificationsNotSaved(node_id=node_id),
         when_healthy_again=NotificationsSavedAgain(node_id=node_id),
     )
-    return ExternalDependency(name="local database", client_name=None, rules={SAVES_FAILED: alert})
+    return ExternalDependency(name=name, client_name=None, rules={SAVES_FAILED: alert})
 
 
 def notification_service_dependencies(
     services: Iterable[NotificationService], *, node_id: NodeId
 ) -> dict[NotificationService, ExternalDependency]:
     """A part per service, judged on its sends that failed: "notifier discord community"."""
-    return {
-        service: ExternalDependency(
-            name=f"notifier {service}",
-            client_name=None,
-            rules={SENDS_FAILED: _sends_failed_alert(service, node_id=node_id)},
-        )
-        for service in services
-    }
+    return {service: _service_dependency(service, node_id=node_id) for service in services}
 
 
-def _sends_failed_alert(service: NotificationService, *, node_id: NodeId) -> HealthAlert:
-    return HealthAlert(
+def _service_dependency(service: NotificationService, *, node_id: NodeId) -> ExternalDependency:
+    name = f"notifier {service}"
+    alert = HealthAlert(
+        about=f"{name}, {SENDS_FAILED.name}",
         when_failing=NotificationServiceSendsFailing(service_name=str(service), node_id=node_id),
         when_healthy_again=NotificationServiceSendsPassingAgain(
             service_name=str(service), node_id=node_id
         ),
     )
+    return ExternalDependency(name=name, client_name=None, rules={SENDS_FAILED: alert})

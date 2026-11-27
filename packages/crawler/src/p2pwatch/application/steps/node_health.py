@@ -25,6 +25,6 @@ class NodeHealth:
         failing = transition.current is HealthState.FAILING
         log = self._logger.warning if failing else self._logger.info
         previous, current = transition.previous.value, transition.current.value
-        log("%s, %s: %s to %s", on.name, rule.name, previous, current)
+        log("%s: %s to %s", transition.alert.about, previous, current)
         if (alert := transition.alert_event()) is not None:
             await self._observability_dispatcher.dispatch(alert)

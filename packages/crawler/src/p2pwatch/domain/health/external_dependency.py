@@ -14,6 +14,7 @@ class HealthAlert:
     """The alert a rule of a part sends when it turns failing, and its end when it turns healthy
     again, such as Kad's "off its network for 5 min", then "back on its network"."""
 
+    about: str  # its part and rule, as the log names each change: "client amuled, unreachable"
     when_failing: Event
     when_healthy_again: Event
 
