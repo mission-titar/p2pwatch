@@ -14,12 +14,13 @@ from p2pwatch.domain.observability.events import (
     ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachableLasting,
+    SearchesAcceptedAgain,
+    SearchesRefused,
 )
 from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
-    CONNECTED_TO_NO_NETWORK,
     PASSWORD_REFUSED,
     SEARCHES_FAILED,
     STATUS_PERIOD,
@@ -81,17 +82,6 @@ def test_the_client_s_dependency_is_named_after_it_and_fails_at_3_unanswered_rea
     assert (client.name, client.client_name, client.channel) == ("client amuled", "amuled", None)
     transitions = [client.record(rule=CLIENT_UNREACHABLE, detected=True) for _ in range(3)]
     assert [t and t.current for t in transitions] == [None, None, HealthState.FAILING]
-
-
-def test_the_client_fails_at_6_readings_on_no_network_and_heals_under_2_in_the_last_10() -> None:
-    client = client_dependency(_AMULED, node_id=_NODE_ID)
-
-    offline = [client.record(rule=CONNECTED_TO_NO_NETWORK, detected=True) for _ in range(6)]
-    online = [client.record(rule=CONNECTED_TO_NO_NETWORK, detected=False) for _ in range(9)]
-
-    assert [t and t.current for t in offline] == [*[None] * 5, HealthState.FAILING]
-    # The ninth reading on a network leaves a single one on none among the last 10.
-    assert [t and t.current for t in online] == [*[None] * 8, HealthState.HEALTHY]
 
 
 def test_the_client_fails_at_one_refused_password_and_heals_at_the_first_answer() -> None:
@@ -165,8 +155,11 @@ def test_a_channel_alerts_at_5_min_on_each_rule_of_its_readings_and_ends_once_he
     )
 
 
-def test_the_client_s_networks_and_a_channel_s_searches_have_no_alert() -> None:
-    client = client_dependency(_AMULED, node_id=_NODE_ID)
+def test_a_channel_s_searches_refused_alert_at_the_third_and_end_once_accepted_again() -> None:
     kad = channel_dependency(client_name=_AMULED, channel=_KAD, node_id=_NODE_ID)
-    assert _alert_of(client, rule=CONNECTED_TO_NO_NETWORK) is None
-    assert _alert_of(kad, rule=SEARCHES_FAILED) is None
+    assert _alert_of(kad, rule=SEARCHES_FAILED) == HealthAlert(
+        when_failing=SearchesRefused(client_name=_AMULED, channel=_KAD, node_id=_NODE_ID),
+        when_healthy_again=SearchesAcceptedAgain(
+            client_name=_AMULED, channel=_KAD, node_id=_NODE_ID
+        ),
+    )

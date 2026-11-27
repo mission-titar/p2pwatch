@@ -1,15 +1,12 @@
 import pytest
 
 from p2pwatch.application.steps.node_health import NodeHealth
-from p2pwatch.domain.health.health_rule import HealthRule
+from p2pwatch.domain.health.external_dependency import ExternalDependency
+from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
-from p2pwatch.domain.status_reading import (
-    CLIENT_UNREACHABLE,
-    CONNECTED_TO_NO_NETWORK,
-    client_dependency,
-)
+from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
@@ -30,10 +27,10 @@ _REACHABLE_AGAIN = RelayedLogLine(
 class _AmuleHealth:
     """The node's health over the aMule client, its log and the alerts it dispatches."""
 
-    def __init__(self) -> None:
+    def __init__(self, amule: ExternalDependency | None = None) -> None:
         self.logger = FakeLogger()
         self.observability = ObservabilityOverFakes()
-        self.amule = client_dependency(ClientName("amuled"), node_id=_NODE_ID)
+        self.amule = amule or client_dependency(ClientName("amuled"), node_id=_NODE_ID)
         self._node_health = NodeHealth(
             logger=self.logger, observability_dispatcher=self.observability.dispatcher
         )
@@ -72,9 +69,17 @@ async def test_the_client_turning_failing_then_healthy_again_sends_its_alert_the
 
 
 async def test_a_change_under_a_rule_without_an_alert_is_logged_and_sends_nothing() -> None:
-    amule_health = _AmuleHealth()
-    await amule_health.check(detected=True, times=6, rule=CONNECTED_TO_NO_NETWORK)
-    message = "client amuled, connected to no network: unknown to failing"
+    silent = HealthRule(
+        name="silent",
+        fails_at=Detections(times=1, among_last=1),
+        recovers_under=Detections(times=1, among_last=1),
+    )
+    amule = ExternalDependency(
+        name="client amuled", client_name=ClientName("amuled"), rules={silent: None}
+    )
+    amule_health = _AmuleHealth(amule)
+    await amule_health.check(detected=True, times=1, rule=silent)
+    message = "client amuled, silent: unknown to failing"
     assert amule_health.logger.lines == [LoggedLine(level="warning", message=message)]
     assert amule_health.alerts() == []
 

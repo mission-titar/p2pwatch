@@ -15,6 +15,8 @@ from p2pwatch.domain.observability.events import (
     ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachableLasting,
+    SearchesAcceptedAgain,
+    SearchesRefused,
 )
 from p2pwatch.domain.value_bounds import require_well_formed_text
 
@@ -45,13 +47,6 @@ CHANNEL_NOT_CONNECTABLE = HealthRule(
 # A channel's sixth reading in a row comes 5 minutes after the first.
 CHANNEL_ALERT_AFTER = (_CHANNEL_DETECTED_IN_A_ROW - 1) * STATUS_PERIOD
 
-# No channel of the client connected, so no download finds a source: 6 readings, as a channel's.
-CONNECTED_TO_NO_NETWORK = HealthRule(
-    name="connected to no network",
-    fails_at=Detections(times=_CHANNEL_DETECTED_IN_A_ROW, among_last=_CHANNEL_DETECTED_IN_A_ROW),
-    recovers_under=Detections(times=2, among_last=10),
-)
-
 # No wait repairs a password: one refusal tells it, one answered reading ends it.
 PASSWORD_REFUSED = HealthRule(
     name="password refused",
@@ -68,8 +63,8 @@ SEARCHES_FAILED = HealthRule(
 
 
 def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDependency:
-    """The client, judged by whether its API answers, accepts our password and has any of its
-    channels connected: "client amuled"."""
+    """The client, judged by whether its API answers and accepts our password: "client
+    amuled"."""
     return ExternalDependency(
         name=f"client {client_name}",
         client_name=client_name,
@@ -82,7 +77,6 @@ def client_dependency(client_name: ClientName, *, node_id: NodeId) -> ExternalDe
                 ),
                 when_healthy_again=ClientReachableAgain(client_name=client_name, node_id=node_id),
             ),
-            CONNECTED_TO_NO_NETWORK: None,
             PASSWORD_REFUSED: HealthAlert(
                 when_failing=ClientPasswordRefused(client_name=client_name, node_id=node_id),
                 when_healthy_again=ClientPasswordAcceptedAgain(
@@ -120,7 +114,14 @@ def channel_dependency(
         rules={
             CHANNEL_NOT_CONNECTED: alert("connected"),
             CHANNEL_NOT_CONNECTABLE: alert("connectable"),
-            SEARCHES_FAILED: None,
+            SEARCHES_FAILED: HealthAlert(
+                when_failing=SearchesRefused(
+                    client_name=client_name, channel=channel, node_id=node_id
+                ),
+                when_healthy_again=SearchesAcceptedAgain(
+                    client_name=client_name, channel=channel, node_id=node_id
+                ),
+            ),
         },
     )
 

@@ -29,6 +29,8 @@ from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.client_errors import ClientAuthError, SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
+from p2pwatch.domain.observability.notification import RelayedLogLine
+from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.status_reading import channel_dependency
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
@@ -89,8 +91,10 @@ class _Searches:
         self.run_state = FakeRunStateStore()
         self.supervisor_logger = FakeLogger()
         self.health_logger = FakeLogger()
+        self.health_observability = ObservabilityOverFakes()
         self.node_health = NodeHealth(
-            logger=self.health_logger, observability_dispatcher=ObservabilityOverFakes().dispatcher
+            logger=self.health_logger,
+            observability_dispatcher=self.health_observability.dispatcher,
         )
 
     def works(
@@ -289,6 +293,35 @@ def test_three_refused_searches_in_a_row_fail_the_channel_and_nine_that_ran_heal
             level="warning", message="channel amuled kad, searches failed: unknown to failing"
         ),
         LoggedLine(level="info", message="channel amuled kad, searches failed: failing to healthy"),
+    ]
+
+
+def test_the_third_refused_search_in_a_row_alerts_and_the_ninth_that_ran_ends_it(
+    searches: _Searches,
+) -> None:
+    refused: list[Exception] = [SearchFailedError("refused")] * 3
+    client = FakeTimedSearchClient({Channel("kad"): 30.0}, search_failures=refused)
+    [search] = searches.works(client, keywords=["keroro"])
+
+    alerts_after_each: list[int] = []
+    for _ in range(3 + 9):
+        with suppress(SearchFailedError):
+            searches.loop.run_until_complete(search.work.run_once())
+        alerts_after_each.append(len(searches.health_observability.notifications))
+
+    assert alerts_after_each == [0, 0, 1, *[1] * 8, 2]
+    assert [alert for _, alert in searches.health_observability.notifications] == [
+        RelayedLogLine(
+            message="amuled kad: the network refuses our searches",
+            detail="impact: no search on kad",
+            severity=Severity.WARNING,
+            node_id=_NODE_ID,
+        ),
+        RelayedLogLine(
+            message="amuled kad: the network accepts our searches again",
+            severity=Severity.INFO,
+            node_id=_NODE_ID,
+        ),
     ]
 
 
