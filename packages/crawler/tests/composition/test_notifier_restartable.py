@@ -117,7 +117,9 @@ def _sender(
         node_health=NodeHealth(
             logger=FakeLogger(), observability_dispatcher=ObservabilityOverFakes().dispatcher
         ),
-        service_dependencies=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE),
+        service_dependencies=notification_service_dependencies(
+            ONE_SERVICE_PER_AUDIENCE, node_id=NodeId("n1")
+        ),
         local_database=local_database_dependency(node_id=NodeId("n1")),
         logger=FakeLogger(),
     )

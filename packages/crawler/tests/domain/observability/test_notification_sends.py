@@ -1,7 +1,12 @@
 from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthAlert
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 from p2pwatch.domain.identifiers import NodeId
-from p2pwatch.domain.observability.events import NotificationsNotSaved, NotificationsSavedAgain
+from p2pwatch.domain.observability.events import (
+    NotificationServiceSendsFailing,
+    NotificationServiceSendsPassingAgain,
+    NotificationsNotSaved,
+    NotificationsSavedAgain,
+)
 from p2pwatch.domain.observability.notification_sends import (
     SAVES_FAILED,
     SENDS_FAILED,
@@ -25,7 +30,7 @@ def _changes(rule: HealthRule, *detected: bool, on: ExternalDependency) -> list[
 
 
 def _discord_part() -> ExternalDependency:
-    return notification_service_dependencies([_DISCORD])[_DISCORD]
+    return notification_service_dependencies([_DISCORD], node_id=_NODE_ID)[_DISCORD]
 
 
 def test_a_service_is_named_by_its_scheme_and_its_audience_a_second_alike_by_its_ordinal() -> None:
@@ -35,7 +40,7 @@ def test_a_service_is_named_by_its_scheme_and_its_audience_a_second_alike_by_its
 
 
 def test_each_service_has_a_part_of_its_own_named_after_it_and_by_no_client() -> None:
-    parts = notification_service_dependencies([_DISCORD, _NTFY, _SECOND_DISCORD])
+    parts = notification_service_dependencies([_DISCORD, _NTFY, _SECOND_DISCORD], node_id=_NODE_ID)
 
     named = [
         (service, part.name, part.client_name, part.channel) for service, part in parts.items()
@@ -83,9 +88,15 @@ def test_the_local_database_alerts_notifications_not_saved_and_ends_once_saved_a
     )
 
 
-def test_a_service_s_sends_failed_have_no_alert() -> None:
-    # It would be sent through that service.
+def test_a_service_alerts_its_sends_failed_and_ends_once_they_pass_again() -> None:
     part = _discord_part()
     *_, failing = [part.record(rule=SENDS_FAILED, detected=True) for _ in range(3)]
     assert failing is not None
-    assert failing.alert is None
+    assert failing.alert == HealthAlert(
+        when_failing=NotificationServiceSendsFailing(
+            service_name="discord community", node_id=_NODE_ID
+        ),
+        when_healthy_again=NotificationServiceSendsPassingAgain(
+            service_name="discord community", node_id=_NODE_ID
+        ),
+    )

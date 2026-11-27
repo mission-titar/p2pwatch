@@ -778,7 +778,8 @@ Le **domaine** émet des `Event` purs ; une **politique** pure (`plan_observabil
 nœud + notification, dont le genre donne l'audience COMMUNITY ou OPERATIONS) ;
 l'**étape** `ObservabilityDispatcher` (`application/steps/observability_dispatcher.py`) les applique.
 Il n'envoie pas la notification : il la laisse, sans rien attendre, dans la boîte d'envoi
-(`NotificationOutbox`), une entrée par service de son audience. Chaque service a son travail du
+(`NotificationOutbox`), une entrée par service de son audience, sauf celui que son plan saute
+(`skipped_service`, le service dont l'alerte dit les refus, §10.1). Chaque service a son travail du
 notifieur (`NotificationSender`, `notification sending discord community` dans le journal), qui
 envoie la plus ancienne de ce service à chaque tour, dans `notification_timeout_seconds`, puis la
 retire ; un envoi annulé garde son entrée. Un service qui ne répond plus ne retient ainsi que les
@@ -865,11 +866,14 @@ Un bug n'est pas une panne : c'est notre code, jamais une partie, qui l'a ; le
 qu'un canal a des bugs. Chaque service de notification, une URL configurée, est une partie aussi,
 nommée par le schéma de son URL et son audience, jamais par l'URL, qui porte le jeton d'un webhook
 (`notifier discord community`, `notifier discord community 2` pour un second pareil) : après un
-envoi sans bug, le travail du notifieur enregistre sur la partie de son service s'il a échoué (« sends failed » : refusé par le
-service, `NotificationRefusedError`, ou au-delà de `notification_timeout_seconds`), aux mêmes
-seuils. Une URL
-qu'apprise ne sait pas charger est un refus, écrit à chaque envoi. Aucune alerte ne nomme les
-règles d'un service : elle passerait par ce service. La base locale est une partie aussi
+envoi sans bug, le travail du notifieur enregistre sur la partie de son service s'il a échoué
+(« sends failed » : refusé par le service, `NotificationRefusedError`, ou au-delà de
+`notification_timeout_seconds`), aux mêmes seuils. Une URL qu'apprise ne sait pas charger est un
+refus, écrit à chaque envoi. En échec, « discord community refuses our notifications », puis
+« impact: the notifications sent to it are lost », part par chaque service des opérations sauf le
+sien, qui ne peut porter ses propres refus, comme « discord community accepts our notifications
+again » à son retour : le plan de l'alerte nomme le service que le dispatcher saute, et le seul
+service des opérations en échec n'alerte que le journal. La base locale est une partie aussi
 (`local database`) : à chaque tour, le travail du notifieur y enregistre si la dernière sauvegarde
 de la boîte d'envoi a échoué (« saves failed »), aux mêmes seuils. En échec, « notifications not
 saved in local.db », puis « impact: lost at the next restart », part, depuis la mémoire comme toute

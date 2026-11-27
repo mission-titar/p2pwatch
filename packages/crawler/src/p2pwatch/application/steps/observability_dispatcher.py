@@ -1,5 +1,6 @@
 """The dispatch step: plans an ``Event``, logs it, writes its node metrics, and leaves its
-notification for each service of its audience, awaiting nothing, for the notifier's work to send."""
+notification for each service of its audience but the one its plan skips, awaiting nothing, for
+the notifier's work to send."""
 
 from collections.abc import Sequence
 from typing import Protocol, assert_never
@@ -50,7 +51,11 @@ class ObservabilityDispatcher:
                 self._node_metric_writer.set_gauge(instruction)
         if plan.notification is not None:
             audience = audience_of(plan.notification)
-            services = [service for service in self._services if service.audience is audience]
+            services = [
+                service
+                for service in self._services
+                if service.audience is audience and str(service) != plan.skipped_service
+            ]
             self._leave_notification(plan.notification, services=services)
 
     def _log_at_severity(self, severity: Severity, *, message: str) -> None:
