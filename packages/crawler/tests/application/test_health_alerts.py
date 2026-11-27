@@ -227,8 +227,12 @@ async def test_each_status_alert_starts_and_ends_at_its_reading(
     assert await _status_alerts(*readings) == alerts
 
 
-async def test_the_disk_alert_starts_at_each_dip_under_its_floor_and_has_no_end() -> None:
+async def test_the_disk_alert_starts_at_each_dip_under_its_floor_and_ends_back_at_it() -> None:
     # Two dips, one reading exactly at the floor between them.
     alerts = await _disk_alerts(5 * _GIB, 4 * _GIB, _FLOOR, _FLOOR - 1)
     low, impact = "download disk low: under the 10.0 GiB floor", "impact: no new download"
-    assert alerts == [_warning(low, detail=impact, at=1), _warning(low, detail=impact, at=4)]
+    assert alerts == [
+        _warning(low, detail=impact, at=1),
+        _info("download disk above its floor again", at=3),
+        _warning(low, detail=impact, at=4),
+    ]

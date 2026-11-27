@@ -33,6 +33,7 @@ from p2pwatch.domain.observability.events import (
     DecisionChange,
     DecisionsRecorded,
     DiskSpaceLow,
+    DiskSpaceSufficientAgain,
     DownloadCompleted,
     DownloadQueued,
     Event,
@@ -424,6 +425,10 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 f"under the {event.min_free_bytes / 2**30:.1f} GiB floor",
                 detail="impact: no new download",
                 node_id=event.node_id,
+            )
+        case DiskSpaceSufficientAgain():
+            return _relayed(
+                Severity.INFO, message="download disk above its floor again", node_id=event.node_id
             )
         case NotificationsNotSaved():
             return _relayed(

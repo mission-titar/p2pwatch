@@ -3,7 +3,7 @@
 from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthAlert
 from p2pwatch.domain.health.health_rule import Detections, HealthRule
 from p2pwatch.domain.identifiers import NodeId
-from p2pwatch.domain.observability.events import DiskSpaceLow
+from p2pwatch.domain.observability.events import DiskSpaceLow, DiskSpaceSufficientAgain
 
 # As the disk alert always did: failing at the first reading under the floor, healthy at the first
 # reading at or above it, so each dip alerts once.
@@ -19,6 +19,6 @@ def download_disk_dependency(*, min_free_bytes: int, node_id: NodeId) -> Externa
     disk"."""
     alert = HealthAlert(
         when_failing=DiskSpaceLow(min_free_bytes=min_free_bytes, node_id=node_id),
-        when_healthy_again=None,  # the disk alert has no end, as it never had
+        when_healthy_again=DiskSpaceSufficientAgain(node_id=node_id),
     )
     return ExternalDependency(name="download disk", client_name=None, rules={DISK_SPACE_LOW: alert})

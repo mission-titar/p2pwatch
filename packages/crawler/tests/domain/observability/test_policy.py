@@ -267,6 +267,10 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         ),
     ),
     (
+        ev.DiskSpaceSufficientAgain(node_id=_NODE_ID),
+        _relayed(Severity.INFO, message="download disk above its floor again"),
+    ),
+    (
         ev.NotificationsNotSaved(node_id=_NODE_ID),
         _relayed(
             Severity.WARNING,

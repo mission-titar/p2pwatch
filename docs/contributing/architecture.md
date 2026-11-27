@@ -858,8 +858,8 @@ corrigé.
 Le disque des téléchargements est une partie aussi (`download disk`) : à chaque mesure de l'espace
 libre, la décision de téléchargement enregistre s'il est sous son plancher. Une mesure basse suffit
 pour l'échec (« download disk low: under the 10.0 GiB floor », puis « impact: no new download »),
-une bonne pour redevenir sain, et cette alerte n'a pas de fin. Un nœud sans `download:` n'a pas
-cette partie.
+une bonne pour redevenir sain (« download disk above its floor again »). Un nœud sans `download:`
+n'a pas cette partie.
 Un bug n'est pas une panne : c'est notre code, jamais une partie, qui l'a ; le
 `Supervisor` compte les bugs de chaque objet qu'il reconstruit (§10.2), et aucune ligne ne dit
 qu'un canal a des bugs. Chaque service de notification, une URL configurée, est une partie aussi,
