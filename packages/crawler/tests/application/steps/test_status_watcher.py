@@ -322,43 +322,13 @@ async def test_an_unreachable_reading_tells_nothing_of_the_password() -> None:
     assert alerts == [(0.0, _PASSWORD_REFUSED)]
 
 
-_NO_NETWORK = _status(ed2k=(False, None), kad=(False, None))
-
-
-def _no_network_lines(observability: _Observability) -> list[LoggedLine]:
-    """The log lines of each change of the client's health under "connected to no network"."""
-    return [
-        line
-        for line in observability.health_logger.lines
-        if ", connected to no network: " in line.message
-    ]
-
-
 @pytest.mark.asyncio
-async def test_six_readings_on_no_network_fail_the_client_s_rule_and_nine_on_one_heal_it() -> None:
-    on_ed2k_alone = _status(ed2k=_UP, kad=(False, None))
-    observability = await _run(*[_NO_NETWORK] * 6, *[on_ed2k_alone] * 9)
-    assert _no_network_lines(observability) == [
-        LoggedLine(
-            level="warning", message="client amuled, connected to no network: unknown to failing"
-        ),
-        LoggedLine(
-            level="info", message="client amuled, connected to no network: failing to healthy"
-        ),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_an_unreachable_reading_tells_nothing_of_the_client_s_networks() -> None:
-    held = await _run(*[_NO_NETWORK] * 5, _DOWN)
-    failed = await _run(*[_NO_NETWORK] * 5, _DOWN, _NO_NETWORK)
-
-    # The sixth reading on no network is the seventh reading: aMule unreachable records nothing.
-    assert _no_network_lines(held) == []
-    assert _no_network_lines(failed) == [
-        LoggedLine(
-            level="warning", message="client amuled, connected to no network: unknown to failing"
-        )
+async def test_no_channel_connected_fails_each_channel_and_nothing_of_the_client() -> None:
+    observability = await _run(*[_status(ed2k=(False, None), kad=(False, None))] * 6)
+    failing = [line for line in observability.health_logger.lines if line.level == "warning"]
+    assert [line.message for line in failing] == [
+        "channel amuled ed2k, not connected: unknown to failing",
+        "channel amuled kad, not connected: unknown to failing",
     ]
 
 

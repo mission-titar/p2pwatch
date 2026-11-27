@@ -207,6 +207,22 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
         _relayed(Severity.INFO, message="amuled kad: connectable again"),
     ),
     (
+        ev.SearchesRefused(
+            client_name=ClientName("amuled"), channel=Channel("ed2k"), node_id=_NODE_ID
+        ),
+        _relayed(
+            Severity.WARNING,
+            message="amuled ed2k: the network refuses our searches",
+            detail="impact: no search on ed2k",
+        ),
+    ),
+    (
+        ev.SearchesAcceptedAgain(
+            client_name=ClientName("amuled"), channel=Channel("ed2k"), node_id=_NODE_ID
+        ),
+        _relayed(Severity.INFO, message="amuled ed2k: the network accepts our searches again"),
+    ),
+    (
         ev.ClientUnreachableLasting(
             client_name=ClientName("amuled"), unreachable_for_seconds=120.0, node_id=_NODE_ID
         ),

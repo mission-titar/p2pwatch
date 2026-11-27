@@ -29,11 +29,7 @@ from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
-from p2pwatch.domain.status_reading import (
-    CHANNEL_NOT_CONNECTED,
-    CONNECTED_TO_NO_NETWORK,
-    SEARCHES_FAILED,
-)
+from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED, SEARCHES_FAILED
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger
@@ -285,19 +281,6 @@ async def test_the_works_over_a_client_built_anew_record_on_the_parts_built_once
         "channel amuled ed2k",
         "channel amuled kad",
     ]
-
-
-@pytest.mark.parametrize("downloading", [True, False], ids=["downloading", "not-downloading"])
-async def test_the_status_reading_records_no_network_on_the_client_s_part_downloading_or_not(
-    node: _Node, *, downloading: bool
-) -> None:
-    works = node.client_works(downloading=downloading).over(node.client(FakeAmuleApi()))
-
-    # aMule's status by default: neither channel connected, 6 readings to turn failing.
-    for _ in range(6):
-        await _named(works, name="status reading amuled").work.run_once()
-
-    assert node.parts_changed_under(CONNECTED_TO_NO_NETWORK) == ["client amuled"]
 
 
 async def test_the_status_reading_records_a_channel_on_the_part_its_searches_record_on(

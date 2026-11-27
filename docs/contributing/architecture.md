@@ -840,13 +840,12 @@ d'affilée, il est en échec (« amuled kad: off its network for 5 min ») ; non
 donné n'enregistre rien, si bien que pendant qu'aMule ne répond pas, les canaux gardent leur état.
 Chaque canal a une troisième règle, « searches failed » : chaque recherche enregistre si le réseau
 l'a refusée (`SearchFailedError`) ; 3 refus d'affilée mettent le canal en échec, moins de 2 sur les
-10 dernières recherches le rendent sain. Un client injoignable ou un mot de passe refusé
-n'enregistre rien, si bien qu'une panne d'aMule ne guérit pas le canal.
-Le client a une seconde règle, « connected to no network » : la lecture d'état y enregistre si
-aucun de ses canaux n'est connecté, que le nœud télécharge ou non ; 6 lectures d'affilée le mettent
-en échec, moins de 2 sur les 10 dernières le rendent sain, et aucune alerte ne la nomme. Il en a
-une troisième, « password refused » : la lecture d'état y enregistre si amuled a refusé notre mot
-de passe (`ClientAuthError`). Un refus suffit pour l'échec (« amuled refuses the password: check
+10 dernières recherches le rendent sain. En échec, « amuled ed2k: the network refuses our
+searches », puis « impact: no search on ed2k », part, et « amuled ed2k: the network accepts our
+searches again » à son retour. Un client injoignable ou un mot de passe refusé n'enregistre rien,
+si bien qu'une panne d'aMule ne guérit pas le canal.
+Le client a une seconde règle, « password refused » : la lecture d'état y enregistre si amuled a
+refusé notre mot de passe (`ClientAuthError`). Un refus suffit pour l'échec (« amuled refuses the password: check
 the configuration »), une lecture qui répond pour redevenir sain (« amuled accepts the password
 again »), et une lecture sans réponse n'enregistre rien. Le tour qui a vu le refus lève toujours
 une erreur attendue, écrite par le `Supervisor` à chaque lecture, et le nœud tourne. Le client

@@ -1,9 +1,8 @@
 """Reads one client's status every minute: each reading feeds the channel gauges and the health
-of the client, whether it answers, accepts our password and has any channel connected, and of each
-channel.
+of the client, whether it answers and accepts our password, and of each channel.
 
-A field aMule did not give records nothing, so while aMule does not answer each channel, the
-client's networks and its password keep their health.
+A field aMule did not give records nothing, so while aMule does not answer each channel and the
+client's password keep their health.
 """
 
 from collections.abc import Mapping
@@ -25,7 +24,6 @@ from p2pwatch.domain.status_reading import (
     CHANNEL_NOT_CONNECTABLE,
     CHANNEL_NOT_CONNECTED,
     CLIENT_UNREACHABLE,
-    CONNECTED_TO_NO_NETWORK,
     PASSWORD_REFUSED,
     STATUS_PERIOD,
     ChannelStatus,
@@ -36,7 +34,7 @@ from p2pwatch.domain.status_reading import (
 
 class StatusWatcher(Work):
     """Reads one client's status every minute, a minute from the end of one reading to the start
-    of the next, each of ``channel_dependencies``' channels in it, and whether any is connected."""
+    of the next, each of ``channel_dependencies``' channels in it."""
 
     def __init__(
         self,
@@ -107,10 +105,6 @@ class StatusWatcher(Work):
         if status is not None:
             await self._node_health.record(
                 on=self._client_dependency, rule=PASSWORD_REFUSED, detected=False
-            )
-            on_a_network = any(channel.connected for channel in status.channels)
-            await self._node_health.record(
-                on=self._client_dependency, rule=CONNECTED_TO_NO_NETWORK, detected=not on_a_network
             )
 
     def _publish(self, status: ClientStatus | None) -> None:

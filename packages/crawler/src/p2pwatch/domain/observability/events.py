@@ -109,6 +109,21 @@ class ChannelRecovered:
 
 
 @dataclass(kw_only=True, frozen=True)
+class SearchesRefused:
+    # A channel's network refusing our searches, such as eD2k off its network: once, until accepted.
+    client_name: ClientName
+    channel: Channel
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class SearchesAcceptedAgain:
+    client_name: ClientName
+    channel: Channel
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class ClientUnreachableLasting:
     # No answer from the client's API for ``unreachable_for_seconds``: once, until reachable again.
     client_name: ClientName
@@ -235,6 +250,8 @@ type Event = (
     | ChannelStatusSampled
     | ChannelDegraded
     | ChannelRecovered
+    | SearchesRefused
+    | SearchesAcceptedAgain
     | ClientUnreachableLasting
     | ClientReachableAgain
     | ClientPasswordRefused

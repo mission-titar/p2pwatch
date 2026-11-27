@@ -42,6 +42,8 @@ from p2pwatch.domain.observability.events import (
     NotificationsNotSaved,
     NotificationsSavedAgain,
     ObservationRecorded,
+    SearchesAcceptedAgain,
+    SearchesRefused,
     SearchExecuted,
     SearchFailed,
     SourceFirstUseful,
@@ -365,6 +367,20 @@ def plan_observability(event: Event) -> ObservabilityPlan:
         case ChannelRecovered():
             return _channel_alert(
                 Severity.INFO, event=event, state_phrase=_RECOVERED_PHRASE_BY_FIELD[event.field]
+            )
+        case SearchesRefused():
+            return _relayed(
+                Severity.WARNING,
+                message=f"{event.client_name} {event.channel}: the network refuses our searches",
+                detail=f"impact: no search on {event.channel}",
+                node_id=event.node_id,
+            )
+        case SearchesAcceptedAgain():
+            return _relayed(
+                Severity.INFO,
+                message=f"{event.client_name} {event.channel}: "
+                "the network accepts our searches again",
+                node_id=event.node_id,
             )
         case ClientUnreachableLasting():
             return _relayed(
