@@ -11,7 +11,7 @@ from p2pwatch.application.steps.stall_watch import StallWatch
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
-from p2pwatch.domain.watched_function import WatchedFunction
+from p2pwatch.domain.watched_function import WatchedCrawl, WatchedDownloads, WatchedFunction
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
@@ -20,8 +20,8 @@ pytestmark = pytest.mark.asyncio
 
 _AMULED = ClientName("amuled")
 _NODE_ID = NodeId("n1")
-_ED2K = WatchedFunction(client_name=_AMULED, channel=Channel("ed2k"))
-_KAD = WatchedFunction(client_name=_AMULED, channel=Channel("kad"))
+_ED2K = WatchedCrawl(client_name=_AMULED, channel=Channel("ed2k"))
+_KAD = WatchedCrawl(client_name=_AMULED, channel=Channel("kad"))
 _KAD_STALLED = RelayedLogLine(
     message="search stalled on amuled kad for 15 min",
     detail="cause: see the other alerts or the log",
@@ -31,10 +31,21 @@ _KAD_STALLED = RelayedLogLine(
 _KAD_MOVING_AGAIN = RelayedLogLine(
     message="search on amuled kad moving again", severity=Severity.INFO, node_id=_NODE_ID
 )
+_DOWNLOADS = WatchedDownloads(client_name=_AMULED)
+_DOWNLOADS_STALLED = RelayedLogLine(
+    message="downloads stalled on amuled for 15 min",
+    detail="cause: see the other alerts or the log",
+    severity=Severity.WARNING,
+    node_id=_NODE_ID,
+)
+_DOWNLOADS_MOVING_AGAIN = RelayedLogLine(
+    message="downloads on amuled moving again", severity=Severity.INFO, node_id=_NODE_ID
+)
 
 
 class _Watch:
-    """A stall watch over amuled's two channels, on one fake timeline, and the alerts it sends."""
+    """A stall watch over amuled's two channels and its downloads, on one fake timeline, and the
+    alerts it sends."""
 
     def __init__(self) -> None:
         self.time = FakeTime()
@@ -42,7 +53,7 @@ class _Watch:
         self._observability = ObservabilityOverFakes()
         self.watch = StallWatch(
             client_name=_AMULED,
-            watched=[_ED2K, _KAD],
+            watched=[_ED2K, _KAD, _DOWNLOADS],
             function_progress=self._progress,
             node_health=build_node_health(observability_dispatcher=self._observability.dispatcher),
             monotonic_clock=self.time.monotonic,
@@ -68,9 +79,22 @@ class _Watch:
 
 
 async def test_kad_searches_never_completing_alert_at_15_min_once_until_one_completes() -> None:
-    alerts = await _Watch().alerts_over(minutes=20, moving_from={_ED2K: 0, _KAD: 17})
+    alerts = await _Watch().alerts_over(minutes=20, moving_from={_ED2K: 0, _KAD: 17, _DOWNLOADS: 0})
 
     assert alerts == [(15, _KAD_STALLED), (17, _KAD_MOVING_AGAIN)]
+
+
+async def test_the_downloads_and_kad_stalling_together_each_alert_and_end_on_their_own() -> None:
+    alerts = await _Watch().alerts_over(
+        minutes=20, moving_from={_ED2K: 0, _KAD: 17, _DOWNLOADS: 16}
+    )
+
+    assert alerts == [
+        (15, _KAD_STALLED),
+        (15, _DOWNLOADS_STALLED),
+        (16, _DOWNLOADS_MOVING_AGAIN),
+        (17, _KAD_MOVING_AGAIN),
+    ]
 
 
 async def test_its_first_look_waits_nothing_and_each_next_a_minute() -> None:

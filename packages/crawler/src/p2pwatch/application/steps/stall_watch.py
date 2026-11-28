@@ -2,6 +2,7 @@
 in the latest 15 minutes, such as the crawl on amuled's kad."""
 
 from collections.abc import Sequence
+from typing import assert_never
 
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.function_progress import FunctionProgress
@@ -11,7 +12,12 @@ from p2pwatch.domain.health.external_dependency import HealthAlert
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.events import FunctionMovingAgain, FunctionStalled
 from p2pwatch.domain.status_reading import STATUS_PERIOD
-from p2pwatch.domain.watched_function import STALL_AFTER, WatchedFunction
+from p2pwatch.domain.watched_function import (
+    STALL_AFTER,
+    WatchedCrawl,
+    WatchedDownloads,
+    WatchedFunction,
+)
 
 
 class StallWatch(Work):
@@ -58,7 +64,7 @@ class StallWatch(Work):
 
     def _stall_alert(self, function: WatchedFunction) -> HealthAlert:
         return HealthAlert(
-            about=f"the crawl on {function.client_name} {function.channel}, stall",
+            about=f"{_named(function)}, stall",
             when_failing=FunctionStalled(
                 function=function,
                 stalled_for_seconds=STALL_AFTER.total_seconds(),
@@ -66,3 +72,14 @@ class StallWatch(Work):
             ),
             when_healthy_again=FunctionMovingAgain(function=function, node_id=self._node_id),
         )
+
+
+def _named(function: WatchedFunction) -> str:
+    """``function`` as its stall alert is about it: "the crawl on amuled kad"."""
+    match function:
+        case WatchedCrawl():
+            return f"the crawl on {function.client_name} {function.channel}"
+        case WatchedDownloads():
+            return f"the downloads on {function.client_name}"
+        case _:  # pragma: no cover
+            assert_never(function)

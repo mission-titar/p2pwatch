@@ -22,6 +22,7 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         fail_set_state_for: set[str] | None = None,
         fail_set_completed_for: set[str] | None = None,
         fail_tracked_states: bool = False,
+        fail_tracked_states_read: int | None = None,  # the one read, counted from 1, that fails
         fail_set_seen: bool = False,
     ) -> None:
         self.states: dict[str, DownloadState] = {}
@@ -35,6 +36,8 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         self._fail_set_state_for = fail_set_state_for or set()
         self._fail_set_completed_for = fail_set_completed_for or set()
         self._fail_tracked_states = fail_tracked_states
+        self._fail_tracked_states_read = fail_tracked_states_read
+        self._tracked_states_reads = 0
         self._fail_set_seen = fail_set_seen
         self._target_ids: dict[str, TargetId] = {}
 
@@ -89,7 +92,11 @@ class FakeTrackedDownloadStore(TrackedDownloadWriter, TrackedDownloadReader):
         }
 
     def read_tracked_states(self) -> dict[FileKey, DownloadState]:
-        if self._fail_tracked_states:
+        self._tracked_states_reads += 1
+        if (
+            self._fail_tracked_states
+            or self._tracked_states_reads == self._fail_tracked_states_read
+        ):
             raise StoreError("read_tracked_states failed")
         return {
             FileKey(network=Network.ED2K, native_id=h): state for h, state in self.states.items()

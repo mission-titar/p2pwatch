@@ -48,10 +48,12 @@ class DownloadTracker:
         # Each queued or downloading download's instant from which it counts as lost.
         self._loss_deadline_by_file: dict[FileKey, MonotonicInstant] = {}
 
-    async def track(self, listed_statuses: tuple[DownloadStatus, ...]) -> None:
-        """Follows ``listed_statuses``: a store failure in one step skips that step only."""
+    async def track(self, listed_statuses: tuple[DownloadStatus, ...]) -> bool:
+        """Follows ``listed_statuses``, a store failure in one step skipping that step only;
+        returns whether every write passed."""
         # Step 1 - RECONCILE: NO client I/O left (the list came from step 0) → only StoreError.
         # Every step shares that ONE snapshot: a second read could only contradict the first.
+        passed = True
         try:
             states = self._tracked_download_reader.read_tracked_states()
             self._reconcile_states(states, listed_statuses=listed_statuses)
@@ -59,6 +61,7 @@ class DownloadTracker:
             self._logger.error(
                 "download reconciliation store failure (%s): step skipped, continues", error
             )
+            passed = False
         # Step 2 - COMPLETIONS: we RE-READ ``read_tracked_states`` FRESHLY (logic-download#2).
         # Without it, a failure in step 1 left ``states`` frozen/empty → every completed file →
         # ``states.get is None`` → ignored → NO completion recorded the entire cycle. The re-read
@@ -67,11 +70,13 @@ class DownloadTracker:
         # downstream.
         try:
             fresh_states = self._tracked_download_reader.read_tracked_states()
-            await self._handle_completions(fresh_states, listed_statuses=listed_statuses)
+            if not await self._handle_completions(fresh_states, listed_statuses=listed_statuses):
+                passed = False
         except StoreError as error:
             self._logger.error(
                 "download completions store failure (%s): step skipped, continues", error
             )
+            passed = False
         # Step 2b - PRESENCE + LOSS: ``latest_seen_at`` is for the next start; loss is measured
         # here.
         try:
@@ -81,6 +86,8 @@ class DownloadTracker:
             self._logger.error(
                 "download presence store failure (%s): step skipped, continues", error
             )
+            passed = False
+        return passed
 
     def reset_loss_deadline(self, file: FileKey) -> None:
         """Counts ``lost_after`` from now for ``file``, which the node has just queued."""
@@ -137,12 +144,14 @@ class DownloadTracker:
         states: dict[FileKey, DownloadState],
         *,
         listed_statuses: tuple[DownloadStatus, ...],
-    ) -> None:
-        """Completes each tracked file the client reports ``completed``.
+    ) -> bool:
+        """Completes each tracked file the client reports ``completed``; returns whether each
+        completion was recorded.
 
         A ``failed`` file completes too: the TTL can condemn a download that had in fact finished.
         A store failure on one file skips that file only.
         """
+        recorded = True
         for status in listed_statuses:
             file = status.file
             current = states.get(file)
@@ -158,6 +167,8 @@ class DownloadTracker:
                     file.native_id,
                     error,
                 )
+                recorded = False
+        return recorded
 
     def _reconcile_loss_deadlines(
         self, listed_files: frozenset[FileKey], *, monotonic_now: MonotonicInstant

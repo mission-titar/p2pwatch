@@ -14,6 +14,7 @@ from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.function_progress import FunctionProgress
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.download.candidate import DownloadCandidate
 from p2pwatch.domain.download.disk_space import download_disk_dependency
@@ -24,6 +25,7 @@ from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.observation import FileObservation, ReportedFile
+from p2pwatch.domain.watched_function import WatchedDownloads
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
 from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
@@ -36,6 +38,7 @@ from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 NODE_ID = NodeId("n1")
+DOWNLOADS = WatchedDownloads(client_name=ClientName("amuled"))
 HASH_A = "a" * 32
 HASH_B = "b" * 32
 HASH_C = "c" * 32
@@ -98,6 +101,21 @@ def started(client: FakeDownloadClient) -> list[str]:
     return [request.file.native_id for request in client.started]
 
 
+class DownloadsProgress:
+    """amuled's downloads' progress, on a timeline of its own: whether a round moved them."""
+
+    def __init__(self) -> None:
+        self._time = FakeTime()
+        self.function_progress = FunctionProgress(monotonic_clock=self._time.monotonic)
+
+    async def moved_by(self, cycle: DownloadCycle) -> bool:
+        """Whether a round of ``cycle``, a minute after the first look, moved the downloads."""
+        self.function_progress.time_without_progress(DOWNLOADS)
+        self._time.advance(timedelta(minutes=1))
+        await cycle.run_once()
+        return self.function_progress.time_without_progress(DOWNLOADS) == timedelta(0)
+
+
 def build_cycle(
     *,
     client: FakeDownloadClient,
@@ -117,6 +135,7 @@ def build_cycle(
     poll_interval_seconds: float = 30.0,
     waker: FakeWaker | None = None,
     wait_clock: MonotonicClock | None = None,  # the wait's own: the tracker reads fake_time's
+    function_progress: FunctionProgress | None = None,
 ) -> DownloadCycle:
     fake_time = fake_time or FakeTime()
     wall_clock = wall_clock or fake_time.wall
@@ -174,6 +193,8 @@ def build_cycle(
             observation_reader=observation_reader,
             logger=logger,
         ),
+        function_progress=function_progress
+        or FunctionProgress(monotonic_clock=fake_time.monotonic),
         poll_interval_seconds=poll_interval_seconds,
         monotonic_clock=wait_clock or fake_time.monotonic,
         waker=waker or FakeWaker(),

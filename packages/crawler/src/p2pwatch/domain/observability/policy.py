@@ -74,6 +74,7 @@ from p2pwatch.domain.observability.notification import (
     TierRise,
 )
 from p2pwatch.domain.observability.severity import Severity
+from p2pwatch.domain.watched_function import WatchedCrawl, WatchedDownloads, WatchedFunction
 
 # The works of each function as the alert of its loss names them all.
 _WORKS_OF = {
@@ -216,6 +217,17 @@ def _degraded_impact(event: ChannelDegraded) -> str:
             return "impact: fewer sources can reach our downloads"
         case _:  # pragma: no cover
             assert_never(event.field)
+
+
+def _watched(function: WatchedFunction) -> tuple[str, str]:
+    """What a stall alert calls ``function``, and where it runs: ``("search", "amuled kad")``."""
+    match function:
+        case WatchedCrawl():
+            return "search", f"{function.client_name} {function.channel}"
+        case WatchedDownloads():
+            return "downloads", function.client_name
+        case _:  # pragma: no cover
+            assert_never(function)
 
 
 def _plan_decisions(event: DecisionsRecorded) -> ObservabilityPlan:
@@ -475,20 +487,17 @@ def plan_observability(event: Event) -> ObservabilityPlan:
                 node_id=event.node_id,
             )
         case FunctionStalled():
-            stalled = event.function
+            what, where = _watched(event.function)
             return _relayed(
                 Severity.WARNING,
-                message=f"search stalled on {stalled.client_name} {stalled.channel} "
-                f"for {event.stalled_for_seconds / 60:.0f} min",
+                message=f"{what} stalled on {where} for {event.stalled_for_seconds / 60:.0f} min",
                 detail="cause: see the other alerts or the log",
                 node_id=event.node_id,
             )
         case FunctionMovingAgain():
-            moving = event.function
+            what, where = _watched(event.function)
             return _relayed(
-                Severity.INFO,
-                message=f"search on {moving.client_name} {moving.channel} moving again",
-                node_id=event.node_id,
+                Severity.INFO, message=f"{what} on {where} moving again", node_id=event.node_id
             )
         case CrawlerFunctionLost():
             return _relayed(

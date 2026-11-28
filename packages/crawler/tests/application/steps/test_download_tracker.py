@@ -27,6 +27,7 @@ from tests.support.application.steps.download_cycle import (
     HASH_A,
     HASH_B,
     NODE_ID,
+    DownloadsProgress,
     build_cycle,
     candidate,
     key,
@@ -103,7 +104,7 @@ async def test_every_byte_received_is_not_a_completion() -> None:
 
 
 @pytest.mark.asyncio
-async def test_one_hash_store_failure_does_not_starve_other_completions() -> None:
+async def test_one_file_s_completion_refused_starves_no_other_moving_the_downloads_not() -> None:
     # Regression error-boundary#2: a ``StoreError`` in ``_record_completion`` of hash N
     # used to bubble up to the cycle handler, abandoning N+1, N+2 of the same snapshot. The fix
     # isolates PER HASH (try/except around _record_completion), honoring the "isolated per
@@ -121,11 +122,13 @@ async def test_one_hash_store_failure_does_not_starve_other_completions() -> Non
     tracked_download_store = FakeTrackedDownloadStore(fail_set_completed_for={HASH_A})
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     tracked_download_store.states[HASH_B] = DownloadState.DOWNLOADING
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()
+    assert not await downloads.moved_by(cycle)
     # despite the failure on HASH_A
     assert tracked_download_store.states[HASH_B] is DownloadState.COMPLETED
 
@@ -535,11 +538,13 @@ async def test_monitor_store_error_still_promotes_completions_in_same_cycle() ->
     # set_state(HASH_B, DOWNLOADING) which raises → step 1 crashes, but HASH_A is completed.
     tracked_download_store.states[HASH_A] = DownloadState.DOWNLOADING
     tracked_download_store.states[HASH_B] = DownloadState.QUEUED
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()
+    assert not await downloads.moved_by(cycle)
     # HASH_A's completion is recorded despite the failure of reconcile_states on HASH_B
     assert tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
 
@@ -552,11 +557,27 @@ async def test_tracked_states_store_failure_is_absorbed_at_step_2() -> None:
     # ``except StoreError`` of step 2 separately from that of step 1.
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore(fail_tracked_states=True)
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()  # does not raise (both StoreError are absorbed)
+    # Does not raise: both StoreError are absorbed.
+    assert not await downloads.moved_by(cycle)
+
+
+@pytest.mark.asyncio
+async def test_the_completions_re_read_refused_alone_moves_the_downloads_not() -> None:
+    downloads = DownloadsProgress()
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        # The round's second read: step 1's passed, the starter's will.
+        tracked_download_store=FakeTrackedDownloadStore(fail_tracked_states_read=2),
+        function_progress=downloads.function_progress,
+    )
+
+    assert not await downloads.moved_by(cycle)
 
 
 @pytest.mark.asyncio
@@ -569,11 +590,13 @@ async def test_presence_store_failure_is_absorbed_and_candidates_still_run() -> 
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, filename="x", size_bytes=100)}
     )
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()  # does not raise
+    assert not await downloads.moved_by(cycle)  # does not raise
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED
