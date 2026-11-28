@@ -290,5 +290,5 @@ async def test_webui_a_handler_bug_is_a_500_and_the_app_keeps_serving() -> None:
         metrics = await client.get("/metrics")
         health = await client.get("/health")
     assert metrics.status_code == 500
-    assert (health.status_code, health.json()) == (200, {"status": "ok"})
+    assert (health.status_code, health.json()) == (200, {"status": "UP", "checks": []})
 

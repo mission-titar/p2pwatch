@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient, Response
 from starlette.applications import Starlette
 
 from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
+from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.adapters.driving.webui.app import build_app
 from p2pwatch.application.ports.driving.console_query_runner import ConsoleQueryRun
 from p2pwatch.application.ports.driving.crawl_summarizer import CrawlSummary
@@ -18,6 +19,7 @@ from p2pwatch.application.ports.driving.file_lister import FileListing
 from p2pwatch.application.ports.driving.node_describer import NodeDescription
 from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricListing
 from p2pwatch.application.ports.driving.source_lister import SourceListing
+from p2pwatch.application.use_cases.describe_health import DescribeHealth
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.node_state import NodeState
@@ -97,6 +99,7 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
         source_name_describer=FakeSourceNameDescriber(None),
         console_query_runner=console_query_runner,
         node_metric_lister=FakeNodeMetricLister(NodeMetricListing(samples_by_node_metric={})),
+        health_describer=DescribeHealth(InMemoryOpenAlertStore()),
         amule_url="http://localhost:4711",
     )
 

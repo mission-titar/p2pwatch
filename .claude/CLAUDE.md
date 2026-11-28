@@ -55,6 +55,7 @@ Integration suites (Docker, deselected by default): `docs/contributing/testing.m
 - **Clean / Hexagonal** (`agents/specs/2026-10-18-hexagonal-architecture.md`): six hexagons never import one another. A hexagon's rings are `domain/`, `application/` (`ports/{driving,driven}/`, `use_cases/`, `steps/`, at most one `<x>_lifecycle.py`), `adapters/{driving,driven}/` and `composition/`; imports point inward, and an adapter never imports another adapter.
 - **Every module is declared in `tach.toml`** with exactly the dependencies it uses: a new module or a new import across modules is a new entry there, never a `# tach-ignore`.
 - **A contract per contracted port, or per Writer/Reader pair**: `<Port>Contract` or `<Thing>StoreContract`, an ABC in `tests/contracts/` at the mirror of the port, whose tests state the port's docstrings; each implementation, its fake included, subclasses it as `Test<Implementation>` in its own test module.
+- **A store in memory has no fake**: it is its own double, so every test that needs one uses the store itself (`InMemoryOpenAlertStore`).
 - **A test never patches a module** (`monkeypatch`, `unittest.mock.patch`): what it tunes is a parameter, a port or a callback `Protocol`.
 - **Only the clock adapters read the system clock or sleep**: everything else injects `WallClock`, `MonotonicClock` or `Ticker`.
 - **No I/O in the core**: `domain/` and `application/` import only what `ast-grep/rules/*-imports.yml` lists; a module that does I/O is an adapter.

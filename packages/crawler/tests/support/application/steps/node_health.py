@@ -1,5 +1,6 @@
 """The node's health as the tests of the steps that record checks or open alerts build it."""
 
+from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
@@ -17,4 +18,5 @@ def build_node_health(
     return NodeHealth(
         logger=logger or FakeLogger(),
         observability_dispatcher=observability_dispatcher or ObservabilityOverFakes().dispatcher,
+        open_alert_writer=InMemoryOpenAlertStore(),
     )
