@@ -43,7 +43,7 @@ Every exact text is in appendix D, for lot 7's operator pages.
   service cannot carry its own alert; the others can.* Block 20.
 - **D38. The crawl of each channel and the downloads of each client alert after 15 minutes without progress; a search
   answered empty is progress.** *A rule catches only the outages someone listed, a stall catches the rest; counting
-  results alone would alert a node that finds nothing.* Blocks 90, 100.
+  results alone would alert a node that finds nothing.* Blocks 90, 95, 100.
 - **D39. An alert's second line is a fixed text: what the outage costs, or where its cause may lie.** *The other open
   alerts and the log name the cause; nothing computes it.* Block 10.
 - **D40. A download amuled rejects is notified once.** *The node never tries it again, and it may be an episode.*
@@ -149,7 +149,8 @@ candidate.
 | 70 | `feat/health-endpoint` | the open alerts published, `/health` | ~415 lines, ~19 files |
 | 80 | `feat/open-alerts-on-node-page` | the open alerts on the Node page | 165 lines, 12 files (Corrected: measured) |
 | 85 | `feat/open-alerts-since` | each open alert since when (Corrected: cut out of 80) | 149 lines, 19 files (measured) |
-| 90 | `feat/crawl-stall-alert` | the crawl's stall | ~470 lines, ~19 files |
+| 90 | `feat/crawl-stall-alert` | the crawl's stall | 489 lines, 16 files (Corrected: measured) |
+| 95 | `feat/crawl-progress-on-recorded-files` | a search progressing only on a file recorded (Corrected: cut out of 90) | 80 lines, 6 files (measured) |
 | 100 | `feat/downloads-stall-alert` | the downloads' stall | ~265 lines, ~12 files |
 | 110 | `feat/health-command` | `python -m p2pwatch health` | ~350 lines, ~13 files |
 | 120 | `feat/compose-healthcheck` | compose's healthcheck | ~75 lines, ~7 files |
@@ -163,6 +164,9 @@ candidate.
 One stack from `main`. Every rule alerts (10 to 40) before the node's health keeps the alerts (60), which `/health`
 (70) and the Node page (80) read; the stalls and the healthcheck come next, the five independent pieces last. How the
 sizes were measured: appendix C.
+
+(Corrected: the operator allows this lot up to 22 blocks, on 2026-11-28, when block 95's cut took it to 20; past 22
+the lead asks again.)
 
 ## 6. Limits and scope
 
@@ -330,12 +334,17 @@ A name a teammate derives from the Naming rules is the teammate's; this table fi
 - **`NodeHealth`** (85) takes a `WallClock`, which stamps each alert it opens: an `OpenAlert`, the alert and the
   instant, which the store, `DescribeHealth` and the page then hold.
 
-### Block 90, the crawl's stall
+### Blocks 90 and 95, the crawl's stall
 
-- **The crawl's progress**: `Cataloguer.catalog` returns whether the file was recorded (it returns the rows the file
-  judge wrote today, 0 both for a file recorded with no decision changed and for a `StoreError` absorbed);
+(Corrected: block 90 measured 564 lines once built, cut into 90, the stall on each search completed, and 95, a search
+progressing only on a file recorded; `catalog` returns the rows written or `None`, not a boolean, so that the search's
+log line "N verdict(s) changed", which the troubleshooting pages cite, stays.)
+
+- **The crawl's progress** (95): `Cataloguer.catalog` returns `None` for a file not recorded (it returns the rows the
+  file judge wrote today, 0 both for a file recorded with no decision changed and for a `StoreError` absorbed);
   `SearchWorker._record_observations` returns whether at least one reported file was recorded, or none was reported;
-  `KeywordSearch.run_once` records progress on its channel in the client's `FunctionProgress` only then.
+  `KeywordSearch.run_once` records progress on its channel in the client's `FunctionProgress` only then. In 90, each
+  search completed records it.
 - **`FunctionProgress`** is built once per client by the composition beside the client's dependencies, so a rebuild of
   the client keeps it; it keeps the instant of the node's first watch turn, from which the 15 minutes count, not from a
   rebuilt object's.
