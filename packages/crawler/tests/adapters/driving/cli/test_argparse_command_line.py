@@ -16,6 +16,7 @@ from p2pwatch.application.ports.driving.config_validator import (
     ConfigValidator,
 )
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.application.ports.driving.health_checker import HealthChecker
 from p2pwatch.domain.config_problem import ConfigProblem
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
@@ -26,6 +27,7 @@ from p2pwatch.domain.out_of_space_error import OutOfSpaceError
 from p2pwatch.domain.shutdown_deadline_error import ShutdownDeadlineError
 from tests.fakes.application.use_cases.fake_catalog_merger import FakeCatalogMerger
 from tests.fakes.application.use_cases.fake_config_validator import FakeConfigValidator
+from tests.fakes.application.use_cases.fake_health_checker import FakeHealthChecker
 from tests.fakes.composition.fake_crawler_runner import FakeCrawlerRunner
 
 _CWD = PurePath("/srv/node")
@@ -43,12 +45,14 @@ def _command_line(
     *,
     config_validator: ConfigValidator | None = None,
     catalog_merger: CatalogMerger | None = None,
+    health_checker: HealthChecker | None = None,
     root_logger: logging.Logger | None = None,
 ) -> ArgparseCommandLine:
     return ArgparseCommandLine(
         crawler_runner=crawler_runner or FakeCrawlerRunner(),
         config_validator=config_validator or FakeConfigValidator(),
         catalog_merger=catalog_merger or FakeCatalogMerger(),
+        health_checker=health_checker or FakeHealthChecker(),
         root_logger=root_logger or logging.Logger("root"),
         cwd=_CWD,
     )
@@ -215,6 +219,19 @@ def test_validate_config_prints_one_line_per_problem_of_every_file(
     )
 
 
+@pytest.mark.parametrize(("is_healthy", "exit_code"), [(True, 0), (False, 1)])
+def test_health_checks_the_node_only_and_exits_zero_when_healthy(
+    *, is_healthy: bool, exit_code: int
+) -> None:
+    crawler_runner = FakeCrawlerRunner()
+    health_checker = FakeHealthChecker(is_healthy=is_healthy)
+
+    assert _command_line(crawler_runner, health_checker=health_checker).run(["health"]) == exit_code
+
+    assert health_checker.checks == 1
+    assert crawler_runner.crawled_paths == []
+
+
 def test_the_bare_invocation_is_refused_with_a_usage_line(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -237,12 +254,12 @@ def test_the_help_lists_the_subcommands_and_names_no_observer_mode(
 
     help_text = capsys.readouterr().out
     assert exit_info.value.code == 0
-    assert "{crawl,validate-config,merge}" in help_text
+    assert "{crawl,validate-config,merge,health}" in help_text
     assert "observer" not in help_text  # the config says ``download.enabled``
 
 
 @pytest.mark.parametrize(
-    "argv", [["crawl"], ["validate-config"], ["merge", "--output", "out.db", "a.db"]]
+    "argv", [["crawl"], ["validate-config"], ["merge", "--output", "out.db", "a.db"], ["health"]]
 )
 def test_every_subcommand_logs_at_info_with_its_logger_name(argv: list[str]) -> None:
     root_logger = logging.Logger("root")

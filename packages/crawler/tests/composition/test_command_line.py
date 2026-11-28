@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from p2pwatch.composition.command_line import build_command_line
+from p2pwatch.composition.command_line import WEBUI_PORT, build_command_line
+from tests.fakes.fake_health_endpoint_server import FakeHealthEndpointServer
 from tests.support.adapters.driven.config import shipped_4_1_0
 from tests.support.adapters.driven.persistence_sqlite.helpers import (
     HASH_A,
@@ -24,10 +25,15 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_pre_migration_copie
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _DEPLOY = _REPOSITORY_ROOT / "deploy"
 _ENV = {"AMULE_API_PASSWORD": "s3cr3t"}
+# Never 8080: a node up on the same host publishes it on every interface.
+_UNUSED_WEBUI_PORT = 9
 
 
 def _run(argv: list[str], *, cwd: Path) -> int:
-    return build_command_line(env=_ENV, cwd=cwd, root_logger=logging.getLogger()).run(argv)
+    command_line = build_command_line(
+        env=_ENV, cwd=cwd, root_logger=logging.getLogger(), webui_port=_UNUSED_WEBUI_PORT
+    )
+    return command_line.run(argv)
 
 
 def _paths_argv(*, config: Path, matcher: Path = _DEPLOY / "matcher.yml") -> list[str]:
@@ -71,7 +77,10 @@ def test_the_files_4_1_0_shipped_give_exactly_their_14_problems_one_line_each(
         str(shipped_4_1_0.MATCHER_PATH),
     ]
     command_line = build_command_line(
-        env=shipped_4_1_0.ENV, cwd=tmp_path, root_logger=logging.getLogger()
+        env=shipped_4_1_0.ENV,
+        cwd=tmp_path,
+        root_logger=logging.getLogger(),
+        webui_port=_UNUSED_WEBUI_PORT,
     )
 
     assert command_line.run(argv) == 1
@@ -114,6 +123,21 @@ def test_validate_config_lists_an_absent_targets_beside_a_wrong_matcher(
     [targets_line, matcher_line] = capsys.readouterr().err.splitlines()
     assert targets_line == f"Invalid config: {targets}: No such file or directory"
     assert matcher_line == f"Invalid config: {matcher}: rules: Input should be a valid list"
+
+
+def test_health_asks_the_webui_s_health_on_the_port_given(tmp_path: Path) -> None:
+    with FakeHealthEndpointServer() as webui:
+        command_line = build_command_line(
+            env=_ENV, cwd=tmp_path, root_logger=logging.getLogger(), webui_port=webui.port
+        )
+
+        assert command_line.run(["health"]) == 0
+
+    assert webui.request_lines == ["GET /health HTTP/1.1"]
+
+
+def test_the_webui_is_served_on_the_port_compose_publishes() -> None:
+    assert WEBUI_PORT == 8080
 
 
 def test_merge_of_two_catalogs_named_under_cwd_into_a_new_one_holds_both(

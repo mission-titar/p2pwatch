@@ -15,6 +15,7 @@ from p2pwatch.application.ports.driving.catalog_merger import (
 )
 from p2pwatch.application.ports.driving.config_validator import ConfigValidator
 from p2pwatch.application.ports.driving.crawler_runner import CrawlerRunner
+from p2pwatch.application.ports.driving.health_checker import HealthChecker
 from p2pwatch.domain.config_defaults import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_MATCHER_PATH,
@@ -86,8 +87,8 @@ def _problem_line(problem: ConfigProblem) -> str:
 
 
 class ArgparseCommandLine:
-    """``crawl``, ``validate-config`` and ``merge``, each over its driving port; a relative path,
-    the config's default ones included, is taken under ``cwd``."""
+    """``crawl``, ``validate-config``, ``merge`` and ``health``, each over its driving port; a
+    relative path, the config's default ones included, is taken under ``cwd``."""
 
     def __init__(
         self,
@@ -95,12 +96,14 @@ class ArgparseCommandLine:
         crawler_runner: CrawlerRunner,
         config_validator: ConfigValidator,
         catalog_merger: CatalogMerger,
+        health_checker: HealthChecker,
         root_logger: logging.Logger,
         cwd: PurePath,
     ) -> None:
         self._crawler_runner = crawler_runner
         self._config_validator = config_validator
         self._catalog_merger = catalog_merger
+        self._health_checker = health_checker
         self._root_logger = root_logger
         self._cwd = cwd
 
@@ -127,7 +130,10 @@ class ArgparseCommandLine:
             ),
             under_cwd=self._under_cwd,
         )
+        subparsers.add_parser("health", help="exit 0 when the webui's /health answers 200, else 1")
         args = parser.parse_args(argv)
+        if args.command == "health":
+            return 0 if self._health_checker.check_health() else 1
         if args.command == "crawl":
             return self._crawl(args)
         if args.command == "validate-config":
