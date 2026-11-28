@@ -39,6 +39,7 @@ from p2pwatch.domain.observability.policy import (
 )
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.source import SourceKey
+from p2pwatch.domain.watched_function import WatchedFunction
 
 _AMULED_KAD = ChannelLabels(client_name=ClientName("amuled"), channel=Channel("kad"))
 _AMULED_ED2K = ChannelLabels(client_name=ClientName("amuled"), channel=Channel("ed2k"))
@@ -48,6 +49,7 @@ _SOURCE = SourceKey(network=Network.ED2K, native_id="1f2e3d4c" * 4)
 _FILE = FileKey(network=Network.ED2K, native_id="8f3a1c0b9e7d44a2b6c1f0e9d8a7b6c5")
 _062A = (ev.TargetTitle(target_id=TargetId("062A"), title="Les demoiselles cambrioleuses"),)
 _NODE_ID = NodeId("titar-node-1")
+_AMULED_KAD_CRAWL = WatchedFunction(client_name=ClientName("amuled"), channel=Channel("kad"))
 
 
 def _relayed(
@@ -323,6 +325,18 @@ CASES: list[tuple[ev.Event, ObservabilityPlan]] = [
     (
         ev.WorksHealthyAgain(object_name="client amuled", node_id=_NODE_ID),
         _relayed(Severity.INFO, message="client amuled: every work healthy again"),
+    ),
+    (
+        ev.FunctionStalled(function=_AMULED_KAD_CRAWL, stalled_for_seconds=900.0, node_id=_NODE_ID),
+        _relayed(
+            Severity.WARNING,
+            message="search stalled on amuled kad for 15 min",
+            detail="cause: see the other alerts or the log",
+        ),
+    ),
+    (
+        ev.FunctionMovingAgain(function=_AMULED_KAD_CRAWL, node_id=_NODE_ID),
+        _relayed(Severity.INFO, message="search on amuled kad moving again"),
     ),
     *[
         (

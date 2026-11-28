@@ -14,6 +14,7 @@ from p2pwatch.domain.file_target_decision import FileTargetDecision
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.source import SourceKey
+from p2pwatch.domain.watched_function import WatchedFunction
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -216,6 +217,20 @@ class WorksHealthyAgain:
 
 
 @dataclass(kw_only=True, frozen=True)
+class FunctionStalled:
+    # A watched function, such as the crawl on amuled's kad, without progress for that long.
+    function: WatchedFunction
+    stalled_for_seconds: float
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
+class FunctionMovingAgain:
+    function: WatchedFunction
+    node_id: NodeId
+
+
+@dataclass(kw_only=True, frozen=True)
 class SourceFirstUseful:
     # A source read useful for the first time on this node (source points spec, D5).
     source: SourceKey
@@ -271,6 +286,8 @@ type Event = (
     | CrawlerFunctionLost
     | WorksStillFailing
     | WorksHealthyAgain
+    | FunctionStalled
+    | FunctionMovingAgain
     | SourceFirstUseful
     | SourceReappeared
     | CrawlerStarted

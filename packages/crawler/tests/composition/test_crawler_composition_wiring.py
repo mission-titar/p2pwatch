@@ -419,7 +419,8 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
     # status reading, download and source tracking: two calls, their notifications left awaiting
     # nothing. An eD2k search: the other keyword's search ahead (its budget, then two calls), the
     # spacing, its budget and three calls. A Kad search: a spacing for each keyword on its Kad
-    # word, two budgets and four calls. The webui's thread watch awaits nothing: the margin alone.
+    # word, two budgets and four calls. The stall watch and the webui's thread watch await
+    # nothing: the margin alone.
     assert [message for message in caplog.messages if ": time limit " in message] == [
         "status reading amuled: time limit 1020 s",
         "download tracking amuled: time limit 1020 s",
@@ -428,6 +429,7 @@ async def test_each_work_is_handed_the_time_limit_its_path_bounds(
         "search 'keroro mission' amuled ed2k: time limit 2400 s",
         "search 'keroro' amuled kad: time limit 2100 s",
         "search 'keroro mission' amuled kad: time limit 2100 s",
+        "stall watch amuled: time limit 300 s",
         "webui: time limit 300 s",
     ]
 

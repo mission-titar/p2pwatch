@@ -38,6 +38,8 @@ from p2pwatch.domain.observability.events import (
     DownloadQueued,
     Event,
     FreeSpaceSampled,
+    FunctionMovingAgain,
+    FunctionStalled,
     NotificationServiceSendsFailing,
     NotificationServiceSendsPassingAgain,
     NotificationsNotSaved,
@@ -470,6 +472,22 @@ def plan_observability(event: Event) -> ObservabilityPlan:
             return _relayed(
                 Severity.INFO,
                 message=f"{event.object_name}: every work healthy again",
+                node_id=event.node_id,
+            )
+        case FunctionStalled():
+            stalled = event.function
+            return _relayed(
+                Severity.WARNING,
+                message=f"search stalled on {stalled.client_name} {stalled.channel} "
+                f"for {event.stalled_for_seconds / 60:.0f} min",
+                detail="cause: see the other alerts or the log",
+                node_id=event.node_id,
+            )
+        case FunctionMovingAgain():
+            moving = event.function
+            return _relayed(
+                Severity.INFO,
+                message=f"search on {moving.client_name} {moving.channel} moving again",
                 node_id=event.node_id,
             )
         case CrawlerFunctionLost():
