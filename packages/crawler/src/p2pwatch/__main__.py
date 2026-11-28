@@ -5,10 +5,10 @@ import os
 import sys
 from pathlib import Path
 
-from p2pwatch.composition.command_line import build_command_line
+from p2pwatch.composition.command_line import WEBUI_PORT, build_command_line
 
 if __name__ == "__main__":  # pragma: no cover
     command_line = build_command_line(
-        env=os.environ, cwd=Path.cwd(), root_logger=logging.getLogger()
+        env=os.environ, cwd=Path.cwd(), root_logger=logging.getLogger(), webui_port=WEBUI_PORT
     )
     raise SystemExit(command_line.run(sys.argv[1:]))

@@ -169,7 +169,7 @@ développement et en CI, jamais dans une image.
 
 | Hexagone | Paquet | Ports pilotants | Ce que pilotent ses adaptateurs |
 |---|---|---|---|
-| `p2pwatch` | `packages/crawler/` | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise |
+| `p2pwatch` | `packages/crawler/` | `CrawlerRunner`, `ConfigValidator`, `CatalogMerger`, `HealthChecker` pour la ligne de commande, un port par page ou contrôle de la webui, `/metrics` compris, que Prometheus appelle | amuleapi, les deux bases SQLite, les horloges, apprise, le `/health` de sa propre webui |
 | `p2pwatch_amule` | `packages/amule/` | `ContainerBooter`, `PortSyncLoopRunner`, `ApiHealthChecker` | `amule.conf`, s6, gluetun, les comptes et répertoires d'amuled, `amuleapi --set-admin-pass-stdin`, le REST d'amuleapi (santé, préférences) |
 | `vex_checks` | `packages/vex_checks/` | `ImageClaimsChecker`, `AppliedClaimsChecker`, `ClaimCoverageChecker` | les VEX, le SBOM Syft, Grype, le SARIF, les règles source d'ast-grep |
 | `template_checks` | `packages/template_checks/` | `LogicFreeChecker`, `TemplateAttributeLister` | les gabarits de la webui |
@@ -246,8 +246,9 @@ flowchart TB
   démarrage, réévalue le catalogue si la politique a changé, puis le `Supervisor` fait tourner les
   `Work` des objets qu'il a fait construire (§10.2).
 - **`composition/command_line.py`** (`build_command_line`) construit les ports `crawl`,
-  `validate-config` et `merge` (le cas d'usage `MergeCatalogs`) et les passe à la ligne de
-  commande, `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;
+  `validate-config`, `merge` (le cas d'usage `MergeCatalogs`) et `health` (`CheckHealth`, qui lit
+  le `/health` de la webui sur `127.0.0.1` en 2 s au plus) et les passe à la ligne de commande,
+  `adapters/driving/cli/`, qui lit la sous-commande et rend son code de sortie ;
   `python -m p2pwatch` lit l'état du processus et la lance.
 
 ## 5. Les recherches
@@ -999,7 +1000,7 @@ deux fois de suite n'alerte pas.
 |---|---|
 | Câblage | `composition/command_line.py` (`build_command_line`), `composition/crawler_composition.py` (`CrawlerComposition`), `composition/work_time_limits.py` (`AmuleWorkTimeLimits`, la limite de temps de chaque `Work`), `composition/amule_client_works.py` (`AmuleClientWorks`, les `Work` sur le client aMule ; `DownloadSteps`, les étapes de téléchargement construites une fois), `composition/webui_restartable.py` (`WebuiRestartableBuilder`, la webui telle que le nœud la construit à chaque redémarrage), `composition/notifier_restartable.py` (`NotifierRestartableBuilder`, le notifieur tel que le nœud le construit à chaque redémarrage) |
 | Démarrage et supervision | `application/crawler_lifecycle.py` (`CrawlerLifecycle`), `application/steps/supervisor.py` (`Supervisor`), `application/steps/work.py` (`Work`, `SupervisedWork`), `domain/crawler_function.py` (`CrawlerFunction`, ce que sert chaque `Work`) |
-| Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`) |
+| Ligne de commande | `__main__.py`, `adapters/driving/cli/` (`crawl`, `validate-config`, `merge`, `health`) |
 | Les `Work` | `application/steps/` : `keyword_search.py` (`KeywordSearch`, un `Work`, sur les `SearchWorker` de `search_worker.py`, leur `BackoffRegistry` de `backoff_registry.py` et leur `BackoffSaver` de `backoff_saver.py`), `status_watcher.py` (`StatusWatcher`, un `Work`), `download_cycle.py` (`DownloadCycle`, un `Work`, et ses étapes `download_tracker.py`, `download_decider.py`, `download_starter.py`), `source_watcher.py` (`SourceWatcher`, un `Work`), `webui_thread_watch.py` (`WebuiThreadWatch`, un `Work`), `download_labeler.py` (qui nomme un téléchargement dans les notifications des deux) |
 | Cas d'usage | `application/use_cases/` : les pages (`summarize_crawl.py`, `describe_*.py`, `list_*.py`, `run_console_query.py`), le contrôle de redémarrage (`request_shutdown.py`), `validate_config.py`, `merge_catalogs.py` |
 | Config | `adapters/driven/config/` (lit les trois fichiers, résout `${VAR}`, les contrôle par leurs schémas pydantic et construit les objets du domaine), `domain/crawler_config.py` (les objets de `crawler.yml` et sa règle entre valeurs) |
