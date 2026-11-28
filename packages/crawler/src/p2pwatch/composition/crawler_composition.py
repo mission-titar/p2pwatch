@@ -466,6 +466,7 @@ class CrawlerComposition(CrawlerRunner):
                 logger=StdlibLogger(NodeHealth.__module__),
                 observability_dispatcher=observability_dispatcher,
                 open_alert_writer=open_alert_store,
+                wall_clock=wall_clock,
             )
             supervisor = Supervisor(
                 run_state_reader=run_state_store,

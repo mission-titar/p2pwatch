@@ -117,10 +117,11 @@ class BackoffStateDisplay:
 @dataclass(kw_only=True, frozen=True)
 class OpenAlertDisplay:
     """One alert open on /node, in its notification's two lines: "amuled unreachable for 2 min",
-    then "impact: no search, no download", the second blank when it has none."""
+    then "impact: no search, no download", the second blank when it has none; since when, in UTC."""
 
     message: str
     detail: str
+    opened_at: str
 
 
 @dataclass(kw_only=True, frozen=True)

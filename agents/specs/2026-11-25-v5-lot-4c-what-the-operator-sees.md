@@ -52,7 +52,7 @@ Every exact text is in appendix D, for lot 7's operator pages.
 ### What the operator reads
 
 - **D41. The Node page lists the open alerts, each with since when.** *The operator sees what is wrong now without
-  scrolling the notifications.* Blocks 70, 80.
+  scrolling the notifications.* Blocks 70, 80, 85.
 - **D42. `/health` answers 503 while an object is left unrepaired, 200 under any other alert; Docker reads it through
   `python -m p2pwatch health`, with a 30-minute start period.** *An unrepaired object is the one state a crawler
   restart may fix, and every outage has its alert; the start period covers a v4 catalog's first upgrade.* Blocks 70,
@@ -147,7 +147,8 @@ candidate.
 | 50 | `refactor/node-health-test-builder` | the tests' `NodeHealth` built by one helper | ~70 lines, ~12 files |
 | 60 | `refactor/alerts-open-and-end-through-node-health` | the node's health opening and ending every alert | ~290 lines, ~14 files |
 | 70 | `feat/health-endpoint` | the open alerts published, `/health` | ~415 lines, ~19 files |
-| 80 | `feat/open-alerts-on-node-page` | the open alerts on the Node page | ~240 lines, ~14 files |
+| 80 | `feat/open-alerts-on-node-page` | the open alerts on the Node page | 165 lines, 12 files (Corrected: measured) |
+| 85 | `feat/open-alerts-since` | each open alert since when (Corrected: cut out of 80) | 149 lines, 19 files (measured) |
 | 90 | `feat/crawl-stall-alert` | the crawl's stall | ~470 lines, ~19 files |
 | 100 | `feat/downloads-stall-alert` | the downloads' stall | ~265 lines, ~12 files |
 | 110 | `feat/health-command` | `python -m p2pwatch health` | ~350 lines, ~13 files |
@@ -225,7 +226,7 @@ introduces, and corrects the glossary lines, `architecture.md` and the docstring
 | `NotificationServiceSendsFailing`, `NotificationServiceSendsPassingAgain` | events | 20 | `sends failed`'s alert and its end |
 | `SearchesRefused`, `SearchesAcceptedAgain` | events | 30 | `searches failed`'s alert and its end |
 | `HealthAlert` | domain value, widened | 40 | an alert: its opening event, its end event (required), what it is about; sent by a rule, a stall or the supervisor |
-| `open alert` | glossary word, `OpenAlert` from block 80 | 60 | an alert opened and not yet ended, with the wall-clock instant it opened from block 80 |
+| `open alert` | glossary word, `OpenAlert` from block 85 | 60 | an alert opened and not yet ended, with the wall-clock instant it opened from block 85 |
 | `OpenAlertWriter`, `OpenAlertReader`, `InMemoryOpenAlertStore` | driven port pair, adapter | 70 | the alerts open, set by the node's health on the crawler's loop, read by the webui's thread |
 | `watched function` | glossary word, `WatchedFunction` | 90 | a function as its progress is watched: the crawl on one channel of a client, the downloads on a client; never a `part`, which is an external dependency |
 | `stall` | glossary word | 90 | a watched function that made no progress for `STALL_AFTER`; never a download making no progress, nor `lost`, D34's bugs verdict |
@@ -308,7 +309,7 @@ A name a teammate derives from the Naming rules is the teammate's; this table fi
 ### Block 70, the alerts open published, `/health`
 
 - **`NodeHealth`** takes an `OpenAlertWriter`, which it sets whole at each change: the alerts open, unstamped until
-  block 80.
+  block 85.
 - **`InMemoryOpenAlertStore`** swaps a new tuple at each write, after `InMemoryStatusReadingStore`; its contract reads
   from another thread. No fake store: a store in memory is its own double (the operator), so the tests use it; the
   block records that rule in `.claude/CLAUDE.md`, the first to apply it.
@@ -319,13 +320,15 @@ A name a teammate derives from the Naming rules is the teammate's; this table fi
   unrepaired object is the one lasting state a crawler restart may repair; a function lost restarts at once, and an
   outage has its alert (Kubernetes' liveness excludes the dependencies).
 
-### Block 80, the Node page
+### Blocks 80 and 85, the Node page
 
-- **`NodeHealth`** takes a `WallClock`, which stamps each alert it opens: an `OpenAlert`, the alert and the instant,
-  which the store then holds; `architecture.md` describes the alerts open.
-- **`DescribeNode`** reads the alerts open beside `NodeStateReader`; `NodeDescription` gains them; `node.html` gains a
-  section `Alerts`, each alert's two lines from the policy's plan of its opening event, and `No alert open`; its
-  existing tests' `<td>` matchers kept exact.
+(Corrected: block 80 measured 22 files once built, cut into 80, the alerts on the page, and 85, their instant.)
+
+- **`DescribeNode`** (80) reads the alerts open beside `NodeStateReader`; `NodeDescription` gains them; `node.html`
+  gains a section `Alerts`, each alert's two lines from the policy's plan of its opening event, and `No alert open`;
+  its existing tests' `<td>` matchers kept exact; `architecture.md` describes the alerts open.
+- **`NodeHealth`** (85) takes a `WallClock`, which stamps each alert it opens: an `OpenAlert`, the alert and the
+  instant, which the store, `DescribeHealth` and the page then hold.
 
 ### Block 90, the crawl's stall
 
@@ -555,7 +558,7 @@ inventory-alerts.md`, `-webui.md`, `-faults.md`, gitignored); re-checked by the 
 tree, then the spec's reviewer's recounts and the agent's third estimate over the re-cut blocks; plus or minus 25 %.
 Blocks 10, 70 and 90 came at 22, 23 and 21 files, each brought under the bound: in 10, `detail` defaults to none, so
 only the 9 test modules that compare an alert change; in 70, the glossary's `open alert` goes in 60, the `OpenAlert`
-value and `architecture.md` in 80, and no fake store is written (the fourth estimate counted 70 at 22 with them: 19
+value in 85 and `architecture.md` in 80, and no fake store is written (the fourth estimate counted 70 at 22 with them: 19
 without); in 90, the rebuild row is tested in `test_amule_client_works.py`, the watch's time limit needs no new method,
 and `download_cycle.py`'s rewording and `architecture.md` go in 100.
 

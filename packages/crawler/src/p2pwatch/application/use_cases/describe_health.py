@@ -13,8 +13,8 @@ class DescribeHealth(HealthDescriber):
     def describe_health(self) -> HealthDescription:
         return HealthDescription(
             unrepaired_objects=tuple(
-                alert.when_failing.object_name
-                for alert in self._open_alert_reader.read_open_alerts()
-                if isinstance(alert.when_failing, WorksStillFailing)
+                open_alert.alert.when_failing.object_name
+                for open_alert in self._open_alert_reader.read_open_alerts()
+                if isinstance(open_alert.alert.when_failing, WorksStillFailing)
             )
         )

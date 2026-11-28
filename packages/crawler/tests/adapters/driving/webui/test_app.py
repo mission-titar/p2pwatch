@@ -48,6 +48,7 @@ from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
 from p2pwatch.domain.health.external_dependency import HealthAlert
+from p2pwatch.domain.health.open_alert import OpenAlert
 from p2pwatch.domain.identifiers import Channel, ClientName, FileId, Keyword, NodeId, SourceId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
@@ -212,7 +213,7 @@ def _app_on_fakes(
     controls: _Controls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
     node_metric_lister: NodeMetricLister = _NO_NODE_METRIC_LISTER,
-    open_alerts: tuple[HealthAlert, ...] = (),
+    open_alerts: tuple[OpenAlert, ...] = (),
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
@@ -341,7 +342,7 @@ def populated_app() -> tuple[Starlette, str]:
 # ---------------------------------------------------------------------------
 
 
-async def _health(*open_alerts: HealthAlert) -> tuple[int, Any]:
+async def _health(*open_alerts: OpenAlert) -> tuple[int, Any]:
     app = _app_on_fakes(open_alerts=open_alerts)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health")
@@ -1262,18 +1263,20 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
     assert "None" not in text  # an unknown value shows blank
 
 
-async def _alert_cells(*open_alerts: HealthAlert) -> list[str]:
+async def _alert_cells(*open_alerts: OpenAlert) -> list[str]:
     """The cells of /node's alerts, the node tracking no download and no backoff."""
     page = await _page(_app_on_fakes(open_alerts=open_alerts), url="/node")
     return re.findall(r"<td>([^<]*)</td>", page)
 
 
 @pytest.mark.asyncio
-async def test_node_page_lists_each_alert_open_in_its_two_lines() -> None:
+async def test_node_page_lists_each_alert_open_in_its_two_lines_since_its_opening_in_utc() -> None:
     assert await _alert_cells(UNREACHABLE, UNREPAIRED) == [
         *("amuled unreachable for 2 min", "impact: no search, no download"),
+        "2026-06-12T14:02:00.000000+00:00",
         "client amuled: status reading still failing after 3 rebuilds",
         "cause: a bug of its own, or a shared state a crawler restart would renew",
+        "2026-06-12T14:17:30.000000+00:00",
     ]
 
 
@@ -1285,13 +1288,16 @@ async def test_node_page_shows_an_alert_whose_opening_relays_no_line_by_its_log_
         when_failing=ClientUnreachable(client_name=amuled),
         when_healthy_again=ClientReachableAgain(client_name=amuled, node_id=node_id),
     )
-    assert await _alert_cells(alert) == ["amuled unreachable", ""]
+    open_alert = OpenAlert(alert=alert, opened_at=datetime(2026, 6, 12, 14, 2, tzinfo=UTC))
+    assert await _alert_cells(open_alert) == [
+        *("amuled unreachable", "", "2026-06-12T14:02:00.000000+00:00")
+    ]
 
 
 @pytest.mark.asyncio
 async def test_node_page_says_when_no_alert_is_open() -> None:
     page = await _page(_app_on_fakes(), url="/node")
-    assert '<td colspan="2">No alert open.</td>' in page
+    assert '<td colspan="3">No alert open.</td>' in page
 
 
 @pytest.mark.asyncio

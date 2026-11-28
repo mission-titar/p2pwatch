@@ -33,6 +33,7 @@ from p2pwatch.domain.observability.notification_sends import (
 from p2pwatch.domain.observability.severity import Severity
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
+from tests.fakes.adapters.driven.fake_loop_wall_clock import FakeLoopWallClock
 from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotificationOutboxStore
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
@@ -42,7 +43,7 @@ from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
-from tests.support.virtual_time import VirtualLoop
+from tests.support.virtual_time import EPOCH, VirtualLoop
 
 _DAY = timedelta(days=1)
 _CRAWL_LOST = "the crawl lost after 3 rebuilds"
@@ -178,6 +179,7 @@ class _Node:
             node_health=build_node_health(
                 observability_dispatcher=self.observability.dispatcher,
                 open_alert_writer=self.open_alerts,
+                wall_clock=FakeLoopWallClock(loop),
             ),
             node_id=NodeId("n1"),
             logger=self.logger,
@@ -332,7 +334,11 @@ def test_a_client_left_unrepaired_keeps_its_alert_open_for_the_node_page(
 
     node.run_for(1500.0)
 
-    assert [alert.about for alert in node.open_alerts.read_open_alerts()] == ["client amuled"]
+    # Opened at its third rebuild in vain, 904 s in.
+    open_alerts = node.open_alerts.read_open_alerts()
+    assert [(open_alert.alert.about, open_alert.opened_at) for open_alert in open_alerts] == [
+        ("client amuled", EPOCH + timedelta(seconds=904))
+    ]
 
 
 @pytest.mark.parametrize(

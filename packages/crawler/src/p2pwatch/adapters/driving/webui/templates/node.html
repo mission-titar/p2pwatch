@@ -8,6 +8,7 @@
       <tr>
         <th>Alert</th>
         <th>Detail</th>
+        <th>Since</th>
       </tr>
     </thead>
     <tbody>
@@ -15,9 +16,10 @@
       <tr>
         <td>{{ open_alert.message }}</td>
         <td>{{ open_alert.detail }}</td>
+        <td>{{ open_alert.opened_at }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="2">No alert open.</td></tr>
+      <tr><td colspan="3">No alert open.</td></tr>
       {% endfor %}
     </tbody>
   </table>

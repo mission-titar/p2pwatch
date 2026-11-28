@@ -1,14 +1,18 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.domain.health.external_dependency import HealthAlert
+from p2pwatch.domain.health.open_alert import OpenAlert
 from p2pwatch.domain.identifiers import ClientName, NodeId
 from p2pwatch.domain.observability.events import WorksHealthyAgain, WorksStillFailing
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.status_reading import CLIENT_UNREACHABLE, client_dependency
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
+from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 pytestmark = pytest.mark.asyncio
@@ -32,11 +36,13 @@ class _AmuleHealth:
         self.logger = FakeLogger()
         self.observability = ObservabilityOverFakes()
         self.open_alerts = InMemoryOpenAlertStore()
+        self.time = FakeTime()
         self.amule = client_dependency(ClientName("amuled"), node_id=_NODE_ID)
         self.node_health = NodeHealth(
             logger=self.logger,
             observability_dispatcher=self.observability.dispatcher,
             open_alert_writer=self.open_alerts,
+            wall_clock=self.time.wall,
         )
 
     async def check(self, *, detected: bool, times: int) -> None:
@@ -155,7 +161,9 @@ async def test_an_alert_opened_is_set_open_after_the_ones_opened_before() -> Non
     await amule_health.check(detected=True, times=3)
     await amule_health.node_health.open_alert(_UNREPAIRED)
     open_alerts = amule_health.open_alerts.read_open_alerts()
-    assert [alert.about for alert in open_alerts] == ["client amuled, unreachable", "client amuled"]
+    assert [open_alert.alert.about for open_alert in open_alerts] == [
+        *("client amuled, unreachable", "client amuled")
+    ]
 
 
 async def test_an_alert_ended_is_set_open_no_more() -> None:
@@ -163,4 +171,25 @@ async def test_an_alert_ended_is_set_open_no_more() -> None:
     await amule_health.node_health.open_alert(_UNREPAIRED)
     await amule_health.check(detected=True, times=3)
     await amule_health.check(detected=False, times=9)
-    assert amule_health.open_alerts.read_open_alerts() == (_UNREPAIRED,)
+    open_alerts = amule_health.open_alerts.read_open_alerts()
+    assert [open_alert.alert for open_alert in open_alerts] == [_UNREPAIRED]
+
+
+async def test_an_alert_opened_is_set_open_since_the_wall_clock_s_instant_at_its_opening() -> None:
+    amule_health = _AmuleHealth()
+    amule_health.time.advance(timedelta(minutes=2))
+    await amule_health.node_health.open_alert(_UNREPAIRED)
+    assert amule_health.open_alerts.read_open_alerts() == (
+        OpenAlert(alert=_UNREPAIRED, opened_at=datetime(2026, 6, 12, 0, 2, tzinfo=UTC)),
+    )
+
+
+async def test_an_alert_opened_again_while_open_keeps_the_instant_of_its_first_opening() -> None:
+    amule_health = _AmuleHealth()
+    amule_health.time.advance(timedelta(minutes=2))
+    await amule_health.node_health.open_alert(_UNREPAIRED)
+    amule_health.time.advance(timedelta(minutes=2))
+    await amule_health.node_health.open_alert(_unrepaired("search 'titar' amuled kad"))
+    assert amule_health.open_alerts.read_open_alerts() == (
+        OpenAlert(alert=_UNREPAIRED, opened_at=datetime(2026, 6, 12, 0, 2, tzinfo=UTC)),
+    )
