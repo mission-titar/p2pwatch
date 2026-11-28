@@ -4,11 +4,11 @@ from datetime import timedelta
 
 from p2pwatch.application.steps.function_progress import FunctionProgress
 from p2pwatch.domain.identifiers import Channel, ClientName
-from p2pwatch.domain.watched_function import WatchedFunction
+from p2pwatch.domain.watched_function import WatchedCrawl
 from tests.fakes.adapters.driven.fake_time import FakeTime
 
-_ED2K = WatchedFunction(client_name=ClientName("amuled"), channel=Channel("ed2k"))
-_KAD = WatchedFunction(client_name=ClientName("amuled"), channel=Channel("kad"))
+_ED2K = WatchedCrawl(client_name=ClientName("amuled"), channel=Channel("ed2k"))
+_KAD = WatchedCrawl(client_name=ClientName("amuled"), channel=Channel("kad"))
 
 
 def test_every_function_counts_from_the_first_look_at_any_the_time_before_for_none() -> None:

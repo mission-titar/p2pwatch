@@ -3,34 +3,46 @@ from datetime import timedelta
 
 import pytest
 
+from p2pwatch.application.ports.driven.free_space_meter import FreeSpaceMeter
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.download_cycle import DownloadCycle
+from p2pwatch.application.steps.function_progress import FunctionProgress
+from p2pwatch.application.steps.stall_watch import StallWatch
 from p2pwatch.domain.client_errors import (
     ClientAuthError,
     ClientUnreachableError,
     DownloadRejectedError,
     ReadRejectedError,
 )
+from p2pwatch.domain.download.policy import DownloadVerdict
 from p2pwatch.domain.download.states import DownloadState
+from p2pwatch.domain.identifiers import ClientName
 from p2pwatch.domain.matching.identifiers import TargetId
+from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.wake_subject import WakeSubject
 from tests.fakes.adapters.driven.fake_blocking_monotonic_clock import FakeBlockingMonotonicClock
 from tests.fakes.adapters.driven.fake_broken_free_space_meter import FakeBrokenFreeSpaceMeter
 from tests.fakes.adapters.driven.fake_decision_reader import FakeDecisionReader
 from tests.fakes.adapters.driven.fake_download_client import FakeDownloadClient
+from tests.fakes.adapters.driven.fake_free_space_meter import FakeFreeSpaceMeter
+from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_observation_reader import FakeObservationReader
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_tracked_download_store import FakeTrackedDownloadStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.support.application.steps.download_cycle import (
+    DOWNLOADS,
     HASH_A,
     HASH_B,
+    NODE_ID,
+    DownloadsProgress,
     build_cycle,
     candidate,
     observation,
     started,
     status,
 )
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 # A refused read is the daemon unavailable, not a download refused.
@@ -39,22 +51,26 @@ _UNAVAILABLE = [ClientUnreachableError("daemon down"), ReadRejectedError("amuled
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", _UNAVAILABLE, ids=["unreachable", "rejected"])
-async def test_unreachable_client_is_tolerated_and_iteration_skipped(failure: Exception) -> None:
+async def test_an_unavailable_client_skips_the_round_moving_the_downloads_not(
+    failure: Exception,
+) -> None:
     client = FakeDownloadClient(list_failures=[failure])
     tracked_download_store = FakeTrackedDownloadStore()
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=FakeDecisionReader(
             candidates=(candidate(HASH_A, target_id=TargetId("062A")),)
         ),
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()  # does not raise
+    assert not await downloads.moved_by(cycle)  # does not raise
     assert client.started == []  # iteration skipped (no candidates processed)
 
 
 @pytest.mark.asyncio
-async def test_store_error_is_absorbed() -> None:
+async def test_a_candidate_store_error_is_absorbed_moving_the_downloads_not() -> None:
     client = FakeDownloadClient()
     tracked_download_store = FakeTrackedDownloadStore(
         fail_record=True
@@ -65,17 +81,19 @@ async def test_store_error_is_absorbed() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, filename="x", size_bytes=1)}
     )
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()  # does not raise (StoreError absorbed)
+    assert not await downloads.moved_by(cycle)  # does not raise (StoreError absorbed)
 
 
 @pytest.mark.asyncio
-async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
+async def test_start_unreachable_keeps_queued_and_is_tolerated_moving_the_downloads_not() -> None:
     # start raises ClientUnreachableError → tolerated at cycle level; the download stays QUEUED
     # (record_queued already happened) → caught up next round. write-before-network invariant.
     client = FakeDownloadClient(start_failures=[ClientUnreachableError("down")])
@@ -86,19 +104,21 @@ async def test_start_unreachable_keeps_queued_and_is_tolerated() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, filename="x", size_bytes=1)}
     )
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()  # does not raise
+    assert not await downloads.moved_by(cycle)  # does not raise
     assert tracked_download_store.states[HASH_A] is DownloadState.QUEUED  # stays queued → caught up
     assert client.started == []
 
 
 @pytest.mark.asyncio
-async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
+async def test_completion_and_new_candidate_in_the_same_cycle_moving_the_downloads() -> None:
     # HASH_A completed via the SHARED files (recorded this cycle); HASH_B is a new candidate
     # (queued + link).
     client = FakeDownloadClient(listed=[(status(HASH_A, completed=True),)])
@@ -110,13 +130,15 @@ async def test_completion_and_new_candidate_in_the_same_cycle() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_B: observation(HASH_B, filename="b.avi", size_bytes=100)}
     )
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()
+    assert await downloads.moved_by(cycle)
     assert (
         tracked_download_store.states[HASH_A] is DownloadState.COMPLETED
     )  # shared and out of the queue
@@ -241,7 +263,7 @@ async def test_monitor_store_failure_is_isolated_and_does_not_starve_candidates(
 
 
 @pytest.mark.asyncio
-async def test_start_store_failure_is_tolerated_and_does_not_raise() -> None:
+async def test_start_store_failure_is_tolerated_moving_the_downloads_not() -> None:
     # start_unlisted raises StoreError (set_state fails while marking a rejected start) →
     # tolerated (log), the cycle does not raise. Contract "never raises".
     # start rejected → start_unlisted tries set_state(FAILED), which raises
@@ -254,13 +276,15 @@ async def test_start_store_failure_is_tolerated_and_does_not_raise() -> None:
     observation_reader = FakeObservationReader(
         observations={HASH_A: observation(HASH_A, filename="x", size_bytes=1)}
     )
+    downloads = DownloadsProgress()
     cycle = build_cycle(
         client=client,
         tracked_download_store=tracked_download_store,
         decision_reader=decision_reader,
         observation_reader=observation_reader,
+        function_progress=downloads.function_progress,
     )
-    await cycle.run_once()  # does NOT raise (step-4 StoreError tolerated)
+    assert not await downloads.moved_by(cycle)  # does NOT raise (step-4 StoreError tolerated)
 
 
 @pytest.mark.asyncio
@@ -289,6 +313,87 @@ async def test_an_unmeasurable_output_directory_admits_nothing_and_does_not_rais
     assert HASH_A not in tracked_download_store.states
     assert observability.logger.lines == []
     assert observability.node_metric_store.read_samples() == ()
+
+
+async def _alerts_over_a_quarter_hour(
+    *, target_id: TargetId, size_bytes: int, free_space_meter: FreeSpaceMeter, logger: FakeLogger
+) -> list[tuple[int, str]]:
+    """Each alert's minute and first line while amuled's downloads take a round a minute on one
+    candidate for 15 min, the stall watch looking before each round."""
+    fake_time, observability = FakeTime(), ObservabilityOverFakes()
+    progress = FunctionProgress(monotonic_clock=fake_time.monotonic)
+    cycle = build_cycle(
+        client=FakeDownloadClient(),
+        tracked_download_store=FakeTrackedDownloadStore(),
+        decision_reader=FakeDecisionReader(candidates=(candidate(HASH_A, target_id=target_id),)),
+        observation_reader=FakeObservationReader(
+            observations={HASH_A: observation(HASH_A, filename="x", size_bytes=size_bytes)}
+        ),
+        free_space_meter=free_space_meter,
+        observability_dispatcher=observability.dispatcher,
+        fake_time=fake_time,
+        logger=logger,
+        function_progress=progress,
+    )
+    watch = StallWatch(
+        client_name=ClientName("amuled"),
+        watched=[DOWNLOADS],
+        function_progress=progress,
+        node_health=build_node_health(observability_dispatcher=observability.dispatcher),
+        monotonic_clock=fake_time.monotonic,
+        node_id=NODE_ID,
+    )
+    alerts: list[tuple[int, str]] = []
+    for minute in range(16):
+        already = len(observability.notifications)
+        await watch.run_once()
+        await cycle.run_once()
+        sent = observability.notifications[already:]
+        alerts += [
+            (minute, alert.message) for _, alert in sent if isinstance(alert, RelayedLogLine)
+        ]
+        fake_time.advance(timedelta(minutes=1))
+    return alerts
+
+
+# A target the config no longer lists counts as complete; 2 MB do not fit in the 1 MB free.
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("target_id", "size_bytes", "verdict"),
+    [
+        (TargetId("S9E999Z"), 1, DownloadVerdict.SKIP_COMPLETE),
+        (TargetId("062A"), 2_000_000, DownloadVerdict.SKIP_DISK_CAP),
+    ],
+    ids=["complete", "deferred-for-disk-space"],
+)
+async def test_rounds_skipping_or_deferring_their_candidate_stall_nothing(
+    *, target_id: TargetId, size_bytes: int, verdict: DownloadVerdict
+) -> None:
+    logger = FakeLogger()
+
+    alerts = await _alerts_over_a_quarter_hour(
+        target_id=target_id,
+        size_bytes=size_bytes,
+        free_space_meter=FakeFreeSpaceMeter(1_000_000),
+        logger=logger,
+    )
+
+    assert alerts == []
+    assert f"candidate file={HASH_A} → {verdict.value} (skipped/deferred)" in [
+        line.message for line in logger.lines
+    ]
+
+
+@pytest.mark.asyncio
+async def test_an_output_directory_removed_stalls_the_downloads_at_15_min() -> None:
+    alerts = await _alerts_over_a_quarter_hour(
+        target_id=TargetId("062A"),
+        size_bytes=1,
+        free_space_meter=FakeBrokenFreeSpaceMeter(),
+        logger=FakeLogger(),
+    )
+
+    assert alerts == [(15, "downloads stalled on amuled for 15 min")]
 
 
 def _idle_cycle(*, wait_clock: MonotonicClock, waker: FakeWaker | None = None) -> DownloadCycle:

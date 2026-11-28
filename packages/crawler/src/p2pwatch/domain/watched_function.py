@@ -1,5 +1,5 @@
 """``WatchedFunction``: a function as its progress is watched, which stalls after 15 minutes
-without progress."""
+without progress: the crawl on one channel of a client, or the downloads on a client."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -11,9 +11,19 @@ STALL_AFTER = timedelta(minutes=15)
 
 
 @dataclass(kw_only=True, frozen=True)
-class WatchedFunction:
-    """A function as its progress is watched: the crawl on one channel of a client, such as
-    amuled's kad; never a part, which is an external dependency."""
+class WatchedCrawl:
+    """The crawl on one channel of a client, such as amuled's kad, which a search progresses."""
 
     client_name: ClientName
     channel: Channel
+
+
+@dataclass(kw_only=True, frozen=True)
+class WatchedDownloads:
+    """The downloads on a client, such as amuled's, which a download round progresses."""
+
+    client_name: ClientName
+
+
+# Never a part, which is an external dependency.
+type WatchedFunction = WatchedCrawl | WatchedDownloads

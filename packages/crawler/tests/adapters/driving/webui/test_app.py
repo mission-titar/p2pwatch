@@ -70,7 +70,7 @@ from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
-from p2pwatch.domain.watched_function import WatchedFunction
+from p2pwatch.domain.watched_function import WatchedCrawl
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.application.use_cases.fake_console_query_runner import FakeConsoleQueryRunner
 from tests.fakes.application.use_cases.fake_crawl_summarizer import FakeCrawlSummarizer
@@ -363,7 +363,7 @@ async def test_health_is_503_naming_an_object_left_unrepaired() -> None:
     )
 
 
-_KAD_CRAWL = WatchedFunction(client_name=ClientName("amuled"), channel=Channel("kad"))
+_KAD_CRAWL = WatchedCrawl(client_name=ClientName("amuled"), channel=Channel("kad"))
 _STALLED = OpenAlert(
     alert=HealthAlert(
         about="the crawl on amuled kad, stall",

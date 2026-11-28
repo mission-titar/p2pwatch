@@ -917,7 +917,7 @@ its own, or a shared state a crawler restart would renew`, et sa fin, `client am
 healthy again`, quand le compte repart de zéro. Chaque `Work` sert une fonction du
 crawler (`CrawlerFunction`) : la webui, les notifications, le crawl (les recherches de chaque client
 P2P) et, sur un nœud qui télécharge, les téléchargements (le suivi des téléchargements et des
-sources) ; la lecture du statut n'en sert aucune. Une fonction est perdue quand chaque objet qui la
+sources) ; la lecture du statut et la veille des blocages (§10.3) n'en servent aucune. Une fonction est perdue quand chaque objet qui la
 sert est non réparé et que chacun de ses `Work` est en échec, un `Work` qui n'a jamais tourné ne
 l'étant pas, et un objet dont la troisième reconstruction a levé, qui ne tient plus de `Work`,
 comptant comme en échec :
@@ -950,6 +950,28 @@ l'identique ; sans service configuré, rien n'est laissé à envoyer, et le noti
 travail. Le `Supervisor` ne fait tourner que les `Work` des objets qu'il a fait construire : aucun
 `Work` n'échappe à une reconstruction. Les `Work` rendus prennent leur premier tour comme au démarrage du nœud, sans les 60 s qui suivent un
 bug : ce sont des objets neufs, même si leurs tours d'avant restent jugés.
+
+### 10.3 Les fonctions qui ne progressent plus
+
+Une règle n'attrape que les pannes que quelqu'un a listées ; le nœud surveille aussi le symptôme, le
+progrès de chaque fonction surveillée (`WatchedFunction`) : le crawl sur chaque canal d'un client
+(`WatchedCrawl`) et, sur un nœud qui télécharge, les téléchargements d'un client
+(`WatchedDownloads`). Une recherche fait progresser le crawl sur son canal dès qu'un fichier de sa
+réponse est enregistré, ou quand sa réponse est vide, si bien qu'un nœud qui ne trouve rien n'alerte
+pas. Un tour de téléchargement fait progresser les téléchargements quand chacune de ses étapes est
+faite : la liste du client lue, chaque écriture du suivi passée, l'espace libre mesuré et les
+candidats écrits, les téléchargements démarrés. Un candidat sauté pour une cible complète, ou
+différé faute d'espace, laisse le tour fait. `FunctionProgress`, construit une fois par client à
+côté de ses parties, garde le dernier progrès de chacune sur l'horloge monotone : un client
+reconstruit compte à partir de là où l'ancien s'était arrêté. `StallWatch`, un `Work` par client
+(`stall watch amuled`), regarde chaque minute : une fonction sans progrès depuis 15 minutes
+(`STALL_AFTER`), comptées depuis son dernier progrès ou depuis le premier regard, ouvre son alerte
+par `NodeHealth`, « search stalled on amuled kad for 15 min » ou « downloads stalled on amuled for 15
+min », puis « cause: see the other alerts or the log », et la finit au premier progrès, « search on
+amuled kad moving again » ou « downloads on amuled moving again ». Une panne envoie ainsi plusieurs
+alertes : amuled injoignable envoie la sienne à 2 minutes, puis une par fonction surveillée à 15.
+15 minutes dépassent deux fois l'attente la plus longue du backoff (2 x 390 s) : un canal refusé
+deux fois de suite n'alerte pas.
 
 ## 11. Invariants de conception (récapitulatif)
 
@@ -986,7 +1008,7 @@ bug : ce sont des objets neufs, même si leurs tours d'avant restent jugés.
 | Frontière amuleapi | `adapters/driven/amule_api/` (client / mapping / erreurs) ; ports `application/ports/driven/search_client.py`, `download_client.py`, `source_client.py` |
 | Persistance | `adapters/driven/persistence_sqlite/` (migrations `.sql`, magasins et lecteurs) |
 | Observabilité | `domain/observability/`, `application/steps/observability_dispatcher.py`, `application/steps/notification_outbox.py`, `application/steps/notification_sender.py`, `adapters/driven/observability/` |
-| Santé | `domain/health/` (dépendances externes, règles, alertes, transitions), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`, la partie de la base locale et sa règle « saves failed »), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé et son alerte envoyée), `application/steps/supervisor.py` (le dernier objet de chaque constructeur, gardé, reconstruit quand ses bugs reviennent, et fermé ; `BUGS`, les seuils de ses bugs), `composition/amule_client_restartable.py` (le client aMule construit à neuf), `composition/webui_restartable.py` (la webui construite à neuf), `composition/notifier_restartable.py` (le notifieur construit à neuf) |
+| Santé | `domain/health/` (dépendances externes, règles, alertes, transitions), `domain/observability/notification_sends.py` (les services de notification, la partie de chacun, leur règle « sends failed », `NotificationRefusedError`, la partie de la base locale et sa règle « saves failed »), `application/steps/node_health.py` (chaque vérification enregistrée, chaque changement journalisé et son alerte envoyée), `application/steps/function_progress.py` et `application/steps/stall_watch.py` (le dernier progrès de chaque fonction surveillée, son alerte après 15 minutes sans), `application/steps/supervisor.py` (le dernier objet de chaque constructeur, gardé, reconstruit quand ses bugs reviennent, et fermé ; `BUGS`, les seuils de ses bugs), `composition/amule_client_restartable.py` (le client aMule construit à neuf), `composition/webui_restartable.py` (la webui construite à neuf), `composition/notifier_restartable.py` (le notifieur construit à neuf) |
 | WebUI | `adapters/driving/webui/` (in-process, thread dédié) |
 | Conteneur d'aMule | `packages/amule/src/p2pwatch_amule/` (câblage : `composition/command_line.py` (`build_command_line`) ; le one-shot : la ligne de commande appelle le port `ContainerBooter`, implémenté par la composition `composition/boot_composition.py` (`BootComposition`), qui lit les variables puis lance le cas d'usage `application/use_cases/boot_container.py` ; le port-sync : la ligne de commande appelle le port `PortSyncLoopRunner`, implémenté par la composition `composition/port_sync_composition.py` (`PortSyncComposition`), qui assemble `application/port_sync_lifecycle.py`) ; image `packages/amule/Dockerfile`, services s6 sous `packages/amule/docker/services.d/` |
 | Déploiement | `deploy/compose.yml` (le cœur et un `include:`), `deploy/ed2k/` (`service`, `direct` et `vpn.compose.yml`) |

@@ -46,7 +46,7 @@ from p2pwatch.domain.download.disk_space import download_disk_dependency
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.status_reading import channel_dependency, client_dependency
-from p2pwatch.domain.watched_function import WatchedFunction
+from p2pwatch.domain.watched_function import WatchedCrawl, WatchedDownloads, WatchedFunction
 
 
 def works_in_start_order[W](
@@ -125,10 +125,14 @@ class DownloadSteps:
         )
 
     def works_over(
-        self, client: AmuleApiClient, *, time_limit: timedelta
+        self,
+        client: AmuleApiClient,
+        *,
+        time_limit: timedelta,
+        function_progress: FunctionProgress,
     ) -> tuple[SupervisedWork, SupervisedWork]:
         """Download tracking and source tracking over ``client``, each turn cut at
-        ``time_limit``."""
+        ``time_limit``, each round done recorded in ``function_progress``."""
         download_cycle = DownloadCycle(
             client_name=self._client_name,
             download_client=client,
@@ -141,6 +145,7 @@ class DownloadSteps:
                 observation_reader=self._observation_store,
                 logger=StdlibLogger(DownloadStarter.__module__),
             ),
+            function_progress=function_progress,
             poll_interval_seconds=self._config.poll_interval_seconds,
             monotonic_clock=self._monotonic_clock,
             waker=self._waker,
@@ -214,9 +219,9 @@ class AmuleClientWorks:
             for channel in channels
         }
         self._node_id = node_id
-        self._crawl = tuple(
-            WatchedFunction(client_name=client_name, channel=channel) for channel in channels
-        )
+        crawl = [WatchedCrawl(client_name=client_name, channel=channel) for channel in channels]
+        downloads = [] if download_steps is None else [WatchedDownloads(client_name=client_name)]
+        self._watched: tuple[WatchedFunction, ...] = (*crawl, *downloads)
         self._function_progress = FunctionProgress(monotonic_clock=monotonic_clock)
 
     def over(self, client: AmuleApiClient) -> list[SupervisedWork]:
@@ -244,7 +249,7 @@ class AmuleClientWorks:
         )
         stall_watch = StallWatch(
             client_name=self._client_name,
-            watched=self._crawl,
+            watched=self._watched,
             function_progress=self._function_progress,
             node_health=self._node_health,
             monotonic_clock=self._monotonic_clock,
@@ -259,7 +264,11 @@ class AmuleClientWorks:
             tracking=(
                 ()
                 if download_steps is None
-                else download_steps.works_over(client, time_limit=self._time_limits.of_tracking())
+                else download_steps.works_over(
+                    client,
+                    time_limit=self._time_limits.of_tracking(),
+                    function_progress=self._function_progress,
+                )
             ),
             searches=keyword_searches(
                 search_workers=[search_worker],

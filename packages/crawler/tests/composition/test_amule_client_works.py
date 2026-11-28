@@ -386,3 +386,29 @@ async def test_amuled_unreachable_alerts_at_2_min_and_stalls_each_channel_at_15_
         (16, "search on amuled kad moving again"),
         (24, "amuled reachable again"),
     ]
+
+
+async def test_on_a_node_that_downloads_amuled_unreachable_stalls_its_downloads_too(
+    node: _Node,
+) -> None:
+    api = FakeAmuleApi(status={"ec_connected": True, "ed2k": _CONNECTED, "kad": _CONNECTED})
+    api.overrides[_LOGIN] = lambda _request: error(503, code="daemon_unreachable")
+    works = node.client_works(downloading=True).over(node.client(api))
+
+    unreachable = await node.alerts_minute_by_minute(works, minutes=16)
+    del api.overrides[_LOGIN]
+    answering = await node.alerts_minute_by_minute(works, minutes=1)
+
+    assert unreachable == [
+        (2, "amuled unreachable for 2 min"),
+        (15, "search stalled on amuled ed2k for 15 min"),
+        (15, "search stalled on amuled kad for 15 min"),
+        (15, "downloads stalled on amuled for 15 min"),
+    ]
+    # The disk under this node's floor is an outage of its own: the downloads' round is done.
+    assert answering == [
+        (16, "download disk low: under the 4294967296.0 GiB floor"),
+        (16, "search on amuled ed2k moving again"),
+        (16, "search on amuled kad moving again"),
+        (16, "downloads on amuled moving again"),
+    ]

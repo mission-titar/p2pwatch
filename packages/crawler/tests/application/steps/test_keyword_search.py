@@ -37,7 +37,7 @@ from p2pwatch.domain.observability.severity import Severity
 from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.status_reading import channel_dependency
-from p2pwatch.domain.watched_function import WatchedFunction
+from p2pwatch.domain.watched_function import WatchedCrawl
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -109,7 +109,7 @@ class _Searches:
         return StallWatch(
             client_name=ClientName("amuled"),
             watched=[
-                WatchedFunction(client_name=ClientName("amuled"), channel=channel)
+                WatchedCrawl(client_name=ClientName("amuled"), channel=channel)
                 for channel in client.channels()
             ],
             function_progress=self.function_progress,

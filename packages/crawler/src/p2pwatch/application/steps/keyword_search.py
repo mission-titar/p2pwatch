@@ -17,7 +17,7 @@ from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.status_reading import SEARCHES_FAILED
-from p2pwatch.domain.watched_function import WatchedFunction
+from p2pwatch.domain.watched_function import WatchedCrawl
 
 
 # The time limit of the search of ``keyword`` on ``channel``.
@@ -49,7 +49,7 @@ class KeywordSearch(Work):
         self._node_health = node_health
         self._channel_dependency = channel_dependency
         self._function_progress = function_progress
-        self._function = WatchedFunction(client_name=search_worker.client_name, channel=channel)
+        self._function = WatchedCrawl(client_name=search_worker.client_name, channel=channel)
 
     def __str__(self) -> str:
         return f"search '{self._keyword}' {self._search_worker.client_name} {self._channel}"
