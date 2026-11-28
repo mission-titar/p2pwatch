@@ -75,6 +75,7 @@ from p2pwatch.application.ports.driving.console_query_runner import ConsoleQuery
 from p2pwatch.application.ports.driving.crawl_summarizer import ClientSummary, CrawlSummarizer
 from p2pwatch.application.ports.driving.file_describer import FileDescriber
 from p2pwatch.application.ports.driving.file_lister import FileLister
+from p2pwatch.application.ports.driving.health_describer import HealthDescriber
 from p2pwatch.application.ports.driving.node_describer import NodeDescriber
 from p2pwatch.application.ports.driving.node_metric_lister import NodeMetricLister
 from p2pwatch.application.ports.driving.shutdown_requester import ShutdownRequester
@@ -755,6 +756,7 @@ def build_app(
     source_name_describer: SourceNameDescriber,
     console_query_runner: ConsoleQueryRunner,
     node_metric_lister: NodeMetricLister,
+    health_describer: HealthDescriber,
     amule_url: str,
 ) -> Starlette:
     """Build and return the wired Starlette application.
@@ -766,7 +768,7 @@ def build_app(
     ``node_describer`` /node, ``file_lister`` /files and a target's page, ``file_describer`` a
     file's page, ``source_lister`` /sources, ``source_describer`` a source's page,
     ``source_name_describer`` a name's page, ``console_query_runner`` the console,
-    ``node_metric_lister`` /metrics.
+    ``node_metric_lister`` /metrics, ``health_describer`` /health.
 
     ``amule_url`` is the base the nav's aMule entry points at (design §9); the caller reads it
     from ``webui.amule_url``."""
@@ -789,7 +791,13 @@ def build_app(
     # ------------------------------------------------------------------
 
     async def handle_health(request: Request) -> JSONResponse:
-        return JSONResponse({"status": "ok"})
+        # MicroProfile Health's body: a check per object left unrepaired, each DOWN, and 503.
+        unrepaired_objects = health_describer.describe_health().unrepaired_objects
+        checks = [{"name": object_name, "status": "DOWN"} for object_name in unrepaired_objects]
+        return JSONResponse(
+            {"status": "DOWN" if checks else "UP", "checks": checks},
+            status_code=503 if checks else 200,
+        )
 
     async def handle_dashboard(request: Request) -> Response:
         summary = crawl_summarizer.summarize_crawl()

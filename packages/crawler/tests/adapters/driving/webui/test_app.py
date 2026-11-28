@@ -15,6 +15,7 @@ from starlette.applications import Starlette
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from p2pwatch.adapters.driven.config.targets_schema import targets_from_document
+from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.adapters.driving.webui.app import (
     _catalog_entry_displays,
     _normalize_direction,
@@ -38,6 +39,7 @@ from p2pwatch.application.ports.driving.node_metric_lister import (
 from p2pwatch.application.ports.driving.source_describer import SourceDescription
 from p2pwatch.application.ports.driving.source_lister import SourceListing
 from p2pwatch.application.ports.driving.source_name_describer import SourceNameDescription
+from p2pwatch.application.use_cases.describe_health import DescribeHealth
 from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDirection
 from p2pwatch.domain.console_query import QueryFailure
 from p2pwatch.domain.coverage import TargetCoverage, TargetCoverageStatus
@@ -45,6 +47,7 @@ from p2pwatch.domain.download.states import DownloadState, FailureReason, Waitin
 from p2pwatch.domain.file_history import FileHistory
 from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.file_target_decision import DatedDecision
+from p2pwatch.domain.health.external_dependency import HealthAlert
 from p2pwatch.domain.identifiers import Channel, ClientName, FileId, Keyword, NodeId, SourceId
 from p2pwatch.domain.interval import Interval
 from p2pwatch.domain.known_source import KnownSource
@@ -80,6 +83,7 @@ from tests.fakes.application.use_cases.fake_source_name_describer import (
     DescribeSourceNameCall,
     FakeSourceNameDescriber,
 )
+from tests.support.domain.health_alerts import UNREACHABLE, UNREPAIRED
 
 # ---------------------------------------------------------------------------
 # Parsed-config helpers (since P4a build_app takes already-parsed config)
@@ -207,10 +211,13 @@ def _app_on_fakes(
     controls: _Controls = _NO_CONTROLS,
     amule_url: str = _AMULE_URL,
     node_metric_lister: NodeMetricLister = _NO_NODE_METRIC_LISTER,
+    open_alerts: tuple[HealthAlert, ...] = (),
 ) -> Starlette:
     import p2pwatch.adapters.driving.webui
 
     webui_directory = Path(p2pwatch.adapters.driving.webui.__file__).parent
+    open_alert_store = InMemoryOpenAlertStore()
+    open_alert_store.set_open_alerts(open_alerts)
     return build_app(
         target_segments=_targets() if target_segments is None else target_segments,
         templates_directory=webui_directory / "templates",
@@ -226,6 +233,7 @@ def _app_on_fakes(
         amule_url=amule_url,
         console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
         node_metric_lister=node_metric_lister,
+        health_describer=DescribeHealth(open_alert_store),
     )
 
 
@@ -330,14 +338,29 @@ def populated_app() -> tuple[Starlette, str]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_health_returns_200(populated_app: tuple[Starlette, str]) -> None:
-    """/health → 200 {"status": "ok"}."""
-    app, _ = populated_app
+async def _health(*open_alerts: HealthAlert) -> tuple[int, Any]:
+    app = _app_on_fakes(open_alerts=open_alerts)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    return resp.status_code, resp.json()
+
+
+@pytest.mark.asyncio
+async def test_health_is_503_naming_an_object_left_unrepaired() -> None:
+    assert await _health(UNREACHABLE, UNREPAIRED) == (
+        503,
+        {"status": "DOWN", "checks": [{"name": "client amuled", "status": "DOWN"}]},
+    )
+
+
+@pytest.mark.asyncio
+async def test_health_is_200_under_an_outage_alert_alone() -> None:
+    assert await _health(UNREACHABLE) == (200, {"status": "UP", "checks": []})
+
+
+@pytest.mark.asyncio
+async def test_health_is_200_with_no_alert_open() -> None:
+    assert await _health() == (200, {"status": "UP", "checks": []})
 
 
 @pytest.mark.asyncio
@@ -1273,6 +1296,7 @@ async def test_a_template_reading_what_its_context_lacks_raises(
         amule_url=_AMULE_URL,
         console_query_runner=_NO_CONSOLE_QUERY_RUNNER,
         node_metric_lister=_NO_NODE_METRIC_LISTER,
+        health_describer=DescribeHealth(InMemoryOpenAlertStore()),
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         with pytest.raises(UndefinedError):

@@ -2,6 +2,7 @@
 ends through."""
 
 from p2pwatch.application.ports.driven.logger import Logger
+from p2pwatch.application.ports.driven.open_alert_writer import OpenAlertWriter
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthAlert
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
@@ -9,13 +10,18 @@ from p2pwatch.domain.health.health_rule import HealthRule, HealthState
 
 class NodeHealth:
     """The node's health: every part's checks come here, each change logged and its rule's alert
-    opened or ended, such as "amuled unreachable for 2 min"; it keeps the alerts open."""
+    opened or ended, such as "amuled unreachable for 2 min"; it keeps and publishes those open."""
 
     def __init__(
-        self, *, logger: Logger, observability_dispatcher: ObservabilityDispatcher
+        self,
+        *,
+        logger: Logger,
+        observability_dispatcher: ObservabilityDispatcher,
+        open_alert_writer: OpenAlertWriter,
     ) -> None:
         self._logger = logger
         self._observability_dispatcher = observability_dispatcher
+        self._open_alert_writer = open_alert_writer
         self._open: dict[str, HealthAlert] = {}  # by what each is about: "client amuled"
 
     async def record(self, *, on: ExternalDependency, rule: HealthRule, detected: bool) -> None:
@@ -39,6 +45,7 @@ class NodeHealth:
         if alert.about in self._open:
             return
         self._open[alert.about] = alert
+        self._open_alert_writer.set_open_alerts(tuple(self._open.values()))
         await self._observability_dispatcher.dispatch(alert.when_failing)
 
     async def end_alert(self, *, about: str) -> None:
@@ -46,4 +53,5 @@ class NodeHealth:
         repaired; one not open does nothing."""
         if (alert := self._open.pop(about, None)) is None:
             return
+        self._open_alert_writer.set_open_alerts(tuple(self._open.values()))
         await self._observability_dispatcher.dispatch(alert.when_healthy_again)

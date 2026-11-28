@@ -49,6 +49,7 @@ from p2pwatch.adapters.driven.asyncio_waker import AsyncioWaker
 from p2pwatch.adapters.driven.config.crawler_config import load_config
 from p2pwatch.adapters.driven.glibc_memory_releaser import GlibcMemoryReleaser
 from p2pwatch.adapters.driven.in_memory_node_metric_store import InMemoryNodeMetricStore
+from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.adapters.driven.in_memory_status_reading_store import InMemoryStatusReadingStore
 from p2pwatch.adapters.driven.observability.apprise_notifier import AppriseNotifier
 from p2pwatch.adapters.driven.persistence_sqlite.errors import OpeningInterruptedError
@@ -117,6 +118,7 @@ from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.application.use_cases.describe_file import DescribeFile
+from p2pwatch.application.use_cases.describe_health import DescribeHealth
 from p2pwatch.application.use_cases.describe_node import DescribeNode
 from p2pwatch.application.use_cases.describe_source import DescribeSource
 from p2pwatch.application.use_cases.describe_source_name import DescribeSourceName
@@ -280,6 +282,7 @@ class CrawlerComposition(CrawlerRunner):
         config: LoadedConfig,
         status_reading_store: InMemoryStatusReadingStore,
         node_metric_store: InMemoryNodeMetricStore,
+        open_alert_store: InMemoryOpenAlertStore,
         shutdown_requester: RequestShutdown,
         engine: MatchingEngine,
         wall_clock: WallClock,
@@ -288,8 +291,8 @@ class CrawlerComposition(CrawlerRunner):
     ) -> UvicornServerThread:
         """The read-only webui on its OWN thread + loop (spec §5), not started yet. It shares with
         the crawler the parsed config (immutable), the engine and the clocks (no state after their
-        construction), the status reading and node metric stores (whole snapshots swapped, never
-        mutated) and the run state (every change scheduled on the crawler's loop).
+        construction), the status reading, node metric and open alert stores (whole snapshots
+        swapped, never mutated) and the run state (every change scheduled on the crawler's loop).
         It reads through its OWN ``ThreadReadConnections``, one connection per thread, each opened
         by ``database_opener``."""
         crawler_config = config.crawler_config
@@ -354,6 +357,7 @@ class CrawlerComposition(CrawlerRunner):
                 }
             ),
             node_metric_lister=ListNodeMetrics(node_metric_store),
+            health_describer=DescribeHealth(open_alert_store),
             amule_url=crawler_config.webui.amule_url,
         )
         return UvicornServerThread(
@@ -455,9 +459,11 @@ class CrawlerComposition(CrawlerRunner):
                 leave_notification=outbox.leave,
                 services=tuple(service_parts),
             )
+            open_alert_store = InMemoryOpenAlertStore()
             node_health = NodeHealth(
                 logger=StdlibLogger(NodeHealth.__module__),
                 observability_dispatcher=observability_dispatcher,
+                open_alert_writer=open_alert_store,
             )
             supervisor = Supervisor(
                 run_state_reader=run_state_store,
@@ -511,6 +517,7 @@ class CrawlerComposition(CrawlerRunner):
                     config=config,
                     status_reading_store=status_reading_store,
                     node_metric_store=node_metric_store,
+                    open_alert_store=open_alert_store,
                     shutdown_requester=shutdown_requester,
                     engine=engine,
                     wall_clock=wall_clock,

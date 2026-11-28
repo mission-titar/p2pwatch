@@ -1,5 +1,6 @@
 import pytest
 
+from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.domain.health.external_dependency import HealthAlert
 from p2pwatch.domain.identifiers import ClientName, NodeId
@@ -25,14 +26,17 @@ _REACHABLE_AGAIN = RelayedLogLine(
 
 
 class _AmuleHealth:
-    """The node's health over the aMule client, its log and the alerts it dispatches."""
+    """The node's health over the aMule client, its log, the alerts it dispatches and keeps open."""
 
     def __init__(self) -> None:
         self.logger = FakeLogger()
         self.observability = ObservabilityOverFakes()
+        self.open_alerts = InMemoryOpenAlertStore()
         self.amule = client_dependency(ClientName("amuled"), node_id=_NODE_ID)
         self.node_health = NodeHealth(
-            logger=self.logger, observability_dispatcher=self.observability.dispatcher
+            logger=self.logger,
+            observability_dispatcher=self.observability.dispatcher,
+            open_alert_writer=self.open_alerts,
         )
 
     async def check(self, *, detected: bool, times: int) -> None:
@@ -144,3 +148,19 @@ async def test_an_alert_ended_opens_again_with_its_opening() -> None:
     await amule_health.node_health.end_alert(about="client amuled")
     await amule_health.node_health.open_alert(_UNREPAIRED)
     assert amule_health.messages() == [_STILL_FAILING, _HEALTHY_AGAIN, _STILL_FAILING]
+
+
+async def test_an_alert_opened_is_set_open_after_the_ones_opened_before() -> None:
+    amule_health = _AmuleHealth()
+    await amule_health.check(detected=True, times=3)
+    await amule_health.node_health.open_alert(_UNREPAIRED)
+    open_alerts = amule_health.open_alerts.read_open_alerts()
+    assert [alert.about for alert in open_alerts] == ["client amuled, unreachable", "client amuled"]
+
+
+async def test_an_alert_ended_is_set_open_no_more() -> None:
+    amule_health = _AmuleHealth()
+    await amule_health.node_health.open_alert(_UNREPAIRED)
+    await amule_health.check(detected=True, times=3)
+    await amule_health.check(detected=False, times=9)
+    assert amule_health.open_alerts.read_open_alerts() == (_UNREPAIRED,)
