@@ -14,6 +14,7 @@ from typing import Protocol
 
 import pytest
 
+from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.application.ports.driven.notifier import Notifier
 from p2pwatch.application.steps.notification_outbox import NotificationOutbox
 from p2pwatch.application.steps.notification_sender import NotificationSender
@@ -170,10 +171,14 @@ class _Node:
         self.restart: CrawlerRestartError | None = None
         self.stopped_at: float | None = None
         self.observability = ObservabilityOverFakes()
+        self.open_alerts = InMemoryOpenAlertStore()
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
-            node_health=build_node_health(observability_dispatcher=self.observability.dispatcher),
+            node_health=build_node_health(
+                observability_dispatcher=self.observability.dispatcher,
+                open_alert_writer=self.open_alerts,
+            ),
             node_id=NodeId("n1"),
             logger=self.logger,
         )
@@ -314,6 +319,20 @@ def test_a_bug_at_every_turn_of_one_of_three_searches_rebuilds_their_object_3_ti
     bug_lines = [line for line in node.logger.lines if line.message.startswith("bug in ")]
     assert len(bug_lines) == 21  # its 12th turn over the fourth build at 1444 s
     assert all(isinstance(line.error, KeyError) for line in bug_lines)
+
+
+def test_a_client_left_unrepaired_keeps_its_alert_open_for_the_node_page(
+    virtual_loop: VirtualLoop,
+) -> None:
+    works = _works(
+        ("search 'keroro' amuled ed2k", _always, CrawlerFunction.CRAWL),
+        ("search 'titar' amuled ed2k", _never, CrawlerFunction.CRAWL),
+    )
+    node = _Node(virtual_loop, client_works=works)
+
+    node.run_for(1500.0)
+
+    assert [alert.about for alert in node.open_alerts.read_open_alerts()] == ["client amuled"]
 
 
 @pytest.mark.parametrize(

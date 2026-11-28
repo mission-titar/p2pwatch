@@ -56,6 +56,7 @@ from p2pwatch.domain.matching.engine import DecisionRecord, Explanation
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
+from p2pwatch.domain.observability.events import ClientReachableAgain, ClientUnreachable
 from p2pwatch.domain.observability.node_metric import NodeGauge, NodeMetricSample
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -130,7 +131,7 @@ _CRAWL_SUMMARY = CrawlSummary(
     ),
 )
 _SUMMARIZER = FakeCrawlSummarizer(_CRAWL_SUMMARY)
-_DESCRIBER = FakeNodeDescriber(NodeDescription(node_state=_NODE_STATE))
+_DESCRIBER = FakeNodeDescriber(NodeDescription(node_state=_NODE_STATE, open_alerts=()))
 _NO_FILE_LISTER = FakeFileLister(
     FileListing(
         catalog_entries=(),
@@ -224,7 +225,9 @@ def _app_on_fakes(
         static_directory=webui_directory / "static",
         shutdown_requester=controls.shutdown_requester,
         crawl_summarizer=FakeCrawlSummarizer(crawl_summary),
-        node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state)),
+        node_describer=FakeNodeDescriber(
+            NodeDescription(node_state=node_state, open_alerts=open_alerts)
+        ),
         file_lister=file_lister,
         file_describer=file_describer,
         source_lister=source_lister,
@@ -1257,6 +1260,38 @@ async def test_node_page_shows_a_downloads_lifecycle() -> None:
     assert "<td>local_processing</td>" in text
     assert "<td>error</td>" in text
     assert "None" not in text  # an unknown value shows blank
+
+
+async def _alert_cells(*open_alerts: HealthAlert) -> list[str]:
+    """The cells of /node's alerts, the node tracking no download and no backoff."""
+    page = await _page(_app_on_fakes(open_alerts=open_alerts), url="/node")
+    return re.findall(r"<td>([^<]*)</td>", page)
+
+
+@pytest.mark.asyncio
+async def test_node_page_lists_each_alert_open_in_its_two_lines() -> None:
+    assert await _alert_cells(UNREACHABLE, UNREPAIRED) == [
+        *("amuled unreachable for 2 min", "impact: no search, no download"),
+        "client amuled: status reading still failing after 3 rebuilds",
+        "cause: a bug of its own, or a shared state a crawler restart would renew",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_node_page_shows_an_alert_whose_opening_relays_no_line_by_its_log_line() -> None:
+    amuled, node_id = ClientName("amuled"), NodeId("n1")
+    alert = HealthAlert(
+        about="client amuled",
+        when_failing=ClientUnreachable(client_name=amuled),
+        when_healthy_again=ClientReachableAgain(client_name=amuled, node_id=node_id),
+    )
+    assert await _alert_cells(alert) == ["amuled unreachable", ""]
+
+
+@pytest.mark.asyncio
+async def test_node_page_says_when_no_alert_is_open() -> None:
+    page = await _page(_app_on_fakes(), url="/node")
+    assert '<td colspan="2">No alert open.</td>' in page
 
 
 @pytest.mark.asyncio

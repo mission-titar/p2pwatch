@@ -81,7 +81,7 @@ def _build(console_query_runner: FakeConsoleQueryRunner) -> Starlette:
         crawl_summarizer=FakeCrawlSummarizer(
             CrawlSummary(client_summaries=(), node_state=node_state, target_coverages=())
         ),
-        node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state)),
+        node_describer=FakeNodeDescriber(NodeDescription(node_state=node_state, open_alerts=())),
         file_lister=FakeFileLister(
             FileListing(
                 catalog_entries=(),
