@@ -320,7 +320,9 @@ class CrawlerComposition(CrawlerRunner):
                 status_reading_reader=status_reading_store,
                 monotonic_clock=monotonic_clock,
             ),
-            node_describer=DescribeNode(node_state_reader),
+            node_describer=DescribeNode(
+                node_state_reader=node_state_reader, open_alert_reader=open_alert_store
+            ),
             file_lister=ListFiles(catalog_file_reader),
             file_describer=DescribeFile(
                 catalog_file_reader=catalog_file_reader,

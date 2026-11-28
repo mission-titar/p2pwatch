@@ -115,6 +115,15 @@ class BackoffStateDisplay:
 
 
 @dataclass(kw_only=True, frozen=True)
+class OpenAlertDisplay:
+    """One alert open on /node, in its notification's two lines: "amuled unreachable for 2 min",
+    then "impact: no search, no download", the second blank when it has none."""
+
+    message: str
+    detail: str
+
+
+@dataclass(kw_only=True, frozen=True)
 class NodeStateDisplay:
     """The node's identity and downloads, as the dashboard and /node show them, blank until
     the node records its id."""

@@ -2,6 +2,28 @@
 {% block title %}Node · p2pwatch{% endblock %}
 {% block content %}
 <section>
+  <h2>Alerts</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Alert</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for open_alert in open_alerts %}
+      <tr>
+        <td>{{ open_alert.message }}</td>
+        <td>{{ open_alert.detail }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="2">No alert open.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
   <h2>Identity</h2>
   <dl>
     <dt>Identifier</dt>

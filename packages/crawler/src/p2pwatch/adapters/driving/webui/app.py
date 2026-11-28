@@ -43,6 +43,7 @@ from p2pwatch.adapters.driving.webui.displays import (
     NavItemDisplay,
     NodeStateDisplay,
     ObservationDisplay,
+    OpenAlertDisplay,
     PageNavDisplay,
     QueryAnswerDisplay,
     QueryRowDisplay,
@@ -86,6 +87,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import Network
+from p2pwatch.domain.health.external_dependency import HealthAlert
 from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.interval import (
     MAX_INTERVAL_SPAN,
@@ -97,6 +99,8 @@ from p2pwatch.domain.matching.decision_tier import DecisionTier
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.node_state import NodeState
+from p2pwatch.domain.observability.notification import RelayedLogLine
+from p2pwatch.domain.observability.policy import plan_observability
 from p2pwatch.domain.observation import FileObservation
 from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey
@@ -672,6 +676,16 @@ def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     )
 
 
+def _open_alert_display(alert: HealthAlert) -> OpenAlertDisplay:
+    """An alert open in the two lines its opening relays, as the operations read them."""
+    plan = plan_observability(alert.when_failing)
+    match plan.notification:
+        case RelayedLogLine(message=message, detail=detail):
+            return OpenAlertDisplay(message=message, detail=detail or "")
+        case _:  # an opening that relays no line: its log line alone
+            return OpenAlertDisplay(message=plan.message, detail="")
+
+
 def _backoff_state_displays(node_state: NodeState) -> tuple[BackoffStateDisplay, ...]:
     """Each backoff and its planned retry: its start plus its delay."""
     return tuple(
@@ -1166,11 +1180,15 @@ def build_app(
         )
 
     async def handle_node(request: Request) -> Response:
-        node_state = node_describer.describe_node().node_state
+        node_description = node_describer.describe_node()
+        node_state = node_description.node_state
         return templates.TemplateResponse(
             request,
             "node.html",
             {
+                "open_alerts": tuple(
+                    _open_alert_display(alert) for alert in node_description.open_alerts
+                ),
                 "node_state": _node_state_display(node_state),
                 "backoff_states": _backoff_state_displays(node_state),
             },

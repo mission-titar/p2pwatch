@@ -881,7 +881,11 @@ l'alerte qu'elle envoie et sa fin (`HealthAlert`), que le type exige : mypy refu
 alerte comme une alerte sans fin. L'alerte dit aussi de quoi elle parle, sa partie et sa règle
 (`client amuled, unreachable`), comme le journal nomme chaque changement.
 `NodeHealth` journalise chaque changement d'état et envoie l'alerte de sa règle par le
-dispatcher, comme tout autre événement.
+dispatcher, comme tout autre événement. Toute alerte s'ouvre et finit par lui, celle du
+`Supervisor` comprise (§10.2) : il garde les alertes ouvertes, par ce dont chacune parle, et les
+publie entières à chaque changement dans `InMemoryOpenAlertStore`, que lit le thread de la webui
+sans verrou. La page Node les liste, chacune en ses deux lignes, et `/health` répond 503 tant
+qu'un objet reste non réparé.
 
 ### 10.2 Les redémarrages du client aMule, de la webui et du notifieur
 
