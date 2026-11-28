@@ -3,9 +3,11 @@ ends through."""
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.ports.driven.open_alert_writer import OpenAlertWriter
+from p2pwatch.application.ports.driven.wall_clock import WallClock
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.domain.health.external_dependency import ExternalDependency, HealthAlert
 from p2pwatch.domain.health.health_rule import HealthRule, HealthState
+from p2pwatch.domain.health.open_alert import OpenAlert
 
 
 class NodeHealth:
@@ -18,11 +20,13 @@ class NodeHealth:
         logger: Logger,
         observability_dispatcher: ObservabilityDispatcher,
         open_alert_writer: OpenAlertWriter,
+        wall_clock: WallClock,
     ) -> None:
         self._logger = logger
         self._observability_dispatcher = observability_dispatcher
         self._open_alert_writer = open_alert_writer
-        self._open: dict[str, HealthAlert] = {}  # by what each is about: "client amuled"
+        self._wall_clock = wall_clock
+        self._open: dict[str, OpenAlert] = {}  # by what each is about: "client amuled"
 
     async def record(self, *, on: ExternalDependency, rule: HealthRule, detected: bool) -> None:
         """Records one check of ``rule`` on ``on``, such as a status reading aMule did not
@@ -40,18 +44,18 @@ class NodeHealth:
             await self.end_alert(about=transition.alert.about)
 
     async def open_alert(self, alert: HealthAlert) -> None:
-        """Dispatches ``alert``'s opening and keeps it open, such as an object left unrepaired;
-        one already open by what it is about does nothing."""
+        """Dispatches ``alert``'s opening and keeps it open from now, such as an object left
+        unrepaired; one already open by what it is about does nothing."""
         if alert.about in self._open:
             return
-        self._open[alert.about] = alert
+        self._open[alert.about] = OpenAlert(alert=alert, opened_at=self._wall_clock.now())
         self._open_alert_writer.set_open_alerts(tuple(self._open.values()))
         await self._observability_dispatcher.dispatch(alert.when_failing)
 
     async def end_alert(self, *, about: str) -> None:
         """Dispatches the end of the alert open ``about`` and drops it, such as "client amuled"
         repaired; one not open does nothing."""
-        if (alert := self._open.pop(about, None)) is None:
+        if (open_alert := self._open.pop(about, None)) is None:
             return
         self._open_alert_writer.set_open_alerts(tuple(self._open.values()))
-        await self._observability_dispatcher.dispatch(alert.when_healthy_again)
+        await self._observability_dispatcher.dispatch(open_alert.alert.when_healthy_again)

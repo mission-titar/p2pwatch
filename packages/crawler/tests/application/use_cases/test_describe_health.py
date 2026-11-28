@@ -2,11 +2,11 @@
 
 from p2pwatch.adapters.driven.in_memory_open_alert_store import InMemoryOpenAlertStore
 from p2pwatch.application.use_cases.describe_health import DescribeHealth
-from p2pwatch.domain.health.external_dependency import HealthAlert
+from p2pwatch.domain.health.open_alert import OpenAlert
 from tests.support.domain.health_alerts import UNREACHABLE, UNREPAIRED
 
 
-def _unrepaired_objects(*open_alerts: HealthAlert) -> tuple[str, ...]:
+def _unrepaired_objects(*open_alerts: OpenAlert) -> tuple[str, ...]:
     open_alert_store = InMemoryOpenAlertStore()
     open_alert_store.set_open_alerts(open_alerts)
     return DescribeHealth(open_alert_store).describe_health().unrepaired_objects

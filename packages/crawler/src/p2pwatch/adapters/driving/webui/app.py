@@ -87,7 +87,7 @@ from p2pwatch.domain.catalog_entry import CatalogEntry, CatalogEntrySort, SortDi
 from p2pwatch.domain.console_query import ConsoleDatabase, QueryAnswer, QueryFailure
 from p2pwatch.domain.ed2k_link import build_ed2k_link
 from p2pwatch.domain.file_key import Network
-from p2pwatch.domain.health.external_dependency import HealthAlert
+from p2pwatch.domain.health.open_alert import OpenAlert
 from p2pwatch.domain.identifiers import FileId, SourceId
 from p2pwatch.domain.interval import (
     MAX_INTERVAL_SPAN,
@@ -676,14 +676,16 @@ def _node_state_display(node_state: NodeState) -> NodeStateDisplay:
     )
 
 
-def _open_alert_display(alert: HealthAlert) -> OpenAlertDisplay:
-    """An alert open in the two lines its opening relays, as the operations read them."""
-    plan = plan_observability(alert.when_failing)
+def _open_alert_display(open_alert: OpenAlert) -> OpenAlertDisplay:
+    """An alert open in the two lines its opening relays, as the operations read them, and since
+    when."""
+    plan = plan_observability(open_alert.alert.when_failing)
+    opened_at = open_alert.opened_at.isoformat(timespec="microseconds")
     match plan.notification:
         case RelayedLogLine(message=message, detail=detail):
-            return OpenAlertDisplay(message=message, detail=detail or "")
+            return OpenAlertDisplay(message=message, detail=detail or "", opened_at=opened_at)
         case _:  # an opening that relays no line: its log line alone
-            return OpenAlertDisplay(message=plan.message, detail="")
+            return OpenAlertDisplay(message=plan.message, detail="", opened_at=opened_at)
 
 
 def _backoff_state_displays(node_state: NodeState) -> tuple[BackoffStateDisplay, ...]:
@@ -1187,7 +1189,7 @@ def build_app(
             "node.html",
             {
                 "open_alerts": tuple(
-                    _open_alert_display(alert) for alert in node_description.open_alerts
+                    _open_alert_display(open_alert) for open_alert in node_description.open_alerts
                 ),
                 "node_state": _node_state_display(node_state),
                 "backoff_states": _backoff_state_displays(node_state),
