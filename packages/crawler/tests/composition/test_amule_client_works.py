@@ -4,6 +4,7 @@ once."""
 
 import sqlite3
 from collections.abc import Iterator
+from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
 
@@ -25,9 +26,12 @@ from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSt
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.crawler_function import CrawlerFunction
+from p2pwatch.domain.expected_error import ExpectedError
 from p2pwatch.domain.health.health_rule import HealthRule
 from p2pwatch.domain.identifiers import ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
+from p2pwatch.domain.monotonic_instant import MonotonicInstant
+from p2pwatch.domain.observability.notification import RelayedLogLine
 from p2pwatch.domain.status_reading import CHANNEL_NOT_CONNECTED, SEARCHES_FAILED
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
@@ -35,7 +39,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger
 from tests.fakes.adapters.driven.fake_search_start_store import FakeSearchStartStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
-from tests.fakes.fake_amule_api import FakeAmuleApi
+from tests.fakes.fake_amule_api import FakeAmuleApi, error
 from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener import (
     open_catalog,
     open_local,
@@ -59,6 +63,9 @@ _SEARCHES = [
 ]
 # A floor no disk reaches: each reading of the free space is under it.
 _FLOOR_NO_DISK_REACHES = 2**62
+_START = MonotonicInstant(nanoseconds=0)  # where ``FakeTime``'s monotonic clock starts
+_LOGIN = ("POST", "/api/v1/auth/login")
+_CONNECTED = {"state": "connected", "high_id": True, "firewalled_tcp": False}
 
 
 @pytest.fixture
@@ -198,6 +205,27 @@ class _Node:
             logger=FakeLogger(),
         )
 
+    def alerts(self) -> list[str]:
+        """The first line of each alert its works sent."""
+        notifications = [notification for _, notification in self.observability.notifications]
+        return [alert.message for alert in notifications if isinstance(alert, RelayedLogLine)]
+
+    async def alerts_minute_by_minute(
+        self, works: list[SupervisedWork], *, minutes: int
+    ) -> list[tuple[int, str]]:
+        """Each alert's minute since the start and first line, over a turn of every work at each
+        of ``minutes``, an expected error suppressed."""
+        alerts: list[tuple[int, str]] = []
+        for _ in range(minutes):
+            minute = (self.time.monotonic.now() - _START) // timedelta(minutes=1)
+            sent = len(self.alerts())
+            for supervised in works:
+                with suppress(ExpectedError):
+                    await supervised.work.run_once()
+            alerts += [(minute, alert) for alert in self.alerts()[sent:]]
+            self.time.advance(timedelta(minutes=1))
+        return alerts
+
     def parts_changed_under(self, rule: HealthRule) -> list[str]:
         """The part of each change of health its works recorded under ``rule``, as the log names
         it: "channel amuled kad"."""
@@ -242,6 +270,7 @@ async def test_the_works_over_a_client_built_anew_send_their_requests_to_it_alon
         ("search 'titar' amuled ed2k", True),
         ("search 'keroro' amuled kad", True),
         ("search 'titar' amuled kad", True),
+        ("stall watch amuled", False),
     ]
 
 
@@ -254,6 +283,7 @@ async def test_each_work_over_the_client_serves_its_function_the_status_reading_
         ("status reading amuled", None),
         *[(tracking, CrawlerFunction.DOWNLOADS) for tracking in _TRACKING],
         *[(search, CrawlerFunction.CRAWL) for search in _SEARCHES],
+        ("stall watch amuled", None),
     ]
 
 
@@ -275,6 +305,7 @@ async def test_the_works_over_a_client_built_anew_record_on_the_parts_built_once
         "status reading amuled",
         *tracking,
         *_SEARCHES,
+        "stall watch amuled",
     ]
     # Three readings over each client: failing only on one part per channel, built once.
     assert node.parts_changed_under(CHANNEL_NOT_CONNECTED) == [
@@ -296,3 +327,62 @@ async def test_the_status_reading_records_a_channel_on_the_part_its_searches_rec
 
     assert node.parts_changed_under(SEARCHES_FAILED) == ["channel amuled kad"]
     assert "channel amuled kad" in node.parts_changed_under(CHANNEL_NOT_CONNECTED)
+
+
+async def test_a_client_built_anew_during_a_stall_keeps_it_open_until_a_search_completes(
+    node: _Node,
+) -> None:
+    client_works = node.client_works(downloading=False)
+    first = client_works.over(node.client(FakeAmuleApi()))
+    await _named(first, name="stall watch amuled").work.run_once()
+    node.time.advance(timedelta(minutes=15))
+    await _named(first, name="stall watch amuled").work.run_once()
+
+    built_anew = client_works.over(node.client(FakeAmuleApi()))
+    await _named(built_anew, name="stall watch amuled").work.run_once()
+    await _named(built_anew, name="search 'keroro' amuled kad").work.run_once()
+    await _named(built_anew, name="stall watch amuled").work.run_once()
+
+    assert node.alerts() == [
+        "search stalled on amuled ed2k for 15 min",
+        "search stalled on amuled kad for 15 min",
+        "search on amuled kad moving again",
+    ]
+
+
+async def test_kad_without_contact_alerts_off_its_network_its_searches_answered_empty_stalling_not(
+    node: _Node,
+) -> None:
+    # amuled accepts a Kad search while Kad has no contact, and ends it empty.
+    api = FakeAmuleApi(
+        status={"ec_connected": True, "ed2k": _CONNECTED, "kad": {"state": "connecting"}}
+    )
+    works = node.client_works(downloading=False).over(node.client(api))
+
+    assert await node.alerts_minute_by_minute(works, minutes=20) == [
+        (5, "amuled kad: off its network for 5 min")
+    ]
+
+
+async def test_amuled_unreachable_alerts_at_2_min_and_stalls_each_channel_at_15_until_it_answers(
+    node: _Node,
+) -> None:
+    api = FakeAmuleApi(status={"ec_connected": True, "ed2k": _CONNECTED, "kad": _CONNECTED})
+    api.overrides[_LOGIN] = lambda _request: error(503, code="daemon_unreachable")
+    works = node.client_works(downloading=False).over(node.client(api))
+
+    unreachable = await node.alerts_minute_by_minute(works, minutes=16)
+    del api.overrides[_LOGIN]
+    answering = await node.alerts_minute_by_minute(works, minutes=10)
+
+    assert unreachable == [
+        (2, "amuled unreachable for 2 min"),
+        (15, "search stalled on amuled ed2k for 15 min"),
+        (15, "search stalled on amuled kad for 15 min"),
+    ]
+    # Healthy again under 2 unanswered readings among the last 10: the ninth answered.
+    assert answering == [
+        (16, "search on amuled ed2k moving again"),
+        (16, "search on amuled kad moving again"),
+        (24, "amuled reachable again"),
+    ]

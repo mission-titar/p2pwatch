@@ -20,18 +20,22 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
+from p2pwatch.application.steps.function_progress import FunctionProgress
 from p2pwatch.application.steps.keyword_search import SearchTimeLimitOf, keyword_searches
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
+from p2pwatch.application.steps.stall_watch import StallWatch
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.client_errors import ClientAuthError, SearchFailedError
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
-from p2pwatch.domain.observability.notification import RelayedLogLine
+from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
 from p2pwatch.domain.observability.severity import Severity
+from p2pwatch.domain.observation import ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
 from p2pwatch.domain.status_reading import channel_dependency
+from p2pwatch.domain.watched_function import WatchedFunction
 from tests.fakes.adapters.driven.fake_backoff_state_store import FakeBackoffStateStore
 from tests.fakes.adapters.driven.fake_jitter_generator import FakeJitterGenerator
 from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
@@ -96,6 +100,21 @@ class _Searches:
             observability_dispatcher=self.health_observability.dispatcher,
             logger=self.health_logger,
         )
+        self.function_progress = FunctionProgress(monotonic_clock=self.monotonic_clock)
+
+    def stall_watch(self, client: Any) -> StallWatch:
+        """The watch over the crawl on each channel of ``client``, as the node builds it."""
+        return StallWatch(
+            client_name=ClientName("amuled"),
+            watched=[
+                WatchedFunction(client_name=ClientName("amuled"), channel=channel)
+                for channel in client.channels()
+            ],
+            function_progress=self.function_progress,
+            node_health=self.node_health,
+            monotonic_clock=self.monotonic_clock,
+            node_id=_NODE_ID,
+        )
 
     def works(
         self,
@@ -147,6 +166,7 @@ class _Searches:
                 )
                 for channel in worker.channels
             ],
+            function_progress=self.function_progress,
         )
 
     async def searching(
@@ -364,6 +384,24 @@ def test_a_refused_password_or_a_bug_tells_nothing_of_the_channel_s_searches(
 
     # Three checks would have changed the rule's state, either way.
     assert searches.health_logger.lines == []
+
+
+def _alerts_over_a_quarter_hour(
+    searches: _Searches, *, answer: tuple[ReportedFile, ...]
+) -> list[Notification]:
+    """The alerts sent while Kad searches "keroro" for 15 min, each search answered ``answer`` in
+    30 s, the stall watch looking before each."""
+    client = FakeTimedSearchClient({Channel("kad"): 30.0}, reported_files=answer)
+    [search] = searches.works(client, keywords=["keroro"])
+    watch = searches.stall_watch(client)
+    while searches.loop.time() <= 900.0:
+        searches.loop.run_until_complete(watch.run_once())
+        searches.loop.run_until_complete(search.work.run_once())
+    return [alert for _, alert in searches.health_observability.notifications]
+
+
+def test_searches_completing_stall_nothing(searches: _Searches) -> None:
+    assert _alerts_over_a_quarter_hour(searches, answer=()) == []
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:

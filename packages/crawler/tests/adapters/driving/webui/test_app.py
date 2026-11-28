@@ -57,7 +57,12 @@ from p2pwatch.domain.matching.engine import DecisionRecord, Explanation
 from p2pwatch.domain.matching.identifiers import TargetId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.node_state import NodeState, TrackedDownload
-from p2pwatch.domain.observability.events import ClientReachableAgain, ClientUnreachable
+from p2pwatch.domain.observability.events import (
+    ClientReachableAgain,
+    ClientUnreachable,
+    FunctionMovingAgain,
+    FunctionStalled,
+)
 from p2pwatch.domain.observability.node_metric import NodeGauge, NodeMetricSample
 from p2pwatch.domain.observation import FileObservation, ReportedFile
 from p2pwatch.domain.search.backoff import BackoffKey, BackoffState
@@ -65,6 +70,7 @@ from p2pwatch.domain.sharing_period import SharingPeriod
 from p2pwatch.domain.source import SourceKey, SourceRole
 from p2pwatch.domain.source_history import SourceHistory, SourceNameHistory, SourceNaming
 from p2pwatch.domain.status_reading import ChannelStatus, ClientStatus, StatusReading
+from p2pwatch.domain.watched_function import WatchedFunction
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.application.use_cases.fake_console_query_runner import FakeConsoleQueryRunner
 from tests.fakes.application.use_cases.fake_crawl_summarizer import FakeCrawlSummarizer
@@ -357,9 +363,23 @@ async def test_health_is_503_naming_an_object_left_unrepaired() -> None:
     )
 
 
+_KAD_CRAWL = WatchedFunction(client_name=ClientName("amuled"), channel=Channel("kad"))
+_STALLED = OpenAlert(
+    alert=HealthAlert(
+        about="the crawl on amuled kad, stall",
+        when_failing=FunctionStalled(
+            function=_KAD_CRAWL, stalled_for_seconds=900.0, node_id=NodeId("n1")
+        ),
+        when_healthy_again=FunctionMovingAgain(function=_KAD_CRAWL, node_id=NodeId("n1")),
+    ),
+    opened_at=datetime(2026, 6, 12, 14, 15, tzinfo=UTC),
+)
+
+
 @pytest.mark.asyncio
-async def test_health_is_200_under_an_outage_alert_alone() -> None:
-    assert await _health(UNREACHABLE) == (200, {"status": "UP", "checks": []})
+@pytest.mark.parametrize("open_alert", [UNREACHABLE, _STALLED], ids=["an-outage", "a-stall"])
+async def test_health_is_200_under_an_outage_or_a_stall_alert_alone(open_alert: OpenAlert) -> None:
+    assert await _health(open_alert) == (200, {"status": "UP", "checks": []})
 
 
 @pytest.mark.asyncio

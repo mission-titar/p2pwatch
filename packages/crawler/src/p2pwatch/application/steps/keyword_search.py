@@ -7,6 +7,7 @@ from typing import Protocol
 
 from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
+from p2pwatch.application.steps.function_progress import FunctionProgress
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.work import SupervisedWork, Work
@@ -16,6 +17,7 @@ from p2pwatch.domain.health.external_dependency import ExternalDependency
 from p2pwatch.domain.identifiers import Channel, Keyword
 from p2pwatch.domain.search.keywords import dedupe_keywords
 from p2pwatch.domain.status_reading import SEARCHES_FAILED
+from p2pwatch.domain.watched_function import WatchedFunction
 
 
 # The time limit of the search of ``keyword`` on ``channel``.
@@ -37,6 +39,7 @@ class KeywordSearch(Work):
         monotonic_clock: MonotonicClock,
         node_health: NodeHealth,
         channel_dependency: ExternalDependency,
+        function_progress: FunctionProgress,
     ) -> None:
         self._keyword = keyword
         self._channel = channel
@@ -45,6 +48,8 @@ class KeywordSearch(Work):
         self._monotonic_clock = monotonic_clock
         self._node_health = node_health
         self._channel_dependency = channel_dependency
+        self._function_progress = function_progress
+        self._function = WatchedFunction(client_name=search_worker.client_name, channel=channel)
 
     def __str__(self) -> str:
         return f"search '{self._keyword}' {self._search_worker.client_name} {self._channel}"
@@ -58,7 +63,8 @@ class KeywordSearch(Work):
 
     async def run_once(self) -> None:
         """Searches the keyword once, then saves the backoff if the search changed it, a failed
-        search included, and records on the channel whether the network refused the search."""
+        search included, records on the channel whether the network refused the search, and the
+        crawl's progress on the channel once the search completed."""
         # aMule unreachable or refusing our password records nothing: the network said nothing.
         try:
             with self._backoff_saver.saving():
@@ -67,6 +73,7 @@ class KeywordSearch(Work):
             await self._record_searches_failed(detected=True)
             raise
         await self._record_searches_failed(detected=False)
+        self._function_progress.record_progress(self._function)
 
     async def _record_searches_failed(self, *, detected: bool) -> None:
         await self._node_health.record(
@@ -83,9 +90,11 @@ def keyword_searches(
     time_limit_of: SearchTimeLimitOf,
     node_health: NodeHealth,
     channel_dependencies: Iterable[ExternalDependency],
+    function_progress: FunctionProgress,
 ) -> list[SupervisedWork]:
     """One search per client, channel and keyword of the config, with its time limit, a keyword
-    listed twice searched once and an empty one never; each records its refusals on its channel."""
+    listed twice searched once and an empty one never; each records its refusals on its channel,
+    and its progress in ``function_progress``."""
     each_keyword_once = dedupe_keywords(keywords)
     channel_of = {
         (channel.client_name, channel.channel): channel for channel in channel_dependencies
@@ -100,6 +109,7 @@ def keyword_searches(
                 monotonic_clock=monotonic_clock,
                 node_health=node_health,
                 channel_dependency=channel_of[search_worker.client_name, channel],
+                function_progress=function_progress,
             ),
             time_limit=time_limit_of(keyword, channel=channel),
             function=CrawlerFunction.CRAWL,

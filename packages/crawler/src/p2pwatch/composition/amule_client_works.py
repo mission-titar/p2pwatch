@@ -30,20 +30,23 @@ from p2pwatch.application.steps.download_decider import DownloadDecider
 from p2pwatch.application.steps.download_labeler import DownloadLabeler
 from p2pwatch.application.steps.download_starter import DownloadStarter
 from p2pwatch.application.steps.download_tracker import DownloadTracker
+from p2pwatch.application.steps.function_progress import FunctionProgress
 from p2pwatch.application.steps.keyword_search import keyword_searches
 from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.search_worker import SearchWorker
 from p2pwatch.application.steps.source_watcher import SourceWatcher
+from p2pwatch.application.steps.stall_watch import StallWatch
 from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.work import SupervisedWork
-from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
+from p2pwatch.composition.work_time_limits import TIME_LIMIT_MARGIN, AmuleWorkTimeLimits
 from p2pwatch.domain.crawler_config import DownloadConfig
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.download.disk_space import download_disk_dependency
 from p2pwatch.domain.identifiers import Channel, ClientName, NodeId
 from p2pwatch.domain.matching.models import TargetSegment
 from p2pwatch.domain.status_reading import channel_dependency, client_dependency
+from p2pwatch.domain.watched_function import WatchedFunction
 
 
 def works_in_start_order[W](
@@ -210,9 +213,15 @@ class AmuleClientWorks:
             channel: channel_dependency(client_name=client_name, channel=channel, node_id=node_id)
             for channel in channels
         }
+        self._node_id = node_id
+        self._crawl = tuple(
+            WatchedFunction(client_name=client_name, channel=channel) for channel in channels
+        )
+        self._function_progress = FunctionProgress(monotonic_clock=monotonic_clock)
 
     def over(self, client: AmuleApiClient) -> list[SupervisedWork]:
-        """Every work over ``client``, in the order the supervisor starts them."""
+        """Every work over ``client``, in the order the supervisor starts them, the stall watch
+        last: it sends no request."""
         download_steps = self._download_steps
         status_watcher = StatusWatcher(
             client_name=self._client_name,
@@ -233,7 +242,15 @@ class AmuleClientWorks:
             observability_dispatcher=self._observability_dispatcher,
             logger=StdlibLogger(SearchWorker.__module__),
         )
-        return works_in_start_order(
+        stall_watch = StallWatch(
+            client_name=self._client_name,
+            watched=self._crawl,
+            function_progress=self._function_progress,
+            node_health=self._node_health,
+            monotonic_clock=self._monotonic_clock,
+            node_id=self._node_id,
+        )
+        works = works_in_start_order(
             status_watcher=SupervisedWork(
                 work=status_watcher,
                 time_limit=self._time_limits.of_status_reading(),
@@ -252,5 +269,11 @@ class AmuleClientWorks:
                 time_limit_of=self._time_limits.of_search,
                 node_health=self._node_health,
                 channel_dependencies=self._channel_dependencies.values(),
+                function_progress=self._function_progress,
             ),
         )
+        # Its turn awaits nothing: the margin alone.
+        return [
+            *works,
+            SupervisedWork(work=stall_watch, time_limit=TIME_LIMIT_MARGIN, function=None),
+        ]

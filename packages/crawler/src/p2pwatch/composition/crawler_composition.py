@@ -19,9 +19,10 @@ The ``Supervisor`` holds the object each builder built latest, runs its works, c
 and closes them at the unwind.
 
 Works: one search per channel and keyword (``KeywordSearch``), the status watcher, download and
-source tracking when configured, the webui's thread watch, and the notifications' sending when a
-service is configured, which ``CrawlerLifecycle`` runs until ``PosixProcess`` or the webui
-requests the shutdown, or a function of the crawler lost ends the supervision.
+source tracking when configured, the stall watch, the webui's thread watch, and the
+notifications' sending when a service is configured, which ``CrawlerLifecycle`` runs until
+``PosixProcess`` or the webui requests the shutdown, or a function of the crawler lost ends the
+supervision.
 OBSERVABLE & BOUNDED shutdown (spec §6): long-lived resources are closed AFTER the full unwind of
 the works (no worker can write anymore), all within ``shutdown_deadline_seconds``, what a fired
 deadline leaves within ``CLOSE_TIMEOUT_SECONDS``.
