@@ -65,9 +65,11 @@ class SearchWorker:
             ),
         )
 
-    async def _record_observations(self, channel: Channel, *, answer: SearchAnswer) -> int:
-        """Per-obs pipeline; returns the number of CHANGED verdicts (logging). A
-        ``StoreError`` per obs is ABSORBED inside ``Cataloguer.catalog``."""
+    async def _record_observations(
+        self, channel: Channel, *, answer: SearchAnswer
+    ) -> list[int | None]:
+        """Per-obs pipeline; returns each file's decision rows written, ``None`` for one a
+        ``StoreError`` left unrecorded, ABSORBED inside ``Cataloguer.catalog``."""
         await self._observability_dispatcher.dispatch(
             SearchExecuted(
                 client_name=self._client_name,
@@ -76,17 +78,17 @@ class SearchWorker:
                 skipped_result_count=answer.skipped_result_count,
             )
         )
-        changed = 0
-        for reported_file in answer.reported_files:
-            if await self._cataloguer.catalog(
+        return [
+            await self._cataloguer.catalog(
                 reported_file, client_name=self._client_name, channel=channel
-            ):
-                changed += 1
-        return changed
+            )
+            for reported_file in answer.reported_files
+        ]
 
-    async def search(self, keyword: Keyword, *, channel: Channel) -> None:
-        """One search, run once ``time_until_ready`` is zero. A refused search or an unreachable
-        client raises once the backoff is set, the warning logged and the event dispatched."""
+    async def search(self, keyword: Keyword, *, channel: Channel) -> bool:
+        """One search, run once ``time_until_ready`` is zero; returns whether it progressed, a file
+        of its answer recorded or none in it. A refused search or an unreachable client raises
+        once the backoff is set, the warning logged and the event dispatched."""
         channel_backoff_key = BackoffKey(client_name=self._client_name, channel=channel)
         try:
             answer = await self._client.search(
@@ -117,7 +119,7 @@ class SearchWorker:
                 ClientUnreachable(client_name=self._client_name)
             )
             raise
-        changed = await self._record_observations(channel, answer=answer)
+        written = await self._record_observations(channel, answer=answer)
         self._backoff.reset(channel_backoff_key)
         self._backoff.reset(self._client_backoff_key)
         self._logger.info(
@@ -125,5 +127,7 @@ class SearchWorker:
             self._client_name,
             keyword,
             channel,
-            changed,
+            sum(1 for rows in written if rows),
         )
+        # An answer with no file is progress: a channel finding nothing still crawls.
+        return not written or any(rows is not None for rows in written)

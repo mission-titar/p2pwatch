@@ -302,7 +302,7 @@ async def test_persistence_error_is_absorbed_and_cycle_continues(
         client_name=ClientName("amuled"),
         channel=Channel("ed2k"),
     )
-    assert changed == 0  # absorbed, the cycle continues
+    assert changed is None  # not recorded, absorbed: the cycle continues
     assert waker.woken_subjects == []
     assert logger.lines == [  # file= as key=value, like the download side's
         LoggedLine(

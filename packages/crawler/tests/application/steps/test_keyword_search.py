@@ -5,6 +5,7 @@ The searches share one simulated time, so these tests run on the virtual-time lo
 
 import asyncio
 import json
+import sqlite3
 from contextlib import suppress
 from datetime import timedelta
 from typing import Any
@@ -28,6 +29,7 @@ from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
 from p2pwatch.domain.client_errors import ClientAuthError, SearchFailedError
+from p2pwatch.domain.file_key import FileKey, Network
 from p2pwatch.domain.identifiers import Channel, ClientName, Keyword, NodeId
 from p2pwatch.domain.matching.engine import MatchingEngine
 from p2pwatch.domain.observability.notification import Notification, RelayedLogLine
@@ -386,6 +388,27 @@ def test_a_refused_password_or_a_bug_tells_nothing_of_the_channel_s_searches(
     assert searches.health_logger.lines == []
 
 
+# The catalog refuses each observation of a file reported with 13 sources.
+_REFUSE_THIRTEEN_SOURCES = (
+    "CREATE TRIGGER refuse BEFORE INSERT ON observations WHEN NEW.source_count = 13"
+    " BEGIN SELECT RAISE(ABORT, 'disk full'); END"
+)
+
+
+def _reported_file(native_id: str, *, source_count: int) -> ReportedFile:
+    return ReportedFile(
+        file=FileKey(network=Network.ED2K, native_id=native_id),
+        filename="Keroro 062.avi",
+        size_bytes=234_000_000,
+        source_count=source_count,
+        keyword=Keyword("keroro"),
+    )
+
+
+_RECORDED = _reported_file("31d6cfe0d16ae931b73c59d7e0c089c0", source_count=3)
+_REFUSED = _reported_file("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", source_count=13)
+
+
 def _alerts_over_a_quarter_hour(
     searches: _Searches, *, answer: tuple[ReportedFile, ...]
 ) -> list[Notification]:
@@ -400,8 +423,32 @@ def _alerts_over_a_quarter_hour(
     return [alert for _, alert in searches.health_observability.notifications]
 
 
-def test_searches_completing_stall_nothing(searches: _Searches) -> None:
-    assert _alerts_over_a_quarter_hour(searches, answer=()) == []
+@pytest.mark.parametrize(
+    "answer",
+    [(), (_RECORDED,), (_REFUSED, _RECORDED)],
+    ids=["empty", "recorded", "one-file-refused"],
+)
+def test_searches_answered_empty_or_recording_a_file_of_each_answer_stall_nothing(
+    searches: _Searches, *, catalog_connection: sqlite3.Connection, answer: tuple[ReportedFile, ...]
+) -> None:
+    catalog_connection.execute(_REFUSE_THIRTEEN_SOURCES)
+
+    assert _alerts_over_a_quarter_hour(searches, answer=answer) == []
+
+
+def test_searches_whose_every_file_is_refused_stall_the_crawl_on_their_channel_at_15_min(
+    searches: _Searches, *, catalog_connection: sqlite3.Connection
+) -> None:
+    catalog_connection.execute(_REFUSE_THIRTEEN_SOURCES)
+
+    assert _alerts_over_a_quarter_hour(searches, answer=(_REFUSED,)) == [
+        RelayedLogLine(
+            message="search stalled on amuled kad for 15 min",
+            detail="cause: see the other alerts or the log",
+            severity=Severity.WARNING,
+            node_id=_NODE_ID,
+        )
+    ]
 
 
 def test_a_failed_channel_sleeps_until_its_backoff_ends(searches: _Searches) -> None:

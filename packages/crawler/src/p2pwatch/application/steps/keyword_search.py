@@ -64,16 +64,17 @@ class KeywordSearch(Work):
     async def run_once(self) -> None:
         """Searches the keyword once, then saves the backoff if the search changed it, a failed
         search included, records on the channel whether the network refused the search, and the
-        crawl's progress on the channel once the search completed."""
+        crawl's progress on the channel once a file of its answer is recorded, or none is in it."""
         # aMule unreachable or refusing our password records nothing: the network said nothing.
         try:
             with self._backoff_saver.saving():
-                await self._search_worker.search(self._keyword, channel=self._channel)
+                progressed = await self._search_worker.search(self._keyword, channel=self._channel)
         except SearchFailedError:
             await self._record_searches_failed(detected=True)
             raise
         await self._record_searches_failed(detected=False)
-        self._function_progress.record_progress(self._function)
+        if progressed:
+            self._function_progress.record_progress(self._function)
 
     async def _record_searches_failed(self, *, detected: bool) -> None:
         await self._node_health.record(
