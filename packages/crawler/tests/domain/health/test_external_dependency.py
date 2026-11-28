@@ -1,5 +1,3 @@
-import pytest
-
 from p2pwatch.domain.health.external_dependency import (
     ExternalDependency,
     HealthAlert,
@@ -12,7 +10,6 @@ from p2pwatch.domain.observability.events import (
     ClientPasswordRefused,
     ClientReachableAgain,
     ClientUnreachableLasting,
-    Event,
 )
 
 
@@ -112,24 +109,3 @@ def test_after_failing_it_turns_healthy_at_the_ninth_check_not_detected() -> Non
         (3, HealthState.FAILING),
         (12, HealthState.HEALTHY),
     ]
-
-
-def _sent_at(*, previous: HealthState, current: HealthState) -> Event | None:
-    """What the alert sends at a change from ``previous`` to ``current``."""
-    transition = HealthTransition(alert=_UNREACHABLE_ALERT, previous=previous, current=current)
-    return transition.alert_event()
-
-
-@pytest.mark.parametrize("previous", [HealthState.UNKNOWN, HealthState.HEALTHY])
-def test_a_rule_turning_failing_sends_its_alert(previous: HealthState) -> None:
-    sent = _sent_at(previous=previous, current=HealthState.FAILING)
-    assert sent == _UNREACHABLE_ALERT.when_failing
-
-
-def test_a_rule_healthy_again_after_failing_sends_its_alert_s_end() -> None:
-    sent = _sent_at(previous=HealthState.FAILING, current=HealthState.HEALTHY)
-    assert sent == _UNREACHABLE_ALERT.when_healthy_again
-
-
-def test_a_rule_healthy_from_its_first_checks_sends_nothing() -> None:
-    assert _sent_at(previous=HealthState.UNKNOWN, current=HealthState.HEALTHY) is None

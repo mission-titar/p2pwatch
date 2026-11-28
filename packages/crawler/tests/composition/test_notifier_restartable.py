@@ -42,7 +42,6 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.support.application.steps.node_health import build_node_health
-from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import VirtualLoop
 
 _COMMUNITY, _OPERATIONS = ONE_SERVICE_PER_AUDIENCE
@@ -159,7 +158,7 @@ def test_a_service_past_its_timeout_at_every_send_holds_none_of_another_service_
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_health=build_node_health(),
         node_id=NodeId("n1"),
         logger=FakeLogger(),
     )

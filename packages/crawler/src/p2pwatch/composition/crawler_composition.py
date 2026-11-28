@@ -462,7 +462,7 @@ class CrawlerComposition(CrawlerRunner):
             supervisor = Supervisor(
                 run_state_reader=run_state_store,
                 monotonic_clock=monotonic_clock,
-                observability_dispatcher=observability_dispatcher,
+                node_health=node_health,
                 node_id=node_id,
                 logger=StdlibLogger(Supervisor.__module__),
             )

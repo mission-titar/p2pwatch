@@ -1,4 +1,4 @@
-"""The node's health as the tests of the steps that record checks build it."""
+"""The node's health as the tests of the steps that record checks or open alerts build it."""
 
 from p2pwatch.application.ports.driven.logger import Logger
 from p2pwatch.application.steps.node_health import NodeHealth

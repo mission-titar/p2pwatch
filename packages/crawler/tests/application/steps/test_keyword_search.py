@@ -161,7 +161,7 @@ class _Searches:
         supervisor = Supervisor(
             run_state_reader=self.run_state,
             monotonic_clock=self.monotonic_clock,
-            observability_dispatcher=ObservabilityOverFakes().dispatcher,
+            node_health=build_node_health(),
             node_id=_NODE_ID,
             logger=self.supervisor_logger,
         )

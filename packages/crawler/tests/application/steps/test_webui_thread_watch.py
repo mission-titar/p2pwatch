@@ -21,7 +21,7 @@ from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonoto
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
-from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.virtual_time import VirtualLoop
 
 
@@ -93,7 +93,7 @@ class _Webui:
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
-            observability_dispatcher=ObservabilityOverFakes().dispatcher,
+            node_health=build_node_health(),
             node_id=NodeId("n1"),
             logger=self.logger,
         )

@@ -467,7 +467,7 @@ def test_a_password_refused_at_every_reading_alerts_once_and_the_node_runs_on(
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=monotonic_clock,
-        observability_dispatcher=observability.dispatcher,
+        node_health=observability.node_health,
         node_id=_NODE_ID,
         logger=logger,
     )
@@ -536,7 +536,7 @@ class _RebuiltNode:
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=self._monotonic_clock,
-            observability_dispatcher=self.observability.dispatcher,
+            node_health=self.observability.node_health,
             node_id=_NODE_ID,
             logger=FakeLogger(),
         )
