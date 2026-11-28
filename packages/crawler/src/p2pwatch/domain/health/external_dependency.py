@@ -11,10 +11,10 @@ from p2pwatch.domain.observability.events import Event
 
 @dataclass(kw_only=True, frozen=True)
 class HealthAlert:
-    """The alert a rule of a part sends when it turns failing, and its end when it turns healthy
-    again, such as Kad's "off its network for 5 min", then "back on its network"."""
+    """An alert and its end, opened and ended through the node's health: a rule of a part's, such
+    as Kad's "off its network for 5 min", then "back on its network", or an object unrepaired."""
 
-    about: str  # its part and rule, as the log names each change: "client amuled, unreachable"
+    about: str  # its key among the open ones: "client amuled, unreachable", "client amuled"
     when_failing: Event
     when_healthy_again: Event
 
@@ -27,15 +27,6 @@ class HealthTransition:
     alert: HealthAlert
     previous: HealthState
     current: HealthState
-
-    def alert_event(self) -> Event | None:
-        """What its rule's alert sends at this change: the alert turning failing, its end turning
-        healthy from failing, nothing healthy from the start."""
-        if self.current is HealthState.FAILING:
-            return self.alert.when_failing
-        if self.previous is HealthState.FAILING:
-            return self.alert.when_healthy_again
-        return None
 
 
 class ExternalDependency:

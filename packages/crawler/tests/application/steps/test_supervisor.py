@@ -27,7 +27,7 @@ from tests.fakes.adapters.driven.fake_logger import FakeLogger, LoggedLine
 from tests.fakes.adapters.driven.fake_loop_monotonic_clock import FakeLoopMonotonicClock
 from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
-from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.virtual_time import VirtualLoop
 
 # Every wait on a work's start is bounded: a work that never starts would hang the test.
@@ -192,7 +192,7 @@ def _supervisor(run_state: FakeRunStateStore) -> Supervisor:
     return Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeBlockingMonotonicClock(),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_health=build_node_health(),
         node_id=NodeId("n1"),
         logger=FakeLogger(),
     )
@@ -226,7 +226,7 @@ def _supervise_until(
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(loop),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_health=build_node_health(),
         node_id=NodeId("n1"),
         logger=logger or FakeLogger(),
     )
@@ -276,7 +276,7 @@ def test_it_takes_the_turns_of_the_works_of_each_object_it_built_first(
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(virtual_loop),
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_health=build_node_health(),
         node_id=NodeId("n1"),
         logger=FakeLogger(),
     )

@@ -173,7 +173,7 @@ class _Node:
         self._supervisor = Supervisor(
             run_state_reader=self._run_state,
             monotonic_clock=FakeLoopMonotonicClock(loop),
-            observability_dispatcher=self.observability.dispatcher,
+            node_health=build_node_health(observability_dispatcher=self.observability.dispatcher),
             node_id=NodeId("n1"),
             logger=self.logger,
         )
@@ -634,7 +634,7 @@ def _supervise_the_notifier(
     supervisor = Supervisor(
         run_state_reader=run_state,
         monotonic_clock=FakeLoopMonotonicClock(loop),
-        observability_dispatcher=observability.dispatcher,
+        node_health=build_node_health(observability_dispatcher=observability.dispatcher),
         node_id=NodeId("n1"),
         logger=FakeLogger(),
     )
@@ -700,7 +700,7 @@ def _supervisor() -> Supervisor:
     return Supervisor(
         run_state_reader=FakeRunStateStore(),
         monotonic_clock=FakeTime().monotonic,
-        observability_dispatcher=ObservabilityOverFakes().dispatcher,
+        node_health=build_node_health(),
         node_id=NodeId("n1"),
         logger=FakeLogger(),
     )

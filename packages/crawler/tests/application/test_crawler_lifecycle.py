@@ -176,7 +176,7 @@ class _Crawl:
             run_state_reader=self.run_state,
             # Its sleeps never end: with instant ones, every time limit would expire at once.
             monotonic_clock=supervisor_clock or FakeBlockingMonotonicClock(),
-            observability_dispatcher=self.observability.dispatcher,
+            node_health=node_health,
             node_id=_NODE_ID,
             logger=FakeLogger(),
         )

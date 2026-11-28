@@ -17,11 +17,12 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.ports.driven.restartable import Restartable
 from p2pwatch.application.ports.driven.restartable_builder import RestartableBuilder
 from p2pwatch.application.ports.driven.run_state_reader import RunStateReader
-from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
+from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.work import SupervisedWork, Work
 from p2pwatch.domain.crawler_function import CrawlerFunction
 from p2pwatch.domain.crawler_restart_error import CrawlerRestartError
 from p2pwatch.domain.expected_error import ExpectedError
+from p2pwatch.domain.health.external_dependency import HealthAlert
 from p2pwatch.domain.health.health_rule import Detections, HealthRule, HealthState
 from p2pwatch.domain.identifiers import NodeId
 from p2pwatch.domain.observability.events import WorksHealthyAgain, WorksStillFailing
@@ -194,13 +195,13 @@ class Supervisor:
         *,
         run_state_reader: RunStateReader,
         monotonic_clock: MonotonicClock,
-        observability_dispatcher: ObservabilityDispatcher,
+        node_health: NodeHealth,
         node_id: NodeId,
         logger: Logger,
     ) -> None:
         self._run_state_reader = run_state_reader
         self._monotonic_clock = monotonic_clock
-        self._observability_dispatcher = observability_dispatcher
+        self._node_health = node_health
         self._node_id = node_id
         self._logger = logger
         self._rebuilds_decided: asyncio.Queue[_SupervisedObject] = asyncio.Queue()
@@ -277,13 +278,18 @@ class Supervisor:
                 return
 
     async def _alert_unrepaired(self, supervised: _SupervisedObject) -> None:
+        object_name = str(supervised.builder)
         still_failing = WorksStillFailing(
-            object_name=str(supervised.builder),
+            object_name=object_name,
             works=supervised.failing_works(),
             rebuilds=REBUILDS_IN_VAIN_AT_MOST,
             node_id=self._node_id,
         )
-        await self._observability_dispatcher.dispatch(still_failing)
+        healthy_again = WorksHealthyAgain(object_name=object_name, node_id=self._node_id)
+        alert = HealthAlert(
+            about=object_name, when_failing=still_failing, when_healthy_again=healthy_again
+        )
+        await self._node_health.open_alert(alert)
 
     def _restart_if_a_function_is_lost(self) -> None:
         """Ends the supervision once a function is wholly lost: every object serving it
@@ -337,10 +343,7 @@ class Supervisor:
                 case "unrepaired":
                     await self._alert_unrepaired(over)
                 case "repaired":
-                    healthy = WorksHealthyAgain(
-                        object_name=str(over.builder), node_id=self._node_id
-                    )
-                    await self._observability_dispatcher.dispatch(healthy)
+                    await self._node_health.end_alert(about=str(over.builder))
                 case _:  # nothing decided
                     pass
             if over.unrepaired:
