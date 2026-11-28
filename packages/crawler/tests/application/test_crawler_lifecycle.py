@@ -18,7 +18,6 @@ from p2pwatch.application.ports.driven.monotonic_clock import MonotonicClock
 from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRegistry
 from p2pwatch.application.steps.catalog_reevaluator import CatalogReevaluator
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.notification_sender import NotificationSender
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.supervisor import ShutdownBoundArmer, Supervisor
@@ -54,6 +53,7 @@ from tests.fakes.adapters.driven.fake_run_state_store import FakeRunStateStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import VirtualLoop
 
@@ -170,9 +170,7 @@ class _Crawl:
                 _WorkWaitingForTheStop("status", on_start=self._work_started),
             )
         ]
-        node_health = NodeHealth(
-            logger=FakeLogger(), observability_dispatcher=self.observability.dispatcher
-        )
+        node_health = build_node_health(observability_dispatcher=self.observability.dispatcher)
         local_database = local_database_dependency(node_id=_NODE_ID)
         self._supervisor = Supervisor(
             run_state_reader=self.run_state,

@@ -10,7 +10,6 @@ import pytest
 
 from p2pwatch.application.ports.driven.status_client import StatusClient
 from p2pwatch.application.ports.driven.status_reading_writer import StatusReadingWriter
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.observability_dispatcher import ObservabilityDispatcher
 from p2pwatch.application.steps.status_watcher import StatusWatcher
 from p2pwatch.application.steps.supervisor import Supervisor
@@ -39,6 +38,7 @@ from tests.fakes.adapters.driven.fake_status_client import FakeStatusClient
 from tests.fakes.adapters.driven.fake_status_reading_store import FakeStatusReadingStore
 from tests.fakes.adapters.driven.fake_time import FakeTime
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.virtual_time import VirtualLoop
 
 type _Reading = ClientStatus | ClientError
@@ -66,8 +66,8 @@ class _Observability:
             services=ONE_SERVICE_PER_AUDIENCE,
         )
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(
-            logger=self.health_logger, observability_dispatcher=self.dispatcher
+        self.node_health = build_node_health(
+            observability_dispatcher=self.dispatcher, logger=self.health_logger
         )
 
     def _leave(

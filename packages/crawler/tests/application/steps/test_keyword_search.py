@@ -21,7 +21,6 @@ from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
 from p2pwatch.application.steps.keyword_search import SearchTimeLimitOf, keyword_searches
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.search_worker import SEARCH_BUDGET_SECONDS, SearchWorker
 from p2pwatch.application.steps.supervisor import Supervisor
 from p2pwatch.application.steps.work import SupervisedWork
@@ -48,6 +47,7 @@ from tests.fakes.adapters.driven.fake_timed_search_client import FakeTimedSearch
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
 from tests.fakes.composition.fake_restartable_builder import FakeRestartableBuilder
 from tests.fakes.fake_amule_api import PASSWORD, FakeAmuleApi
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 from tests.support.virtual_time import EPOCH, VirtualLoop
 
@@ -92,9 +92,9 @@ class _Searches:
         self.supervisor_logger = FakeLogger()
         self.health_logger = FakeLogger()
         self.health_observability = ObservabilityOverFakes()
-        self.node_health = NodeHealth(
-            logger=self.health_logger,
+        self.node_health = build_node_health(
             observability_dispatcher=self.health_observability.dispatcher,
+            logger=self.health_logger,
         )
 
     def works(

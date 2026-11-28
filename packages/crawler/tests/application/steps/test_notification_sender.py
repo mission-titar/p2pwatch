@@ -33,6 +33,7 @@ from tests.fakes.adapters.driven.fake_notification_outbox_store import FakeNotif
 from tests.fakes.adapters.driven.fake_notifier import ONE_SERVICE_PER_AUDIENCE, FakeNotifier
 from tests.fakes.adapters.driven.fake_raising_notifier import FakeRaisingNotifier
 from tests.fakes.adapters.driven.fake_waker import FakeWaker
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 pytestmark = pytest.mark.asyncio
@@ -68,10 +69,7 @@ def _sender(
         outbox=outbox,
         notifier=notifier,
         notification_timeout_seconds=timeout,
-        node_health=NodeHealth(
-            logger=health_logger or FakeLogger(),
-            observability_dispatcher=ObservabilityOverFakes().dispatcher,
-        ),
+        node_health=build_node_health(logger=health_logger),
         service_dependencies=notification_service_dependencies(
             notifier.services(), node_id=_NODE_ID
         ),
@@ -322,7 +320,7 @@ async def test_emptying_the_outbox_sends_each_service_s_at_once_a_held_send_hold
 async def test_emptying_the_outbox_sends_what_a_send_left_for_a_service_already_emptied() -> None:
     observability, notifier = ObservabilityOverFakes(), FakeNotifier()
     observability.outbox_store.writes_fail = True
-    node_health = NodeHealth(logger=FakeLogger(), observability_dispatcher=observability.dispatcher)
+    node_health = build_node_health(observability_dispatcher=observability.dispatcher)
     local_database = local_database_dependency(node_id=_NODE_ID)
     parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID)
     senders = [
@@ -380,7 +378,7 @@ async def test_a_community_service_refusing_is_alerted_through_the_operations_on
     None
 ):
     observability = ObservabilityOverFakes()
-    node_health = NodeHealth(logger=FakeLogger(), observability_dispatcher=observability.dispatcher)
+    node_health = build_node_health(observability_dispatcher=observability.dispatcher)
     parts = notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID)
     refusing, taking = (
         _sender_over(
@@ -416,9 +414,7 @@ async def test_two_operations_services_one_refusing_its_alert_is_left_for_the_ot
         observability,
         notifier=FakeNotifier((refused, taking), refusing=[refused]),
         service=refused,
-        node_health=NodeHealth(
-            logger=FakeLogger(), observability_dispatcher=observability.dispatcher
-        ),
+        node_health=build_node_health(observability_dispatcher=observability.dispatcher),
         service_parts=notification_service_dependencies((refused, taking), node_id=_NODE_ID),
     )
     for _ in range(3):
@@ -440,8 +436,8 @@ async def test_the_one_operations_service_refusing_every_send_is_alerted_in_the_
         observability,
         notifier=FakeNotifier(refusing=[_OPERATIONS]),
         service=_OPERATIONS,
-        node_health=NodeHealth(
-            logger=health_logger, observability_dispatcher=observability.dispatcher
+        node_health=build_node_health(
+            observability_dispatcher=observability.dispatcher, logger=health_logger
         ),
         service_parts=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID),
     )
@@ -470,8 +466,8 @@ async def test_a_local_database_refusing_every_save_still_sends_every_entry_and_
         observability,
         notifier=notifier,
         service=_OPERATIONS,
-        node_health=NodeHealth(
-            logger=health_logger, observability_dispatcher=observability.dispatcher
+        node_health=build_node_health(
+            observability_dispatcher=observability.dispatcher, logger=health_logger
         ),
         service_parts=notification_service_dependencies(ONE_SERVICE_PER_AUDIENCE, node_id=_NODE_ID),
     )

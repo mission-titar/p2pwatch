@@ -20,7 +20,6 @@ from p2pwatch.application.steps.backoff_registry import BackoffPolicy, BackoffRe
 from p2pwatch.application.steps.backoff_saver import BackoffSaver
 from p2pwatch.application.steps.cataloguer import Cataloguer
 from p2pwatch.application.steps.file_judge import FileJudge
-from p2pwatch.application.steps.node_health import NodeHealth
 from p2pwatch.application.steps.work import SupervisedWork
 from p2pwatch.composition.amule_client_works import AmuleClientWorks, DownloadSteps
 from p2pwatch.composition.work_time_limits import AmuleWorkTimeLimits
@@ -41,6 +40,7 @@ from tests.support.adapters.driven.persistence_sqlite.sqlite_database_opener imp
     open_catalog,
     open_local,
 )
+from tests.support.application.steps.node_health import build_node_health
 from tests.support.application.steps.observability_dispatcher import ObservabilityOverFakes
 
 pytestmark = pytest.mark.asyncio
@@ -88,8 +88,8 @@ class _Node:
         self.time = FakeTime()
         self.observability = ObservabilityOverFakes()
         self.health_logger = FakeLogger()
-        self.node_health = NodeHealth(
-            logger=self.health_logger, observability_dispatcher=self.observability.dispatcher
+        self.node_health = build_node_health(
+            observability_dispatcher=self.observability.dispatcher, logger=self.health_logger
         )
         self.observation_store = SqliteObservationStore(catalog_connection)
         self.decision_store = SqliteDecisionStore(catalog_connection)
